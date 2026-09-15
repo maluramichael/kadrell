@@ -62,8 +62,8 @@ enum Theme {
         var parts = shortPath(path).split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         var s = parts.joined(separator: "/")
         for i in parts.indices.dropLast() where NSAttributedString(string: s, attributes: attrs).size().width > width {
-            guard let c = parts[i].first, parts[i] != "~" else { continue }
-            parts[i] = String(c)
+            guard parts[i].count > 1 else { continue }
+            parts[i] = String(parts[i].prefix(parts[i].hasPrefix(".") ? 2 : 1))   // .claude wird .c, nicht nur .
             s = parts.joined(separator: "/")
         }
         return s

@@ -372,8 +372,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showAbout() {
         if overlay?.isVisible == true, overlayIsAbout { dismissSheet(); return }
-        overlayIsAbout = true
         present(AboutView(), plainReturn: true, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { [weak self] in self?.dismissSheet() })
+        overlayIsAbout = true   // erst nach present: das räumt über dismissSheet den alten Wert ab
     }
     private var overlayIsAbout = false
     @objc private func menuPalette() { togglePalette() }

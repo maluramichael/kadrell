@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 0.3.1 (2026-09-16)
+
+- Fix: F1 schließt die offene Hilfe wieder, nicht nur Esc.
+- Fix: Versteckte Ordner wie `.claude` werden beim Abkürzen zu `.c` statt nur `.`.
+
 ## 0.3.0 (2026-09-16)
 
 - Änderung: Der Pfad einer Gruppe steht in der Seitenleiste klein und eingerückt unter dem Gruppennamen, bei wenig Platz werden die vorderen Ordner abgekürzt (`~/d/p/projekt`).
