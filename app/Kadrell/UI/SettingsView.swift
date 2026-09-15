@@ -12,6 +12,18 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: startFolderKey) }
     }
 
+    /// Letzte Antwort von Claude als zweite Zeile unter jeder Session im Baum.
+    static var showLastMessage: Bool {
+        get { UserDefaults.standard.bool(forKey: "showLastMessage") }
+        set { UserDefaults.standard.set(newValue, forKey: "showLastMessage") }
+    }
+
+    /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default aus.
+    static var stackShowPath: Bool {
+        get { UserDefaults.standard.bool(forKey: "stackShowPath") }
+        set { UserDefaults.standard.set(newValue, forKey: "stackShowPath") }
+    }
+
     static let uiScales: [Double] = [0.9, 1, 1.15, 1.3]
     static let lineSpacings: [Double] = [1, 1.1, 1.2, 1.35]
     static let paddings: [Double] = [0, 4, 8, 12]
@@ -69,6 +81,8 @@ enum Settings {
 @MainActor
 final class SettingsModel {
     var startFolder = Settings.startFolder
+    var showLastMessage = Settings.showLastMessage
+    var stackShowPath = Settings.stackShowPath
     var hotkeys = Hotkeys.current
     var uiScale = Settings.uiScale
     var fontName = Settings.terminalFontName
@@ -88,6 +102,8 @@ final class SettingsModel {
         stopRecording()
         let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         if !p.isEmpty { Settings.startFolder = p }
+        Settings.showLastMessage = showLastMessage
+        Settings.stackShowPath = stackShowPath
         Hotkeys.current = hotkeys
         Settings.uiScale = uiScale
         Settings.terminalFontName = fontName
@@ -163,6 +179,8 @@ struct SettingsView: View {
                     }
                 }
                 setting("Zeilenabstand") { choice(Settings.lineSpacings, $model.lineSpacing) { "\(Int(($0 * 100).rounded())) %" } }
+                setting("Pfad in Stack-Zeilen") { pill(model.stackShowPath ? "an" : "aus", on: model.stackShowPath) { model.stackShowPath.toggle() } }
+                setting("Letzte Antwort von Claude im Baum") { pill(model.showLastMessage ? "an" : "aus", on: model.showLastMessage) { model.showLastMessage.toggle() } }
                 setting("Innenabstand") { choice(Settings.paddings, $model.padding) { "\(Int($0)) px" } }
             }
             .padding(.horizontal, 16).padding(.vertical, 8)

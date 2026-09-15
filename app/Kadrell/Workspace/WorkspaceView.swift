@@ -313,6 +313,12 @@ final class WorkspaceView: NSView {
         if hover { Icons.x(in: CGRect(x: rx - 16, y: r.midY - 8, width: 16, height: 16), color: Theme.sub); rx -= 24 }
         rx -= age.size().width; age.draw(at: CGPoint(x: rx, y: r.midY - 7))
         rx -= 8 + grp.size().width; grp.draw(at: CGPoint(x: rx, y: r.midY - 7))
+        if Settings.stackShowPath {
+            let path = NSAttributedString(string: (s.cwd as NSString).abbreviatingWithTildeInPath, attributes: Theme.attrs(10.5, Theme.muted))
+            let w = min(path.size().width, max(0, (rx - 16 - r.minX - 28) / 2))
+            rx -= 16 + w
+            path.draw(with: CGRect(x: rx, y: r.midY - 7, width: w, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        }
         let title = NSAttributedString(string: s.title, attributes: Theme.attrs(11.5, on || hover ? Theme.fg : Theme.sub, bold: on))
         title.draw(with: CGRect(x: r.minX + 28, y: r.midY - 8, width: max(0, rx - 10 - r.minX - 28), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }

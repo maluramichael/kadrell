@@ -157,4 +157,17 @@ final class SessionTolerantDecodeTests: XCTestCase {
         XCTAssertEqual(l[0].title, "p · 79a8")
         XCTAssertEqual(l[1].name, "fix")
     }
+
+    /// Transcript: angeschnittene erste Zeile, Tool-Aufruf ohne Text und Sidechain-Antwort werden übersprungen.
+    func testTranscriptLastText() {
+        let jsonl = """
+        ,"cut":"off"}
+        {"type":"assistant","message":{"content":[{"type":"text","text":"Fix ist drin.\\n\\nSoll ich **pushen**?"}]}}
+        {"type":"user","message":{"content":"ja"}}
+        {"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"subagent"}]}}
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash"}]}}
+        """
+        XCTAssertEqual(Transcript.lastText(jsonl: Data(jsonl.utf8)), "Fix ist drin. Soll ich pushen?")
+        XCTAssertNil(Transcript.lastText(jsonl: Data("{\"type\":\"user\"}".utf8)))
+    }
 }
