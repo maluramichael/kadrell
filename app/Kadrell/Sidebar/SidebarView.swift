@@ -22,7 +22,6 @@ final class SidebarView: NSView {
     enum SelectMode { case replace, toggle, add }
     /// Klick = nur diese, ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu.
     var onSelect: (([String], SelectMode) -> Void)?
-    var onActivateSession: ((Session) -> Void)?
     var onNewSession: ((String) -> Void)?
     var onEditGroup: ((String) -> Void)?
     /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
@@ -205,7 +204,6 @@ final class SidebarView: NSView {
                 return
             }
             anchor = s.id
-            if !cmd, s.isDone || s.isStale { onActivateSession?(s); return }
             onSelect?([s.id], cmd ? .toggle : .replace)
         }
     }

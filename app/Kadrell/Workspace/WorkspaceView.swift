@@ -25,7 +25,6 @@ final class WorkspaceView: NSView {
     var onChange: (() -> Void)?
     /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
     var onCloseSession: ((String, Bool) -> Void)?
-    var onActivateSession: ((Session) -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -63,12 +62,8 @@ final class WorkspaceView: NSView {
     func session(_ key: String) -> Session? { sessions[key] }
     func group(forSession key: String) -> Group? { groups.first { $0.sessionIds.contains(key) } }
 
-    /// Sessions in Attach-Reihenfolge: sichtbare zuerst, dann der Rest.
-    func sessionsByPriority() -> [Session] {
-        let shown = selected.compactMap { sessions[$0] }
-        let rest = sessions.values.filter { !selected.contains($0.id) }.sorted { $0.startedAt > $1.startedAt }
-        return shown + rest
-    }
+    /// Nur sichtbare Sessions bekommen ein Terminal: jeder Attach-Client ist ein eigener Prozess.
+    func shownSessions() -> [Session] { selected.compactMap { sessions[$0] } }
 
     // MARK: Auswahl
 
@@ -90,7 +85,7 @@ final class WorkspaceView: NSView {
             focused = ids.first
         }
         zen = false
-        for (k, v) in cells where !selected.contains(k) { v.removeFromSuperview(); cells[k] = nil }
+        for (k, v) in cells where !selected.contains(k) { v.removeFromSuperview(); cells[k] = nil; attach?.detach(k) }
         for id in selected where cells[id] == nil {
             let v = CellView(session: sessions[id]!)
             addSubview(v)
@@ -327,9 +322,7 @@ final class WorkspaceView: NSView {
         let force = event.modifierFlags.contains(.command)
         switch hit(at: p) {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
-        case .cell(let k), .row(let k):
-            guard let s = sessions[k] else { return }
-            if s.isDone || s.isStale { onActivateSession?(s) } else { setFocus(k) }
+        case .cell(let k), .row(let k): setFocus(k)
         case .none: window?.makeFirstResponder(self)
         }
     }

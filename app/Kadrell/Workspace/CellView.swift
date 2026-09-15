@@ -84,9 +84,9 @@ final class CellView: NSView {
             drawLabel("LÄUFT IN ANDEREM TERMINAL", in: body)
         } else if session.isStale {
             drawHatch(in: body)
-            drawLabel("PROZESS WEG · KLICK STARTET NEU", in: body)
+            drawLabel("PROZESS WEG · ⌘P › NEU STARTEN", in: body)
         } else if session.isDone {
-            drawLabel(session.state == "stopped" ? "GESTOPPT · KLICK SETZT FORT" : "BEENDET · KLICK SETZT FORT", in: body)
+            drawLabel(session.state == "stopped" ? "GESTOPPT · ⌘P › FORTSETZEN" : "BEENDET · ⌘P › FORTSETZEN", in: body)
         } else if !attached {
             drawHatch(in: body)
             if !lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }

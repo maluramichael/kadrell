@@ -96,7 +96,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         workspace.onChange = { [weak self] in self?.syncSidebar() }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
-        workspace.onActivateSession = { [weak self] s in self?.resume(s) }
         sidebar.onSelect = { [weak self] ids, mode in
             guard let self else { return }
             switch mode {
@@ -105,7 +104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .add: workspace.addMissing(ids)
             }
         }
-        sidebar.onActivateSession = { [weak self] s in self?.resume(s) }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
         sidebar.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
@@ -144,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.assign(sessions)
         attach.sync(with: sessions)
         reloadViews()
-        attach.enqueue(workspace.sessionsByPriority())
+        attach.enqueue(workspace.shownSessions())
     }
 
     private func reloadViews() {
@@ -287,8 +285,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Grid", { [weak self] in self?.workspace.setMode(.grid) }),
             ("Stack", { [weak self] in self?.workspace.setMode(.stack) }),
             ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
-            ("Alle anhängen", { [weak self] in self?.attachAll() }),
             ("Session stoppen (fokussierte)", { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
+            ("Session fortsetzen / neu starten (fokussierte)", { [weak self] in if let s = focusedSession, s.isDone || s.isStale { self?.resume(s) } }),
             ("Session schließen (fokussierte)", { [weak self] in if let s = focusedSession { self?.closeSession(s.id) } }),
             ("Gruppe bearbeiten (der fokussierten Session)", { [weak self] in
                 if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
@@ -296,10 +294,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ] + store.groups.map { g in ("Alle Sessions von \(g.name)", { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
         palette.source = src
         palette.open(over: window)
-    }
-
-    private func attachAll() {
-        for s in workspace.sessions.values where s.canAttach { attach.attachNow(s) }
     }
 
     // MARK: Sessions
@@ -349,7 +343,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Beendete Sessions: `--bg --resume`; Einträge ohne Prozess: `respawn`. Danach anhängen und zeigen.
+    /// Beendete Sessions: `--bg --resume` (startet laut CLI ggf. eine Kopie, deshalb nur auf ausdrücklichen Befehl);
+    /// Einträge ohne Prozess: `respawn`. Danach anhängen und zeigen.
     private func resume(_ s: Session) {
         Task {
             do {
