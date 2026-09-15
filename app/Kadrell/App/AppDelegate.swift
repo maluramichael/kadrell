@@ -106,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .replace: workspace.select(ids, add: false)
             case .toggle: workspace.select(ids, add: true)
             case .add: workspace.addMissing(ids)
+            case .cursor: workspace.select(ids, add: false, takeKeyboard: false)
             }
         }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
@@ -121,7 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
+            guard let self else { return event }
+            // Offene Hilfe hat selbst die Tastatur: F1 schließt sie wieder.
+            if event.keyCode == 122, overlayIsAbout, event.window === overlay { dismissSheet(); return nil }
+            guard event.window === self.window else { return event }
             if let action = Hotkeys.action(for: event) { self.perform(action); return nil }
             // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
             if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
@@ -232,6 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let file = NSMenu(title: "Datei")
         file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
         file.addItem(withTitle: "Neue Session im selben Ordner", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
+        file.addItem(.separator())
+        file.addItem(withTitle: "Fenster schließen", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
 
         let edit = NSMenu(title: "Bearbeiten")
@@ -242,8 +248,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Bearbeiten", action: nil, keyEquivalent: "").submenu = edit
 
         let view = NSMenu(title: "Ansicht")
-        view.addItem(withTitle: "Grid", action: #selector(menuGrid), keyEquivalent: "1")
-        view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "2")
+        view.addItem(withTitle: "Grid", action: #selector(menuGrid), keyEquivalent: "")
+        view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "")
         view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
         view.addItem(.separator())
         view.addItem(withTitle: "Terminal-Schrift größer", action: #selector(menuFontBigger), keyEquivalent: "+")
@@ -265,12 +271,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Ansicht", action: nil, keyEquivalent: "").submenu = view
 
         let session = NSMenu(title: "Session")
-        session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "w")
+        session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "")
         main.addItem(withTitle: "Session", action: nil, keyEquivalent: "").submenu = session
         NSApp.mainMenu = main
     }
 
-    @objc private func menuNewSession() { openNewSession(groupId: nil) }
+    /// Hat der Baum die Tastatur (⌘1), gleich in die Gruppe der fokussierten Session, ohne Dialog.
+    @objc private func menuNewSession() {
+        let inTree = window.firstResponder === sidebar
+        openNewSession(groupId: inTree ? workspace.focused.flatMap { workspace.group(forSession: $0)?.id } : nil)
+    }
     @objc private func menuNewSessionHere() { newSessionInFocusedFolder() }
     /// Ohne fokussierte Session gibt es keinen Ordner: dann wie ⌘N.
     private func newSessionInFocusedFolder() {
@@ -333,8 +343,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .lastSession: workspace.focusLast()
         case .zoom: workspace.toggleZen()
         case .nextLayout: workspace.setMode(workspace.mode.other)
+        case .focusSidebar: focusSidebar()
+        case .focusWorkspace: focusWorkspace()
         default: workspace.removeFocused()
         }
+    }
+
+    private func focusSidebar() {
+        if sidebarScroll.isHidden { menuSidebar() }
+        window.makeFirstResponder(sidebar)
+    }
+
+    /// Fokussierte Kachel bekommt die Tastatur; ist rechts nichts offen, die erste Session im Baum.
+    private func focusWorkspace() {
+        if let f = workspace.focused { workspace.setFocus(f); return }
+        let first = displayGroups().flatMap(\.sessionIds).first { workspace.session($0) != nil }
+        workspace.select(first.map { [$0] } ?? [], add: false)
     }
 
     private func showAbout() {

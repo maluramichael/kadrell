@@ -49,7 +49,7 @@ final class NewSessionModel {
     func start() {
         guard step == 2 else { pick(selected); return }
         var dir = NewSessionModel.expand(cwd.trimmingCharacters(in: .whitespacesAndNewlines))
-        // ⌘⏎ mit markiertem Vorschlag: direkt in dem Ordner starten, statt im halb getippten Pfad.
+        // ⏎ bei halb getipptem Pfad: im markierten Vorschlag starten.
         var isDir: ObjCBool = false
         let typedExists = FileManager.default.fileExists(atPath: dir, isDirectory: &isDir) && isDir.boolValue
         let comps = completions
@@ -112,8 +112,8 @@ struct NewSessionView: View {
                 foot("⏎ starten · Esc abbrechen")
             } else {
                 label("Neue Session · Ordner")
-                FolderInput(path: $model.cwd, selected: $model.compSelected) { }
-                DialogFoot(hint: "Tab oder ⏎ vervollständigen · Esc abbrechen", button: "Starten") { model.start() }
+                FolderInput(path: $model.cwd, selected: $model.compSelected) { model.start() }
+                DialogFoot(hint: "Tab vervollständigen · / Unterordner · Esc abbrechen", button: "Starten") { model.start() }
             }
         }
         .font(Theme.ui(12))

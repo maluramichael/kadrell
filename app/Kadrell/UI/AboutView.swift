@@ -5,7 +5,7 @@ struct AboutView: View {
     private var keys: [(String, String)] {
         let fixed: [(String, String)] = [
             ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
-            ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("Ziehen", "Session oder Gruppe umsortieren, Baum und Kacheln gleich"), ("⌘A", "alle Sessions öffnen"), ("⌘1 / ⌘2", "Grid / Stack"),
+            ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("Ziehen", "Session oder Gruppe umsortieren, Baum und Kacheln gleich"), ("⌘A", "alle Sessions öffnen"),
         ]
         // Belegbare Kürzel, eine Zeile je Hilfetext; lange Reihen (Kachel 1–9) nur erstes … letztes.
         let current = Hotkeys.current
@@ -17,7 +17,7 @@ struct AboutView: View {
         }
         return fixed + rows + [
             ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"),
-            ("⌘W", "Fokussierte Session stoppen"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner, Tastenkürzel"), ("F1", "diese Hilfe"),
+            ("⌘W", "Fenster schließen"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner, Tastenkürzel"), ("F1", "diese Hilfe"),
         ]
     }
     private var version: String {

@@ -78,8 +78,8 @@ final class WorkspaceView: NSView {
 
     // MARK: Auswahl
 
-    /// Ersetzt die Auswahl (Klick) oder toggelt jede Id (⌘-Klick).
-    func select(_ ids: [String], add: Bool) {
+    /// Ersetzt die Auswahl (Klick) oder toggelt jede Id (⌘-Klick). `takeKeyboard: false`: Pfeiltasten im Baum.
+    func select(_ ids: [String], add: Bool, takeKeyboard: Bool = true) {
         let ids = ids.filter { sessions[$0] != nil }
         if add {
             for id in ids {
@@ -106,7 +106,7 @@ final class WorkspaceView: NSView {
         for id in selected { attach?.attachNow(sessions[id]!) }
         persist()
         relayout()
-        focusTerminal()
+        if takeKeyboard { focusTerminal() }
     }
 
     /// ⇧-Bereich oder Gruppe mit Modifier: fehlende Sessions dazu, nichts weg.

@@ -1,7 +1,8 @@
 import SwiftUI
 import AppKit
 
-// Einheitliche Pfadeingabe: tippen, Tab vervollständigt, Pfeile wählen, ⏎ bestätigt, Button öffnet den Ordnerdialog.
+// Einheitliche Pfadeingabe: tippen, Tab übernimmt den Vorschlag (ohne Slash), Pfeile wählen, ⏎ bestätigt den Pfad im Feld.
+// Unterordner zeigt die Liste erst, wenn man selbst „/“ tippt.
 
 /// Unterordner, die zum getippten Pfad passen (nur Verzeichnisse, keine versteckten).
 func folderCompletions(for typed: String) -> [String] {
@@ -27,10 +28,10 @@ func folderCompletions(for typed: String) -> [String] {
     }
     ranked.sort { $0.rank != $1.rank ? $0.rank < $1.rank : $0.name.lowercased() < $1.name.lowercased() }
     let base = dir.hasSuffix("/") ? dir : dir + "/"
-    return ranked.prefix(8).map { base + $0.name + "/" }
+    return ranked.prefix(8).map { base + $0.name }
 }
 
-/// Nativer Ordnerdialog. Liefert den gewählten Pfad mit Slash oder nil.
+/// Nativer Ordnerdialog. Liefert den gewählten Pfad oder nil.
 @MainActor
 func chooseFolder(start: String, completion: @escaping (String?) -> Void) {
     let panel = NSOpenPanel()
@@ -41,7 +42,7 @@ func chooseFolder(start: String, completion: @escaping (String?) -> Void) {
     panel.directoryURL = URL(fileURLWithPath: NewSessionModel.expand(start))
     panel.prompt = "Wählen"
     panel.begin { resp in
-        completion(resp == .OK ? panel.url.map { $0.path + "/" } : nil)
+        completion(resp == .OK ? panel.url.map { $0.path } : nil)
     }
 }
 
@@ -54,7 +55,7 @@ struct FolderInput: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            PathField(text: $path, onTab: complete, onSubmit: complete,   // ⏎ wie Tab; starten nur per ⌘⏎ oder Button
+            PathField(text: $path, onTab: complete, onSubmit: onSubmit,
                       onMove: { d in selected = max(0, min(max(completions.count - 1, 0), selected + d)) })
                 .frame(height: 20 * Theme.scale)
             Button("Ordner wählen …") {
