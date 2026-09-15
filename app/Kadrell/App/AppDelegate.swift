@@ -307,6 +307,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let session = NSMenu(title: "Session")
         session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "")
         main.addItem(withTitle: "Session", action: nil, keyEquivalent: "").submenu = session
+
+        let windows = NSMenu(title: "Fenster")
+        windows.addItem(withTitle: "Im Dock ablegen", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windows.addItem(withTitle: "Zoomen", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        main.addItem(withTitle: "Fenster", action: nil, keyEquivalent: "").submenu = windows
+        NSApp.windowsMenu = windows
         NSApp.mainMenu = main
     }
 

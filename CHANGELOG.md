@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.1.1 (2026-09-16)
+
+- Fix: ⌘M legt das Fenster wieder im Dock ab, dazu gibt es jetzt das Menü „Fenster".
+
 ## 1.1.0 (2026-09-16)
 
 - Änderung: Der Pfad einer Gruppe steht in der Seitenleiste klein und eingerückt unter dem Gruppennamen, bei wenig Platz werden die vorderen Ordner abgekürzt (`~/d/p/projekt`).
