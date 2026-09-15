@@ -80,6 +80,7 @@ final class SessionRegistry {
         for a in agents { if let pid = a.pid, let key = pids[pid] { live[key] = a } }
         return sessions.map { s in
             var s = s
+            s.branch = Git.branch(at: s.cwd)
             guard let a = live[s.id] else { s.rawStatus = nil; s.pid = nil; s.waitingFor = nil; return s }
             s.sessionId = a.sessionId
             if !Session.isAutoName(a.name, cwd: s.cwd) { s.name = a.name }

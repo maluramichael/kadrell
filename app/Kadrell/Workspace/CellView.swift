@@ -89,9 +89,12 @@ final class CellView: NSView {
         }
         let title = NSAttributedString(string: session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
         let group = NSAttributedString(string: groupName, attributes: Theme.attrs(10.5, groupColor))
-        let titleW = min(title.size().width, max(0, b.width - 24 - metaW - iconW - 16 - group.size().width - 8))
+        let branch = NSAttributedString(string: session.branch ?? "", attributes: Theme.attrs(10.5, Theme.muted))
+        let branchW = branch.length == 0 ? 0 : branch.size().width + 8
+        let titleW = min(title.size().width, max(0, b.width - 24 - metaW - iconW - 16 - group.size().width - 8 - branchW))
         title.draw(with: CGRect(x: 24, y: 5, width: titleW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        group.draw(with: CGRect(x: 24 + titleW + 8, y: 6, width: max(0, b.width - 24 - titleW - 8 - metaW - iconW - 16), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        if branchW > 0 { branch.draw(at: CGPoint(x: 24 + titleW + 8, y: 6)) }
+        group.draw(with: CGRect(x: 24 + titleW + 8 + branchW, y: 6, width: max(0, b.width - 24 - titleW - 8 - branchW - metaW - iconW - 16), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         meta.draw(at: CGPoint(x: b.width - (hovered ? 24 : 0) - 9 - metaW, y: 6))
         if hovered { Icons.x(in: xRectLogical, color: Theme.sub) }
     }

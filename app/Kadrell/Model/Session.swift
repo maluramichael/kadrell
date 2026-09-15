@@ -21,6 +21,8 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var rawStatus: String? = nil
     var pid: Int? = nil
     var waitingFor: String? = nil
+    /// Git-Branch des Projektordners, wird bei jedem Refresh aus `.git/HEAD` gelesen.
+    var branch: String? = nil
 
     enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name }
 

@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.6.0 (2026-09-16)
+
+- Feature: Die Kopfzeile jeder Session zeigt den aktuellen Git-Branch des Projektordners.
+
 ## 1.5.1 (2026-09-16)
 
 - Fix: ⌘N öffnet immer den Dialog zur Gruppenwahl, auch wenn der Baum den Fokus hat. Vorher startete es dort wie ⌘⏎ sofort eine Session in der Gruppe der fokussierten Session.
