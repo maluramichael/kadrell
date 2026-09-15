@@ -63,8 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         canvas.onViewChange = { [weak self] in self?.updateBar() }
         canvas.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
         canvas.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
-        canvas.onCloseGroup = { [weak self] gid in self?.closeGroup(gid) }
-        canvas.onCloseSession = { [weak self] key in self?.closeSession(key) }
+        canvas.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
+        canvas.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         canvas.onActivateSession = { [weak self] s in self?.resume(s) }
         bar.onNew = { [weak self] in self?.openNewSession(groupId: nil) }
         bar.onPalette = { [weak self] in self?.togglePalette() }
@@ -190,8 +190,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Sessions
 
-    /// Rückfrage im App-Design. ⏎ bestätigt, Esc bricht ab.
-    private func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, then action: @escaping () -> Void) {
+    /// Rückfrage im App-Design. ⏎ bestätigt, Esc bricht ab. `skip` (⌘+Klick) führt direkt aus.
+    private func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false, then action: @escaping () -> Void) {
+        if skip { action(); return }
         let run = { [weak self] in self?.dismissSheet(); action() }
         present(ConfirmView(title: message, info: info, button: button, destructive: destructive,
                             onConfirm: run, onCancel: { [weak self] in self?.dismissSheet() }),
@@ -214,13 +215,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func closeSession(_ key: String) {
+    private func closeSession(_ key: String, force: Bool = false) {
         guard let s = canvas.session(key) else { return }
         guard let id = s.shortId else {
             confirm("Session „\(s.name)“ läuft in einem anderen Terminal", "Interaktive Sessions kann Kadrell nicht stoppen.", button: "OK", destructive: false) {}
             return
         }
-        confirm("Session „\(s.name)“ stoppen und entfernen?", "claude stop \(id) und claude rm \(id). Das lässt sich nicht rückgängig machen.", button: "Entfernen") { [weak self] in
+        confirm("Session „\(s.name)“ stoppen und entfernen?", "claude stop \(id) und claude rm \(id). Das lässt sich nicht rückgängig machen.", button: "Entfernen", skip: force) { [weak self] in
             guard let self else { return }
             let gid = canvas.group(forSession: key)?.id
             attach.detach(key)
@@ -249,7 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func closeGroup(_ gid: String) {
+    private func closeGroup(_ gid: String, force: Bool = false) {
         guard let g = store.group(id: gid) else { return }
         let members = g.sessionIds.compactMap { canvas.session($0) }
         let bg = members.filter { $0.shortId != nil && !$0.isDone }
@@ -260,7 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         confirm("Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?",
-                bg.isEmpty ? "Die Gruppe wird aus Kadrell entfernt." : "\(bg.count) Hintergrund-Session(s) werden mit claude stop gestoppt.", button: "Schließen") { [weak self] in
+                bg.isEmpty ? "Die Gruppe wird aus Kadrell entfernt." : "\(bg.count) Hintergrund-Session(s) werden mit claude stop gestoppt.", button: "Schließen", skip: force) { [weak self] in
             guard let self else { return }
             for s in members { attach.detach(s.id) }
             Task {

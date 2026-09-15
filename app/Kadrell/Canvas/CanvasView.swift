@@ -31,8 +31,9 @@ final class CanvasView: NSView {
     var onViewChange: (() -> Void)?
     var onNewSession: ((String?) -> Void)?
     var onEditGroup: ((String) -> Void)?
-    var onCloseGroup: ((String) -> Void)?
-    var onCloseSession: ((String) -> Void)?
+    /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage ausführen.
+    var onCloseGroup: ((String, Bool) -> Void)?
+    var onCloseSession: ((String, Bool) -> Void)?
     var onActivateSession: ((Session) -> Void)?
 
     override init(frame: NSRect) {
@@ -389,14 +390,15 @@ final class CanvasView: NSView {
         drag = nil
         if wasDrag { return }
         let p = convert(event.locationInWindow, from: nil)
+        let force = event.modifierFlags.contains(.command)
         switch hit(at: p) {
-        case .cellClose(let k): onCloseSession?(k)
+        case .cellClose(let k): onCloseSession?(k, force)
         case .cell(let k):
             guard k != focusedKey, let s = sessions[k] else { return }
             if s.isDone || s.isStale { onActivateSession?(s) } else { focus(k) }
         case .header(let g): fitGroup(g)
         case .pen(let g): onEditGroup?(g)
-        case .close(let g): onCloseGroup?(g)
+        case .close(let g): onCloseGroup?(g, force)
         case .plus(let g): onNewSession?(g)
         case .none: break
         }
