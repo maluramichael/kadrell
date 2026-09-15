@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.5.0 (2026-09-16)
+
+- Änderung: Die Einstellungen sind wie die F1-Hilfe in Bereiche gegliedert: Sessions, Claude, Darstellung, Baum und Kacheln, Tastenkürzel. Die Tastenkürzel-Liste ist zusätzlich in Navigation und Kacheln verwalten unterteilt.
+
 ## 1.4.0 (2026-09-16)
 
 - Feature: Gruppen lassen sich per Herz als Favorit markieren. Eine favorisierte Gruppe bleibt im Baum stehen, auch wenn ihre letzte Session geschlossen wurde, und startet per Plus wieder eine neue.

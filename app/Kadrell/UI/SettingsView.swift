@@ -182,9 +182,20 @@ final class SettingsModel {
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
-    private func label(_ s: String) -> some View {
-        Text(s).font(Theme.ui(12)).foregroundStyle(Theme.fgColor)
-            .padding(.horizontal, 16).padding(.top, 14)
+    /// Bereichsüberschrift wie in der F1-Hilfe: Akzentfarbe, gesperrt, Großbuchstaben, optionaler Hinweis daneben.
+    private func heading(_ s: String, note: String = "", first: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(s.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.runningColor)
+            if !note.isEmpty { Text(note).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor) }
+        }
+        .padding(.horizontal, 16).padding(.top, first ? 14 : 18).padding(.bottom, 6)
+    }
+
+    /// Kürzel nach denselben Bereichen wie die F1-Hilfe; die zweite Gruppe nimmt den Rest, damit keine Aktion verschwindet.
+    private var hotkeyGroups: [(String, [HotkeyAction])] {
+        let nav: [HotkeyAction] = [.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession]
+            + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace]
+        return [("Navigation", nav), ("Kacheln verwalten", HotkeyAction.allCases.filter { !nav.contains($0) })]
     }
 
     var body: some View {
@@ -196,19 +207,42 @@ struct SettingsView: View {
             }
             .font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
             .padding(.horizontal, 16).padding(.top, 12)
-            label("Startordner für ⌘N")
-            HStack(spacing: 10) {
-                Text(Theme.shortPath(model.startFolder)).font(Theme.ui(12)).foregroundStyle(Theme.fgColor)
-                    .lineLimit(1).truncationMode(.head)
-                Spacer()
-                Button("Ordner wählen …") {
-                    chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } }
+            Divider().overlay(Theme.lineColor).padding(.top, 12)
+
+            heading("Sessions", first: true)
+            VStack(spacing: 6) {
+                setting("Startordner für ⌘N") {
+                    HStack(spacing: 10) {
+                        Text(Theme.shortPath(model.startFolder)).font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
+                            .lineLimit(1).truncationMode(.head)
+                        Button("Ordner wählen …") {
+                            chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } }
+                        }
+                        .buttonStyle(.plain).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+                        .padding(.horizontal, 10).padding(.vertical, 4).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+                    }
                 }
-                .buttonStyle(.plain).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
-                .padding(.horizontal, 10).padding(.vertical, 4).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+                setting("Wenn Claude endet (zweimal ⌃C, /exit)") {
+                    HStack(spacing: 2) {
+                        pill("Kachel bleibt, Klick setzt fort", on: !model.closeTileOnExit) { model.closeTileOnExit = false }
+                        pill("Kachel schließen", on: model.closeTileOnExit) { model.closeTileOnExit = true }
+                    }
+                }
             }
-            .padding(.horizontal, 16).padding(.top, 8)
-            label("Darstellung")
+            .padding(.horizontal, 16)
+
+            heading("Claude", note: "gilt für neu gestartete Claude-Prozesse")
+            VStack(spacing: 6) {
+                setting("Bypass-Modus erlauben (--allow-dangerously-skip-permissions)") {
+                    pill(model.claudeAllowBypass ? "an" : "aus", on: model.claudeAllowBypass) { model.claudeAllowBypass.toggle() }
+                }
+                setting("Startmodus") { options(Settings.claudeModes, $model.claudeMode) }
+                setting("Modell") { options(Settings.claudeModels, $model.claudeModel) }
+                setting("Effort") { options(Settings.claudeEfforts, $model.claudeEffort) }
+            }
+            .padding(.horizontal, 16)
+
+            heading("Darstellung")
             VStack(spacing: 6) {
                 setting("UI-Größe") { choice(Settings.uiScales, $model.uiScale) { "\(Int(($0 * 100).rounded())) %" } }
                 setting("Terminal-Schrift") {
@@ -225,35 +259,27 @@ struct SettingsView: View {
                     }
                 }
                 setting("Zeilenabstand") { choice(Settings.lineSpacings, $model.lineSpacing) { "\(Int(($0 * 100).rounded())) %" } }
+                setting("Innenabstand der Kacheln") { choice(Settings.paddings, $model.padding) { "\(Int($0)) px" } }
+            }
+            .padding(.horizontal, 16)
+
+            heading("Baum und Kacheln")
+            VStack(spacing: 6) {
                 setting("Pfad in Stack-Zeilen") { pill(model.stackShowPath ? "an" : "aus", on: model.stackShowPath) { model.stackShowPath.toggle() } }
                 setting("Letzte Antwort von Claude im Baum") { pill(model.showLastMessage ? "an" : "aus", on: model.showLastMessage) { model.showLastMessage.toggle() } }
-                setting("Innenabstand") { choice(Settings.paddings, $model.padding) { "\(Int($0)) px" } }
             }
-            .padding(.horizontal, 16).padding(.vertical, 8)
-            label("Sessions")
-            setting("Wenn Claude endet (zweimal ⌃C, /exit)") {
-                HStack(spacing: 2) {
-                    pill("Kachel bleibt, Klick setzt fort", on: !model.closeTileOnExit) { model.closeTileOnExit = false }
-                    pill("Kachel schließen", on: model.closeTileOnExit) { model.closeTileOnExit = true }
-                }
-            }
-            .padding(.horizontal, 16).padding(.vertical, 8)
-            label("Claude  (gilt für neu gestartete Claude-Prozesse)")
-            VStack(spacing: 6) {
-                setting("Bypass-Modus erlauben (--allow-dangerously-skip-permissions)") {
-                    pill(model.claudeAllowBypass ? "an" : "aus", on: model.claudeAllowBypass) { model.claudeAllowBypass.toggle() }
-                }
-                setting("Startmodus") { options(Settings.claudeModes, $model.claudeMode) }
-                setting("Modell") { options(Settings.claudeModels, $model.claudeModel) }
-                setting("Effort") { options(Settings.claudeEfforts, $model.claudeEffort) }
-            }
-            .padding(.horizontal, 16).padding(.vertical, 8)
-            label("Tastenkürzel")
+            .padding(.horizontal, 16)
+
+            heading("Tastenkürzel")
             ScrollView {
-                VStack(spacing: 2) {
-                    ForEach(HotkeyAction.allCases, id: \.self) { a in row(a) }
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(hotkeyGroups, id: \.0) { title, actions in
+                        Text(title).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.mutedColor)
+                            .padding(.top, title == hotkeyGroups.first?.0 ? 0 : 12).padding(.bottom, 4)
+                        ForEach(actions, id: \.self) { a in row(a) }
+                    }
                 }
-                .padding(.horizontal, 16).padding(.vertical, 8)
+                .padding(.horizontal, 16).padding(.vertical, 4)
             }
             .frame(height: 320 * Theme.scale)
             DialogFoot(hint: "Kürzel anklicken, Tasten drücken · ⌫ entfernt · Esc abbrechen", button: "Speichern") { model.save() }
