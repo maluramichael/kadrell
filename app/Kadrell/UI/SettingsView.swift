@@ -17,7 +17,6 @@ enum Settings {
 @MainActor
 final class SettingsModel {
     var startFolder = Settings.startFolder
-    var compSelected = 0
     var hotkeys = Hotkeys.current
     /// Aktion, deren Kürzel gerade aufgenommen wird.
     var recording: HotkeyAction?
@@ -70,7 +69,17 @@ struct SettingsView: View {
             Text("EINSTELLUNGEN").font(.custom("JetBrainsMonoNF-Regular", size: 11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
                 .padding(.horizontal, 16).padding(.top, 12)
             label("Startordner für ⌘N")
-            FolderInput(path: $model.startFolder, selected: $model.compSelected) { }
+            HStack(spacing: 10) {
+                Text(Theme.shortPath(model.startFolder)).font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.fgColor)
+                    .lineLimit(1).truncationMode(.head)
+                Spacer()
+                Button("Ordner wählen …") {
+                    chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } }
+                }
+                .buttonStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+                .padding(.horizontal, 10).padding(.vertical, 4).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+            }
+            .padding(.horizontal, 16).padding(.top, 8)
             label("Tastenkürzel")
             ScrollView {
                 VStack(spacing: 2) {
@@ -78,10 +87,10 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
             }
-            .frame(height: 380)
+            .frame(height: 620)
             DialogFoot(hint: "Kürzel anklicken, Tasten drücken · ⌫ entfernt · Esc abbrechen", button: "Speichern") { model.save() }
         }
-        .frame(width: 640, alignment: .leading)
+        .frame(width: 900, alignment: .leading)
         .background(Theme.panelColor)
         .onDisappear { model.stopRecording() }
     }
