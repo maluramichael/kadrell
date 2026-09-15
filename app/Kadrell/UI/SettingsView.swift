@@ -11,6 +11,11 @@ enum Settings {
         }
         set { UserDefaults.standard.set(newValue, forKey: startFolderKey) }
     }
+    /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default aus.
+    static var stackShowPath: Bool {
+        get { UserDefaults.standard.bool(forKey: "stackShowPath") }
+        set { UserDefaults.standard.set(newValue, forKey: "stackShowPath") }
+    }
 }
 
 @Observable
@@ -18,6 +23,7 @@ enum Settings {
 final class SettingsModel {
     var startFolder = Settings.startFolder
     var compSelected = 0
+    var stackShowPath = Settings.stackShowPath
     var hotkeys = Hotkeys.current
     /// Aktion, deren Kürzel gerade aufgenommen wird.
     var recording: HotkeyAction?
@@ -28,6 +34,7 @@ final class SettingsModel {
         stopRecording()
         let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         if !p.isEmpty { Settings.startFolder = p }
+        Settings.stackShowPath = stackShowPath
         Hotkeys.current = hotkeys
         onDone?()
     }
@@ -71,6 +78,10 @@ struct SettingsView: View {
                 .padding(.horizontal, 16).padding(.top, 12)
             label("Startordner für ⌘N")
             FolderInput(path: $model.startFolder, selected: $model.compSelected) { }
+            Toggle(isOn: $model.stackShowPath) {
+                Text("Pfad in Stack-Zeilen anzeigen").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.fgColor)
+            }
+            .toggleStyle(.checkbox).padding(.horizontal, 16).padding(.top, 14)
             label("Tastenkürzel")
             ScrollView {
                 VStack(spacing: 2) {
