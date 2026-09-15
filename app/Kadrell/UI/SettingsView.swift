@@ -70,7 +70,7 @@ struct SettingsView: View {
             Text("EINSTELLUNGEN").font(.custom("JetBrainsMonoNF-Regular", size: 11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
                 .padding(.horizontal, 16).padding(.top, 12)
             label("Startordner für ⌘N")
-            FolderInput(path: $model.startFolder, selected: $model.compSelected) { }
+            FolderInput(path: $model.startFolder, selected: $model.compSelected) { model.save() }
             label("Tastenkürzel")
             ScrollView {
                 VStack(spacing: 2) {
