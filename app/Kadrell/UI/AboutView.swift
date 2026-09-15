@@ -7,7 +7,7 @@ struct AboutView: View {
         ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "alle Sessions öffnen"),
         ("⌘1 / ⌘2", "Grid / Stack"), ("⌘⌥ ← ↑ → ↓", "Fokus bewegen · im Stack auf- und zuklappen"),
         ("⌘⇧ ⏎", "Fokus-Kachel allein (zen)"), ("⌘Esc", "Fokus-Kachel schließen (Esc selbst geht an Claude)"),
-        ("⌘N", "Neue Session"), ("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"), ("⌘W", "Fokussierte Session stoppen"),
+        ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"),("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"), ("⌘W", "Fokussierte Session stoppen"),
         ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner"), ("F1", "diese Hilfe"),
     ]
     private var version: String {

@@ -115,6 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             if event.keyCode == 53, event.modifierFlags.contains(.command) { self.workspace.removeFocused(); return nil }
+            // ⌘⏎ (ohne ⇧, das ist zen): neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
+            if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
             if event.keyCode == 122 { self.showAbout(); return nil }   // F1
             return event
         }
@@ -220,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let file = NSMenu(title: "Datei")
         file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
+        file.addItem(withTitle: "Neue Session im selben Ordner", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
 
         let edit = NSMenu(title: "Bearbeiten")
@@ -254,6 +257,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func menuNewSession() { openNewSession(groupId: nil) }
+    @objc private func menuNewSessionHere() { newSessionInFocusedFolder() }
+    /// Ohne fokussierte Session gibt es keinen Ordner: dann wie ⌘N.
+    private func newSessionInFocusedFolder() {
+        guard let s = workspace.focused.flatMap({ workspace.session($0) }), !s.cwd.isEmpty else { openNewSession(groupId: nil); return }
+        startSession(group: workspace.group(forSession: s.id), cwd: s.cwd)
+    }
     @objc private func menuAbout() { showAbout() }
     @objc private func menuSettings() {
         let model = SettingsModel()
