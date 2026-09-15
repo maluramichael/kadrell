@@ -3,7 +3,8 @@ import SwiftUI
 /// F1 und „Über Kadrell“: Autor, Link, Tastenkürzel. Esc oder ⏎ schließt.
 struct AboutView: View {
     private let keys: [(String, String)] = [
-        ("Klick", "nur diese Session zeigen"), ("⇧ Klick", "Session dazu oder weg · auf Gruppe: alle ihre Sessions"),
+        ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
+        ("⇧ Klick", "Bereich seit dem letzten Klick dazu"),
         ("⌘1 / ⌘2", "Grid / Stack"), ("⌘⌥ ← ↑ → ↓", "Fokus bewegen · im Stack auf- und zuklappen"),
         ("⌘⇧ ⏎", "Fokus-Kachel allein (zen)"), ("⌘Esc", "Fokus-Kachel schließen (Esc selbst geht an Claude)"),
         ("⌘N", "Neue Session"), ("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"), ("⌘W", "Fokussierte Session stoppen"),

@@ -93,10 +93,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onChange = { [weak self] in self?.syncSidebar() }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         workspace.onActivateSession = { [weak self] s in self?.resume(s) }
-        sidebar.onSelectSession = { [weak self] key, add in self?.workspace.select([key], add: add) }
-        sidebar.onSelectGroup = { [weak self] gid, add in
-            guard let self, let g = store.group(id: gid) else { return }
-            if add { workspace.addMissing(g.sessionIds) } else { workspace.select(g.sessionIds, add: false) }
+        sidebar.onSelect = { [weak self] ids, mode in
+            guard let self else { return }
+            switch mode {
+            case .replace: workspace.select(ids, add: false)
+            case .toggle: workspace.select(ids, add: true)
+            case .add: workspace.addMissing(ids)
+            }
         }
         sidebar.onActivateSession = { [weak self] s in self?.resume(s) }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
@@ -431,8 +434,14 @@ final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// Split-View mit 1-px-Trenner in der Linienfarbe des Themes.
-final class ThinSplitView: NSSplitView {
+/// Split-View mit 1-px-Trenner in der Linienfarbe des Themes; greifbar ist er 8 px breit.
+final class ThinSplitView: NSSplitView, NSSplitViewDelegate {
+    static let grabWidth: CGFloat = 8
     override var dividerColor: NSColor { Theme.line }
     override var dividerThickness: CGFloat { 1 }
+    override init(frame: NSRect) { super.init(frame: frame); delegate = self }
+    required init?(coder: NSCoder) { nil }
+    func splitView(_ splitView: NSSplitView, effectiveRect proposed: NSRect, forDrawnRect drawn: NSRect, ofDividerAt i: Int) -> NSRect {
+        drawn.insetBy(dx: -(ThinSplitView.grabWidth - drawn.width) / 2, dy: 0)
+    }
 }

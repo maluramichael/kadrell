@@ -72,7 +72,7 @@ final class WorkspaceView: NSView {
 
     // MARK: Auswahl
 
-    /// Ersetzt die Auswahl (Klick) oder toggelt jede Id (⇧-Klick).
+    /// Ersetzt die Auswahl (Klick) oder toggelt jede Id (⌘-Klick).
     func select(_ ids: [String], add: Bool) {
         let ids = ids.filter { sessions[$0] != nil }
         if add {
@@ -102,7 +102,7 @@ final class WorkspaceView: NSView {
         focusTerminal()
     }
 
-    /// ⇧-Klick auf eine Gruppe: fehlende Sessions dazu, nichts weg.
+    /// ⇧-Bereich oder Gruppe mit Modifier: fehlende Sessions dazu, nichts weg.
     func addMissing(_ ids: [String]) { select(ids.filter { !selected.contains($0) }, add: true) }
 
     func setFocus(_ key: String, takeKeyboard: Bool = true) {
@@ -242,7 +242,7 @@ final class WorkspaceView: NSView {
         dirtyRect.fill()
         if selected.isEmpty {
             let a = NSAttributedString(string: "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
-            let b = NSAttributedString(string: "⇧-Klick für mehrere · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+            let b = NSAttributedString(string: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
             a.draw(at: CGPoint(x: bounds.midX - a.size().width / 2, y: bounds.midY - 16))
             b.draw(at: CGPoint(x: bounds.midX - b.size().width / 2, y: bounds.midY + 4))
             return
@@ -300,6 +300,7 @@ final class WorkspaceView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        guard p.x > ThinSplitView.grabWidth / 2 else { return }   // Griffzone des Trenners: Cursor gehört dem Split
         var cell: String?, row: String?
         switch hit(at: p) {
         case .cell(let k): cell = k; NSCursor.arrow.set()

@@ -15,10 +15,13 @@ final class SidebarView: NSView {
     private var collapsed: Set<String> = []
     private var rows: [Row] = []
     private var hovered: Int?
+    /// Letzte einzeln angeklickte Session: Startpunkt für ⇧-Bereiche.
+    private var anchor: String?
     private var pulseTask: Task<Void, Never>?
 
-    var onSelectSession: ((String, Bool) -> Void)?
-    var onSelectGroup: ((String, Bool) -> Void)?
+    enum SelectMode { case replace, toggle, add }
+    /// Klick = nur diese, ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu.
+    var onSelect: (([String], SelectMode) -> Void)?
     var onActivateSession: ((Session) -> Void)?
     var onNewSession: ((String) -> Void)?
     var onEditGroup: ((String) -> Void)?
@@ -71,6 +74,9 @@ final class SidebarView: NSView {
     }
 
     private func rowIndex(at p: CGPoint) -> Int? { rows.indices.first { rowRect($0).contains(p) } }
+    /// Sichtbare Sessions in Baumreihenfolge (Bereichsauswahl läuft über Gruppen hinweg).
+    private var sessionIds: [String] { rows.compactMap { if case .session(let s, _) = $0 { s.id } else { nil } } }
+    private func sessionIndex(_ id: String) -> Int? { sessionIds.firstIndex(of: id) }
     /// Trefferflächen rechts in der Zeile, von rechts nach links: nur bei Hover sichtbar.
     private func iconRects(_ r: CGRect, count: Int) -> [CGRect] {
         (0..<count).map { CGRect(x: r.maxX - 8 - CGFloat($0 + 1) * 20, y: r.midY - 8, width: 16, height: 16) }
@@ -147,8 +153,10 @@ final class SidebarView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        let i = rowIndex(at: convert(event.locationInWindow, from: nil))
-        NSCursor.pointingHand.set()
+        let p = convert(event.locationInWindow, from: nil)
+        guard p.x < bounds.width - ThinSplitView.grabWidth / 2 else { return }   // Griffzone des Trenners
+        let i = rowIndex(at: p)
+        (i == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
         guard i != hovered else { return }
         hovered = i
         needsDisplay = true
@@ -163,8 +171,8 @@ final class SidebarView: NSView {
         let p = convert(event.locationInWindow, from: nil)
         guard let i = rowIndex(at: p) else { return }
         let r = rowRect(i)
-        let add = event.modifierFlags.contains(.shift)
-        let force = event.modifierFlags.contains(.command)
+        let shift = event.modifierFlags.contains(.shift), cmd = event.modifierFlags.contains(.command)
+        let force = cmd
         switch rows[i] {
         case .group(let g):
             let icons = iconRects(r, count: 3)
@@ -176,11 +184,16 @@ final class SidebarView: NSView {
                 reload(groups: groups, sessions: Array(sessions.values))
                 return
             }
-            onSelectGroup?(g.id, add)
+            onSelect?(g.sessionIds, shift || cmd ? .add : .replace)
         case .session(let s, _):
             if iconRects(r, count: 1)[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseSession?(s.id, force); return }
-            if !add, s.isDone || s.isStale { onActivateSession?(s); return }
-            onSelectSession?(s.id, add)
+            if shift, let a = anchor, let ai = sessionIndex(a), let bi = sessionIndex(s.id) {
+                onSelect?(sessionIds[min(ai, bi)...max(ai, bi)].map { $0 }, .add)
+                return
+            }
+            anchor = s.id
+            if !cmd, s.isDone || s.isStale { onActivateSession?(s); return }
+            onSelect?([s.id], cmd ? .toggle : .replace)
         }
     }
 }
