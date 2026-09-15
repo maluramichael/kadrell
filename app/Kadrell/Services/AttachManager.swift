@@ -7,7 +7,7 @@ import os
 final class KadrellTerminalView: LocalProcessTerminalView {
     var onEscape: (() -> Void)?
     var onExit: (() -> Void)?
-    /// Schriftfaktor (≥ 1) beim letzten Ruhezustand im geometrischen Zoom-Modus; darunter nur Layer-Skalierung.
+    /// Maßstab beim letzten Ruhezustand im geometrischen Zoom-Modus (Schrift = 12 × Maßstab).
     var restFontScale: CGFloat = 1
     /// Per Layer verkleinert: Mauskoordinaten stimmen nicht mehr, Klicks gehen an die Canvas (Fokus).
     var passthroughMouse = false

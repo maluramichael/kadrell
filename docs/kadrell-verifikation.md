@@ -112,9 +112,11 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
   Kachel auf das Fensterformat. Neue Gruppen landen rechts neben den bestehenden, sonst darunter.
   Header-Icons (+, Stift, X) sind immer sichtbar; `+` startet eine Session ohne hinzuzoomen.
 - **Zwei Zoom-Modi (⌘,):** „Layout“ wie im Brief (Text bildschirmkonstant, Terminal ab 320 px Kachelbreite).
-  „Geometrisch“: die Terminalschrift ist 12 pt × Maßstab, die Spaltenzahl bleibt beim Zoomen konstant,
-  während der Bewegung wird das eingehängte Terminal nur per Layer skaliert (kein SIGWINCH), in Ruhe
-  Frame und Schrift neu gesetzt. Unter 3 px Schrift wird ausgehängt und der Text-Snapshot gezeigt.
+  „Geometrisch“: in Ruhe ist die Terminalschrift 12 pt × Maßstab bei Frame = Kachel, Spalten und Zeilen
+  bleiben beim Zoomen konstant; während der Bewegung wird das eingehängte Terminal nur per Layer skaliert.
+  Falle: SwiftTerm zeichnet nur innerhalb von `visibleRect`, das Layer-Transformationen ignoriert. Ein
+  dauerhaft per Layer verkleinertes Terminal mit übergroßem Frame verliert deshalb die unteren Zeilen.
+  Unter 3 px Schrift wird ausgehängt und der mitskalierte Text-Snapshot gezeigt.
 - **Claude-Nutzung in der Leiste:** `GET https://api.anthropic.com/api/oauth/usage` mit dem OAuth-Token
   aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (derselbe Weg wie die CLI), Header
   `anthropic-beta: oauth-2025-04-20`. Gelesen wird das `limits`-Array (kind `session`, `weekly_all`,
