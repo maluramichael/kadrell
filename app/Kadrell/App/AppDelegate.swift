@@ -323,11 +323,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = main
     }
 
-    /// Hat der Baum die Tastatur (⌘1), gleich in die Gruppe der fokussierten Session, ohne Dialog.
-    @objc private func menuNewSession() {
-        let inTree = window.firstResponder === sidebar
-        openNewSession(groupId: inTree ? workspace.focused.flatMap { workspace.group(forSession: $0)?.id } : nil)
-    }
+    /// ⌘N öffnet immer den Gruppen-Dialog, auch mit Fokus im Baum. Ohne Dialog startet nur ⌘⏎ (oder das Plus im Baum).
+    @objc private func menuNewSession() { openNewSession(groupId: nil) }
     @objc private func menuNewSessionHere() { newSessionInFocusedFolder() }
     /// Ohne fokussierte Session gibt es keinen Ordner: dann wie ⌘N.
     private func newSessionInFocusedFolder() {

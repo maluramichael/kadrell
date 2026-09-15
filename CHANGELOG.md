@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.5.1 (2026-09-16)
+
+- Fix: ⌘N öffnet immer den Dialog zur Gruppenwahl, auch wenn der Baum den Fokus hat. Vorher startete es dort wie ⌘⏎ sofort eine Session in der Gruppe der fokussierten Session.
+
 ## 1.5.0 (2026-09-16)
 
 - Änderung: Die Einstellungen sind wie die F1-Hilfe in Bereiche gegliedert: Sessions, Claude, Darstellung, Baum und Kacheln, Tastenkürzel. Die Tastenkürzel-Liste ist zusätzlich in Navigation und Kacheln verwalten unterteilt.
