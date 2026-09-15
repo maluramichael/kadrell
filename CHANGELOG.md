@@ -6,6 +6,14 @@ Neueste Version oben.
 
 - Feature: Neuer Bereich „Claude“ in den Einstellungen: Bypass-Modus erlauben, Startmodus, Modell und Effort für neu gestartete Sessions festlegen.
 
+## 1.3.3 (2026-09-16)
+
+- Änderung: ⌘W schließt nicht mehr Kadrell, sondern beendet und entfernt die fokussierte Session (mit Rückfrage).
+
+## 1.3.2 (2026-09-16)
+
+- Fix: Die Mikrofon-Freigabe gilt jetzt für die ganze App, macOS fragt nicht mehr in jeder Session neu.
+
 ## 1.3.1 (2026-09-16)
 
 - Änderung: Die Hilfe (F1) ist nach Bereichen gegliedert: Sessions öffnen, Navigation, Kacheln verwalten, Fenster und App.
