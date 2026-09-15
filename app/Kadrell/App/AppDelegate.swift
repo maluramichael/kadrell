@@ -284,7 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closeGroup(_ gid: String, force: Bool = false) {
         guard let g = store.group(id: gid) else { return }
         let members = g.sessionIds.compactMap { canvas.session($0) }
-        let bg = members.filter { $0.shortId != nil && !$0.isDone }
+        let bg = members.filter { $0.shortId != nil }
         if members.isEmpty {
             store.remove(id: gid)
             canvas.reload(groups: store.groups, sessions: registry.sessions)
@@ -292,11 +292,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         confirm("Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?",
-                bg.isEmpty ? "Die Gruppe wird aus Kadrell entfernt." : "\(bg.count) Hintergrund-Session(s) werden mit claude stop gestoppt.", button: "Schließen", skip: force) { [weak self] in
+                bg.isEmpty ? "Die Gruppe wird aus Kadrell entfernt." : "\(bg.count) Session(s) werden gestoppt und mit claude rm gelöscht. Das lässt sich nicht rückgängig machen.", button: "Schließen", skip: force) { [weak self] in
             guard let self else { return }
             for s in members { attach.detach(s.id) }
             Task {
-                for s in bg { if let id = s.shortId { try? await self.cli.stop(id: id) } }
+                // stop hält nur an (die Session taucht sonst beim nächsten Poll als neue Gruppe wieder auf), rm löscht.
+                for s in bg {
+                    guard let id = s.shortId else { continue }
+                    if !s.isDone { try? await self.cli.stop(id: id) }
+                    try? await self.cli.remove(id: id)
+                }
                 self.store.remove(id: gid)
                 await self.registry.pollNow()
                 self.canvas.reload(groups: self.store.groups, sessions: self.registry.sessions)
