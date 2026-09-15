@@ -193,7 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let run = { [weak self] in self?.dismissSheet(); action() }
         present(ConfirmView(title: message, info: info, button: button, destructive: destructive,
                             onConfirm: run, onCancel: { [weak self] in self?.dismissSheet() }),
-                onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: run)
+                plainReturn: true, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: run)
     }
 
     private func report(_ error: Error) {
@@ -251,6 +251,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let g = store.group(id: gid) else { return }
         let members = g.sessionIds.compactMap { canvas.session($0) }
         let bg = members.filter { $0.shortId != nil && !$0.isDone }
+        if members.isEmpty {
+            store.remove(id: gid)
+            canvas.reload(groups: store.groups, sessions: registry.sessions)
+            canvas.fitAll()
+            return
+        }
         confirm("Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?",
                 bg.isEmpty ? "Die Gruppe wird aus Kadrell entfernt." : "\(bg.count) Hintergrund-Session(s) werden mit claude stop gestoppt.", button: "Schließen") { [weak self] in
             guard let self else { return }
@@ -267,12 +273,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Sheets
 
-    private func present<V: View>(_ view: V, onCancel: @escaping () -> Void, onPrimary: @escaping () -> Void) {
+    private func present<V: View>(_ view: V, plainReturn: Bool = false, onCancel: @escaping () -> Void, onPrimary: @escaping () -> Void) {
         dismissSheet()
         if palette.isVisible { palette.dismiss() }
         let p = OverlayPanel(rootView: view)
         p.onCancel = onCancel
         p.onPrimary = onPrimary
+        p.primaryOnPlainReturn = plainReturn
         overlay = p
         p.open(over: window)
     }

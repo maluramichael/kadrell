@@ -7,6 +7,8 @@ import SwiftUI
 final class OverlayPanel: NSPanel {
     var onCancel: (() -> Void)?
     var onPrimary: (() -> Void)?
+    /// Rückfragen: auch plain ⏎ bestätigt. Dialoge mit Textfeldern brauchen ⏎ selbst und nehmen nur ⌘⏎.
+    var primaryOnPlainReturn = false
 
     init<V: View>(rootView: V) {
         let host = NSHostingView(rootView: rootView)
@@ -42,7 +44,7 @@ final class OverlayPanel: NSPanel {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.keyCode == 53 { onCancel?(); return true }
-        if event.keyCode == 36, event.modifierFlags.contains(.command) { onPrimary?(); return true }
+        if event.keyCode == 36, event.modifierFlags.contains(.command) || primaryOnPlainReturn { onPrimary?(); return true }
         return super.performKeyEquivalent(with: event)
     }
 

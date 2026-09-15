@@ -157,8 +157,9 @@ final class CellView: NSView {
 
     private func drawLabel(_ text: String, in r: CGRect, dim: CGFloat) {
         guard r.height > 24 else { return }
-        let a = NSAttributedString(string: text, attributes: [.font: Theme.font(11), .foregroundColor: Theme.muted.withAlphaComponent(dim), .kern: 0.5])
-        let s = a.size()
-        a.draw(at: CGPoint(x: r.midX - s.width / 2, y: r.maxY - 10 - s.height))
+        let para = NSMutableParagraphStyle(); para.alignment = .center; para.lineBreakMode = .byTruncatingTail
+        let a = NSAttributedString(string: text, attributes: [.font: Theme.font(11), .foregroundColor: Theme.muted.withAlphaComponent(dim), .kern: 0.5, .paragraphStyle: para])
+        let h = a.size().height
+        a.draw(with: CGRect(x: r.minX + 6, y: r.maxY - 10 - h, width: r.width - 12, height: h), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 }

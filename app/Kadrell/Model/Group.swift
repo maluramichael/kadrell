@@ -49,7 +49,7 @@ final class GroupStore {
     }
 
     /// Ordnet Sessions ohne Gruppe der Gruppe mit gleichem `cwd` zu, legt sonst eine neue an,
-    /// und entfernt Ids, die es nicht mehr gibt. Gibt zurück, ob sich etwas geändert hat.
+    /// entfernt Ids, die es nicht mehr gibt, und leere Gruppen. Gibt zurück, ob sich etwas geändert hat.
     @discardableResult
     func assign(_ sessions: [Session]) -> Bool {
         let before = groups
@@ -64,6 +64,9 @@ final class GroupStore {
                 groups.append(g)
             }
         }
+        // Leere Gruppen fliegen raus: ohne Sessions hat eine Gruppe keinen Zweck, und die Datei
+        // sammelt sonst Ordner von längst beendeten Sessions.
+        groups.removeAll { $0.sessionIds.isEmpty }
         let changed = groups != before
         if changed { try? save() }
         return changed

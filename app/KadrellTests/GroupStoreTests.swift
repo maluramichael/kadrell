@@ -49,7 +49,8 @@ final class GroupStoreTests: XCTestCase {
         store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a")])
         XCTAssertTrue(store.assign([session("s2", cwd: "/p/a")]))
         XCTAssertEqual(store.groups[0].sessionIds, ["s2"])
-        store.remove(id: store.groups[0].id)
+        // ohne Sessions verschwindet die Gruppe
+        XCTAssertTrue(store.assign([]))
         XCTAssertTrue(store.groups.isEmpty)
         XCTAssertTrue(GroupStore(url: url).groups.isEmpty)
     }

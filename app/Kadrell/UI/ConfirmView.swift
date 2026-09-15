@@ -20,11 +20,11 @@ struct ConfirmView: View {
             HStack(spacing: 8) {
                 Spacer()
                 Button(action: onCancel) {
-                    Text("Abbrechen  Esc").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.mutedColor)
+                    Text("Abbrechen").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.mutedColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
                 }.buttonStyle(.plain)
                 Button(action: onConfirm) {
-                    Text("\(button)  ⏎").font(.custom("JetBrainsMonoNF-Bold", size: 12)).foregroundStyle(Theme.bgColor)
+                    Text(button).font(.custom("JetBrainsMonoNF-Bold", size: 12)).foregroundStyle(Theme.bgColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.runningColor)
                 }.buttonStyle(.plain)
             }
