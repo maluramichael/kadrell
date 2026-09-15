@@ -199,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let file = NSMenu(title: "Datei")
         file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
+        file.addItem(withTitle: "Neue Session in dieser Gruppe", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
 
         let edit = NSMenu(title: "Bearbeiten")
@@ -233,6 +234,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func menuNewSession() { openNewSession(groupId: nil) }
+    /// ⌘⏎: gleich los im Ordner der fokussierten Session, ohne Fokus wie ⌘N.
+    @objc private func menuNewSessionHere() {
+        guard let key = workspace.focused, let s = workspace.session(key) else { openNewSession(groupId: nil); return }
+        let g = workspace.group(forSession: key)
+        startSession(group: g, cwd: g?.cwd ?? s.cwd)
+    }
     @objc private func menuAbout() { showAbout() }
     @objc private func menuSettings() {
         let model = SettingsModel()
