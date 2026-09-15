@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.3.2 (2026-09-16)
+
+- Fix: Die Mikrofon-Freigabe gilt jetzt für die ganze App, macOS fragt nicht mehr in jeder Session neu.
+
 ## 1.3.1 (2026-09-16)
 
 - Änderung: Die Hilfe (F1) ist nach Bereichen gegliedert: Sessions öffnen, Navigation, Kacheln verwalten, Fenster und App.
