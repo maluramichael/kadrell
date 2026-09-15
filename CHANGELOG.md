@@ -13,6 +13,10 @@ Neueste Version oben.
 - Feature: Laufende Hintergrund-Sessions werden beim Start zur Übernahme angeboten.
 - Entfernt: Sessions aus anderen Terminals erscheinen nicht mehr automatisch, ebenso das Angebot, doppelte Sessions zu löschen.
 
+## 0.2.1 (2026-09-16)
+
+- Fix: Der Rahmen einer Kachel unter der Maus wird nur noch minimal heller statt fast weiß.
+
 ## 0.2.0 (2026-09-15)
 
 - Feature: Die Einstellungen (⌘,) zeigen jetzt die installierte Version.
