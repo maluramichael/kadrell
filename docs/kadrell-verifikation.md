@@ -111,11 +111,15 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
   Spaltenzahl (⌘, → „Spalten pro Gruppe“, Default 2), kein festes 16:10 mehr. Im Fokus wächst die
   Kachel auf das Fensterformat. Neue Gruppen landen rechts neben den bestehenden, sonst darunter.
   Header-Icons (+, Stift, X) sind immer sichtbar; `+` startet eine Session ohne hinzuzoomen.
+- **Zwei Zoom-Modi (⌘,):** „Layout“ wie im Brief (Text bildschirmkonstant, Terminal ab 320 px Kachelbreite).
+  „Geometrisch“: die Terminalschrift ist 12 pt × Maßstab, die Spaltenzahl bleibt beim Zoomen konstant,
+  während der Bewegung wird das eingehängte Terminal nur per Layer skaliert (kein SIGWINCH), in Ruhe
+  Frame und Schrift neu gesetzt. Unter 3 px Schrift wird ausgehängt und der Text-Snapshot gezeigt.
 - **Claude-Nutzung in der Leiste:** `GET https://api.anthropic.com/api/oauth/usage` mit dem OAuth-Token
   aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (derselbe Weg wie die CLI), Header
   `anthropic-beta: oauth-2025-04-20`. Gelesen wird das `limits`-Array (kind `session`, `weekly_all`,
   `weekly_scoped` mit `scope.model.display_name` „Fable“), Fallback `five_hour`/`seven_day`. Jeder
-  Parse- oder HTTP-Fehler ergibt „–%“, nie ein Absturz. Abfrage jede Minute.
+  Parse- oder HTTP-Fehler ergibt „–%“, nie ein Absturz. Abfrage alle drei Minuten.
 - **Spaltenzahl der Karte (alt, ersetzt):** mindestens so viele wie in die Fensterbreite passen, bei vielen Gruppen
   mehr, damit die Karte ungefähr das Seitenverhältnis des Fensters hat (`Layout.worldWidth`). Mit
   30 Gruppen in einer Spalte wäre „Fit alles“ ein 5-%-Turm gewesen.

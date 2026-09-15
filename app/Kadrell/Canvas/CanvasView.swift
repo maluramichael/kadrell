@@ -174,17 +174,45 @@ final class CanvasView: NSView {
         ensureFocusedFills()
     }
 
-    /// Terminal nur eingehängt, wenn die Kachel ≥ 320 px breit ist und keine Animation läuft (Punkt 10).
+    /// Layout-Modus: Terminal nur eingehängt, wenn die Kachel ≥ 320 px breit ist und keine Animation läuft;
+    /// Schrift immer 12 pt. Geometrischer Modus: Schrift = 12 × Maßstab (Spalten bleiben konstant, kein
+    /// SIGWINCH beim Zoomen); während der Bewegung bleibt das Terminal eingehängt und wird per Layer skaliert.
     private func mountTerminal(for key: String, in cell: CellView, session: Session) {
         guard let t = attach?.terminal(for: key) else { return }
+        func unmount() {
+            guard t.superview != nil else { return }
+            if window?.firstResponder === t { window?.makeFirstResponder(self) }
+            t.layer?.transform = CATransform3DIdentity
+            t.removeFromSuperview()
+        }
+        if Settings.zoomMode == .geometric, focusedKey != key {
+            let fontSize = 12 * scale
+            if isAnimating {
+                guard t.superview === cell, t.restScale > 0 else { return }
+                let k = scale / t.restScale
+                t.frame.origin = cell.terminalRect.origin
+                t.layer?.transform = CATransform3DMakeScale(k, k, 1)
+                return
+            }
+            guard fontSize >= 3 else { unmount(); return }
+            if t.superview !== cell { cell.addSubview(t) }
+            t.layer?.transform = CATransform3DIdentity
+            t.restScale = scale
+            if abs(t.font.pointSize - fontSize) > 0.05 { t.font = Theme.font(fontSize) }
+            let body = cell.terminalRect
+            if t.frame != body { t.frame = body }
+            return
+        }
         let want = cell.lod >= 3 && !isAnimating
         if want {
             if t.superview !== cell { cell.addSubview(t) }
+            t.layer?.transform = CATransform3DIdentity
+            t.restScale = scale
+            if abs(t.font.pointSize - 12) > 0.05 { t.font = Theme.font(12) }
             let body = cell.terminalRect
             if t.frame != body { t.frame = body }
-        } else if t.superview != nil {
-            if window?.firstResponder === t { window?.makeFirstResponder(self) }
-            t.removeFromSuperview()
+        } else {
+            unmount()
         }
     }
 

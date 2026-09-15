@@ -1,7 +1,20 @@
 import SwiftUI
 
+enum ZoomMode: String, CaseIterable {
+    /// Text bleibt in Bildschirmpunkten gleich groß, beim Zoomen ändert sich nur die Menge des Inhalts.
+    case layout
+    /// Text zoomt mit: das Terminal behält seine Spalten, die Schrift skaliert mit dem Maßstab.
+    case geometric
+    var label: String { self == .layout ? "Layout · Text bleibt gleich groß" : "Geometrisch · Text zoomt mit" }
+}
+
 enum Settings {
     static let startFolderKey = "startFolder"
+    static let zoomModeKey = "zoomMode"
+    static var zoomMode: ZoomMode {
+        get { ZoomMode(rawValue: UserDefaults.standard.string(forKey: zoomModeKey) ?? "") ?? .layout }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: zoomModeKey) }
+    }
     static let columnsKey = "columnsPerGroup"
     /// Kachel-Spalten je Gruppe (i3-artiges Raster), 1 bis 6, Default 2.
     static var columns: Int {
@@ -24,6 +37,7 @@ enum Settings {
 final class SettingsModel {
     var startFolder = Settings.startFolder
     var columns = Settings.columns
+    var zoomMode = Settings.zoomMode
     var compSelected = 0
     var onDone: (() -> Void)?
 
@@ -31,6 +45,7 @@ final class SettingsModel {
         let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         if !p.isEmpty { Settings.startFolder = p }
         Settings.columns = columns
+        Settings.zoomMode = zoomMode
         onDone?()
     }
 }
@@ -57,6 +72,20 @@ struct SettingsView: View {
                         .overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
                         .contentShape(Rectangle())
                         .onTapGesture { model.columns = n }
+                }
+            }
+            .padding(14)
+            Divider().overlay(Theme.lineColor)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Zoom").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.fgColor)
+                ForEach(ZoomMode.allCases, id: \.self) { m in
+                    HStack(spacing: 8) {
+                        Rectangle().fill(m == model.zoomMode ? Theme.runningColor : .clear).frame(width: 10, height: 10)
+                            .overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+                        Text(m.label).font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(m == model.zoomMode ? Theme.fgColor : Theme.mutedColor)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.zoomMode = m }
                 }
             }
             .padding(14)

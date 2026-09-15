@@ -55,7 +55,7 @@ final class UsageService {
     var onChange: ((Usage) -> Void)?
     private var task: Task<Void, Never>?
 
-    func start(interval: TimeInterval = 60) {
+    func start(interval: TimeInterval = 180) {
         task?.cancel()
         task = Task { [weak self] in
             while !Task.isCancelled {
