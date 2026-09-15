@@ -2,25 +2,10 @@ import AppKit
 import SwiftTerm
 import os
 
-/// Meldet Titel-Escapes (OSC 0/2) weiter; die View selbst kann den Delegate nicht spielen, ihre
-/// gleichnamigen Methoden kollidieren mit dem Protokoll.
-final class TitleWatcher: LocalProcessTerminalViewDelegate {
-    let onTitle: @MainActor (String) -> Void
-    init(onTitle: @escaping @MainActor (String) -> Void) { self.onTitle = onTitle }
-    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    func processTerminated(source: TerminalView, exitCode: Int32?) {}
-    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
-        MainActor.assumeIsolated { onTitle(title) }
-    }
-}
-
-/// Terminal einer angehängten Session.
+/// Terminal einer laufenden Session.
 @MainActor
 final class KadrellTerminalView: LocalProcessTerminalView {
     var onExit: (() -> Void)?
-    /// `processDelegate` ist weak, deshalb hier festhalten.
-    var titleWatcher: TitleWatcher? { didSet { processDelegate = titleWatcher } }
 
     /// `keyDown` ist in SwiftTerm nicht `open`; `performKeyEquivalent` sieht jedes Tastenereignis vorher.
     /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt.
@@ -37,7 +22,8 @@ final class KadrellTerminalView: LocalProcessTerminalView {
     }
 }
 
-/// Hält pro angehängter Session genau ein Terminal, hängt gestaffelt an und pflegt Text-Snapshots.
+/// Hält pro Session höchstens einen Claude-Prozess im Terminal (Kind von Kadrell), startet gestaffelt
+/// und pflegt Text-Snapshots. Beendet Kadrell, enden die Prozesse; beim nächsten Start setzt `--resume` fort.
 @MainActor
 final class AttachManager {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "attach")
@@ -45,16 +31,13 @@ final class AttachManager {
     private(set) var terminals: [String: KadrellTerminalView] = [:]
     private(set) var snapshots: [String: [String]] = [:]
     private var queue: [Session] = []
-    /// Attach-Clients, die sofort wieder beendet wurden (z. B. „no saved transcript“): nicht automatisch neu versuchen.
-    private(set) var failed: Set<String> = []
-    private var startedAt: [String: Date] = [:]
-    /// Von Kadrell selbst beendete Clients (SIGHUP): deren Exit ist kein Nutzer-Ausstieg.
+    /// Claude hat sich beendet (`/exit`, Absturz) oder wurde gestoppt: nicht automatisch neu starten, erst auf Klick.
+    private(set) var ended: Set<String> = []
+    /// Von Kadrell selbst beendete Prozesse (SIGHUP).
     private var closing: Set<String> = []
     private var queueTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
     var onChange: (() -> Void)?
-    /// Der Nutzer hat den Attach-Client selbst verlassen (Ctrl-C/Ctrl-D), die Session lief dabei noch.
-    var onClientExit: ((String) -> Void)?
 
     init(cli: ClaudeCLI) {
         self.cli = cli
@@ -68,12 +51,15 @@ final class AttachManager {
 
     var attachedCount: Int { terminals.count }
     func isAttached(_ key: String) -> Bool { terminals[key] != nil }
+    func isEnded(_ key: String) -> Bool { ended.contains(key) }
     func terminal(for key: String) -> KadrellTerminalView? { terminals[key] }
     func lines(for key: String) -> [String] { snapshots[key] ?? [] }
+    /// Schlüssel der Session je pid ihres Claude-Prozesses.
+    var pids: [Int: String] { Dictionary(terminals.map { (Int($0.value.process.shellPid), $0.key) }, uniquingKeysWith: { a, _ in a }) }
 
     /// Ersetzt die Warteschlange; Reihenfolge wie übergeben (sichtbare zuerst), eine Session alle 500 ms.
     func enqueue(_ sessions: [Session]) {
-        queue = sessions.filter { $0.canAttach && terminals[$0.id] == nil && !failed.contains($0.id) }
+        queue = sessions.filter { terminals[$0.id] == nil && !ended.contains($0.id) }
         guard queueTask == nil, !queue.isEmpty else { return }
         queueTask = Task { [weak self] in
             while let self, !self.queue.isEmpty, !Task.isCancelled {
@@ -85,54 +71,56 @@ final class AttachManager {
         }
     }
 
+    /// Startet den Claude-Prozess der Session, auch wenn er vorher beendet war.
     func attachNow(_ session: Session) {
-        guard session.canAttach, let id = session.shortId, terminals[session.id] == nil else { return }
+        guard terminals[session.id] == nil else { return }
         queue.removeAll { $0.id == session.id }
-        failed.remove(session.id)
-        startedAt[session.id] = Date()
+        ended.remove(session.id)
+        snapshots[session.id] = nil
         let t = KadrellTerminalView(frame: NSRect(x: 0, y: 0, width: 960, height: 600), font: Settings.terminalFont, options: .default)
         t.lineSpacing = CGFloat(Settings.terminalLineSpacing)
         t.nativeBackgroundColor = Theme.bg
         t.nativeForegroundColor = Theme.fg
         t.caretColor = Theme.fg
         let key = session.id
-        // Ctrl-C/Ctrl-D/← in der Session detacht in den Agent-View, der setzt den Titel „… claude agents“.
-        // Für Kadrell heißt das: der Nutzer ist raus, Client beenden und wie einen Ausstieg behandeln.
-        t.titleWatcher = TitleWatcher { [weak self] title in
-            guard let self, title.hasSuffix("claude agents"), self.terminals[key] != nil else { return }
-            self.detach(key)
-            self.onClientExit?(key)
-        }
         t.onExit = { [weak self] in
             guard let self else { return }
-            if let t0 = self.startedAt[key], Date().timeIntervalSince(t0) < 5 {
-                self.failed.insert(key)
+            if self.closing.remove(key) == nil {
+                self.ended.insert(key)
                 self.snapshots[key] = t.terminalStateSnapshot().visibleRows.map(\.text).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                AttachManager.log.warning("attach \(key, privacy: .public) sofort beendet: \(self.snapshots[key]?.joined(separator: " ") ?? "", privacy: .public)")
+                AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .public)")
             }
-            let expected = self.closing.remove(key) != nil || self.failed.contains(key)
             self.detach(key, signal: false)
-            if !expected { self.onClientExit?(key) }
         }
-        t.startProcess(executable: cli.binary, args: ["attach", id], environment: cli.environmentList,
+        let args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: Transcript.path(sessionId: session.sessionId) != nil)
+        AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .public) in \(session.cwd, privacy: .public)")
+        t.startProcess(executable: cli.binary, args: args, environment: cli.environmentList,
                        execName: "claude", currentDirectory: session.cwd)
         terminals[key] = t
         onChange?()
     }
 
-    /// Hängt aus: `SIGHUP` an den Attach-Client (die Hintergrund-Session läuft weiter, siehe docs/kadrell-verifikation.md).
+    /// Beendet den Claude-Prozess per `SIGHUP`. Die Konversation liegt im Transcript und lässt sich fortsetzen.
     func detach(_ key: String, signal: Bool = true) {
         guard let t = terminals.removeValue(forKey: key) else { return }
         if signal, t.process.running { closing.insert(key); kill(t.process.shellPid, SIGHUP) }
         t.removeFromSuperview()
-        if !failed.contains(key) { snapshots[key] = nil }
+        if !ended.contains(key) { snapshots[key] = nil }
         onChange?()
     }
 
-    /// Entfernt Terminals von Sessions, die es nicht mehr gibt oder die beendet wurden.
+    /// Stoppen: Prozess beenden, Kachel bleibt mit dem letzten Bildschirm stehen, bis ein Klick fortsetzt.
+    func stop(_ key: String) {
+        if let t = terminals[key] { snapshots[key] = t.terminalStateSnapshot().visibleRows.map(\.text).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty } }
+        ended.insert(key)
+        detach(key)
+    }
+
+    /// Beendet Prozesse von Sessions, die aus Kadrell entfernt wurden.
     func sync(with sessions: [Session]) {
-        let live = Set(sessions.filter(\.canAttach).map(\.id))
+        let live = Set(sessions.map(\.id))
         for key in terminals.keys where !live.contains(key) { detach(key) }
+        ended.formIntersection(live)
     }
 
     /// Schrift und Zeilenabstand aus den Einstellungen auf alle offenen Terminals; SwiftTerm passt Spalten und Zeilen selbst an.

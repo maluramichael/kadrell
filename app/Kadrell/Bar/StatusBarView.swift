@@ -8,7 +8,7 @@ final class StatusBarView: NSView {
     var crumbGroupAttrs: [NSAttributedString.Key: Any]?
     var sessionCount = 0
     var openCount = 0
-    var attachText = "attach 0/0"
+    var attachText = "läuft 0/0"
     var usage = Usage.empty
     var layoutMode: LayoutMode = .grid
     var onToggleLayout: (() -> Void)?

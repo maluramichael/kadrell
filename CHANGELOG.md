@@ -2,6 +2,16 @@
 
 Neueste Version oben.
 
+## 1.0.0 (2026-09-16)
+
+- Änderung: Kadrell startet Claude selbst statt als Hintergrund-Session. Claude arbeitet dadurch nicht mehr automatisch in einem eigenen Worktree.
+- Änderung: Beim Beenden von Kadrell enden die Sessions. Beim nächsten Start geht es in jeder angezeigten Session mit dem bisherigen Verlauf weiter.
+- Änderung: Eine neue Session steht sofort im Baum und rechts, ohne Wartezeit.
+- Änderung: Beendet sich Claude in einer Kachel, bleibt die Kachel stehen. Ein Klick darauf setzt die Session fort.
+- Änderung: Schließen entfernt die Session nur aus Kadrell, die Konversation bleibt erhalten.
+- Feature: Laufende Hintergrund-Sessions werden beim Start zur Übernahme angeboten.
+- Entfernt: Sessions aus anderen Terminals erscheinen nicht mehr automatisch, ebenso das Angebot, doppelte Sessions zu löschen.
+
 ## 0.2.0 (2026-09-15)
 
 - Feature: Die Einstellungen (⌘,) zeigen jetzt die installierte Version.

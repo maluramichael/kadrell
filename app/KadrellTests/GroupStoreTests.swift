@@ -14,7 +14,7 @@ final class GroupStoreTests: XCTestCase {
     }
 
     func session(_ id: String, cwd: String) -> Session {
-        Session(shortId: nil, cwd: cwd, kind: "background", startedAt: 0, sessionId: id, name: id)
+        Session(id: id, cwd: cwd, startedAt: 0, sessionId: id, name: id)
     }
 
     func testAutoAssignByCwdAndPersistence() throws {

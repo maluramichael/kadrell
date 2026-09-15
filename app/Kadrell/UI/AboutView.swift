@@ -28,7 +28,7 @@ struct AboutView: View {
                 Text("v\(Settings.version)").font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
             }
             .padding(.horizontal, 16).padding(.top, 16)
-            Text("Alle Claude-Code-Hintergrund-Sessions: Baum links, Terminals rechts als Grid oder Stack.").font(Theme.ui(12))
+            Text("Claude-Code-Sessions als Terminals: Baum links, rechts als Grid oder Stack. Beim Beenden enden sie, beim nächsten Start geht es mit --resume weiter.").font(Theme.ui(12))
                 .foregroundStyle(Theme.mutedColor).padding(.horizontal, 16).padding(.top, 6)
             HStack(spacing: 6) {
                 Text("von Michael Malura ·").foregroundStyle(Theme.mutedColor)
