@@ -55,45 +55,67 @@ final class UsageService {
     var onChange: ((Usage) -> Void)?
     private var task: Task<Void, Never>?
 
+    /// Alle drei Minuten; bei HTTP 429 (der Endpunkt limitiert streng) verdoppelt sich die Pause bis 15 min,
+    /// `Retry-After` wird beachtet. Ein Fehler verwirft nie die letzten bekannten Werte.
     func start(interval: TimeInterval = 180) {
         task?.cancel()
         task = Task { [weak self] in
+            var delay = interval
             while !Task.isCancelled {
                 if let self {
-                    let fresh = await UsageService.fetch()
-                    if fresh != self.usage { self.usage = fresh; self.onChange?(fresh) }
+                    let r = await UsageService.fetch()
+                    switch r {
+                    case .ok(let fresh):
+                        delay = interval
+                        if fresh != self.usage { self.usage = fresh; self.onChange?(fresh) }
+                    case .rateLimited(let retryAfter):
+                        delay = min(900, max(retryAfter ?? delay * 2, interval))
+                        UsageService.log.warning("usage: 429, nächster Versuch in \(Int(delay), privacy: .public) s")
+                    case .failed:
+                        delay = min(900, delay * 2)
+                    }
                 }
-                try? await Task.sleep(for: .seconds(interval))
+                try? await Task.sleep(for: .seconds(delay))
             }
         }
     }
 
+    enum Result { case ok(Usage), rateLimited(TimeInterval?), failed }
+
     /// OAuth-Token aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (wie die CLI ihn ablegt).
     static func token() async -> String? {
-        guard let r = try? await ClaudeCLI.runRaw("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], environment: nil, cwd: nil),
-              r.status == 0,
-              let root = (try? JSONSerialization.jsonObject(with: Data(r.output.utf8))) as? [String: Any],
+        guard let r = try? await ClaudeCLI.runRaw("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], environment: nil, cwd: nil) else {
+            log.warning("usage: security nicht startbar"); return nil
+        }
+        guard r.status == 0 else { log.warning("usage: security exit \(r.status, privacy: .public): \(r.output.prefix(120), privacy: .public)"); return nil }
+        guard let root = (try? JSONSerialization.jsonObject(with: Data(r.output.utf8))) as? [String: Any],
               let oauth = root["claudeAiOauth"] as? [String: Any],
-              let t = oauth["accessToken"] as? String, !t.isEmpty else { return nil }
+              let t = oauth["accessToken"] as? String, !t.isEmpty else { log.warning("usage: Schlüsselbund-Eintrag ohne accessToken"); return nil }
         return t
     }
 
-    static func fetch() async -> Usage {
-        guard let t = await token(), let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return .empty }
+    static func fetch() async -> Result {
+        guard let t = await token(), let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return .failed }
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
         req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         req.setValue("Kadrell", forHTTPHeaderField: "User-Agent")
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
-            guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
-                log.warning("usage: HTTP \((resp as? HTTPURLResponse)?.statusCode ?? -1, privacy: .public)")
-                return .empty
+            let http = resp as? HTTPURLResponse
+            if http?.statusCode == 429 {
+                return .rateLimited(http?.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) })
             }
-            return Usage.parse(data)
+            guard http?.statusCode == 200 else {
+                log.warning("usage: HTTP \(http?.statusCode ?? -1, privacy: .public)")
+                return .failed
+            }
+            let u = Usage.parse(data)
+            log.notice("usage: 5h \(u.session ?? -1) 7d \(u.weekly ?? -1) fable \(u.fable ?? -1)")
+            return .ok(u)
         } catch {
             log.warning("usage: \(String(describing: error), privacy: .public)")
-            return .empty
+            return .failed
         }
     }
 }

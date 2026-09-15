@@ -119,7 +119,8 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
   aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (derselbe Weg wie die CLI), Header
   `anthropic-beta: oauth-2025-04-20`. Gelesen wird das `limits`-Array (kind `session`, `weekly_all`,
   `weekly_scoped` mit `scope.model.display_name` „Fable“), Fallback `five_hour`/`seven_day`. Jeder
-  Parse- oder HTTP-Fehler ergibt „–%“, nie ein Absturz. Abfrage alle drei Minuten.
+  Parse- oder HTTP-Fehler ergibt „–%“ (bzw. behält die letzten Werte), nie ein Absturz. Abfrage alle drei
+  Minuten; der Endpunkt antwortet schnell mit HTTP 429, dann verdoppelt sich die Pause bis 15 Minuten.
 - **Spaltenzahl der Karte (alt, ersetzt):** mindestens so viele wie in die Fensterbreite passen, bei vielen Gruppen
   mehr, damit die Karte ungefähr das Seitenverhältnis des Fensters hat (`Layout.worldWidth`). Mit
   30 Gruppen in einer Spalte wäre „Fit alles“ ein 5-%-Turm gewesen.
