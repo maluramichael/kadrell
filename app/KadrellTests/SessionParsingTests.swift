@@ -22,7 +22,8 @@ final class SessionParsingTests: XCTestCase {
         let list = try Session.decodeList(Data(json.utf8))
         XCTAssertEqual(list.count, 5)
         XCTAssertEqual(list[0].shortId, "0ace1aab")
-        XCTAssertEqual(list[0].id, "0ace1aab-c1a7-45e2-9856-dea5d34eda81")
+        XCTAssertEqual(list[0].id, "0ace1aab")   // kurze Id als Schlüssel
+        XCTAssertEqual(list[1].id, "b746c5bb-ecfe-45d8-b268-7df9b23b5e44")   // ohne kurze Id: sessionId
         XCTAssertTrue(list[0].isBackground)
         XCTAssertFalse(list[0].canAttach)   // blocked ohne pid: Prozess weg
         XCTAssertTrue(list[0].isStale)
