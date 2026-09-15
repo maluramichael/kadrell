@@ -173,7 +173,7 @@ final class CanvasView: NSView {
         let want = cell.lod >= 3 && !isAnimating
         if want {
             if t.superview !== cell { cell.addSubview(t) }
-            let body = cell.bodyRect
+            let body = cell.terminalRect
             if t.frame != body { t.frame = body }
         } else if t.superview != nil {
             if window?.firstResponder === t { window?.makeFirstResponder(self) }

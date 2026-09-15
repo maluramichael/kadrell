@@ -35,6 +35,8 @@ final class CellView: NSView {
 
     var headerRect: CGRect { CGRect(x: 0, y: 0, width: bounds.width, height: Layout.cellHeaderScreen) }
     var bodyRect: CGRect { CGRect(x: 0, y: Layout.cellHeaderScreen, width: bounds.width, height: max(0, bounds.height - Layout.cellHeaderScreen)) }
+    /// Terminal liegt 2 px innerhalb des Rahmens, sonst übermalt es den Rahmen links, rechts und unten.
+    var terminalRect: CGRect { focused ? bodyRect : CGRect(x: 2, y: Layout.cellHeaderScreen, width: max(0, bounds.width - 4), height: max(0, bounds.height - Layout.cellHeaderScreen - 2)) }
     var xRect: CGRect { CGRect(x: bounds.width - 24, y: 5, width: 16, height: 16) }
     var dotRect: CGRect { CGRect(x: 9, y: 9, width: 8, height: 8) }
     var statusColor: NSColor { attached || !session.canAttach ? Theme.color(for: session.status) : Theme.detached }
@@ -78,7 +80,8 @@ final class CellView: NSView {
         Theme.bg.withAlphaComponent(dim).setFill()
         b.fill()
         let head = headerRect
-        let headBase = keyboardFocus ? groupColor.mixed(0.22, into: Theme.surface) : status == .waiting ? Theme.waiting.mixed(0.12, into: Theme.surface) : Theme.surface
+        // Im Vollbild-Fokus keine Hervorhebung: da gibt es nur eine Kachel.
+        let headBase = (keyboardFocus && !focused) ? groupColor.mixed(0.22, into: Theme.surface) : status == .waiting ? Theme.waiting.mixed(0.12, into: Theme.surface) : Theme.surface
         headBase.withAlphaComponent(dim).setFill()
         head.fill()
         Theme.line.withAlphaComponent(dim).setFill()
@@ -114,14 +117,15 @@ final class CellView: NSView {
 
     private func drawBorder(_ dim: CGFloat) {
         let color: NSColor
-        if focused || keyboardFocus { color = groupColor }
+        if focused { color = Theme.line }
+        else if keyboardFocus { color = groupColor }
         else if highlight == true { color = .white }
         else if session.status == .waiting, session.canAttach { color = Theme.waiting }
         else if session.status == .error { color = Theme.error }
         else if hovered { color = Theme.sub }
         else { color = Theme.line }
         color.withAlphaComponent(dim).setFill()
-        let w: CGFloat = (focused || keyboardFocus || highlight == true) ? 2 : 1
+        let w: CGFloat = (!focused && (keyboardFocus || highlight == true)) ? 2 : 1
         bounds.frame(withWidth: w)
     }
 

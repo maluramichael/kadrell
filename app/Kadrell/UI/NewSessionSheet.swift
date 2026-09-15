@@ -18,7 +18,7 @@ final class NewSessionModel {
 
     var completions: [String] { folderCompletions(for: cwd) }
 
-    static func expand(_ s: String) -> String {
+    nonisolated static func expand(_ s: String) -> String {
         s.hasPrefix("~") ? NSHomeDirectory() + s.dropFirst() : s
     }
 

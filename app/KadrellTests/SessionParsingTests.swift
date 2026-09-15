@@ -88,3 +88,29 @@ final class SessionParsingTests: XCTestCase {
         XCTAssertEqual(d.elapsed(now: now), "2d")
     }
 }
+
+final class UsageParsingTests: XCTestCase {
+    func testParsesLimitsArray() {
+        let json = """
+        {"five_hour":{"utilization":42.0,"resets_at":"2026-09-15T16:00:00.984304+00:00"},
+         "seven_day":{"utilization":73.0,"resets_at":"2026-09-16T01:00:00.984327+00:00"},
+         "limits":[{"kind":"session","percent":42,"resets_at":"2026-09-15T16:00:00.984304+00:00"},
+                   {"kind":"weekly_all","percent":73},
+                   {"kind":"weekly_scoped","percent":48,"scope":{"model":{"display_name":"Fable"}}}]}
+        """
+        let u = Usage.parse(Data(json.utf8))
+        XCTAssertEqual(u.session, 42)
+        XCTAssertEqual(u.weekly, 73)
+        XCTAssertEqual(u.fable, 48)
+        XCTAssertNotNil(u.sessionResets)
+    }
+
+    func testFallsBackAndSurvivesGarbage() {
+        let u = Usage.parse(Data("{\"five_hour\":{\"utilization\":10.4},\"seven_day\":{\"utilization\":\"x\"}}".utf8))
+        XCTAssertEqual(u.session, 10)
+        XCTAssertNil(u.weekly)
+        XCTAssertNil(u.fable)
+        XCTAssertEqual(Usage.parse(Data("not json".utf8)), .empty)
+        XCTAssertEqual(Usage.parse(Data("[1,2]".utf8)), .empty)
+    }
+}

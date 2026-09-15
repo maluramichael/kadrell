@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cli: ClaudeCLI!
     private var registry: SessionRegistry!
     private var attach: AttachManager!
+    private let usage = UsageService()
     private var palette: PaletteWindow!
     private var overlay: OverlayPanel?
     private var sessionCounter = 0
@@ -79,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
         registry.onError = { error in AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)") }
         registry.start()
+        usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true }
+        usage.start()
     }
 
     private func sessionsChanged(_ sessions: [Session]) {

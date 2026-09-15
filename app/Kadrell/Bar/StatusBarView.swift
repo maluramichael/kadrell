@@ -8,6 +8,7 @@ final class StatusBarView: NSView {
     var sessionCount = 0
     var zoomPercent = 100
     var attachText = "attach 0/0"
+    var usage = Usage.empty
 
     private var hitRects: [(CGRect, () -> Void)] = []
     private var clockTask: Task<Void, Never>?
@@ -63,6 +64,15 @@ final class StatusBarView: NSView {
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         module([NSAttributedString(string: attachText, attributes: f)])
         module([NSAttributedString(string: "\(zoomPercent)%", attributes: f)])
+        // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
+        func pctString(_ v: Int?) -> NSAttributedString {
+            guard let v else { return NSAttributedString(string: "–%", attributes: fMuted) }
+            let c: NSColor = v >= 90 ? Theme.error : v >= 70 ? Theme.waiting : Theme.idle
+            return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, c))
+        }
+        module([NSAttributedString(string: "fable", attributes: fMuted), pctString(usage.fable)])
+        module([NSAttributedString(string: "7d", attributes: fMuted), pctString(usage.weekly)])
+        module([NSAttributedString(string: "5h", attributes: fMuted), pctString(usage.session)])
 
         // Mitte: Breadcrumb
         let mid: NSAttributedString
