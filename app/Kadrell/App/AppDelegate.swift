@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Platzhalter-Sessions, sofort sichtbar, bis `claude --bg` und der nächste Poll durch sind.
     private var pending: [Session] = []
     private var pendingGroups: [String: Group] = [:]
+    /// Beim Schließen sofort ausgeblendet, bis `claude rm` und der Poll durch sind. Sonst bleibt die Kachel
+    /// sekundenlang „nicht angehängt“ stehen und das Layout springt später, mitten ins nächste Schließen.
+    private var closing: Set<String> = []
     private var firstLoad = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -176,7 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func reloadViews() {
-        workspace.reload(groups: displayGroups(), sessions: (registry?.sessions ?? []) + pending)
+        workspace.reload(groups: displayGroups(), sessions: ((registry?.sessions ?? []) + pending).filter { !closing.contains($0.id) })
         syncSidebar()
     }
 
@@ -390,6 +393,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         confirm("Session „\(s.title)“ stoppen und entfernen?", "claude stop \(id) und claude rm \(id). Das lässt sich nicht rückgängig machen.", button: "Entfernen", skip: force) { [weak self] in
             guard let self else { return }
             attach.detach(key)
+            closing.insert(key)
+            reloadViews()
             Task {
                 do {
                     if !s.isDone { try? await self.cli.stop(id: id) }
@@ -397,6 +402,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.store.removeSession(key)
                     await self.registry.pollNow()
                 } catch { self.report(error) }
+                self.closing.remove(key)
+                self.reloadViews()
             }
         }
     }
@@ -436,6 +443,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bg.isEmpty ? "Die Gruppe wird aus Kadrell entfernt." : "\(bg.count) Session(s) werden gestoppt und mit claude rm gelöscht. Das lässt sich nicht rückgängig machen.", button: "Schließen", skip: force) { [weak self] in
             guard let self else { return }
             for s in members { attach.detach(s.id) }
+            closing.formUnion(members.map(\.id))
+            reloadViews()
             Task {
                 // stop hält nur an (die Session taucht sonst beim nächsten Poll als neue Gruppe wieder auf), rm löscht.
                 for s in bg {
@@ -445,6 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.store.remove(id: gid)
                 await self.registry.pollNow()
+                self.closing.subtract(members.map(\.id))
                 self.reloadViews()
             }
         }
