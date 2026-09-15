@@ -20,15 +20,12 @@ struct AboutView: View {
             ("⌘W", "Fokussierte Session stoppen"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner, Tastenkürzel"), ("F1", "diese Hilfe"),
         ]
     }
-    private var version: String {
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("Kadrell").font(.custom("JetBrainsMonoNF-Bold", size: 18)).foregroundStyle(Theme.fgColor)
-                Text("v\(version)").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.mutedColor)
+                Text("v\(Settings.version)").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.mutedColor)
             }
             .padding(.horizontal, 16).padding(.top, 16)
             Text("Alle Claude-Code-Hintergrund-Sessions: Baum links, Terminals rechts als Grid oder Stack.").font(.custom("JetBrainsMonoNF-Regular", size: 12))

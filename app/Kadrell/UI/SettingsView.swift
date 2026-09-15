@@ -11,6 +11,9 @@ enum Settings {
         }
         set { UserDefaults.standard.set(newValue, forKey: startFolderKey) }
     }
+    static var version: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
+    }
 }
 
 @Observable
@@ -67,8 +70,13 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("EINSTELLUNGEN").font(.custom("JetBrainsMonoNF-Regular", size: 11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
-                .padding(.horizontal, 16).padding(.top, 12)
+            HStack {
+                Text("EINSTELLUNGEN").kerning(0.6)
+                Spacer()
+                Text("Kadrell v\(Settings.version)")
+            }
+            .font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+            .padding(.horizontal, 16).padding(.top, 12)
             label("Startordner für ⌘N")
             FolderInput(path: $model.startFolder, selected: $model.compSelected) { }
             label("Tastenkürzel")
