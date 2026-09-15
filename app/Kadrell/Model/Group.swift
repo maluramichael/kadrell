@@ -6,6 +6,10 @@ struct Group: Codable, Equatable, Identifiable, Sendable {
     var color: String
     var cwd: String
     var sessionIds: [String]
+    /// Optional, damit eine groups.json ohne den Schlüssel weiter lädt.
+    var favorite: Bool?
+
+    var isFavorite: Bool { favorite == true }
 }
 
 /// Gruppen sind App-Daten, persistiert als JSON unter Application Support.
@@ -65,8 +69,8 @@ final class GroupStore {
             }
         }
         // Leere Gruppen fliegen raus: ohne Sessions hat eine Gruppe keinen Zweck, und die Datei
-        // sammelt sonst Ordner von längst beendeten Sessions.
-        groups.removeAll { $0.sessionIds.isEmpty }
+        // sammelt sonst Ordner von längst beendeten Sessions. Favoriten bleiben stehen.
+        groups.removeAll { $0.sessionIds.isEmpty && !$0.isFavorite }
         let changed = groups != before
         if changed { try? save() }
         return changed
@@ -79,6 +83,11 @@ final class GroupStore {
         try? save()
     }
     func remove(id: String) { groups.removeAll { $0.id == id }; try? save() }
+    func toggleFavorite(id: String) {
+        guard let i = groups.firstIndex(where: { $0.id == id }) else { return }
+        groups[i].favorite = groups[i].isFavorite ? nil : true
+        try? save()
+    }
     func removeSession(_ sessionId: String) {
         for i in groups.indices { groups[i].sessionIds.removeAll { $0 == sessionId } }
         try? save()

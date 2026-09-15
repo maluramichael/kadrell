@@ -156,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
         sidebar.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
+        sidebar.onToggleFavorite = { [weak self] gid in self?.store.toggleFavorite(id: gid); self?.reloadViews() }
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
         sidebar.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         sidebar.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }

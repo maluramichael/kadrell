@@ -33,6 +33,8 @@ final class SidebarView: NSView {
     var onSelect: (([String], SelectMode) -> Void)?
     var onNewSession: ((String) -> Void)?
     var onEditGroup: ((String) -> Void)?
+    /// Favorit an/aus: eine favorisierte Gruppe bleibt auch ohne Sessions in der Liste.
+    var onToggleFavorite: ((String) -> Void)?
     /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
     var onCloseGroup: ((String, Bool) -> Void)?
     var onCloseSession: ((String, Bool) -> Void)?
@@ -162,18 +164,20 @@ final class SidebarView: NSView {
         Icons.chevron(in: CGRect(x: 6, y: r.minY + 4, width: 16, height: 16), open: !collapsed.contains(g.id), color: Theme.muted)
         let head = headRect(r)
         let name = NSAttributedString(string: "▪ " + g.name, attributes: Theme.attrs(12, color, bold: true))
-        let right = r.maxX - 8 - 3 * 20   // Platz für die Icons immer reservieren, sonst springt der Text beim Hover
+        let right = r.maxX - 8 - 4 * 20   // Platz für die Icons immer reservieren, sonst springt der Text beim Hover
         name.draw(with: CGRect(x: 26, y: head.midY - 8, width: max(0, right - 26), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         let pa = Theme.attrs(10.5, Theme.muted)
         let pw = max(0, r.maxX - 8 - 42)
         NSAttributedString(string: Theme.fitPath(g.cwd, width: pw, attrs: pa), attributes: pa)
             .draw(with: CGRect(x: 42, y: head.maxY - 4, width: pw, height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        let rects = iconRects(head, count: 4)
         if hover {
-            let rects = iconRects(head, count: 3)
             Icons.x(in: rects[0], color: Theme.muted)
             Icons.pen(in: rects[1], color: Theme.muted)
             Icons.plus(in: rects[2], color: Theme.muted)
         }
+        // Als Favorit markiert, bleibt das Herz auch ohne Hover stehen, sonst sieht man den Zustand nie.
+        if hover || g.isFavorite { Icons.heart(in: rects[3], color: g.isFavorite ? color : Theme.muted, filled: g.isFavorite) }
     }
 
     private func drawSession(_ s: Session, group g: Group, in row: CGRect, hover: Bool) {
@@ -259,10 +263,11 @@ final class SidebarView: NSView {
         let force = event.modifierFlags.contains(.command)
         switch rows[i] {
         case .group(let g):
-            let icons = iconRects(headRect(r), count: 3)
+            let icons = iconRects(headRect(r), count: 4)
             if icons[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseGroup?(g.id, force); return }
             if icons[1].insetBy(dx: -3, dy: -3).contains(p) { onEditGroup?(g.id); return }
             if icons[2].insetBy(dx: -3, dy: -3).contains(p) { onNewSession?(g.id); return }
+            if icons[3].insetBy(dx: -3, dy: -3).contains(p) { onToggleFavorite?(g.id); return }
             if p.x < 26 {
                 if collapsed.contains(g.id) { collapsed.remove(g.id) } else { collapsed.insert(g.id) }
                 reload(groups: groups, sessions: Array(sessions.values))

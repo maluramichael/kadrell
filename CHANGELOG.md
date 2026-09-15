@@ -4,6 +4,7 @@ Neueste Version oben.
 
 ## 1.4.0 (2026-09-16)
 
+- Feature: Gruppen lassen sich per Herz als Favorit markieren. Eine favorisierte Gruppe bleibt im Baum stehen, auch wenn ihre letzte Session geschlossen wurde, und startet per Plus wieder eine neue.
 - Feature: Neuer Bereich „Claude“ in den Einstellungen: Bypass-Modus erlauben, Startmodus, Modell und Effort für neu gestartete Sessions festlegen.
 
 ## 1.3.3 (2026-09-16)

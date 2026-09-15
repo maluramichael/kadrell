@@ -35,6 +35,20 @@ enum Icons {
         p.stroke()
     }
 
+    /// Herz für Favoriten: gefüllt, solange die Gruppe einer ist, sonst nur der Umriss.
+    @MainActor static func heart(in r: CGRect, color: NSColor, filled: Bool) {
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 16 * r.width, y: r.minY + y / 16 * r.height) }
+        let p = NSBezierPath()
+        p.lineWidth = 1.5
+        p.move(to: pt(8, 13.5))
+        p.curve(to: pt(1.8, 6.2), controlPoint1: pt(4.2, 11), controlPoint2: pt(1.8, 8.6))
+        p.curve(to: pt(8, 5.2), controlPoint1: pt(1.8, 2.6), controlPoint2: pt(6, 2.4))
+        p.curve(to: pt(14.2, 6.2), controlPoint1: pt(10, 2.4), controlPoint2: pt(14.2, 2.6))
+        p.curve(to: pt(8, 13.5), controlPoint1: pt(14.2, 8.6), controlPoint2: pt(11.8, 11))
+        p.close()
+        if filled { color.setFill(); p.fill() } else { color.setStroke(); p.stroke() }
+    }
+
     /// Chevron nach unten (offen) oder rechts (zu).
     @MainActor static func chevron(in r: CGRect, open: Bool, color: NSColor) {
         let p = NSBezierPath()

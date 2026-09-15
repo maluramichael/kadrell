@@ -71,4 +71,17 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertTrue(store.groups.isEmpty)
         XCTAssertTrue(GroupStore(url: url).groups.isEmpty)
     }
+
+    func testFavoriteSurvivesEmptyGroup() throws {
+        let store = GroupStore(url: url)
+        store.assign([session("s1", cwd: "/p/a"), session("t1", cwd: "/p/b")])
+        store.toggleFavorite(id: store.groups[0].id)
+        XCTAssertTrue(store.assign([]))
+        XCTAssertEqual(store.groups.map(\.cwd), ["/p/a"])
+        XCTAssertTrue(GroupStore(url: url).groups[0].isFavorite)
+        // Wieder abgewählt, verschwindet die leere Gruppe beim nächsten Poll
+        store.toggleFavorite(id: store.groups[0].id)
+        XCTAssertTrue(store.assign([]))
+        XCTAssertTrue(store.groups.isEmpty)
+    }
 }
