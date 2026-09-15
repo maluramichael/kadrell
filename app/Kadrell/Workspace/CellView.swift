@@ -61,8 +61,10 @@ final class CellView: NSView {
         head.fill()
         Theme.line.setFill()
         CGRect(x: 0, y: head.maxY - 1, width: b.width, height: 1).fill()
-        dot.setFill()
-        NSBezierPath(ovalIn: dotRect).fill()
+        if session.isPending { Icons.spinner(in: dotRect.insetBy(dx: -1, dy: -1), color: Theme.sub) } else {
+            dot.setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
+        }
         let meta = NSAttributedString(string: session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
         let iconW: CGFloat = hovered ? 24 : 0
@@ -79,6 +81,7 @@ final class CellView: NSView {
         let body = bodyRect
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }
         if session.isPending {
+            Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
             drawLabel("STARTET …", in: body)
         } else if session.isInteractive {
             drawLabel("LÄUFT IN ANDEREM TERMINAL", in: body)

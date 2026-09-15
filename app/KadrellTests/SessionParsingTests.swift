@@ -126,3 +126,14 @@ final class SessionDuplicateTests: XCTestCase {
         XCTAssertEqual(Set(d.map(\.id)), ["a1", "a3"])   // a2 ist die neueste; anderer Ordner und unbenannte bleiben
     }
 }
+
+final class SessionTolerantDecodeTests: XCTestCase {
+    func testEntryWithoutNameDoesNotBreakTheList() throws {
+        let json = #"[{"id":"79a85a2c","cwd":"/p","kind":"background","startedAt":1,"sessionId":"79a85a2c-x","state":"blocked"},{"id":"aa","cwd":"/p","kind":"background","startedAt":2,"sessionId":"aa-x","name":"fix","pid":5,"status":"idle"}]"#
+        let l = try Session.decodeList(Data(json.utf8))
+        XCTAssertEqual(l.count, 2)
+        XCTAssertEqual(l[0].name, "79a85a2c")
+        XCTAssertEqual(l[0].title, "p · 79a8")
+        XCTAssertEqual(l[1].name, "fix")
+    }
+}

@@ -49,6 +49,17 @@ enum Icons {
         p.stroke()
     }
 
+    /// Ladeanzeige: Kreisbogen, der sich mit der Zeit dreht (Aufrufer zeichnet regelmäßig neu).
+    @MainActor static func spinner(in r: CGRect, color: NSColor, width: CGFloat = 1.5) {
+        let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1) * 360
+        let p = NSBezierPath()
+        p.lineWidth = width
+        p.lineCapStyle = .round
+        p.appendArc(withCenter: CGPoint(x: r.midX, y: r.midY), radius: min(r.width, r.height) / 2 - width / 2, startAngle: -t, endAngle: -t - 270, clockwise: true)
+        color.setStroke()
+        p.stroke()
+    }
+
     /// Layout-Symbol für die Leiste: Grid = vier Quadrate, Stack = Rahmen mit zwei Linien.
     @MainActor static func layout(_ mode: LayoutMode, in r: CGRect, color: NSColor) {
         let p = NSBezierPath()

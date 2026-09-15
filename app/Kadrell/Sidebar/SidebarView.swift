@@ -36,7 +36,7 @@ final class SidebarView: NSView {
         pulseTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(80))
-                guard let self, self.sessions.values.contains(where: { $0.status == .running }) else { continue }
+                guard let self, self.sessions.values.contains(where: { $0.status == .running || $0.isPending }) else { continue }
                 self.needsDisplay = true
             }
         }
@@ -145,8 +145,12 @@ final class SidebarView: NSView {
         let c = attached || !s.canAttach ? Theme.color(for: s.status) : Theme.detached
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
         let pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
-        (s.status == .running && s.canAttach ? c.withAlphaComponent(pulse) : c).setFill()
-        NSBezierPath(ovalIn: CGRect(x: 27, y: r.midY - 4, width: 8, height: 8)).fill()
+        if s.isPending {
+            Icons.spinner(in: CGRect(x: 26, y: r.midY - 5, width: 10, height: 10), color: Theme.sub)
+        } else {
+            (s.status == .running && s.canAttach ? c.withAlphaComponent(pulse) : c).setFill()
+            NSBezierPath(ovalIn: CGRect(x: 27, y: r.midY - 4, width: 8, height: 8)).fill()
+        }
         if hover { Icons.x(in: iconRects(r, count: 1)[0], color: Theme.muted) }
         var right = r.maxX - 8 - 20   // Icon-Platz immer reserviert
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))

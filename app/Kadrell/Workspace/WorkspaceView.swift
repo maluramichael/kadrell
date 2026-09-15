@@ -223,9 +223,9 @@ final class WorkspaceView: NSView {
         }
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
         pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
-        for (key, v) in cells where sessions[key]?.status == .running && !v.isHidden && !v.headerHidden {
+        for (key, v) in cells where sessions[key]?.status == .running && !v.isHidden {
             v.pulse = pulse
-            v.setNeedsDisplay(v.dotRect)
+            if sessions[key]?.isPending == true { v.needsDisplay = true } else if !v.headerHidden { v.setNeedsDisplay(v.dotRect) }
         }
         if !stackRows.isEmpty { needsDisplay = true }
     }
@@ -259,8 +259,10 @@ final class WorkspaceView: NSView {
         CGRect(x: r.minX, y: r.minY, width: on ? 3 : 1, height: r.height).fill()
         let attached = attach?.isAttached(key) ?? false
         let c = attached || !s.canAttach ? Theme.color(for: s.status) : Theme.detached
-        (s.status == .running && s.canAttach ? c.withAlphaComponent(pulse) : c).setFill()
-        NSBezierPath(ovalIn: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8)).fill()
+        if s.isPending { Icons.spinner(in: CGRect(x: r.minX + 11, y: r.midY - 5, width: 10, height: 10), color: Theme.sub) } else {
+            (s.status == .running && s.canAttach ? c.withAlphaComponent(pulse) : c).setFill()
+            NSBezierPath(ovalIn: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8)).fill()
+        }
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let grp = NSAttributedString(string: g?.name ?? "", attributes: Theme.attrs(10.5, color))
         var rx = r.maxX - 10

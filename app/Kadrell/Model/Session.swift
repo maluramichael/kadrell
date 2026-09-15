@@ -29,6 +29,21 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
         self.name = name; self.state = state; self.rawStatus = rawStatus; self.pid = pid; self.waitingFor = waitingFor
     }
 
+    /// Tolerant: Einträge ohne `name` (z. B. liegengebliebene Kopien) dürfen nicht die ganze Liste kippen.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        shortId = try c.decodeIfPresent(String.self, forKey: .shortId)
+        cwd = try c.decodeIfPresent(String.self, forKey: .cwd) ?? ""
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? "background"
+        startedAt = try c.decodeIfPresent(Double.self, forKey: .startedAt) ?? 0
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? shortId ?? ""
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? shortId ?? sessionId
+        state = try c.decodeIfPresent(String.self, forKey: .state)
+        rawStatus = try c.decodeIfPresent(String.self, forKey: .rawStatus)
+        pid = try c.decodeIfPresent(Int.self, forKey: .pid)
+        waitingFor = try c.decodeIfPresent(String.self, forKey: .waitingFor)
+    }
+
     /// Stabiler Schlüssel: die kurze Hintergrund-Id. `/resume` in Claude Code wechselt die `sessionId`,
     /// die `id` des Hintergrundjobs bleibt, damit die Kachel ihren Platz behält.
     var id: String { shortId ?? sessionId }
