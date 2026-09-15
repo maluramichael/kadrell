@@ -121,6 +121,7 @@ final class CellView: NSView {
         else if focused { color = groupColor }
         else if session.status == .waiting, session.canAttach { color = Theme.waiting }
         else if session.status == .error { color = Theme.error }
+        else if hovered { color = Theme.detached }
         else { color = Theme.line }
         color.setFill()
         bounds.frame(withWidth: focused || dropTarget ? 2 : 1)
