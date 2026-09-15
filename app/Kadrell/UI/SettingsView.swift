@@ -75,6 +75,10 @@ enum Settings {
         }
         return out
     }
+
+    static var version: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
+    }
 }
 
 @Observable
@@ -148,8 +152,13 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("EINSTELLUNGEN").font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
-                .padding(.horizontal, 16).padding(.top, 12)
+            HStack {
+                Text("EINSTELLUNGEN").kerning(0.6)
+                Spacer()
+                Text("Kadrell v\(Settings.version)")
+            }
+            .font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+            .padding(.horizontal, 16).padding(.top, 12)
             label("Startordner für ⌘N")
             HStack(spacing: 10) {
                 Text(Theme.shortPath(model.startFolder)).font(Theme.ui(12)).foregroundStyle(Theme.fgColor)
