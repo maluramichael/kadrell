@@ -164,6 +164,7 @@ final class CanvasView: NSView {
             v.lines = attach?.lines(for: key) ?? []
             v.highlight = highlightKeys.map { $0.contains(key) }
             v.pulse = pulse
+            v.textScale = (Settings.zoomMode == .geometric && focusedKey != key) ? scale : 1
             mountTerminal(for: key, in: v, session: s)
             v.needsDisplay = true
         }
@@ -175,8 +176,9 @@ final class CanvasView: NSView {
     }
 
     /// Layout-Modus: Terminal nur eingehängt, wenn die Kachel ≥ 320 px breit ist und keine Animation läuft;
-    /// Schrift immer 12 pt. Geometrischer Modus: Schrift = 12 × Maßstab (Spalten bleiben konstant, kein
-    /// SIGWINCH beim Zoomen); während der Bewegung bleibt das Terminal eingehängt und wird per Layer skaliert.
+    /// Schrift immer 12 pt. Geometrischer Modus: unter 100 % bleibt die Schrift 12 pt und das Terminal wird
+    /// nur per Layer skaliert (keine Neuberechnung, kein SIGWINCH); über 100 % wächst die Schrift in
+    /// 0,5er-Schritten, damit Text scharf bleibt. Unter 5 px Schrift zeigt die Kachel den skalierten Snapshot.
     private func mountTerminal(for key: String, in cell: CellView, session: Session) {
         guard let t = attach?.terminal(for: key) else { return }
         func unmount() {
@@ -186,28 +188,30 @@ final class CanvasView: NSView {
             t.removeFromSuperview()
         }
         if Settings.zoomMode == .geometric, focusedKey != key {
-            let fontSize = 12 * scale
+            guard 12 * scale >= 5, cell.lod >= 1 else { unmount(); return }
             if isAnimating {
-                guard t.superview === cell, t.restScale > 0 else { return }
-                let k = scale / t.restScale
+                guard t.superview === cell else { return }
                 t.frame.origin = cell.terminalRect.origin
-                t.layer?.transform = CATransform3DMakeScale(k, k, 1)
+                t.layer?.transform = CATransform3DMakeScale(scale / t.restFontScale, scale / t.restFontScale, 1)
                 return
             }
-            guard fontSize >= 3 else { unmount(); return }
+            let fontScale = max(1, (scale * 2).rounded() / 2)
             if t.superview !== cell { cell.addSubview(t) }
-            t.layer?.transform = CATransform3DIdentity
-            t.restScale = scale
-            if abs(t.font.pointSize - fontSize) > 0.05 { t.font = Theme.font(fontSize) }
-            let body = cell.terminalRect
-            if t.frame != body { t.frame = body }
+            if abs(t.font.pointSize - 12 * fontScale) > 0.05 { t.font = Theme.font(12 * fontScale) }
+            t.restFontScale = fontScale
+            let r = cell.terminalRect
+            // Frame in „Ruhe-Pixeln“ (Welt × Schriftfaktor), der Rest ist Layer-Skalierung ≤ 1
+            let k = scale / fontScale
+            let frame = CGRect(x: r.minX, y: r.minY, width: (r.width / k).rounded(), height: (r.height / k).rounded())
+            if t.frame != frame { t.frame = frame }
+            t.layer?.transform = CATransform3DMakeScale(k, k, 1)
             return
         }
         let want = cell.lod >= 3 && !isAnimating
         if want {
             if t.superview !== cell { cell.addSubview(t) }
             t.layer?.transform = CATransform3DIdentity
-            t.restScale = scale
+            t.restFontScale = 1
             if abs(t.font.pointSize - 12) > 0.05 { t.font = Theme.font(12) }
             let body = cell.terminalRect
             if t.frame != body { t.frame = body }

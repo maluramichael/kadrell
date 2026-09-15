@@ -40,8 +40,10 @@ struct Layout {
             l.groupOrder.append(g.id)
             union = union.map { $0.union(f) } ?? f
             l.headers[g.id] = CGRect(x: f.minX + groupPad, y: f.minY + groupPad, width: f.width - 2 * groupPad, height: headerH)
+            // unten mindestens 18 Bildschirm-px frei, damit der Griff nie unter einer Kachel liegt
+            let bottomPad = Swift.max(groupPad, 18 / s)
             let inner = CGRect(x: f.minX + groupPad, y: f.minY + groupPad + headerH + groupHeaderGapWorld,
-                               width: f.width - 2 * groupPad, height: f.height - 2 * groupPad - headerH - groupHeaderGapWorld)
+                               width: f.width - 2 * groupPad, height: f.height - groupPad - bottomPad - headerH - groupHeaderGapWorld)
             let n = g.cellKeys.count
             guard n > 0, inner.width > 0, inner.height > 0 else { continue }
             let cols = Swift.max(1, Swift.min(columns, n))

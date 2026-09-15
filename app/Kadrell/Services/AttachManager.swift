@@ -7,8 +7,8 @@ import os
 final class KadrellTerminalView: LocalProcessTerminalView {
     var onEscape: (() -> Void)?
     var onExit: (() -> Void)?
-    /// Maßstab, bei dem Frame und Schrift zuletzt gesetzt wurden (geometrischer Zoom-Modus).
-    var restScale: CGFloat = 0
+    /// Schriftfaktor (≥ 1) beim letzten Ruhezustand im geometrischen Zoom-Modus; darunter nur Layer-Skalierung.
+    var restFontScale: CGFloat = 1
 
     /// `keyDown` ist in SwiftTerm nicht `open`; `performKeyEquivalent` sieht jedes Tastenereignis vorher.
     /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt.

@@ -16,6 +16,8 @@ final class CellView: NSView {
     /// nil = keine Suche aktiv; sonst gedimmt, wenn nicht getroffen.
     var highlight: Bool?
     var pulse: CGFloat = 1
+    /// Geometrischer Zoom: Snapshot-Zeilen skalieren mit (1 = 12 pt).
+    var textScale: CGFloat = 1
 
     init(session: Session) {
         self.session = session
@@ -130,8 +132,9 @@ final class CellView: NSView {
     }
 
     private func drawLines(in r: CGRect, dim: CGFloat) {
-        guard r.height > 10, !lines.isEmpty else { return }
-        let lineH: CGFloat = 12 * 1.45
+        let fontSize = 12 * textScale
+        guard r.height > 10, !lines.isEmpty, fontSize >= 2 else { return }
+        let lineH: CGFloat = fontSize * 1.45
         let fit = max(0, Int(r.height / lineH))
         guard fit > 0 else { return }
         let shown = lines.suffix(fit)
@@ -139,7 +142,7 @@ final class CellView: NSView {
         var y = lod >= 3 ? r.minY : r.maxY - CGFloat(shown.count) * lineH
         for line in shown {
             let color: NSColor = line.hasPrefix(">") ? Theme.fg : line.hasPrefix("⏺") || line.hasPrefix("●") ? Theme.sub : Theme.muted
-            let a = NSAttributedString(string: line, attributes: Theme.attrs(12, color.withAlphaComponent(dim), bold: line.hasPrefix(">")))
+            let a = NSAttributedString(string: line, attributes: Theme.attrs(fontSize, color.withAlphaComponent(dim), bold: line.hasPrefix(">")))
             a.draw(with: CGRect(x: r.minX, y: y, width: r.width, height: lineH), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
             y += lineH
         }
