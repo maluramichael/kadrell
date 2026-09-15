@@ -97,4 +97,12 @@ final class ClaudeCLI: Sendable {
     static func sessionArgs(sessionId: String, hasTranscript: Bool) -> [String] {
         hasTranscript ? ["--resume", sessionId] : ["--session-id", sessionId]
     }
+
+    /// Start-Flags aus den Einstellungen. Leerer String = Claude-Default, Flag entfällt.
+    static func launchArgs(allowBypass: Bool, mode: String, model: String, effort: String) -> [String] {
+        (allowBypass ? ["--allow-dangerously-skip-permissions"] : [])
+            + (mode.isEmpty ? [] : ["--permission-mode", mode])
+            + (model.isEmpty ? [] : ["--model", model])
+            + (effort.isEmpty ? [] : ["--effort", effort])
+    }
 }

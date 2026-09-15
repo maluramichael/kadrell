@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.4.0 (2026-09-16)
+
+- Feature: Neuer Bereich „Claude“ in den Einstellungen: Bypass-Modus erlauben, Startmodus, Modell und Effort für neu gestartete Sessions festlegen.
+
 ## 1.3.0 (2026-09-16)
 
 - Feature: In den Einstellungen unter „Sessions" lässt sich wählen, ob die Kachel nach dem Beenden von Claude (zweimal ⌃C, /exit) stehen bleibt oder sich schließt. Fortsetzen geht danach weiter per Klick im Baum.

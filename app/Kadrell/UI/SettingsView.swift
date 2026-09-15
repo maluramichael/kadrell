@@ -30,6 +30,27 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "closeTileOnExit") }
     }
 
+    /// Start-Flags für Claude, gelten ab dem nächsten Start eines Claude-Prozesses. "" = Claude-Default.
+    static let claudeModes = ["", "acceptEdits", "auto", "plan", "dontAsk", "bypassPermissions"]
+    static let claudeModels = ["", "fable", "opus", "sonnet"]
+    static let claudeEfforts = ["", "low", "medium", "high", "xhigh", "max"]
+    static var claudeAllowBypass: Bool {
+        get { UserDefaults.standard.bool(forKey: "claude.allowBypass") }
+        set { UserDefaults.standard.set(newValue, forKey: "claude.allowBypass") }
+    }
+    static var claudeMode: String {
+        get { UserDefaults.standard.string(forKey: "claude.mode") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "claude.mode") }
+    }
+    static var claudeModel: String {
+        get { UserDefaults.standard.string(forKey: "claude.model") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "claude.model") }
+    }
+    static var claudeEffort: String {
+        get { UserDefaults.standard.string(forKey: "claude.effort") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "claude.effort") }
+    }
+
     static let uiScales: [Double] = [0.9, 1, 1.15, 1.3]
     static let lineSpacings: [Double] = [1, 1.1, 1.2, 1.35]
     static let paddings: [Double] = [0, 4, 8, 12]
@@ -94,6 +115,10 @@ final class SettingsModel {
     var showLastMessage = Settings.showLastMessage
     var stackShowPath = Settings.stackShowPath
     var closeTileOnExit = Settings.closeTileOnExit
+    var claudeAllowBypass = Settings.claudeAllowBypass
+    var claudeMode = Settings.claudeMode
+    var claudeModel = Settings.claudeModel
+    var claudeEffort = Settings.claudeEffort
     var hotkeys = Hotkeys.current
     var uiScale = Settings.uiScale
     var fontName = Settings.terminalFontName
@@ -116,6 +141,10 @@ final class SettingsModel {
         Settings.showLastMessage = showLastMessage
         Settings.stackShowPath = stackShowPath
         Settings.closeTileOnExit = closeTileOnExit
+        Settings.claudeAllowBypass = claudeAllowBypass
+        Settings.claudeMode = claudeMode
+        Settings.claudeModel = claudeModel
+        Settings.claudeEffort = claudeEffort
         Hotkeys.current = hotkeys
         Settings.uiScale = uiScale
         Settings.terminalFontName = fontName
@@ -209,6 +238,16 @@ struct SettingsView: View {
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
+            label("Claude  (gilt für neu gestartete Claude-Prozesse)")
+            VStack(spacing: 6) {
+                setting("Bypass-Modus erlauben (--allow-dangerously-skip-permissions)") {
+                    pill(model.claudeAllowBypass ? "an" : "aus", on: model.claudeAllowBypass) { model.claudeAllowBypass.toggle() }
+                }
+                setting("Startmodus") { options(Settings.claudeModes, $model.claudeMode) }
+                setting("Modell") { options(Settings.claudeModels, $model.claudeModel) }
+                setting("Effort") { options(Settings.claudeEfforts, $model.claudeEffort) }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 8)
             label("Tastenkürzel")
             ScrollView {
                 VStack(spacing: 2) {
@@ -216,7 +255,7 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
             }
-            .frame(height: 460 * Theme.scale)
+            .frame(height: 320 * Theme.scale)
             DialogFoot(hint: "Kürzel anklicken, Tasten drücken · ⌫ entfernt · Esc abbrechen", button: "Speichern") { model.save() }
         }
         .frame(width: 900 * Theme.scale, alignment: .leading)
@@ -237,6 +276,13 @@ struct SettingsView: View {
     private func choice(_ values: [Double], _ value: Binding<Double>, _ text: @escaping (Double) -> String) -> some View {
         HStack(spacing: 2) {
             ForEach(values, id: \.self) { v in pill(text(v), on: abs(value.wrappedValue - v) < 0.001) { value.wrappedValue = v } }
+        }
+    }
+
+    /// Wie `choice`, für Texte. "" heißt Claude-Default.
+    private func options(_ values: [String], _ value: Binding<String>) -> some View {
+        HStack(spacing: 2) {
+            ForEach(values, id: \.self) { v in pill(v.isEmpty ? "Standard" : v, on: value.wrappedValue == v) { value.wrappedValue = v } }
         }
     }
 

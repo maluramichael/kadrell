@@ -96,6 +96,7 @@ final class AttachManager {
             if self.ended.contains(key) { self.onEnded?(key) }
         }
         let args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: Transcript.path(sessionId: session.sessionId) != nil)
+            + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
         AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .public) in \(session.cwd, privacy: .public)")
         t.startProcess(executable: cli.binary, args: args, environment: cli.environmentList,
                        execName: "claude", currentDirectory: session.cwd)
