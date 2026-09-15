@@ -2,7 +2,7 @@
 
 Neueste Version oben.
 
-## Unreleased
+## 0.2.0 (2026-09-15)
 
 - Feature: Die Einstellungen (⌘,) zeigen jetzt die installierte Version.
 
