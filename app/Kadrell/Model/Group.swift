@@ -92,4 +92,19 @@ final class GroupStore {
         groups[i].sessionIds.append(sessionId)
         try? save()
     }
+
+    /// Sortieren per Ziehen: die Session nimmt den Platz von `target` in derselben Gruppe ein.
+    func moveSession(_ id: String, to target: String) {
+        guard let g = groups.firstIndex(where: { $0.sessionIds.contains(id) }),
+              let from = groups[g].sessionIds.firstIndex(of: id), let to = groups[g].sessionIds.firstIndex(of: target), from != to else { return }
+        groups[g].sessionIds.insert(groups[g].sessionIds.remove(at: from), at: to)
+        try? save()
+    }
+
+    /// Die Gruppe nimmt den Platz von `target` ein.
+    func moveGroup(_ id: String, to target: String) {
+        guard let from = groups.firstIndex(where: { $0.id == id }), let to = groups.firstIndex(where: { $0.id == target }), from != to else { return }
+        groups.insert(groups.remove(at: from), at: to)
+        try? save()
+    }
 }

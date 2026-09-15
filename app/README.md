@@ -13,7 +13,8 @@ open build/Build/Products/Debug/Kadrell.app
 ```
 
 Bedienung: Klick im Baum zeigt nur diese Session, ⌘-Klick nimmt sie dazu oder weg, ⇧-Klick markiert den
-Bereich seit dem letzten Klick, Klick auf eine Gruppe zeigt alle ihre Sessions. ⌘1 Grid, ⌘2 Stack, ⌘⌥-Pfeile bewegen den Fokus, ⌘⇧⏎ zeigt die Fokus-Kachel allein,
+Bereich seit dem letzten Klick, Klick auf eine Gruppe zeigt alle ihre Sessions. Ziehen im Baum oder an der Titelzeile
+einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf eine fremde Gruppe zieht die ganze Gruppe mit). ⌘1 Grid, ⌘2 Stack, ⌘⌥-Pfeile bewegen den Fokus, ⌘⇧⏎ zeigt die Fokus-Kachel allein,
 ⌘Esc schließt sie (Esc selbst geht an Claude Code), ⌘B blendet den Baum aus, ⌘N neue Session, ⌘⏎ neue Session im Ordner der fokussierten, ⌘P Suche
 (`>` Kommandos), ⌘W stoppt die fokussierte Session. F1 zeigt die Hilfe, beim ersten Start automatisch.
 

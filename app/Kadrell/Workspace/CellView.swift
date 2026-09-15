@@ -12,6 +12,8 @@ final class CellView: NSView {
     /// Das Terminal dieser Kachel hat gerade die Tastatur.
     var keyboardFocus = false
     var hovered = false
+    /// Beim Ziehen einer anderen Kachel: hier landet sie.
+    var dropTarget = false
     var attached = false
     var lines: [String] = []
     var pulse: CGFloat = 1
@@ -101,13 +103,14 @@ final class CellView: NSView {
 
     private func drawBorder() {
         let color: NSColor
-        if focused { color = groupColor }
+        if dropTarget { color = Theme.fg }
+        else if focused { color = groupColor }
         else if session.status == .waiting, session.canAttach { color = Theme.waiting }
         else if session.status == .error { color = Theme.error }
         else if hovered { color = Theme.sub }
         else { color = Theme.line }
         color.setFill()
-        bounds.frame(withWidth: focused ? 2 : 1)
+        bounds.frame(withWidth: focused || dropTarget ? 2 : 1)
     }
 
     private func drawLines(in r: CGRect) {

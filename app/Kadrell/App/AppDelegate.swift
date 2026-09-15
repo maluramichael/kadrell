@@ -109,6 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
         sidebar.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
+        sidebar.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
+        sidebar.onMoveGroup = { [weak self] gid, target in self?.store.moveGroup(gid, to: target); self?.reloadViews() }
+        workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
 
         // ⌘Esc schließt die Fokus-Kachel, F1 die Hilfe, egal ob Terminal oder Fläche die Tastatur hat. Esc allein geht an Claude.
@@ -387,6 +390,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             } catch { report(error) }
         }
+    }
+
+    /// Baum und Arbeitsfläche teilen eine Reihenfolge: in derselben Gruppe tauscht die Session den Platz,
+    /// über Gruppengrenzen hinweg rückt die ganze Gruppe an die Stelle der Zielgruppe.
+    private func moveSession(_ id: String, to target: String) {
+        guard let g = store.group(forSession: id), let t = store.group(forSession: target) else { return }
+        if g.id == t.id { store.moveSession(id, to: target) } else { store.moveGroup(g.id, to: t.id) }
+        reloadViews()
     }
 
     private func closeGroup(_ gid: String, force: Bool = false) {

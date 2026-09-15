@@ -18,6 +18,11 @@ final class SidebarView: NSView {
     /// Letzte einzeln angeklickte Session: Startpunkt für ⇧-Bereiche.
     private var anchor: String?
     private var pulseTask: Task<Void, Never>?
+    /// Gedrückte Zeile: Klick wird erst beim Loslassen ausgewertet, Ziehen sortiert um. Zeilen als Wert,
+    /// nicht als Index: ein Poll kann den Baum zwischen Drücken und Loslassen neu aufbauen.
+    private var pressed: (point: CGPoint, row: Row, flags: NSEvent.ModifierFlags)?
+    private var dragging = false
+    private var dropTarget: Row?
 
     enum SelectMode { case replace, toggle, add }
     /// Klick = nur diese, ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu.
@@ -27,8 +32,15 @@ final class SidebarView: NSView {
     /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
     var onCloseGroup: ((String, Bool) -> Void)?
     var onCloseSession: ((String, Bool) -> Void)?
+    /// Ziehen: (gezogen, Ziel), Session innerhalb ihrer Gruppe bzw. Gruppe vor/hinter eine andere.
+    var onMoveSession: ((String, String) -> Void)?
+    var onMoveGroup: ((String, String) -> Void)?
 
-    private enum Row { case group(Group), session(Session, Group) }
+    private enum Row {
+        case group(Group), session(Session, Group)
+        var key: String { switch self { case .group(let g): "g:" + g.id; case .session(let s, _): "s:" + s.id } }
+    }
+    private func index(of r: Row) -> Int? { rows.firstIndex { $0.key == r.key } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -112,6 +124,16 @@ final class SidebarView: NSView {
             case .session(let s, let g): drawSession(s, group: g, in: r, hover: hovered == i)
             }
         }
+        if let y = dropLineY() { Theme.fg.setFill(); CGRect(x: 0, y: y - 1, width: bounds.width, height: 2).fill() }
+    }
+
+    /// Einfügelinie: über dem Ziel beim Ziehen nach oben, darunter (bei Gruppen unter deren letzter Zeile) nach unten.
+    private func dropLineY() -> CGFloat? {
+        guard dragging, let tr = dropTarget, let t = index(of: tr), let sr = pressed?.row, let src = index(of: sr) else { return nil }
+        guard t > src else { return rowRect(t).minY }
+        guard case .group = rows[t] else { return rowRect(t).maxY }
+        let end = rows.indices.dropFirst(t + 1).first { if case .group = rows[$0] { true } else { false } } ?? rows.count
+        return rowRect(end - 1).maxY
     }
 
     private func drawGroup(_ g: Group, in r: CGRect, hover: Bool) {
@@ -185,10 +207,10 @@ final class SidebarView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        pressed = nil
         guard let i = rowIndex(at: p) else { return }
         let r = rowRect(i)
-        let shift = event.modifierFlags.contains(.shift), cmd = event.modifierFlags.contains(.command)
-        let force = cmd
+        let force = event.modifierFlags.contains(.command)
         switch rows[i] {
         case .group(let g):
             let icons = iconRects(r, count: 3)
@@ -200,9 +222,56 @@ final class SidebarView: NSView {
                 reload(groups: groups, sessions: Array(sessions.values))
                 return
             }
-            onSelect?(g.sessionIds, shift || cmd ? .add : .replace)
         case .session(let s, _):
             if iconRects(r, count: 1)[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseSession?(s.id, force); return }
+        }
+        pressed = (p, rows[i], event.modifierFlags)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let press = pressed else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true; hovered = nil }
+        guard dragging else { return }
+        autoscroll(with: event)
+        NSCursor.closedHand.set()
+        dropTarget = target(for: press.row, at: p)
+        needsDisplay = true
+    }
+
+    /// Gültiges Ziel: eine Session nur innerhalb ihrer Gruppe, eine Gruppe landet auf der Kopfzeile einer anderen.
+    private func target(for src: Row, at p: CGPoint) -> Row? {
+        guard let j = rowIndex(at: p), rows[j].key != src.key else { return nil }
+        switch (src, rows[j]) {
+        case (.session(_, let g), .session(_, let h)): return g.id == h.id ? rows[j] : nil
+        case (.group(let g), _):
+            guard let head = rows[...j].last(where: { if case .group = $0 { true } else { false } }),
+                  case .group(let h) = head, h.id != g.id else { return nil }
+            return head
+        default: return nil
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let press = pressed else { return }
+        let wasDragging = dragging, t = dropTarget
+        pressed = nil; dragging = false; dropTarget = nil
+        needsDisplay = true
+        if wasDragging {
+            NSCursor.arrow.set()
+            guard let t else { return }
+            switch (press.row, t) {
+            case (.session(let s, _), .session(let u, _)): onMoveSession?(s.id, u.id)
+            case (.group(let g), .group(let h)): onMoveGroup?(g.id, h.id)
+            default: break
+            }
+            return
+        }
+        let shift = press.flags.contains(.shift), cmd = press.flags.contains(.command)
+        switch press.row {
+        case .group(let g):
+            onSelect?(g.sessionIds, shift || cmd ? .add : .replace)
+        case .session(let s, _):
             if shift, let a = anchor, let ai = sessionIndex(a), let bi = sessionIndex(s.id) {
                 onSelect?(sessionIds[min(ai, bi)...max(ai, bi)].map { $0 }, .add)
                 return
