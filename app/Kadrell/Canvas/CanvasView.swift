@@ -132,7 +132,6 @@ final class CanvasView: NSView {
             let f = toScreen(r).integral
             if v.frame != f { v.frame = f }
             v.headerRect = toScreen(layout.headers[g.id] ?? .zero).offsetBy(dx: -f.minX, dy: -f.minY)
-            v.plusRect = toScreen(layout.plus[g.id] ?? .zero).offsetBy(dx: -f.minX, dy: -f.minY)
             v.count = g.sessionIds.filter { sessions[$0] != nil }.count
             v.lod = baseLod
             v.hovered = hoveredGroup == g.id
@@ -332,11 +331,11 @@ final class CanvasView: NSView {
         }
         for (id, v) in groupViews where v.frame.contains(p) {
             let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
-            if v.lod >= 1, hoveredGroup == id {
-                if v.penRect.insetBy(dx: -4, dy: -4).contains(local) { return .pen(id) }
-                if v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .close(id) }
+            if v.lod >= 1 {
+                if v.plusRect.insetBy(dx: -4, dy: -4).contains(local) { return .plus(id) }
+                if hoveredGroup == id, v.penRect.insetBy(dx: -4, dy: -4).contains(local) { return .pen(id) }
+                if hoveredGroup == id, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .close(id) }
             }
-            if v.plusRect.contains(local) { return .plus(id) }
             if v.headerRect.insetBy(dx: 0, dy: -6).contains(local) { return .header(id) }
         }
         return .none

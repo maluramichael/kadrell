@@ -1,6 +1,6 @@
 import Foundation
 
-/// Grid-Layout in Weltkoordinaten. Chrome (Gruppen-Kopfzeile) ist bildschirmkonstant und geht
+/// Grid-Layout in Weltkoordinaten. Neue Sessions kommen über ⌘N oder das + im Gruppen-Header, keine Plus-Kachel. Chrome (Gruppen-Kopfzeile) ist bildschirmkonstant und geht
 /// deshalb mit `1/scale` in die Welt ein: das Layout hängt vom Maßstab ab.
 struct Layout {
     static let worldPad: CGFloat = 24
@@ -22,7 +22,6 @@ struct Layout {
     var groups: [String: CGRect] = [:]
     var headers: [String: CGRect] = [:]
     var cells: [String: CGRect] = [:]
-    var plus: [String: CGRect] = [:]
     var content: CGRect = .zero
     var groupOrder: [String] = []
 
@@ -65,15 +64,14 @@ struct Layout {
             let cw = (inner - CGFloat(ccols - 1) * cellGap) / CGFloat(ccols)
             var cy = y + groupPad + headerH
             var crowH: CGFloat = 0
-            let keys = g.cellKeys + ["+"]
-            for (j, k) in keys.enumerated() {
+            for (j, k) in g.cellKeys.enumerated() {
                 let cc = j % ccols
                 if cc == 0, j > 0 { cy += crowH + cellGap; crowH = 0 }
                 let h = (k == focused) ? cw / viewportAspect : cw / cellAspect
-                let r = CGRect(x: x + groupPad + CGFloat(cc) * (cw + cellGap), y: cy, width: cw, height: h)
-                if k == "+" { l.plus[g.id] = r } else { l.cells[k] = r }
+                l.cells[k] = CGRect(x: x + groupPad + CGFloat(cc) * (cw + cellGap), y: cy, width: cw, height: h)
                 crowH = Swift.max(crowH, h)
             }
+            if g.cellKeys.isEmpty { crowH = cw / cellAspect / 2 }
             let gh = cy + crowH + groupPad - y
             l.groups[g.id] = CGRect(x: x, y: y, width: gw, height: gh)
             l.headers[g.id] = CGRect(x: x + groupPad, y: y + groupPad, width: inner, height: groupHeaderScreen / s)

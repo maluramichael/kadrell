@@ -31,9 +31,6 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(c1.height, 225, accuracy: 0.01)
         XCTAssertEqual(c2.minX, c1.maxX + 12, accuracy: 0.01)
         XCTAssertEqual(c3.minY, c1.maxY + 12, accuracy: 0.01)
-        // Plus-Kachel nach der letzten Session
-        XCTAssertEqual(l.plus["a"]!.minX, c2.minX, accuracy: 0.01)
-        XCTAssertEqual(l.plus["a"]!.minY, c3.minY, accuracy: 0.01)
         XCTAssertGreaterThan(l.content.height, l.groups["a"]!.maxY)
         XCTAssertEqual(l.groupOrder, ["a", "b"])
     }
