@@ -21,7 +21,9 @@ final class CanvasView: NSView {
 
     private var displayLink: CADisplayLink?
     private var anim: (from: (CGFloat, CGPoint), to: (CGFloat, CGPoint), start: CFTimeInterval, duration: CFTimeInterval, completion: (() -> Void)?)?
-    var isAnimating: Bool { anim != nil }
+    /// Rad und Pinch setzen nur ein Ziel; der Display-Link fährt weich hinterher (kein SIGWINCH-Gewitter).
+    private var smoothTarget: (scale: CGFloat, offset: CGPoint)?
+    var isAnimating: Bool { anim != nil || smoothTarget != nil }
     private var drag: (start: CGPoint, offset: CGPoint, moved: Bool)?
     private var pulseTask: Task<Void, Never>?
     private var wheelMonitor: Any?
@@ -215,6 +217,30 @@ final class CanvasView: NSView {
         setView(scale: s, offset: CGPoint(x: p.x - (p.x - offset.x) * k, y: p.y - (p.y - offset.y) * k))
     }
 
+    /// Wie `zoom`, aber weich: rechnet vom bisherigen Ziel aus, damit schnelle Rad-Ereignisse sich summieren.
+    func zoomSmooth(by factor: CGFloat, at p: CGPoint) {
+        let (s0, o0) = smoothTarget ?? (scale, offset)
+        let s = Layout.clamp(s0 * factor)
+        let k = s / s0
+        setSmoothTarget(s, CGPoint(x: p.x - (p.x - o0.x) * k, y: p.y - (p.y - o0.y) * k))
+    }
+
+    func panSmooth(by d: CGPoint) {
+        let (s0, o0) = smoothTarget ?? (scale, offset)
+        setSmoothTarget(s0, CGPoint(x: o0.x + d.x, y: o0.y + d.y))
+    }
+
+    private func setSmoothTarget(_ s: CGFloat, _ o: CGPoint) {
+        if focusedKey != nil { unfocus() }
+        anim = nil
+        smoothTarget = (s, o)
+        if displayLink == nil {
+            let link = displayLink(target: self, selector: #selector(tick(_:)))
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        }
+    }
+
     func pan(by d: CGPoint) { setView(scale: scale, offset: CGPoint(x: offset.x + d.x, y: offset.y + d.y)) }
 
     /// Fit im Zielmaßstab rechnen: das Layout hängt vom Maßstab ab, deshalb iterieren.
@@ -285,9 +311,22 @@ final class CanvasView: NSView {
         displayLink?.invalidate()
         displayLink = nil
         anim = nil
+        smoothTarget = nil
     }
 
     @objc private func tick(_ link: CADisplayLink) {
+        if let t = smoothTarget {
+            let f: CGFloat = 0.28
+            let ds = t.scale - scale, dx = t.offset.x - offset.x, dy = t.offset.y - offset.y
+            if abs(ds) < scale * 0.001, abs(dx) < 0.3, abs(dy) < 0.3 {
+                smoothTarget = nil
+                setView(scale: t.scale, offset: t.offset)
+                if anim == nil { displayLink?.invalidate(); displayLink = nil }
+            } else {
+                setView(scale: scale + ds * f, offset: CGPoint(x: offset.x + dx * f, y: offset.y + dy * f))
+            }
+            return
+        }
         guard let a = anim else { stopAnimation(); return }
         let k = min(1, (CACurrentMediaTime() - a.start) / a.duration)
         let e = 1 - pow(1 - k, 3)
@@ -407,20 +446,18 @@ final class CanvasView: NSView {
 
     override func scrollWheel(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        stopAnimation()
         if event.modifierFlags.contains(.shift) {
             let d = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.scrollingDeltaY
-            pan(by: CGPoint(x: d, y: 0))
+            panSmooth(by: CGPoint(x: d, y: 0))
             return
         }
         // Rad und Trackpad zoomen immer um den Zeiger (Shift pannt, Drag pannt).
         let k: CGFloat = event.hasPreciseScrollingDeltas ? 0.005 : 0.15
-        zoom(by: exp(event.scrollingDeltaY * k), at: p)
+        zoomSmooth(by: exp(event.scrollingDeltaY * k), at: p)
     }
 
     override func magnify(with event: NSEvent) {
-        stopAnimation()
-        zoom(by: 1 + event.magnification, at: convert(event.locationInWindow, from: nil))
+        zoomSmooth(by: 1 + event.magnification, at: convert(event.locationInWindow, from: nil))
     }
 
     override func keyDown(with event: NSEvent) {
@@ -429,8 +466,8 @@ final class CanvasView: NSView {
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         switch event.charactersIgnoringModifiers {
         case "f": fitAll()
-        case "+", "=": stopAnimation(); zoom(by: 1.3, at: center)
-        case "-": stopAnimation(); zoom(by: 1 / 1.3, at: center)
+        case "+", "=": zoomSmooth(by: 1.3, at: center)
+        case "-": zoomSmooth(by: 1 / 1.3, at: center)
         default: super.keyDown(with: event)
         }
     }
