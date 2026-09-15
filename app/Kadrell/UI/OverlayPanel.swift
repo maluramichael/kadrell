@@ -77,17 +77,22 @@ enum Backdrop {
         let open = window?.childWindows?.contains { $0.isVisible } == true
         if !open { existing?.removeFromSuperview(); return }
         guard existing == nil else { return }
-        let blur = NSVisualEffectView(frame: root.bounds)
-        blur.identifier = id
+        let backdrop = NSView(frame: root.bounds)
+        backdrop.identifier = id
+        backdrop.autoresizingMask = [.width, .height]
+        // Der Blur-Radius von NSVisualEffectView ist fest, abgeschwächt wird er über die Deckkraft.
+        let blur = NSVisualEffectView(frame: backdrop.bounds)
         blur.blendingMode = .withinWindow
         blur.material = .fullScreenUI
         blur.state = .active
+        blur.alphaValue = 0.4
         blur.autoresizingMask = [.width, .height]
-        let dim = NSView(frame: blur.bounds)
+        let dim = NSView(frame: backdrop.bounds)
         dim.wantsLayer = true
-        dim.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
+        dim.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.3).cgColor
         dim.autoresizingMask = [.width, .height]
-        blur.addSubview(dim)
-        root.addSubview(blur)
+        backdrop.addSubview(blur)
+        backdrop.addSubview(dim)
+        root.addSubview(backdrop)
     }
 }
