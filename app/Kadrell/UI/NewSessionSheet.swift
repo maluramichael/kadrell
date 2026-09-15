@@ -162,6 +162,10 @@ struct PathField: NSViewRepresentable {
         f.focusRingType = .none
         f.font = Theme.font(13)
         f.textColor = Theme.fg
+        f.usesSingleLineMode = true      // lange Pfade scrollen horizontal statt umzubrechen
+        f.cell?.wraps = false
+        f.cell?.isScrollable = true
+        f.lineBreakMode = .byClipping
         f.delegate = context.coordinator
         f.stringValue = text
         DispatchQueue.main.async {
