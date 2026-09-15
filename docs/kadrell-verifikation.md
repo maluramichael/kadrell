@@ -96,7 +96,7 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
 
 - **Esc geht an Claude Code**, nicht an die App: Esc ist in Claude Code der Interrupt. Das Terminal
   verlässt man mit **⌘Esc** (stufenweise Terminal → Gruppe → alles), mit **⌘ + Scrollrad** oder Pinch
-  (beide zoomen auch über dem eingehängten Terminal). Die Kachel-Kopfzeile zeigt im Fokus „⌘⎋ zurück“.
+  (beide zoomen auch über dem eingehängten Terminal). Die Kachel-Kopfzeile zeigt im Fokus „⌘Esc zurück“.
   Ohne Fokus reicht Esc wie im Prototyp.
 - **Nur Hintergrund-Sessions.** Interaktive Sessions (`kind: interactive`, laufen in iTerm/tmux) werden
   nicht angezeigt; die Registry filtert sie weg. Punkt 3 des Briefs entfällt damit.
