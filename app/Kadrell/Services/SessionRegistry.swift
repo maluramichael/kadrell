@@ -25,7 +25,8 @@ final class SessionRegistry {
 
     func pollNow() async {
         do {
-            let fresh = try await cli.agents()
+            // Nur Hintergrund-Sessions: interaktive laufen in fremden Terminals und interessieren hier nicht.
+            let fresh = try await cli.agents().filter(\.isBackground)
             if fresh != sessions {
                 sessions = fresh
                 onChange?(fresh)

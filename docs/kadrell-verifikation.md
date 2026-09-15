@@ -98,6 +98,8 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
   verlässt man mit **⌘Esc** (stufenweise Terminal → Gruppe → alles), mit **⌘ + Scrollrad** oder Pinch
   (beide zoomen auch über dem eingehängten Terminal). Die Kachel-Kopfzeile zeigt im Fokus „⌘⎋ zurück“.
   Ohne Fokus reicht Esc wie im Prototyp.
+- **Nur Hintergrund-Sessions.** Interaktive Sessions (`kind: interactive`, laufen in iTerm/tmux) werden
+  nicht angezeigt; die Registry filtert sie weg. Punkt 3 des Briefs entfällt damit.
 - **Keine Gruppen-Chips in der Statusleiste** (bei 30 Gruppen zu voll). Links steht nur der Breadcrumb.
 - **Rückfragen und Fehler** sind eigene Overlays im App-Design (`ConfirmView`), kein `NSAlert`.
   Es ist immer nur ein Overlay offen; ⌘P schließt ⌘N und umgekehrt.
