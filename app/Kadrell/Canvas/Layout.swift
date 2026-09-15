@@ -1,23 +1,21 @@
 import Foundation
 
-/// Grid-Layout in Weltkoordinaten. Neue Sessions kommen über ⌘N oder das + im Gruppen-Header, keine Plus-Kachel. Chrome (Gruppen-Kopfzeile) ist bildschirmkonstant und geht
-/// deshalb mit `1/scale` in die Welt ein: das Layout hängt vom Maßstab ab.
+/// Layout in Weltkoordinaten, i3-artig: jede Gruppe ist ein frei platzierbares Rechteck (gespeichert),
+/// die Kacheln darin füllen die Fläche als Raster mit `columns` Spalten. Die Gruppen-Kopfzeile ist
+/// bildschirmkonstant und geht mit `1/scale` in die Welt ein.
 struct Layout {
     static let worldPad: CGFloat = 24
-    static let groupGap: CGFloat = 24
-    static let groupMin: CGFloat = 720
-    static let groupPad: CGFloat = 16
-    static let cellGap: CGFloat = 12
-    static let cellMin: CGFloat = 320
-    static let cellAspect: CGFloat = 16.0 / 10.0
-    /// Kopfzeile der Gruppe: 18 px Schrift (Bildschirm) plus 12 Welt-Punkte Abstand.
+    static let groupPad: CGFloat = 12
+    static let cellGap: CGFloat = 10
     static let groupHeaderScreen: CGFloat = 18
-    static let groupHeaderGapWorld: CGFloat = 12
+    static let groupHeaderGapWorld: CGFloat = 8
     static let cellHeaderScreen: CGFloat = 26
     static let minScale: CGFloat = 0.03
     static let maxScale: CGFloat = 8
+    static let defaultGroupSize = CGSize(width: 760, height: 500)
+    static let minGroupSize = CGSize(width: 320, height: 200)
 
-    struct GroupInput { let id: String; let cellKeys: [String] }
+    struct GroupInput { let id: String; let cellKeys: [String]; let frame: CGRect }
 
     var groups: [String: CGRect] = [:]
     var headers: [String: CGRect] = [:]
@@ -25,61 +23,57 @@ struct Layout {
     var content: CGRect = .zero
     var groupOrder: [String] = []
 
-    static func columns(available: CGFloat, min: CGFloat, gap: CGFloat) -> Int {
-        Swift.max(1, Int(((available + gap) / (min + gap)).rounded(.down)))
-    }
-
-    /// Weltbreite: mindestens die Fensterbreite; bei vielen Gruppen so viele Spalten, dass die Karte
-    /// ungefähr das Seitenverhältnis des Fensters bekommt (Gruppenhöhe grob 0,45 der Breite).
-    /// ponytail: Faustformel statt echtem Packing; ein Bin-Packing kommt, wenn die Karte spürbar schief ist.
-    static func worldWidth(viewport: CGSize, groupCount: Int) -> CGFloat {
-        let byWidth = columns(available: viewport.width - 2 * worldPad, min: groupMin, gap: groupGap)
-        let aspect = viewport.height > 0 ? viewport.width / viewport.height : 1.6
-        let wanted = Swift.max(byWidth, Int(ceil(sqrt(Double(groupCount) * 0.45 * Double(aspect)))))
-        let needed = CGFloat(wanted) * (groupMin + groupGap) - groupGap + 2 * worldPad
-        return Swift.max(viewport.width, needed)
-    }
-
     /// LOD nach Kachelbreite auf dem Bildschirm: 0 Farbe, 1 Titel, 2 Kopf + Zeilen, 3 Terminal.
     static func lod(cellScreenWidth w: CGFloat) -> Int {
         w < 60 ? 0 : w < 140 ? 1 : w < 320 ? 2 : 3
     }
 
-    static func compute(groups: [GroupInput], worldWidth: CGFloat, scale: CGFloat,
-                        focused: String? = nil, viewportAspect: CGFloat = cellAspect) -> Layout {
+    static func compute(groups: [GroupInput], scale: CGFloat, columns: Int = 2,
+                        focused: String? = nil, viewportAspect: CGFloat = 1.6) -> Layout {
         var l = Layout()
         let s = Swift.max(scale, 0.0001)
-        let avail = Swift.max(worldWidth - 2 * worldPad, groupMin)
-        let cols = columns(available: avail, min: groupMin, gap: groupGap)
-        let gw = (avail - CGFloat(cols - 1) * groupGap) / CGFloat(cols)
-        let headerH = groupHeaderScreen / s + groupHeaderGapWorld
-        var y = worldPad
-        var rowH: CGFloat = 0
-        for (i, g) in groups.enumerated() {
-            let col = i % cols
-            if col == 0, i > 0 { y += rowH + groupGap; rowH = 0 }
-            let x = worldPad + CGFloat(col) * (gw + groupGap)
-            let inner = gw - 2 * groupPad
-            let ccols = columns(available: inner, min: cellMin, gap: cellGap)
-            let cw = (inner - CGFloat(ccols - 1) * cellGap) / CGFloat(ccols)
-            var cy = y + groupPad + headerH
-            var crowH: CGFloat = 0
-            for (j, k) in g.cellKeys.enumerated() {
-                let cc = j % ccols
-                if cc == 0, j > 0 { cy += crowH + cellGap; crowH = 0 }
-                let h = (k == focused) ? cw / viewportAspect : cw / cellAspect
-                l.cells[k] = CGRect(x: x + groupPad + CGFloat(cc) * (cw + cellGap), y: cy, width: cw, height: h)
-                crowH = Swift.max(crowH, h)
-            }
-            if g.cellKeys.isEmpty { crowH = cw / cellAspect / 2 }
-            let gh = cy + crowH + groupPad - y
-            l.groups[g.id] = CGRect(x: x, y: y, width: gw, height: gh)
-            l.headers[g.id] = CGRect(x: x + groupPad, y: y + groupPad, width: inner, height: groupHeaderScreen / s)
+        let headerH = groupHeaderScreen / s
+        var union: CGRect?
+        for g in groups {
+            let f = g.frame
+            l.groups[g.id] = f
             l.groupOrder.append(g.id)
-            rowH = Swift.max(rowH, gh)
+            union = union.map { $0.union(f) } ?? f
+            l.headers[g.id] = CGRect(x: f.minX + groupPad, y: f.minY + groupPad, width: f.width - 2 * groupPad, height: headerH)
+            let inner = CGRect(x: f.minX + groupPad, y: f.minY + groupPad + headerH + groupHeaderGapWorld,
+                               width: f.width - 2 * groupPad, height: f.height - 2 * groupPad - headerH - groupHeaderGapWorld)
+            let n = g.cellKeys.count
+            guard n > 0, inner.width > 0, inner.height > 0 else { continue }
+            let cols = Swift.max(1, Swift.min(columns, n))
+            let rows = (n + cols - 1) / cols
+            let cw = (inner.width - CGFloat(cols - 1) * cellGap) / CGFloat(cols)
+            let ch = (inner.height - CGFloat(rows - 1) * cellGap) / CGFloat(rows)
+            for (i, k) in g.cellKeys.enumerated() {
+                let c = i % cols, r = i / cols
+                l.cells[k] = CGRect(x: inner.minX + CGFloat(c) * (cw + cellGap), y: inner.minY + CGFloat(r) * (ch + cellGap), width: cw, height: ch)
+            }
+            // Fokus: die Kachel wächst auf das Fensterformat, so groß wie es in die Gruppe passt.
+            if let focused, g.cellKeys.contains(focused) {
+                var w = f.width, h = w / viewportAspect
+                if h > f.height { h = f.height; w = h * viewportAspect }
+                l.cells[focused] = CGRect(x: f.minX, y: f.minY, width: w, height: h)
+            }
         }
-        l.content = CGRect(x: 0, y: 0, width: worldWidth, height: groups.isEmpty ? worldPad * 2 : y + rowH + worldPad)
+        l.content = (union ?? CGRect(x: 0, y: 0, width: 1, height: 1)).insetBy(dx: -worldPad, dy: -worldPad)
         return l
+    }
+
+    /// Platz für eine neue Gruppe: rechts neben die bisherigen, sonst darunter; überlappt nie.
+    static func placeNewGroup(existing: [CGRect], size: CGSize = defaultGroupSize, maxWidth: CGFloat = 3200) -> CGRect {
+        guard !existing.isEmpty else { return CGRect(origin: .zero, size: size) }
+        let gap: CGFloat = 24
+        let maxX = existing.map(\.maxX).max()!, minY = existing.map(\.minY).min()!
+        var candidate = CGRect(x: maxX + gap, y: minY, width: size.width, height: size.height)
+        if candidate.maxX > maxWidth {
+            candidate.origin = CGPoint(x: existing.map(\.minX).min()!, y: existing.map(\.maxY).max()! + gap)
+        }
+        while existing.contains(where: { $0.intersects(candidate) }) { candidate.origin.y += gap }
+        return candidate
     }
 
     /// Maßstab und Offset (Bildschirmposition des Weltursprungs), damit `rect` exakt in den Viewport passt.

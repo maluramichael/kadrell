@@ -52,13 +52,21 @@ final class GroupView: NSView {
             if w > 20 { path.draw(with: CGRect(x: x, y: h.minY + (h.height - 15) / 2 + 1, width: w, height: 15), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine]) }
         }
         if lod >= 1 {
-            Icons.plus(in: plusRect, color: hovered ? Theme.sub : Theme.muted)
-            if hovered {
-                Icons.pen(in: penRect, color: Theme.muted)
-                Icons.x(in: xRect, color: Theme.muted)
-            }
+            let c = hovered ? Theme.sub : Theme.muted
+            Icons.plus(in: plusRect, color: c)
+            Icons.pen(in: penRect, color: c)
+            Icons.x(in: xRect, color: c)
+            // Griff unten rechts zum Größerziehen
+            let g = resizeRect
+            let p = NSBezierPath()
+            p.lineWidth = 1
+            p.move(to: CGPoint(x: g.maxX - 2, y: g.minY + 6)); p.line(to: CGPoint(x: g.minX + 6, y: g.maxY - 2))
+            p.move(to: CGPoint(x: g.maxX - 2, y: g.minY + 11)); p.line(to: CGPoint(x: g.minX + 11, y: g.maxY - 2))
+            c.setStroke(); p.stroke()
         }
     }
+
+    var resizeRect: CGRect { CGRect(x: bounds.width - 16, y: bounds.height - 16, width: 16, height: 16) }
 }
 
 /// Dünne Strichgrafiken, keine Systembuttons.

@@ -1,11 +1,19 @@
 import Foundation
 
+struct GroupFrame: Codable, Equatable, Sendable {
+    var x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat
+    init(_ r: CGRect) { x = r.minX; y = r.minY; w = r.width; h = r.height }
+    var rect: CGRect { CGRect(x: x, y: y, width: w, height: h) }
+}
+
 struct Group: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var name: String
     var color: String
     var cwd: String
     var sessionIds: [String]
+    /// Position und Größe in Weltpunkten (i3-artig frei verschiebbar). nil = noch nie platziert.
+    var frame: GroupFrame?
 }
 
 /// Gruppen sind App-Daten, persistiert als JSON unter Application Support.
@@ -45,7 +53,7 @@ final class GroupStore {
     func makeGroup(cwd: String, name: String? = nil) -> Group {
         let base = URL(fileURLWithPath: cwd).lastPathComponent
         return Group(id: UUID().uuidString.lowercased(), name: name ?? (base.isEmpty ? cwd : base),
-                     color: nextColor(), cwd: cwd, sessionIds: [])
+                     color: nextColor(), cwd: cwd, sessionIds: [], frame: nil)
     }
 
     /// Ordnet Sessions ohne Gruppe der Gruppe mit gleichem `cwd` zu, legt sonst eine neue an,
@@ -67,12 +75,27 @@ final class GroupStore {
         // Leere Gruppen fliegen raus: ohne Sessions hat eine Gruppe keinen Zweck, und die Datei
         // sammelt sonst Ordner von längst beendeten Sessions.
         groups.removeAll { $0.sessionIds.isEmpty }
+        placeUnplaced()
         let changed = groups != before
         if changed { try? save() }
         return changed
     }
 
-    func add(_ group: Group) { groups.append(group); try? save() }
+    /// Gruppen ohne Position bekommen einen freien Platz neben den anderen.
+    func placeUnplaced() {
+        for i in groups.indices where groups[i].frame == nil {
+            let existing = groups.compactMap { $0.frame?.rect }
+            groups[i].frame = GroupFrame(Layout.placeNewGroup(existing: existing))
+        }
+    }
+
+    func setFrame(_ rect: CGRect, for id: String) {
+        guard let i = groups.firstIndex(where: { $0.id == id }) else { return }
+        groups[i].frame = GroupFrame(rect)
+        try? save()
+    }
+
+    func add(_ group: Group) { groups.append(group); placeUnplaced(); try? save() }
     func update(_ group: Group) {
         guard let i = groups.firstIndex(where: { $0.id == group.id }) else { return }
         groups[i] = group

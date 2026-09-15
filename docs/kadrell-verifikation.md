@@ -105,7 +105,18 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
 - **Keine Gruppen-Chips in der Statusleiste** (bei 30 Gruppen zu voll). Links steht nur der Breadcrumb.
 - **Rückfragen und Fehler** sind eigene Overlays im App-Design (`ConfirmView`), kein `NSAlert`.
   Es ist immer nur ein Overlay offen; ⌘P schließt ⌘N und umgekehrt.
-- **Spaltenzahl der Karte:** mindestens so viele wie in die Fensterbreite passen, bei vielen Gruppen
+- **Layout i3-artig statt CSS-Grid (Michaels Wunsch vom 15.09.):** jede Gruppe ist ein frei
+  platzierbares Rechteck in Weltkoordinaten (`Group.frame` in `groups.json`), verschiebbar am Kopf,
+  größenveränderbar am Griff unten rechts. Die Kacheln füllen die Gruppe als Raster mit einstellbarer
+  Spaltenzahl (⌘, → „Spalten pro Gruppe“, Default 2), kein festes 16:10 mehr. Im Fokus wächst die
+  Kachel auf das Fensterformat. Neue Gruppen landen rechts neben den bestehenden, sonst darunter.
+  Header-Icons (+, Stift, X) sind immer sichtbar; `+` startet eine Session ohne hinzuzoomen.
+- **Claude-Nutzung in der Leiste:** `GET https://api.anthropic.com/api/oauth/usage` mit dem OAuth-Token
+  aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (derselbe Weg wie die CLI), Header
+  `anthropic-beta: oauth-2025-04-20`. Gelesen wird das `limits`-Array (kind `session`, `weekly_all`,
+  `weekly_scoped` mit `scope.model.display_name` „Fable“), Fallback `five_hour`/`seven_day`. Jeder
+  Parse- oder HTTP-Fehler ergibt „–%“, nie ein Absturz. Abfrage jede Minute.
+- **Spaltenzahl der Karte (alt, ersetzt):** mindestens so viele wie in die Fensterbreite passen, bei vielen Gruppen
   mehr, damit die Karte ungefähr das Seitenverhältnis des Fensters hat (`Layout.worldWidth`). Mit
   30 Gruppen in einer Spalte wäre „Fit alles“ ein 5-%-Turm gewesen.
 

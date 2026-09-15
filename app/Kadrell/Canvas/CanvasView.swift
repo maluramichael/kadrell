@@ -25,6 +25,7 @@ final class CanvasView: NSView {
     private var smoothTarget: (scale: CGFloat, offset: CGPoint)?
     var isAnimating: Bool { anim != nil || smoothTarget != nil }
     private var drag: (start: CGPoint, offset: CGPoint, moved: Bool)?
+    private var groupDrag: (id: String, frame: CGRect, resize: Bool)?
     private var pulseTask: Task<Void, Never>?
     private var wheelMonitor: Any?
     private var keyMonitor: Any?
@@ -38,6 +39,8 @@ final class CanvasView: NSView {
     var onCloseSession: ((String, Bool) -> Void)?
     var onActivateSession: ((Session) -> Void)?
     var onHelp: (() -> Void)?
+    /// Gruppe per Drag verschoben oder in der Größe geändert (Weltkoordinaten), zum Persistieren.
+    var onGroupFrameChange: ((String, CGRect) -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -113,13 +116,18 @@ final class CanvasView: NSView {
     // MARK: Layout
 
     private func layoutInputs() -> [Layout.GroupInput] {
-        groups.map { g in Layout.GroupInput(id: g.id, cellKeys: g.sessionIds.filter { sessions[$0] != nil }) }
+        groups.map { g in
+            Layout.GroupInput(id: g.id, cellKeys: g.sessionIds.filter { sessions[$0] != nil },
+                              frame: dragFrames[g.id] ?? g.frame?.rect ?? CGRect(origin: .zero, size: Layout.defaultGroupSize))
+        }
     }
 
+    /// Während eines Drags gilt das temporäre Frame, bis der Store es übernimmt.
+    private var dragFrames: [String: CGRect] = [:]
+
     private func computeLayout(scale s: CGFloat) -> Layout {
-        let aspect = bounds.height > 0 ? bounds.width / bounds.height : Layout.cellAspect
-        return Layout.compute(groups: layoutInputs(), worldWidth: Layout.worldWidth(viewport: bounds.size, groupCount: groups.count),
-                              scale: s, focused: focusedKey, viewportAspect: aspect)
+        let aspect = bounds.height > 0 ? bounds.width / bounds.height : 1.6
+        return Layout.compute(groups: layoutInputs(), scale: s, columns: Settings.columns, focused: focusedKey, viewportAspect: aspect)
     }
 
     private func toScreen(_ r: CGRect) -> CGRect {
@@ -128,8 +136,7 @@ final class CanvasView: NSView {
 
     func applyLayout() {
         layout = computeLayout(scale: scale)
-        let refWidth = Layout.cellMin * scale
-        let baseLod = Layout.lod(cellScreenWidth: refWidth)
+        let baseLod = Layout.lod(cellScreenWidth: 320 * scale)
         for g in groups {
             guard let v = groupViews[g.id], let r = layout.groups[g.id] else { continue }
             let f = toScreen(r).integral
@@ -362,7 +369,7 @@ final class CanvasView: NSView {
 
     // MARK: Hit-Test
 
-    enum Hit { case cell(String), cellClose(String), header(String), pen(String), close(String), plus(String), none }
+    enum Hit { case cell(String), cellClose(String), header(String), pen(String), close(String), plus(String), resize(String), none }
 
     func hit(at p: CGPoint) -> Hit {
         for (key, v) in cellViews where !v.isHidden && v.frame.contains(p) {
@@ -374,8 +381,9 @@ final class CanvasView: NSView {
             let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
             if v.lod >= 1 {
                 if v.plusRect.insetBy(dx: -4, dy: -4).contains(local) { return .plus(id) }
-                if hoveredGroup == id, v.penRect.insetBy(dx: -4, dy: -4).contains(local) { return .pen(id) }
-                if hoveredGroup == id, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .close(id) }
+                if v.penRect.insetBy(dx: -4, dy: -4).contains(local) { return .pen(id) }
+                if v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .close(id) }
+                if v.resizeRect.insetBy(dx: -4, dy: -4).contains(local) { return .resize(id) }
             }
             if v.headerRect.insetBy(dx: 0, dy: -6).contains(local) { return .header(id) }
         }
@@ -411,7 +419,14 @@ final class CanvasView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        drag = (convert(event.locationInWindow, from: nil), offset, false)
+        let p = convert(event.locationInWindow, from: nil)
+        drag = (p, offset, false)
+        groupDrag = nil
+        switch hit(at: p) {
+        case .header(let g): if let f = layout.groups[g] { groupDrag = (g, f, false) }
+        case .resize(let g): if let f = layout.groups[g] { groupDrag = (g, f, true) }
+        default: break
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -422,12 +437,35 @@ final class CanvasView: NSView {
         d.moved = true
         drag = d
         stopAnimation()
+        if let gd = groupDrag {
+            // Gruppe verschieben oder an der Ecke größer ziehen (Deltas in Weltpunkte umrechnen)
+            var f = gd.frame
+            if gd.resize {
+                f.size.width = max(Layout.minGroupSize.width, gd.frame.width + dx / scale)
+                f.size.height = max(Layout.minGroupSize.height, gd.frame.height + dy / scale)
+            } else {
+                f.origin = CGPoint(x: gd.frame.minX + dx / scale, y: gd.frame.minY + dy / scale)
+            }
+            dragFrames[gd.id] = f
+            applyLayout()
+            return
+        }
         setView(scale: scale, offset: CGPoint(x: d.offset.x + dx, y: d.offset.y + dy))
     }
 
     override func mouseUp(with event: NSEvent) {
         let wasDrag = drag?.moved ?? false
         drag = nil
+        if let gd = groupDrag {
+            groupDrag = nil
+            if wasDrag, let f = dragFrames[gd.id] {
+                if let i = groups.firstIndex(where: { $0.id == gd.id }) { groups[i].frame = GroupFrame(f) }
+                dragFrames[gd.id] = nil
+                onGroupFrameChange?(gd.id, f)
+                applyLayout()
+                return
+            }
+        }
         if wasDrag { return }
         let p = convert(event.locationInWindow, from: nil)
         let force = event.modifierFlags.contains(.command)
@@ -440,7 +478,7 @@ final class CanvasView: NSView {
         case .pen(let g): onEditGroup?(g)
         case .close(let g): onCloseGroup?(g, force)
         case .plus(let g): onNewSession?(g)
-        case .none: break
+        case .resize, .none: break
         }
     }
 

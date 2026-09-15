@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         canvas.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         canvas.onActivateSession = { [weak self] s in self?.resume(s) }
         canvas.onHelp = { [weak self] in self?.showAbout() }
+        canvas.onGroupFrameChange = { [weak self] gid, rect in self?.store.setFrame(rect, for: gid) }
     }
 
     private func boot() async {
@@ -337,7 +338,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 store.attach(sessionId: fresh.id, to: target!.id)
                 canvas.reload(groups: store.groups, sessions: registry.sessions)
                 updateBar()
-                canvas.focus(fresh.id)
+                if let s = registry.sessions.first(where: { $0.id == fresh.id }) { attach.attachNow(s) }
+                if group == nil { canvas.fitAll() }   // neue Gruppe sichtbar machen; bei + bleibt die Ansicht
             } catch { report(error) }
         }
     }
