@@ -437,10 +437,8 @@ final class CanvasView: NSView {
 
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
 
-    // MARK: Hintergrund: feines Punktraster und blasse Zeichen, beides in Weltkoordinaten
+    // MARK: Hintergrund: feines Linienraster in Weltkoordinaten
 
-    private static let glyphs = Array("あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん")
-    private static let glyphFont = NSFont(name: "HiraginoSans-W3", size: 40) ?? NSFont.systemFont(ofSize: 40, weight: .light)
 
     override func draw(_ dirtyRect: NSRect) {
         Theme.bg.setFill()
@@ -466,26 +464,6 @@ final class CanvasView: NSView {
         Theme.line.withAlphaComponent(0.22).setStroke()
         grid.stroke()
 
-        // Zeichen: alle `cell` Weltpunkte eins, Auswahl und Versatz aus einem Hash der Zelle.
-        var cell: CGFloat = 320
-        while cell * scale < 220 { cell *= 2 }
-        let attrs: [NSAttributedString.Key: Any] = [.font: CanvasView.glyphFont, .foregroundColor: Theme.line.withAlphaComponent(0.28)]
-        let cx0 = Int(floor((dirtyRect.minX - offset.x) / scale / cell)) - 1
-        let cy0 = Int(floor((dirtyRect.minY - offset.y) / scale / cell)) - 1
-        let cx1 = Int(ceil((dirtyRect.maxX - offset.x) / scale / cell))
-        let cy1 = Int(ceil((dirtyRect.maxY - offset.y) / scale / cell))
-        guard (cx1 - cx0) * (cy1 - cy0) < 400 else { return }
-        for ix in cx0...cx1 {
-            for iy in cy0...cy1 {
-                var h = UInt32(truncatingIfNeeded: ix &* 73856093 ^ iy &* 19349663)
-                h ^= h >> 13; h = h &* 0x5bd1e995; h ^= h >> 15
-                let g = CanvasView.glyphs[Int(h % UInt32(CanvasView.glyphs.count))]
-                let fx = CGFloat((h >> 8) % 100) / 100, fy = CGFloat((h >> 16) % 100) / 100
-                let px = (CGFloat(ix) + 0.15 + fx * 0.7) * cell * scale + offset.x
-                let py = (CGFloat(iy) + 0.15 + fy * 0.7) * cell * scale + offset.y
-                NSAttributedString(string: String(g), attributes: attrs).draw(at: CGPoint(x: px, y: py))
-            }
-        }
         drawHints()
     }
 
