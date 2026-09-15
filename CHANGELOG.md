@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.2.0 (2026-09-16)
+
+- Änderung: Kacheln tragen immer ihre Gruppenfarbe in Kopfzeile, Rahmen und leicht im Hintergrund, die ausgewählte Kachel etwas kräftiger.
+
 ## 1.1.1 (2026-09-16)
 
 - Fix: ⌘M legt das Fenster wieder im Dock ab, dazu gibt es jetzt das Menü „Fenster".

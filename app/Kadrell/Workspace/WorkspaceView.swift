@@ -232,6 +232,8 @@ final class WorkspaceView: NSView {
     private func mountTerminal(for key: String, in cell: CellView, session: Session) {
         guard let t = attach?.terminal(for: key) else { return }
         if t.superview !== cell { cell.addSubview(t) }
+        let bg = cell.bodyColor
+        if t.nativeBackgroundColor != bg { t.nativeBackgroundColor = bg }
         let body = cell.terminalRect
         if t.frame != body { t.frame = body }
     }
@@ -297,11 +299,11 @@ final class WorkspaceView: NSView {
         let g = group(forSession: key)
         let color = NSColor(hexString: g?.color ?? "#6c7086")
         let on = focused == key, hover = hoveredRow == key
-        (on ? Theme.surface : Theme.panel).setFill()
+        color.mixed(on ? 0.22 : 0.1, into: on ? Theme.surface : Theme.panel).setFill()
         r.fill()
         Theme.line.setFill()
         CGRect(x: r.minX, y: r.maxY - 1, width: r.width, height: 1).fill()
-        (on ? color : Theme.line).setFill()
+        (on ? color : color.mixed(0.45, into: Theme.bg)).setFill()
         CGRect(x: r.minX, y: r.minY, width: on ? 3 : 1, height: r.height).fill()
         let attached = attach?.isAttached(key) ?? false
         let c = attached ? Theme.color(for: s.status) : Theme.detached

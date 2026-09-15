@@ -55,9 +55,11 @@ final class CellView: NSView {
     var xRect: CGRect { xRectLogical.scaled(Theme.scale) }
     var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
     var statusColor: NSColor { attached ? Theme.color(for: session.status) : Theme.detached }
+    /// Hintergrund der Kachel, leicht in Gruppenfarbe getönt, damit Gruppen auf einen Blick auseinanderfallen.
+    var bodyColor: NSColor { groupColor.mixed(0.05, into: Theme.bg) }
 
     override func draw(_ dirtyRect: NSRect) {
-        Theme.bg.setFill()
+        bodyColor.setFill()
         bounds.fill()
         if !headerHidden { Theme.scaled(headerRect) { drawHeader($0) } }
         Theme.scaled(bodyRect) { drawBody($0) }
@@ -68,7 +70,7 @@ final class CellView: NSView {
         let b = head
         let c = statusColor
         let dot = session.status == .running && attached ? c.withAlphaComponent(pulse) : c
-        let headBase = keyboardFocus ? groupColor.mixed(0.22, into: Theme.surface) : session.status == .waiting ? Theme.waiting.mixed(0.12, into: Theme.surface) : Theme.surface
+        let headBase = groupColor.mixed(keyboardFocus || focused ? 0.22 : 0.12, into: Theme.surface)
         headBase.setFill()
         head.fill()
         Theme.line.setFill()
@@ -114,8 +116,8 @@ final class CellView: NSView {
         else if focused { color = groupColor }
         else if session.status == .waiting, attached { color = Theme.waiting }
         else if session.status == .error { color = Theme.error }
-        else if hovered { color = Theme.detached }
-        else { color = Theme.line }
+        else if hovered { color = groupColor.mixed(0.7, into: Theme.bg) }
+        else { color = groupColor.mixed(0.45, into: Theme.bg) }
         color.setFill()
         bounds.frame(withWidth: focused || dropTarget ? 2 : 1)
     }
