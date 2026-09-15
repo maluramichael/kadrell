@@ -12,9 +12,19 @@ func folderCompletions(for typed: String) -> [String] {
         dir = u.deletingLastPathComponent().path; prefix = u.lastPathComponent
     }
     guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
-    return names.filter { !$0.hasPrefix(".") && $0.lowercased().hasPrefix(prefix.lowercased()) }
-        .filter { var d: ObjCBool = false; return FileManager.default.fileExists(atPath: dir + "/" + $0, isDirectory: &d) && d.boolValue }
-        .sorted().prefix(8).map { (dir.hasSuffix("/") ? dir : dir + "/") + $0 + "/" }
+    let q = prefix.lowercased()
+    // Rang: Präfix vor Teilstring vor Buchstabenfolge („ove“ trifft claude-agent-overview), dann alphabetisch.
+    func rank(_ n: String) -> Int? {
+        let l = n.lowercased()
+        if q.isEmpty || l.hasPrefix(q) { return 0 }
+        if l.contains(q) { return 1 }
+        return PaletteWindow.fuzzy(q, l) ? 2 : nil
+    }
+    return names.filter { !$0.hasPrefix(".") }
+        .compactMap { n in rank(n).map { (n, $0) } }
+        .filter { var d: ObjCBool = false; return FileManager.default.fileExists(atPath: dir + "/" + $0.0, isDirectory: &d) && d.boolValue }
+        .sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.lowercased() < $1.0.lowercased() }
+        .prefix(8).map { (dir.hasSuffix("/") ? dir : dir + "/") + $0.0 + "/" }
 }
 
 /// Nativer Ordnerdialog. Liefert den gewählten Pfad mit Slash oder nil.

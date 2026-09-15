@@ -114,7 +114,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         if !isCommandMode { field.stringValue = ">"; field.currentEditor()?.moveToEndOfLine(nil); refreshList() }
     }
 
-    static func fuzzy(_ q: String, _ s: String) -> Bool {
+    nonisolated static func fuzzy(_ q: String, _ s: String) -> Bool {
         let q = Array(q.lowercased()), s = s.lowercased()
         var i = 0
         for c in s where i < q.count && c == q[i] { i += 1 }
