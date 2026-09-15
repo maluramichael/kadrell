@@ -79,7 +79,7 @@ final class NewSessionModel {
 struct NewSessionView: View {
     @Bindable var model: NewSessionModel
     @FocusState private var focus: Field?
-    enum Field { case filter, cwd }
+    enum Field { case filter }
 
     init(model: NewSessionModel, onStart: @escaping (Group?, String) -> Void) {
         self.model = model
@@ -127,14 +127,10 @@ struct NewSessionView: View {
                 foot("⏎ starten · Esc abbrechen")
             } else {
                 label("Neue Session · Ordner")
-                TextField("~/…", text: $model.cwd)
-                    .textFieldStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 13)).padding(14)
-                    .focused($focus, equals: .cwd)
+                PathField(text: $model.cwd, onTab: { model.complete() }, onSubmit: { model.start() },
+                          onMove: { d in model.compSelected = max(0, min(max(model.completions.count - 1, 0), model.compSelected + d)) })
+                    .frame(height: 20).padding(14)
                     .onChange(of: model.cwd) { _, _ in model.compSelected = 0 }
-                    .onSubmit { model.start() }
-                    .onKeyPress(.tab) { model.complete(); return .handled }
-                    .onKeyPress(.downArrow) { model.compSelected = min(max(model.completions.count - 1, 0), model.compSelected + 1); return .handled }
-                    .onKeyPress(.upArrow) { model.compSelected = max(0, model.compSelected - 1); return .handled }
                 let comps = model.completions
                 if !comps.isEmpty {
                     Divider().overlay(Theme.lineColor)
@@ -163,7 +159,7 @@ struct NewSessionView: View {
     }
 
     private func focusStep() {
-        focus = model.step == 1 ? .filter : .cwd
+        focus = model.step == 1 ? .filter : nil
     }
 
     private func label(_ s: String) -> some View {
@@ -188,4 +184,54 @@ extension Theme {
     static let fgColor = Color(nsColor: fg)
     static let mutedColor = Color(nsColor: muted)
     static let runningColor = Color(nsColor: running)
+}
+
+
+/// AppKit-Textfeld für Pfade: Cursor am Ende, Tab vervollständigt, Pfeile wählen, ⏎ startet.
+struct PathField: NSViewRepresentable {
+    @Binding var text: String
+    var onTab: () -> Void
+    var onSubmit: () -> Void
+    var onMove: (Int) -> Void
+
+    func makeNSView(context: Context) -> NSTextField {
+        let f = NSTextField()
+        f.isBordered = false
+        f.drawsBackground = false
+        f.focusRingType = .none
+        f.font = Theme.font(13)
+        f.textColor = Theme.fg
+        f.delegate = context.coordinator
+        f.stringValue = text
+        DispatchQueue.main.async {
+            f.window?.makeFirstResponder(f)
+            f.currentEditor()?.selectedRange = NSRange(location: f.stringValue.utf16.count, length: 0)
+        }
+        return f
+    }
+
+    func updateNSView(_ f: NSTextField, context: Context) {
+        guard f.stringValue != text else { return }
+        f.stringValue = text
+        f.currentEditor()?.selectedRange = NSRange(location: text.utf16.count, length: 0)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: PathField
+        init(_ p: PathField) { parent = p }
+        func controlTextDidChange(_ n: Notification) {
+            if let f = n.object as? NSTextField { parent.text = f.stringValue }
+        }
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
+            switch sel {
+            case #selector(NSResponder.insertTab(_:)): parent.onTab(); return true
+            case #selector(NSResponder.insertNewline(_:)): parent.onSubmit(); return true
+            case #selector(NSResponder.moveDown(_:)): parent.onMove(1); return true
+            case #selector(NSResponder.moveUp(_:)): parent.onMove(-1); return true
+            default: return false
+            }
+        }
+    }
 }

@@ -37,13 +37,10 @@ enum Theme {
         return [.font: font(size, bold: bold), .foregroundColor: color, .paragraphStyle: p]
     }
 
-    /// `/Users/dev/development/x` wird zu `~/dev/x`, wie im Prototyp.
+    /// Home wird zu `~`, sonst bleibt der Pfad wie er ist.
     static func shortPath(_ path: String) -> String {
         let home = NSHomeDirectory()
-        var p = path
-        if p.hasPrefix(home) { p = "~" + p.dropFirst(home.count) }
-        if p.hasPrefix("~/development/") { p = "~/dev/" + p.dropFirst("~/development/".count) }
-        return p
+        return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
 }
 
