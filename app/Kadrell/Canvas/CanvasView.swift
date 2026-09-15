@@ -153,6 +153,7 @@ final class CanvasView: NSView {
         // Fenster zurück und Esc käme nirgends an. Dann holt sich die Canvas die Tastatur zurück.
         if let w = window, w.firstResponder === w { w.makeFirstResponder(self) }
         onViewChange?()
+        ensureFocusedFills()
     }
 
     /// Terminal nur eingehängt, wenn die Kachel ≥ 320 px breit ist und keine Animation läuft (Punkt 10).
@@ -172,7 +173,21 @@ final class CanvasView: NSView {
     override func setFrameSize(_ newSize: NSSize) {
         let changed = newSize != frame.size
         super.setFrameSize(newSize)
-        if changed, !groups.isEmpty { fitAll(animated: false) }
+        guard changed, !groups.isEmpty else { return }
+        if let f = focusedKey { fit(pad: 0, animated: false) { $0.cells[f] } } else { fitAll(animated: false) }
+    }
+
+    /// Im Fokus füllt die Kachel exakt den Viewport. Driftet sie (Resize, Zoom-Reste), einmal nachpassen.
+    private var refitting = false
+    private func ensureFocusedFills() {
+        guard let f = focusedKey, !isAnimating, !refitting, let v = cellViews[f] else { return }
+        let want = bounds
+        if abs(v.frame.minX - want.minX) > 1 || abs(v.frame.minY - want.minY) > 1 ||
+            abs(v.frame.width - want.width) > 2 || abs(v.frame.height - want.height) > 2 {
+            refitting = true
+            fit(pad: 0, animated: false) { $0.cells[f] }
+            refitting = false
+        }
     }
 
     // MARK: Ansicht
