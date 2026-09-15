@@ -66,7 +66,7 @@ final class CellView: NSView {
         let meta = NSAttributedString(string: session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
         let iconW: CGFloat = hovered ? 24 : 0
-        let title = NSAttributedString(string: session.name, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
+        let title = NSAttributedString(string: session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
         let group = NSAttributedString(string: groupName, attributes: Theme.attrs(10.5, groupColor))
         let titleW = min(title.size().width, max(0, b.width - 24 - metaW - iconW - 16 - group.size().width - 8))
         title.draw(with: CGRect(x: 24, y: 5, width: titleW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])

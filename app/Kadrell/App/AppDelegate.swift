@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        // Dock-Icon direkt aus dem Bundle: LaunchServices hält für Debug-Builds am selben Pfad gern das alte, leere Icon.
+        if let url = Bundle.main.url(forResource: "Kadrell", withExtension: "icns"), let img = NSImage(contentsOf: url) { NSApp.applicationIconImage = img }
         buildMenu()
         buildWindow()
         // Unter XCTest nur das Fenster, kein Polling.
@@ -155,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sessions = workspace.sessions
         let focused = workspace.focused.flatMap { sessions[$0] }
         let fg = focused.flatMap { workspace.group(forSession: $0.id) }
-        bar.crumb = focused.map { (fg?.name ?? "", $0.name) }
+        bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, NSColor(hexString: $0.color)) }
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count
@@ -302,7 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopSession(_ s: Session) {
         guard let id = s.shortId else { NSSound.beep(); return }
-        confirm("Session „\(s.name)“ stoppen?", "Die Konversation bleibt erhalten und lässt sich fortsetzen.", button: "Stoppen") { [weak self] in
+        confirm("Session „\(s.title)“ stoppen?", "Die Konversation bleibt erhalten und lässt sich fortsetzen.", button: "Stoppen") { [weak self] in
             guard let self else { return }
             attach.detach(s.id)
             Task {
@@ -314,10 +316,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closeSession(_ key: String, force: Bool = false) {
         guard let s = workspace.session(key) else { return }
         guard let id = s.shortId else {
-            confirm("Session „\(s.name)“ läuft in einem anderen Terminal", "Interaktive Sessions kann Kadrell nicht stoppen.", button: "OK", destructive: false) {}
+            confirm("Session „\(s.title)“ läuft in einem anderen Terminal", "Interaktive Sessions kann Kadrell nicht stoppen.", button: "OK", destructive: false) {}
             return
         }
-        confirm("Session „\(s.name)“ stoppen und entfernen?", "claude stop \(id) und claude rm \(id). Das lässt sich nicht rückgängig machen.", button: "Entfernen", skip: force) { [weak self] in
+        confirm("Session „\(s.title)“ stoppen und entfernen?", "claude stop \(id) und claude rm \(id). Das lässt sich nicht rückgängig machen.", button: "Entfernen", skip: force) { [weak self] in
             guard let self else { return }
             attach.detach(key)
             Task {

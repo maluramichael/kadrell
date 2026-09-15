@@ -158,7 +158,7 @@ final class SidebarView: NSView {
             right -= age.size().width
             age.draw(at: CGPoint(x: right, y: r.midY - 7))
         }
-        let title = NSAttributedString(string: s.name, attributes: Theme.attrs(12, sel || hover ? Theme.fg : Theme.sub))
+        let title = NSAttributedString(string: s.title, attributes: Theme.attrs(12, sel || hover ? Theme.fg : Theme.sub))
         title.draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 8 - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 

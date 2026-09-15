@@ -137,9 +137,9 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
                 }
             }
             list += source.sessions.filter { s, _, lines in
-                q.isEmpty || PaletteWindow.fuzzy(q, s.name + " " + s.cwd + " " + lines.suffix(3).joined(separator: " "))
+                q.isEmpty || PaletteWindow.fuzzy(q, s.title + " " + s.cwd + " " + lines.suffix(3).joined(separator: " "))
             }.map { s, g, lines in
-                Item(label: s.name, sub: String((lines.last ?? Theme.shortPath(s.cwd)).prefix(70)), group: g?.name, status: s.status,
+                Item(label: s.title, sub: String((lines.last ?? Theme.shortPath(s.cwd)).prefix(70)), group: g?.name, status: s.status,
                      sessionKey: s.id, run: { [source] in source.onFocusSession(s.id) })
             }
             items = list

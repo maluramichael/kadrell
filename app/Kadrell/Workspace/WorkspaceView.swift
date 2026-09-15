@@ -272,7 +272,7 @@ final class WorkspaceView: NSView {
         if hover { Icons.x(in: CGRect(x: rx - 16, y: r.midY - 8, width: 16, height: 16), color: Theme.sub); rx -= 24 }
         rx -= age.size().width; age.draw(at: CGPoint(x: rx, y: r.midY - 7))
         rx -= 8 + grp.size().width; grp.draw(at: CGPoint(x: rx, y: r.midY - 7))
-        let title = NSAttributedString(string: s.name, attributes: Theme.attrs(11.5, on || hover ? Theme.fg : Theme.sub, bold: on))
+        let title = NSAttributedString(string: s.title, attributes: Theme.attrs(11.5, on || hover ? Theme.fg : Theme.sub, bold: on))
         title.draw(with: CGRect(x: r.minX + 28, y: r.midY - 8, width: max(0, rx - 10 - r.minX - 28), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 

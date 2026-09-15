@@ -32,6 +32,9 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Stabiler Schlüssel: die kurze Hintergrund-Id. `/resume` in Claude Code wechselt die `sessionId`,
     /// die `id` des Hintergrundjobs bleibt, damit die Kachel ihren Platz behält.
     var id: String { shortId ?? sessionId }
+    /// Anzeigename: bis Claude Code nach der ersten Nachricht einen Titel vergibt, steht im JSON die Id.
+    /// Dann Ordnername plus Id-Anfang, damit zwei neue Sessions unterscheidbar bleiben.
+    var title: String { name == id ? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name }
     var isBackground: Bool { kind == "background" }
     var isInteractive: Bool { kind == "interactive" }
     /// Beendet oder gestoppt: sichtbar, aber erst nach `--bg --resume` wieder anhängbar.
