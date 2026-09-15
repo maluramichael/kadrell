@@ -118,7 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
+            guard let self else { return event }
+            // Offene Hilfe hat selbst die Tastatur: F1 schließt sie wieder.
+            if event.keyCode == 122, overlayIsAbout, event.window === overlay { dismissSheet(); return nil }
+            guard event.window === self.window else { return event }
             if let action = Hotkeys.action(for: event) { self.perform(action); return nil }
             // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
             if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
