@@ -234,10 +234,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Beendete Sessions: `--bg --resume`; Einträge ohne Prozess: `respawn`. Danach anhängen und fokussieren.
     private func resume(_ s: Session) {
         Task {
             do {
-                _ = try await cli.resume(sessionId: s.sessionId, cwd: s.cwd)
+                if s.isStale, let id = s.shortId { try await cli.respawn(id: id) }
+                else { _ = try await cli.resume(sessionId: s.sessionId, cwd: s.cwd) }
                 if let fresh = await registry.waitFor(timeout: 10, { $0.id == s.id && $0.canAttach }) {
                     canvas.focus(fresh.id)
                 }

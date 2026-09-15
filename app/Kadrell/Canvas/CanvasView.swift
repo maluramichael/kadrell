@@ -361,7 +361,7 @@ final class CanvasView: NSView {
         case .cellClose(let k): onCloseSession?(k)
         case .cell(let k):
             guard k != focusedKey, let s = sessions[k] else { return }
-            if s.isDone { onActivateSession?(s) } else { focus(k) }
+            if s.isDone || s.isStale { onActivateSession?(s) } else { focus(k) }
         case .header(let g): fitGroup(g)
         case .pen(let g): onEditGroup?(g)
         case .close(let g): onCloseGroup?(g)

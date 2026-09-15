@@ -24,7 +24,10 @@ final class SessionParsingTests: XCTestCase {
         XCTAssertEqual(list[0].shortId, "0ace1aab")
         XCTAssertEqual(list[0].id, "0ace1aab-c1a7-45e2-9856-dea5d34eda81")
         XCTAssertTrue(list[0].isBackground)
-        XCTAssertTrue(list[0].canAttach)
+        XCTAssertFalse(list[0].canAttach)   // blocked ohne pid: Prozess weg
+        XCTAssertTrue(list[0].isStale)
+        XCTAssertTrue(list[2].canAttach)
+        XCTAssertFalse(list[2].isStale)
         XCTAssertNil(list[1].shortId)
         XCTAssertTrue(list[1].isInteractive)
         XCTAssertFalse(list[1].canAttach)

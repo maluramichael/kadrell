@@ -76,3 +76,50 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
   (`public nonisolated`, sichtbare Zeilen der aktuellen Ansicht).
 - `LocalProcessTerminalView.process.shellPid` für `kill(pid, SIGHUP)`.
 - `processTerminated(_:exitCode:)` ist `open` und wird auf dem Main-Thread geliefert.
+
+## Ergebnisse aus dem App-Test (15.09.2026, 16:00 bis 16:20)
+
+- **`kill -9` der App:** alle 43 Sessions bleiben in `agents --json --all`, die Test-Session `1ac4d16a`
+  weiter `state: blocked, status: idle` mit derselben `pid`. Die `claude attach`-Clients sterben mit der
+  PTY, nach dem Neustart hängt die Queue neu an.
+- **CPU beim Start** mit 43 Sessions (davon 1 anhängbar): 2 bis 7 % eines Kerns (`ps -o %cpu`).
+- **`blocked` heißt nicht „Prozess läuft“:** eine Hintergrund-Session mit `state: blocked` **und** `pid`
+  ist ein lebender Prozess, der am Prompt wartet (`status: idle`). Einträge mit `blocked` **ohne** `pid`
+  sind Leichen: `claude attach` antwortet „Couldn't wake … This session has no saved transcript … `claude
+  respawn <id>` starts this one fresh“ und beendet sich mit Exit 1. Die App zeigt solche Kacheln als
+  „PROZESS WEG · KLICK STARTET NEU“ und ruft bei Klick `claude respawn <id>`.
+- **Tippen kommt an:** Fokus auf eine angehängte Session, Text getippt, Enter, Claude Code antwortet im
+  Terminal der Kachel (Screenshots `10-focus-typed.png`, `11-focus-answer.png`).
+- **`claude --bg` im fremden Terminal** erscheint beim nächsten 2-s-Poll in der App, Gruppe nach `cwd`.
+
+## Abweichungen vom Brief (mit Michael am 15.09. abgestimmt)
+
+- **Esc geht an Claude Code**, nicht an die App: Esc ist in Claude Code der Interrupt. Das Terminal
+  verlässt man mit **⌘Esc** (stufenweise Terminal → Gruppe → alles), mit **⌘ + Scrollrad** oder Pinch
+  (beide zoomen auch über dem eingehängten Terminal). Die Kachel-Kopfzeile zeigt im Fokus „⌘⎋ zurück“.
+  Ohne Fokus reicht Esc wie im Prototyp.
+- **Keine Gruppen-Chips in der Statusleiste** (bei 30 Gruppen zu voll). Links steht nur der Breadcrumb.
+- **Rückfragen und Fehler** sind eigene Overlays im App-Design (`ConfirmView`), kein `NSAlert`.
+  Es ist immer nur ein Overlay offen; ⌘P schließt ⌘N und umgekehrt.
+- **Spaltenzahl der Karte:** mindestens so viele wie in die Fensterbreite passen, bei vielen Gruppen
+  mehr, damit die Karte ungefähr das Seitenverhältnis des Fensters hat (`Layout.worldWidth`). Mit
+  30 Gruppen in einer Spalte wäre „Fit alles“ ein 5-%-Turm gewesen.
+
+## Build
+
+```bash
+cd app && /opt/homebrew/bin/xcodegen generate
+xcodebuild -project Kadrell.xcodeproj -scheme Kadrell -configuration Debug -derivedDataPath build \
+  -skipPackagePluginValidation -skipMacroValidation build
+xcodebuild -project Kadrell.xcodeproj -scheme Kadrell -configuration Debug -derivedDataPath build \
+  -skipPackagePluginValidation -skipMacroValidation test
+open build/Build/Products/Debug/Kadrell.app
+```
+
+`-skipPackagePluginValidation` ist nötig: SwiftTerm bringt den Build-Plugin `SwiftTermBuildInfoPlugin`
+mit, den Xcode ohne die Freigabe („Validate plug-in“) nicht ausführt. SwiftTerm ist auf Commit
+`233c6ba` gepinnt, weil die Snapshot-API (`terminalStateSnapshot`) dort gelesen wurde.
+
+Screenshots aller Zustände: `~/.claude/screenshots/claude-agent-overview/app/` (Übersicht `13-all-after-esc.png`,
+Gruppe `09-focus.png`, Fokus `10-focus-typed.png`, weit weg `06-far.png`, ⌘P `04-palette.png` und
+`05-commands.png`, ⌘N `03-new-session.png`).

@@ -96,6 +96,7 @@ final class ClaudeCLI: Sendable {
     }
 
     func stop(id: String) async throws { try await run(["stop", id]) }
+    func respawn(id: String) async throws { try await run(["respawn", id]) }
     func remove(id: String) async throws { try await run(["rm", id]) }
     func logs(id: String) async throws -> String { try await run(["logs", id]) }
 

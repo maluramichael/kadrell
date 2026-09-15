@@ -94,6 +94,9 @@ final class CellView: NSView {
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }
         if session.isInteractive {
             drawLabel("LÄUFT IN ANDEREM TERMINAL", in: body, dim: dim)
+        } else if session.isStale {
+            drawHatch(in: body)
+            drawLabel("PROZESS WEG · KLICK STARTET NEU", in: body, dim: dim)
         } else if session.isDone {
             drawLabel(session.state == "stopped" ? "GESTOPPT · KLICK SETZT FORT" : "BEENDET · KLICK SETZT FORT", in: body, dim: dim)
         } else if !attached {

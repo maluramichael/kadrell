@@ -34,7 +34,9 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var isInteractive: Bool { kind == "interactive" }
     /// Beendet oder gestoppt: sichtbar, aber erst nach `--bg --resume` wieder anhängbar.
     var isDone: Bool { state == "done" || state == "stopped" }
-    var canAttach: Bool { isBackground && !isDone && shortId != nil }
+    /// Hintergrund-Eintrag ohne `pid`: der Prozess ist weg, `attach` scheitert („no saved transcript“); nur `respawn` hilft.
+    var isStale: Bool { isBackground && !isDone && pid == nil }
+    var canAttach: Bool { isBackground && !isDone && shortId != nil && pid != nil }
     var status: SessionStatus { Session.mapStatus(state: state, status: rawStatus) }
     var startDate: Date { Date(timeIntervalSince1970: startedAt / 1000) }
 
