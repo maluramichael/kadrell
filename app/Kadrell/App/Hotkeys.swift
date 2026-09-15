@@ -1,13 +1,13 @@
 import AppKit
 
-/// Frei belegbare Kürzel, Defaults nach Michaels tmux-Config (M-Pfeile, M-z, M-1…9, M-Tab, M-Enter, M-o).
+/// Frei belegbare Kürzel, Defaults nach Michaels tmux-Config (M-Pfeile, M-z, M-1…9, M-Tab, M-Enter).
 /// Der Event-Monitor im AppDelegate fängt sie fensterweit ab, bevor das Terminal sie sieht.
 enum HotkeyAction: String, CaseIterable, Sendable {
     case focusLeft, focusRight, focusUp, focusDown
     case swapLeft, swapRight, swapUp, swapDown
     case nextSession, prevSession, lastSession
     case focus1, focus2, focus3, focus4, focus5, focus6, focus7, focus8, focus9
-    case zoom, nextLayout, rotate, closeFocused
+    case zoom, nextLayout, closeFocused
 
     /// 0-basiert für focus1…focus9.
     var tileIndex: Int? { rawValue.hasPrefix("focus") ? Int(rawValue.dropFirst(5)).map { $0 - 1 } : nil }
@@ -28,7 +28,6 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .lastSession: return "Zuletzt fokussierte Kachel"
         case .zoom: return "Zoom: Fokus-Kachel allein"
         case .nextLayout: return "Grid ↔ Stack"
-        case .rotate: return "Kacheln rotieren"
         default: return "Fokus-Kachel schließen"
         }
     }
@@ -61,7 +60,6 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .lastSession: return Hotkey(.option, "⇥")
         case .zoom: return Hotkey(.option, "z")
         case .nextLayout: return Hotkey(.option, "⏎")
-        case .rotate: return Hotkey(.option, "o")
         default: return Hotkey(.command, "Esc")
         }
     }

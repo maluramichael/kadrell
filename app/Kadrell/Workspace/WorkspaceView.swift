@@ -25,10 +25,16 @@ final class WorkspaceView: NSView {
     private var pulse: CGFloat = 1
     private var pulseTask: Task<Void, Never>?
     private weak var lastFirstResponder: NSResponder?
+    /// Ziehen einer Kachel oder Stack-Zeile auf eine andere sortiert um.
+    private var pressed: (point: CGPoint, key: String)?
+    private var dragging = false
+    private var dropTarget: String?
 
     var onChange: (() -> Void)?
     /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
     var onCloseSession: ((String, Bool) -> Void)?
+    /// Ziehen: (gezogen, Ziel). Die Reihenfolge selbst gehört dem Baum, siehe `sortSelected`.
+    var onMoveSession: ((String, String) -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -52,6 +58,7 @@ final class WorkspaceView: NSView {
         self.groups = groups
         self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
         selected.removeAll { self.sessions[$0] == nil }
+        sortSelected()
         if let f = focused, !selected.contains(f) { focused = selected.first }
         for (k, v) in cells where self.sessions[k] == nil { v.removeFromSuperview(); cells[k] = nil }
         for id in selected {
@@ -89,6 +96,7 @@ final class WorkspaceView: NSView {
             focused = ids.first
         }
         zen = false
+        sortSelected()
         for (k, v) in cells where !selected.contains(k) { v.removeFromSuperview(); cells[k] = nil; attach?.detach(k) }
         for id in selected where cells[id] == nil {
             let v = CellView(session: sessions[id]!)
@@ -124,13 +132,11 @@ final class WorkspaceView: NSView {
         setFocus(selected[j])
     }
 
-    /// Fokus-Kachel mit ihrem Nachbarn in Richtung `d` tauschen, der Fokus wandert mit.
+    /// Fokus-Kachel mit ihrem Nachbarn in Richtung `d` tauschen, wie Ziehen: die Reihenfolge gehört dem Baum.
     func swapFocused(_ d: Tiling.Direction) {
         guard let f = focused, let i = selected.firstIndex(of: f),
               let j = Tiling.neighbor(of: i, count: selected.count, mode: mode, d) else { return }
-        selected.swapAt(i, j)
-        persist()
-        relayout()
+        onMoveSession?(f, selected[j])
     }
 
     /// Nächste (+1) oder vorige (-1) Kachel, am Ende wieder vorn.
@@ -144,14 +150,6 @@ final class WorkspaceView: NSView {
 
     func focusTile(_ i: Int) { if selected.indices.contains(i) { setFocus(selected[i]) } }
 
-    /// tmux rotate-window: letzte Kachel nach vorn, alle anderen rücken eins weiter.
-    func rotate() {
-        guard selected.count > 1 else { return }
-        selected.insert(selected.removeLast(), at: 0)
-        persist()
-        relayout()
-    }
-
     func setMode(_ m: LayoutMode) {
         mode = m
         UserDefaults.standard.set(m.rawValue, forKey: "workspace.mode")
@@ -164,6 +162,12 @@ final class WorkspaceView: NSView {
         zen.toggle()
         relayout()
         focusTerminal()
+    }
+
+    /// Arbeitsfläche zeigt die Sessions in Baumreihenfolge: Gruppen, darin ihre Sessions.
+    private func sortSelected() {
+        let order = Dictionary(groups.flatMap(\.sessionIds).enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        selected = selected.enumerated().sorted { (order[$0.1] ?? .max, $0.0) < (order[$1.1] ?? .max, $1.0) }.map(\.1)
     }
 
     private func persist() { UserDefaults.standard.set(selected, forKey: "workspace.selected") }
@@ -207,6 +211,7 @@ final class WorkspaceView: NSView {
             v.groupColor = NSColor(hexString: g?.color ?? "#6c7086")
             v.focused = focused == key && visible.count > 1
             v.zoomed = zen && selected.count > 1
+            v.dropTarget = dragging && dropTarget == key
             v.hovered = hoveredCell == key
             v.attached = attach?.isAttached(key) ?? false
             v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
@@ -277,6 +282,10 @@ final class WorkspaceView: NSView {
         }
         guard !stackRows.isEmpty, !zen else { return }
         for (r, key) in stackRows { drawStackRow(r, key: key) }
+        if dragging, let t = dropTarget, let (r, _) = stackRows.first(where: { $0.1 == t }) {
+            Theme.fg.setFill()
+            r.frame(withWidth: 2)
+        }
     }
 
     private func drawStackRow(_ r: CGRect, key: String) {
@@ -355,10 +364,36 @@ final class WorkspaceView: NSView {
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         let force = event.modifierFlags.contains(.command)
+        pressed = nil
         switch hit(at: p) {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
-        case .cell(let k), .row(let k): setFocus(k)
+        case .cell(let k), .row(let k): pressed = (p, k); setFocus(k)
         case .none: window?.makeFirstResponder(self)
         }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let press = pressed, selected.count > 1, !zen else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true }
+        guard dragging else { return }
+        NSCursor.closedHand.set()
+        var t: String?
+        switch hit(at: p) {
+        case .cell(let k), .cellClose(let k), .row(let k), .rowClose(let k): t = k == press.key ? nil : k
+        case .none: t = nil
+        }
+        guard t != dropTarget else { return }
+        dropTarget = t
+        relayout()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let src = pressed?.key, t = dropTarget, wasDragging = dragging
+        pressed = nil; dragging = false; dropTarget = nil
+        guard wasDragging else { return }
+        NSCursor.arrow.set()
+        relayout()
+        if let src, let t { onMoveSession?(src, t) }
     }
 }

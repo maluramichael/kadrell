@@ -44,6 +44,23 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(store.groups.count, 1)
     }
 
+    func testMoveSessionAndGroupPersists() throws {
+        let store = GroupStore(url: url)
+        store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a"), session("s3", cwd: "/p/a"), session("t1", cwd: "/p/b")])
+        store.moveSession("s1", to: "s3")
+        XCTAssertEqual(store.groups[0].sessionIds, ["s2", "s3", "s1"])
+        store.moveSession("s1", to: "s2")
+        XCTAssertEqual(store.groups[0].sessionIds, ["s1", "s2", "s3"])
+        // über Gruppengrenzen verschiebt moveSession nichts
+        store.moveSession("s1", to: "t1")
+        XCTAssertEqual(store.groups[0].sessionIds, ["s1", "s2", "s3"])
+        store.moveGroup(store.groups[1].id, to: store.groups[0].id)
+        XCTAssertEqual(store.groups.map(\.cwd), ["/p/b", "/p/a"])
+        XCTAssertEqual(GroupStore(url: url).groups, store.groups)
+        // Reihenfolge übersteht den nächsten Poll
+        XCTAssertFalse(store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a"), session("s3", cwd: "/p/a"), session("t1", cwd: "/p/b")]))
+    }
+
     func testPrunesVanishedSessionsAndRemovesGroups() throws {
         let store = GroupStore(url: url)
         store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a")])
