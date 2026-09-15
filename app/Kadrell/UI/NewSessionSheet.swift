@@ -16,30 +16,10 @@ final class NewSessionModel {
     var focusRequest = 0
     var onStart: ((Group?, String) -> Void)?
 
-    /// Unterordner, die zum getippten Pfad passen (nur Verzeichnisse, keine versteckten).
-    var completions: [String] {
-        let path = NewSessionModel.expand(cwd)
-        let dir: String, prefix: String
-        if path.hasSuffix("/") { dir = path; prefix = "" } else {
-            let u = URL(fileURLWithPath: path)
-            dir = u.deletingLastPathComponent().path; prefix = u.lastPathComponent
-        }
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
-        return names.filter { !$0.hasPrefix(".") && $0.lowercased().hasPrefix(prefix.lowercased()) }
-            .filter { var d: ObjCBool = false; return FileManager.default.fileExists(atPath: dir + "/" + $0, isDirectory: &d) && d.boolValue }
-            .sorted().prefix(8).map { (dir.hasSuffix("/") ? dir : dir + "/") + $0 + "/" }
-    }
+    var completions: [String] { folderCompletions(for: cwd) }
 
     static func expand(_ s: String) -> String {
         s.hasPrefix("~") ? NSHomeDirectory() + s.dropFirst() : s
-    }
-
-    /// Tab: gewählten Vorschlag übernehmen.
-    func complete() {
-        let c = completions
-        guard !c.isEmpty else { return }
-        cwd = c[min(compSelected, c.count - 1)]
-        compSelected = 0
     }
 
     init(groups: [Group], counts: [String: Int], preselected: Group?) {
@@ -75,7 +55,7 @@ final class NewSessionModel {
     }
 }
 
-/// ⌘N: Schritt 1 Gruppe wählen, Schritt 2 Ordner und erster Prompt. ⌘⏎ startet.
+/// ⌘N: Schritt 1 Gruppe wählen (startet sofort), Schritt 2 nur bei neuer Gruppe: Ordner.
 struct NewSessionView: View {
     @Bindable var model: NewSessionModel
     @FocusState private var focus: Field?
@@ -127,26 +107,7 @@ struct NewSessionView: View {
                 foot("⏎ starten · Esc abbrechen")
             } else {
                 label("Neue Session · Ordner")
-                PathField(text: $model.cwd, onTab: { model.complete() }, onSubmit: { model.start() },
-                          onMove: { d in model.compSelected = max(0, min(max(model.completions.count - 1, 0), model.compSelected + d)) })
-                    .frame(height: 20).padding(14)
-                    .onChange(of: model.cwd) { _, _ in model.compSelected = 0 }
-                let comps = model.completions
-                if !comps.isEmpty {
-                    Divider().overlay(Theme.lineColor)
-                    VStack(spacing: 0) {
-                        ForEach(Array(comps.enumerated()), id: \.element) { i, c in
-                            Text(Theme.shortPath(c)).font(.custom("JetBrainsMonoNF-Regular", size: 12))
-                                .foregroundStyle(i == model.compSelected ? Theme.fgColor : Theme.mutedColor)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 6).padding(.horizontal, 16)
-                                .background(i == model.compSelected ? Theme.surfaceColor : .clear)
-                                .overlay(alignment: .leading) { if i == model.compSelected { Rectangle().fill(Theme.runningColor).frame(width: 3) } }
-                                .contentShape(Rectangle())
-                                .onTapGesture { model.compSelected = i; model.complete() }
-                        }
-                    }
-                }
+                FolderInput(path: $model.cwd, selected: $model.compSelected) { model.start() }
                 foot("Tab vervollständigen · ⏎ starten · Esc abbrechen")
             }
         }
@@ -233,5 +194,81 @@ struct PathField: NSViewRepresentable {
             default: return false
             }
         }
+    }
+}
+
+
+/// Unterordner, die zum getippten Pfad passen (nur Verzeichnisse, keine versteckten).
+func folderCompletions(for typed: String) -> [String] {
+    let path = NewSessionModel.expand(typed)
+    let dir: String, prefix: String
+    if path.hasSuffix("/") { dir = path; prefix = "" } else {
+        let u = URL(fileURLWithPath: path)
+        dir = u.deletingLastPathComponent().path; prefix = u.lastPathComponent
+    }
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
+    return names.filter { !$0.hasPrefix(".") && $0.lowercased().hasPrefix(prefix.lowercased()) }
+        .filter { var d: ObjCBool = false; return FileManager.default.fileExists(atPath: dir + "/" + $0, isDirectory: &d) && d.boolValue }
+        .sorted().prefix(8).map { (dir.hasSuffix("/") ? dir : dir + "/") + $0 + "/" }
+}
+
+/// Nativer Ordnerdialog. Liefert den gewählten Pfad mit Slash oder nil.
+@MainActor
+func chooseFolder(start: String, completion: @escaping (String?) -> Void) {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.canCreateDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.directoryURL = URL(fileURLWithPath: NewSessionModel.expand(start))
+    panel.prompt = "Wählen"
+    panel.begin { resp in
+        completion(resp == .OK ? panel.url.map { $0.path + "/" } : nil)
+    }
+}
+
+/// Pfadfeld mit Vorschlagsliste und Ordner-Button, für ⌘N und Einstellungen.
+struct FolderInput: View {
+    @Binding var path: String
+    @Binding var selected: Int
+    var onSubmit: () -> Void
+    var completions: [String] { folderCompletions(for: path) }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            PathField(text: $path, onTab: complete, onSubmit: onSubmit,
+                      onMove: { d in selected = max(0, min(max(completions.count - 1, 0), selected + d)) })
+                .frame(height: 20)
+            Button("Ordner wählen …") {
+                chooseFolder(start: path) { if let p = $0 { path = p } }
+            }
+            .buttonStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+            .padding(.horizontal, 10).padding(.vertical, 4).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+        }
+        .padding(14)
+        .onChange(of: path) { _, _ in selected = 0 }
+        let comps = completions
+        if !comps.isEmpty {
+            Divider().overlay(Theme.lineColor)
+            VStack(spacing: 0) {
+                ForEach(Array(comps.enumerated()), id: \.element) { i, c in
+                    Text(Theme.shortPath(c)).font(.custom("JetBrainsMonoNF-Regular", size: 12))
+                        .foregroundStyle(i == selected ? Theme.fgColor : Theme.mutedColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 6).padding(.horizontal, 16)
+                        .background(i == selected ? Theme.surfaceColor : .clear)
+                        .overlay(alignment: .leading) { if i == selected { Rectangle().fill(Theme.runningColor).frame(width: 3) } }
+                        .contentShape(Rectangle())
+                        .onTapGesture { selected = i; complete() }
+                }
+            }
+        }
+    }
+
+    private func complete() {
+        let c = completions
+        guard !c.isEmpty else { return }
+        path = c[min(selected, c.count - 1)]
+        selected = 0
     }
 }
