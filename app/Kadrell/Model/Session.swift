@@ -36,11 +36,17 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Dann Ordnername plus Id-Anfang, damit zwei neue Sessions unterscheidbar bleiben.
     var title: String { name == id ? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name }
     var isBackground: Bool { kind == "background" }
+    /// Platzhalter, den Kadrell sofort anlegt, während `claude --bg` noch startet.
+    var isPending: Bool { shortId?.hasPrefix("pending-") == true }
+    static func pending(cwd: String) -> Session {
+        Session(shortId: "pending-" + UUID().uuidString.lowercased().prefix(8), cwd: cwd, kind: "background",
+                startedAt: Date().timeIntervalSince1970 * 1000, sessionId: "", name: "startet …", rawStatus: "starting")
+    }
     var isInteractive: Bool { kind == "interactive" }
     /// Beendet oder gestoppt: sichtbar, aber erst nach `--bg --resume` wieder anhängbar.
     var isDone: Bool { state == "done" || state == "stopped" }
     /// Hintergrund-Eintrag ohne `pid`: der Prozess ist weg, `attach` scheitert („no saved transcript“); nur `respawn` hilft.
-    var isStale: Bool { isBackground && !isDone && pid == nil }
+    var isStale: Bool { isBackground && !isDone && pid == nil && !isPending }
     var canAttach: Bool { isBackground && !isDone && shortId != nil && pid != nil }
     var status: SessionStatus { Session.mapStatus(state: state, status: rawStatus) }
     var startDate: Date { Date(timeIntervalSince1970: startedAt / 1000) }
@@ -52,7 +58,7 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
         for raw in [status, state].compactMap({ $0 }) {
             let v = raw.lowercased()
             switch v {
-            case "busy", "working", "running", "active": return .running
+            case "busy", "working", "running", "active", "starting": return .running
             case "waiting", "blocked": return .waiting
             case "idle", "done", "stopped": return .idle
             default:

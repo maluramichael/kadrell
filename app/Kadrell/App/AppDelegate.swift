@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var palette: PaletteWindow!
     private var overlay: OverlayPanel?
     private var keyMonitor: Any?
+    /// Platzhalter-Sessions, sofort sichtbar, bis `claude --bg` und der nächste Poll durch sind.
+    private var pending: [Session] = []
+    private var pendingGroups: [String: Group] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
@@ -145,15 +148,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func reloadViews() {
-        workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
+        workspace.reload(groups: displayGroups(), sessions: (registry?.sessions ?? []) + pending)
         syncSidebar()
+    }
+
+    /// Gruppen wie im Store, plus Platzhalter: in die Gruppe mit gleichem Ordner, sonst eine vorläufige Gruppe.
+    private func displayGroups() -> [Group] {
+        var groups = store.groups
+        for p in pending {
+            if let i = groups.firstIndex(where: { $0.cwd == p.cwd }) { groups[i].sessionIds.append(p.id); continue }
+            var g = pendingGroups[p.cwd] ?? store.makeGroup(cwd: p.cwd)
+            pendingGroups[p.cwd] = g
+            g.sessionIds = [p.id]
+            groups.append(g)
+        }
+        return groups
     }
 
     /// Baum und Leiste folgen der Arbeitsfläche (Auswahl, Fokus, Layout).
     private func syncSidebar() {
         sidebar.selected = Set(workspace.selected)
         sidebar.focused = workspace.focused
-        sidebar.reload(groups: store.groups, sessions: registry?.sessions ?? [])
+        sidebar.reload(groups: displayGroups(), sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
         let focused = workspace.focused.flatMap { sessions[$0] }
         let fg = focused.flatMap { workspace.group(forSession: $0.id) }
@@ -314,7 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func closeSession(_ key: String, force: Bool = false) {
-        guard let s = workspace.session(key) else { return }
+        guard let s = workspace.session(key), !s.isPending else { return }
         guard let id = s.shortId else {
             confirm("Session „\(s.title)“ läuft in einem anderen Terminal", "Interaktive Sessions kann Kadrell nicht stoppen.", button: "OK", destructive: false) {}
             return
@@ -405,15 +421,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startSession(group: Group?, cwd: String) {
         let t0 = Date().timeIntervalSince1970 * 1000 - 2000
         let known = Set(workspace.sessions.keys)
+        // Sofort sichtbar: Platzhalter im Baum und rechts als Kachel, bis die echte Session da ist.
+        let placeholder = Session.pending(cwd: cwd)
+        pending.append(placeholder)
+        reloadViews()
+        workspace.select([placeholder.id], add: !workspace.selected.isEmpty)
         Task {
             do {
                 let shortId = try await cli.start(cwd: cwd, prompt: "")
                 guard let fresh = await registry.waitFor(timeout: 10, { s in
                     (shortId != nil && s.shortId == shortId) || (s.isBackground && !known.contains(s.id) && s.cwd == cwd && s.startedAt >= t0)
                 }) else {
+                    pending.removeAll { $0.id == placeholder.id }
+                    reloadViews()
                     report(CLIError(command: "claude --bg", status: 0, output: "Die neue Session in \(cwd) ist nach 10 s nicht in `claude agents` aufgetaucht."))
                     return
                 }
+                pending.removeAll { $0.id == placeholder.id }
+                pendingGroups[cwd] = nil
                 var target = group ?? store.group(forCwd: cwd)
                 if target == nil {
                     let g = store.makeGroup(cwd: cwd)
@@ -421,10 +446,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     target = g
                 }
                 store.attach(sessionId: fresh.id, to: target!.id)
-                reloadViews()
-                // Neue Session kommt zur Auswahl dazu und bekommt den Fokus.
+                reloadViews()   // räumt den Platzhalter aus der Auswahl
                 workspace.select([fresh.id], add: !workspace.selected.contains(fresh.id))
-            } catch { report(error) }
+            } catch {
+                pending.removeAll { $0.id == placeholder.id }
+                reloadViews()
+                report(error)
+            }
         }
     }
 

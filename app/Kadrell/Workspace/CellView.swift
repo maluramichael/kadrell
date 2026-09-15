@@ -78,7 +78,9 @@ final class CellView: NSView {
     private func drawBody() {
         let body = bodyRect
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }
-        if session.isInteractive {
+        if session.isPending {
+            drawLabel("STARTET …", in: body)
+        } else if session.isInteractive {
             drawLabel("LÄUFT IN ANDEREM TERMINAL", in: body)
         } else if session.isStale {
             drawHatch(in: body)
