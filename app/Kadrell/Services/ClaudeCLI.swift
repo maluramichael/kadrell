@@ -99,12 +99,27 @@ final class ClaudeCLI: Sendable {
 
     func stop(id: String) async throws { try await run(["stop", id]) }
     func respawn(id: String) async throws { try await run(["respawn", id]) }
-    func remove(id: String) async throws { try await run(["rm", id]) }
+    /// `stop` kehrt zurück, bevor der Prozess weg ist. Sein Worktree-Lock blockiert `rm` noch kurz, deshalb bis 5 s wiederholen.
+    /// Sperrt danach noch ein Prozess, wirft der letzte Versuch; `lockingPid` liest die PID aus der Meldung.
+    func remove(id: String) async throws {
+        for _ in 0..<10 {
+            do { try await run(["rm", id]); return } catch let e as CLIError where ClaudeCLI.lockingPid(e.output) != nil {
+                try await Task.sleep(for: .milliseconds(500))
+            }
+        }
+        try await run(["rm", id])
+    }
     func logs(id: String) async throws -> String { try await run(["logs", id]) }
 
     static func parseBackgroundedId(_ output: String) -> String? {
         guard let r = output.range(of: "backgrounded · ([0-9a-f]{8})", options: .regularExpression) else { return nil }
         return String(output[r].suffix(8))
+    }
+
+    /// `claude rm`: „A Claude Code lock on the worktree names a process that is still running (pid 28440).“
+    static func lockingPid(_ output: String) -> Int? {
+        guard let r = output.range(of: "still running \\(pid [0-9]+\\)", options: .regularExpression) else { return nil }
+        return Int(output[r].filter(\.isNumber))
     }
 
     static func shortName(prompt: String, cwd: String, counter: Int) -> String {

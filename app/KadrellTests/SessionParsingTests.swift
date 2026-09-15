@@ -89,6 +89,15 @@ final class SessionParsingTests: XCTestCase {
         XCTAssertNil(ClaudeCLI.parseBackgroundedId("nothing"))
     }
 
+    func testLockingPid() {
+        let out = """
+        kept 10f507a8 — its worktree is still at "/x/.claude/worktrees/stacked-path-setting"
+          A Claude Code lock on the worktree names a process that is still running (pid 28440).
+        """
+        XCTAssertEqual(ClaudeCLI.lockingPid(out), 28440)
+        XCTAssertNil(ClaudeCLI.lockingPid("kept 10f507a8 — it has unpushed commits"))
+    }
+
     func testShortNameAndElapsed() {
         XCTAssertEqual(ClaudeCLI.shortName(prompt: String(repeating: "a", count: 60), cwd: "/x/y", counter: 1).count, 48)
         XCTAssertEqual(ClaudeCLI.shortName(prompt: "  ", cwd: "/x/proj", counter: 3), "proj-3")

@@ -448,9 +448,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try await self.cli.remove(id: id)
                     self.store.removeSession(key)
                     await self.registry.pollNow()
+                } catch let e as CLIError where self.blocker(of: e, besides: key) != nil {
+                    self.offerStopBlocker(self.blocker(of: e, besides: key)!, then: key)
                 } catch { self.report(error) }
                 self.closing.remove(key)
                 self.reloadViews()
+            }
+        }
+    }
+
+    /// Andere Session, deren Prozess den Worktree sperrt, den `claude rm` löschen will.
+    private func blocker(of error: CLIError, besides key: String) -> Session? {
+        guard let pid = ClaudeCLI.lockingPid(error.output) else { return nil }
+        return registry.sessions.first { $0.pid == pid && $0.id != key && $0.shortId != nil }
+    }
+
+    private func offerStopBlocker(_ blocker: Session, then key: String) {
+        confirm("Worktree wird noch von „\(blocker.title)“ genutzt", "Diese Session ebenfalls stoppen und danach entfernen?", button: "Beide stoppen") { [weak self] in
+            guard let self, let id = blocker.shortId else { return }
+            attach.detach(blocker.id)
+            Task {
+                do { try await self.cli.stop(id: id) } catch { self.report(error); return }
+                self.closeSession(key, force: true)
             }
         }
     }
