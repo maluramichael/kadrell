@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Michael Malura</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Claude-Sessions im Terminal nutzen das Mikrofon für die Spracheingabe.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
