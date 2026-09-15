@@ -183,7 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         edit.addItem(withTitle: "Ausschneiden", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         edit.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Einsetzen", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Alles auswählen", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(withTitle: "Alles auswählen", action: #selector(menuSelectAll), keyEquivalent: "a")
         main.addItem(withTitle: "Bearbeiten", action: nil, keyEquivalent: "").submenu = edit
 
         let view = NSMenu(title: "Ansicht")
@@ -216,6 +216,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = SettingsModel()
         model.onDone = { [weak self] in self?.dismissSheet() }
         present(SettingsView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+    }
+    /// ⌘A: in einem Textfeld die übliche Textauswahl, sonst alle Sessions rechts öffnen.
+    @objc private func menuSelectAll() {
+        if let t = NSApp.keyWindow?.firstResponder as? NSText { t.selectAll(nil); return }
+        workspace.select(store.groups.flatMap(\.sessionIds), add: false)
     }
     @objc private func menuGrid() { workspace.setMode(.grid) }
     @objc private func menuStack() { workspace.setMode(.stack) }
@@ -435,13 +440,34 @@ final class FlippedView: NSView {
 }
 
 /// Split-View mit 1-px-Trenner in der Linienfarbe des Themes; greifbar ist er 8 px breit.
-final class ThinSplitView: NSSplitView, NSSplitViewDelegate {
+/// Die Unteransichten würden den Klick sonst vorher schlucken, deshalb entscheidet der Hit-Test hier.
+final class ThinSplitView: NSSplitView {
     static let grabWidth: CGFloat = 8
     override var dividerColor: NSColor { Theme.line }
     override var dividerThickness: CGFloat { 1 }
-    override init(frame: NSRect) { super.init(frame: frame); delegate = self }
-    required init?(coder: NSCoder) { nil }
-    func splitView(_ splitView: NSSplitView, effectiveRect proposed: NSRect, forDrawnRect drawn: NSRect, ofDividerAt i: Int) -> NSRect {
-        drawn.insetBy(dx: -(ThinSplitView.grabWidth - drawn.width) / 2, dy: 0)
+
+    private var grabRect: CGRect {
+        guard arrangedSubviews.count > 1, !arrangedSubviews[0].isHidden else { return .zero }
+        let x = arrangedSubviews[0].frame.maxX
+        return CGRect(x: x - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
     }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let p = convert(point, from: superview)
+        return grabRect.contains(p) ? self : super.hitTest(point)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        let r = grabRect
+        if !r.isEmpty { addCursorRect(r, cursor: .resizeLeftRight) }
+    }
+
+    override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: grabRect, options: [.mouseMoved, .activeInKeyWindow], owner: self))
+    }
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); updateTrackingAreas() }
 }
