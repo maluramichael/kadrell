@@ -37,5 +37,8 @@ final class HotkeyTests: XCTestCase {
         XCTAssertEqual(HotkeyAction.focus1.tileIndex, 0)
         XCTAssertEqual(HotkeyAction.focus9.tileIndex, 8)
         XCTAssertNil(HotkeyAction.focusLeft.tileIndex)
+        XCTAssertNil(HotkeyAction.focusSidebar.tileIndex)
+        XCTAssertEqual(HotkeyAction.focusSidebar.defaultKey, Hotkey(.command, "1"))
+        XCTAssertEqual(HotkeyAction.nextLayout.defaultKey, Hotkey(.command, "l"))
     }
 }

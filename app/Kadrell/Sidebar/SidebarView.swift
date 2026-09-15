@@ -24,8 +24,9 @@ final class SidebarView: NSView {
     private var dragging = false
     private var dropTarget: Row?
 
-    enum SelectMode { case replace, toggle, add }
-    /// Klick = nur diese, ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu.
+    enum SelectMode { case replace, toggle, add, cursor }
+    /// Klick = nur diese, ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu,
+    /// ↑↓ (cursor) = nur diese, die Tastatur bleibt im Baum.
     var onSelect: (([String], SelectMode) -> Void)?
     var onNewSession: ((String) -> Void)?
     var onEditGroup: ((String) -> Void)?
@@ -161,6 +162,7 @@ final class SidebarView: NSView {
         let color = NSColor(hexString: g.color)
         let sel = selected.contains(s.id), foc = focused == s.id
         if foc { color.mixed(0.14, into: Theme.surface).setFill(); r.fill() }
+        if foc, window?.firstResponder === self { color.setStroke(); NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5)).stroke() }
         else if sel || hover { Theme.surface.setFill(); r.fill() }
         if sel { color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
         let attached = attach?.isAttached(s.id) ?? false
@@ -183,6 +185,26 @@ final class SidebarView: NSView {
     }
 
     // MARK: Events
+
+    override var acceptsFirstResponder: Bool { true }
+    override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
+    override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
+
+    /// ⌘1 gibt dem Baum die Tastatur: ↑↓ wandert über die sichtbaren Sessions, ab der fokussierten.
+    override func keyDown(with event: NSEvent) {
+        let step: Int
+        switch event.keyCode {
+        case 125: step = 1
+        case 126: step = -1
+        default: super.keyDown(with: event); return
+        }
+        let ids = sessionIds
+        guard !ids.isEmpty else { return }
+        let i = focused.flatMap { ids.firstIndex(of: $0) }.map { min(max($0 + step, 0), ids.count - 1) } ?? 0
+        anchor = ids[i]
+        onSelect?([ids[i]], .cursor)
+        if let r = rows.firstIndex(where: { $0.key == "s:" + ids[i] }) { scrollToVisible(rowRect(r)) }
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

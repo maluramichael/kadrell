@@ -8,6 +8,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case nextSession, prevSession, lastSession
     case focus1, focus2, focus3, focus4, focus5, focus6, focus7, focus8, focus9
     case zoom, nextLayout, closeFocused
+    case focusSidebar, focusWorkspace
 
     /// 0-basiert für focus1…focus9.
     var tileIndex: Int? { rawValue.hasPrefix("focus") ? Int(rawValue.dropFirst(5)).map { $0 - 1 } : nil }
@@ -28,6 +29,8 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .lastSession: return "Zuletzt fokussierte Kachel"
         case .zoom: return "Zoom: Fokus-Kachel allein"
         case .nextLayout: return "Grid ↔ Stack"
+        case .focusSidebar: return "Baum: Tastatur hierher, ↑↓ wählt Session"
+        case .focusWorkspace: return "Arbeitsfläche: Tastatur an Claude"
         default: return "Fokus-Kachel schließen"
         }
     }
@@ -59,7 +62,9 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .prevSession: return Hotkey(.option, "p")
         case .lastSession: return Hotkey(.option, "⇥")
         case .zoom: return Hotkey(.option, "z")
-        case .nextLayout: return Hotkey(.option, "⏎")
+        case .nextLayout: return Hotkey(.command, "l")
+        case .focusSidebar: return Hotkey(.command, "1")
+        case .focusWorkspace: return Hotkey(.command, "2")
         default: return Hotkey(.command, "Esc")
         }
     }
