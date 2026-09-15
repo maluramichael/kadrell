@@ -185,6 +185,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.attach = attach
         sidebar.attach = attach
         attach.onChange = { [weak self] in self?.workspace.relayout() }
+        // Einstellung: Kachel einer beendeten Session schließen statt mit „Klick setzt fort" stehen zu lassen.
+        attach.onEnded = { [weak self] key in
+            guard let self, Settings.closeTileOnExit, workspace.selected.contains(key) else { return }
+            workspace.select([key], add: true)
+            syncSidebar()
+        }
         registry = SessionRegistry(cli: cli)
         registry.pids = { [weak attach] in attach?.pids ?? [:] }
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }

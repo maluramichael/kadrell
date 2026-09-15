@@ -38,6 +38,8 @@ final class AttachManager {
     private var queueTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
     var onChange: (() -> Void)?
+    /// Claude hat sich selbst beendet (`/exit`, zweimal ⌃C, Absturz), nicht von Kadrell gestoppt.
+    var onEnded: ((String) -> Void)?
 
     init(cli: ClaudeCLI) {
         self.cli = cli
@@ -91,6 +93,7 @@ final class AttachManager {
                 AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .public)")
             }
             self.detach(key, signal: false)
+            if self.ended.contains(key) { self.onEnded?(key) }
         }
         let args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: Transcript.path(sessionId: session.sessionId) != nil)
         AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .public) in \(session.cwd, privacy: .public)")

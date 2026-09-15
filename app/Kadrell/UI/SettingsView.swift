@@ -24,6 +24,12 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "stackShowPath") }
     }
 
+    /// Beendet sich Claude selbst (zweimal ⌃C, `/exit`), verschwindet die Kachel. Default aus: sie bleibt, Klick setzt fort.
+    static var closeTileOnExit: Bool {
+        get { UserDefaults.standard.bool(forKey: "closeTileOnExit") }
+        set { UserDefaults.standard.set(newValue, forKey: "closeTileOnExit") }
+    }
+
     static let uiScales: [Double] = [0.9, 1, 1.15, 1.3]
     static let lineSpacings: [Double] = [1, 1.1, 1.2, 1.35]
     static let paddings: [Double] = [0, 4, 8, 12]
@@ -87,6 +93,7 @@ final class SettingsModel {
     var startFolder = Settings.startFolder
     var showLastMessage = Settings.showLastMessage
     var stackShowPath = Settings.stackShowPath
+    var closeTileOnExit = Settings.closeTileOnExit
     var hotkeys = Hotkeys.current
     var uiScale = Settings.uiScale
     var fontName = Settings.terminalFontName
@@ -108,6 +115,7 @@ final class SettingsModel {
         if !p.isEmpty { Settings.startFolder = p }
         Settings.showLastMessage = showLastMessage
         Settings.stackShowPath = stackShowPath
+        Settings.closeTileOnExit = closeTileOnExit
         Hotkeys.current = hotkeys
         Settings.uiScale = uiScale
         Settings.terminalFontName = fontName
@@ -191,6 +199,14 @@ struct SettingsView: View {
                 setting("Pfad in Stack-Zeilen") { pill(model.stackShowPath ? "an" : "aus", on: model.stackShowPath) { model.stackShowPath.toggle() } }
                 setting("Letzte Antwort von Claude im Baum") { pill(model.showLastMessage ? "an" : "aus", on: model.showLastMessage) { model.showLastMessage.toggle() } }
                 setting("Innenabstand") { choice(Settings.paddings, $model.padding) { "\(Int($0)) px" } }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 8)
+            label("Sessions")
+            setting("Wenn Claude endet (zweimal ⌃C, /exit)") {
+                HStack(spacing: 2) {
+                    pill("Kachel bleibt, Klick setzt fort", on: !model.closeTileOnExit) { model.closeTileOnExit = false }
+                    pill("Kachel schließen", on: model.closeTileOnExit) { model.closeTileOnExit = true }
+                }
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
             label("Tastenkürzel")

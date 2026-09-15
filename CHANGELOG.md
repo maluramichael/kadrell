@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.3.0 (2026-09-16)
+
+- Feature: In den Einstellungen unter „Sessions" lässt sich wählen, ob die Kachel nach dem Beenden von Claude (zweimal ⌃C, /exit) stehen bleibt oder sich schließt. Fortsetzen geht danach weiter per Klick im Baum.
+
 ## 1.2.0 (2026-09-16)
 
 - Änderung: Kacheln tragen immer ihre Gruppenfarbe in Kopfzeile, Rahmen und leicht im Hintergrund, die ausgewählte Kachel etwas kräftiger.
