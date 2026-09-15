@@ -494,8 +494,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             do {
                 let shortId = try await cli.start(cwd: cwd, prompt: "")
+                // Mit Kurz-Id nur genau diese: bei schnell hintereinander gestarteten Sessions im selben Ordner
+                // greift der Ordner-Fallback sonst die Session eines anderen Starts.
                 guard let fresh = await registry.waitFor(timeout: 10, { s in
-                    (shortId != nil && s.shortId == shortId) || (s.isBackground && !known.contains(s.id) && s.cwd == cwd && s.startedAt >= t0)
+                    if let shortId { return s.shortId == shortId }
+                    return s.isBackground && !known.contains(s.id) && s.cwd == cwd && s.startedAt >= t0
                 }) else {
                     pending.removeAll { $0.id == placeholder.id }
                     reloadViews()
@@ -512,7 +515,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 store.attach(sessionId: fresh.id, to: target!.id)
                 reloadViews()   // räumt den Platzhalter aus der Auswahl
-                workspace.select([fresh.id], add: !workspace.selected.contains(fresh.id))
+                // Schon rechts: nur fokussieren. `add: false` würde die Auswahl auf diese eine Kachel ersetzen.
+                if workspace.selected.contains(fresh.id) { workspace.setFocus(fresh.id) } else { workspace.select([fresh.id], add: true) }
             } catch {
                 pending.removeAll { $0.id == placeholder.id }
                 reloadViews()
