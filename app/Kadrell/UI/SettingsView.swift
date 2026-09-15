@@ -10,6 +10,24 @@ enum ZoomMode: String, CaseIterable {
 
 enum Settings {
     static let startFolderKey = "startFolder"
+    static let gridSizeKey = "gridSize"
+    static let snapKey = "snapToGrid"
+    static let gridSizes: [CGFloat] = [20, 40, 80, 160]
+    /// Rasterweite in Weltpunkten (Hintergrundlinien und Einrasten).
+    static var gridSize: CGFloat {
+        get { let v = UserDefaults.standard.double(forKey: gridSizeKey); return v > 0 ? v : 40 }
+        set { UserDefaults.standard.set(Double(newValue), forKey: gridSizeKey) }
+    }
+    static var snapToGrid: Bool {
+        get { UserDefaults.standard.object(forKey: snapKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: snapKey) }
+    }
+    static func snapped(_ r: CGRect) -> CGRect {
+        guard snapToGrid else { return r }
+        let g = gridSize
+        func q(_ v: CGFloat) -> CGFloat { (v / g).rounded() * g }
+        return CGRect(x: q(r.minX), y: q(r.minY), width: max(g, q(r.width)), height: max(g, q(r.height)))
+    }
     static let zoomModeKey = "zoomMode"
     static var zoomMode: ZoomMode {
         get { ZoomMode(rawValue: UserDefaults.standard.string(forKey: zoomModeKey) ?? "") ?? .layout }

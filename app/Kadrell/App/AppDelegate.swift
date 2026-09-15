@@ -76,6 +76,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         canvas.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         canvas.onActivateSession = { [weak self] s in self?.resume(s) }
         canvas.onHelp = { [weak self] in self?.showAbout() }
+        bar.onToggleSnap = { [weak self] in Settings.snapToGrid.toggle(); self?.bar.needsDisplay = true }
+        bar.onCycleGrid = { [weak self] in
+            let sizes = Settings.gridSizes
+            let i = sizes.firstIndex(of: Settings.gridSize) ?? 1
+            Settings.gridSize = sizes[(i + 1) % sizes.count]
+            self?.bar.needsDisplay = true
+            self?.canvas.needsDisplay = true
+        }
         canvas.onGroupFrameChange = { [weak self] gid, rect in self?.store.setFrame(rect, for: gid) }
     }
 

@@ -88,7 +88,7 @@ final class GroupStore {
     func placeUnplaced() {
         for i in groups.indices where groups[i].frame == nil {
             let existing = groups.compactMap { $0.frame?.rect }
-            groups[i].frame = GroupFrame(Layout.placeNewGroup(existing: existing))
+            groups[i].frame = GroupFrame(Settings.snapped(Layout.placeNewGroup(existing: existing)))
         }
     }
 

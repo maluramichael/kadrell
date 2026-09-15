@@ -487,7 +487,7 @@ final class CanvasView: NSView {
             } else {
                 f.origin = CGPoint(x: gd.frame.minX + dx / scale, y: gd.frame.minY + dy / scale)
             }
-            dragFrames[gd.id] = f
+            dragFrames[gd.id] = Settings.snapped(f)
             applyLayout()
             return
         }
@@ -560,7 +560,7 @@ final class CanvasView: NSView {
         dirtyRect.fill()
         guard scale > 0 else { return }
         // Linienraster in Weltpunkten, Abstand so, dass auf dem Bildschirm mindestens 36 px bleiben.
-        var step: CGFloat = 40
+        var step: CGFloat = Settings.gridSize
         while step * scale < 36 { step *= 2 }
         let grid = NSBezierPath()
         var wx = floor((dirtyRect.minX - offset.x) / scale / step) * step
