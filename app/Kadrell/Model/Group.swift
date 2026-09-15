@@ -92,6 +92,14 @@ final class GroupStore {
         }
     }
 
+    /// Z-Order: nach vorn geholte Gruppe ans Ende (wird zuletzt gezeichnet).
+    func moveToEnd(id: String) {
+        guard let i = groups.firstIndex(where: { $0.id == id }), i != groups.count - 1 else { return }
+        let g = groups.remove(at: i)
+        groups.append(g)
+        try? save()
+    }
+
     func setFrame(_ rect: CGRect, for id: String) {
         guard let i = groups.firstIndex(where: { $0.id == id }) else { return }
         groups[i].frame = GroupFrame(rect)

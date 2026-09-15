@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.canvas.needsDisplay = true
         }
         canvas.onGroupFrameChange = { [weak self] gid, rect in self?.store.setFrame(rect, for: gid) }
+        canvas.onGroupRaised = { [weak self] gid in self?.store.moveToEnd(id: gid) }
     }
 
     private func boot() async {

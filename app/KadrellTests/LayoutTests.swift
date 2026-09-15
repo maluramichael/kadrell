@@ -52,7 +52,7 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(b.minX, 784)
         XCTAssertFalse(b.intersects(a))
         let c = Layout.placeNewGroup(existing: [a, b], maxWidth: 1600)
-        XCTAssertEqual(c.minY, 524)
+        XCTAssertEqual(c.minY, 544)
         XCTAssertFalse(c.intersects(a) || c.intersects(b))
     }
 

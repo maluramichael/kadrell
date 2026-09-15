@@ -20,7 +20,13 @@ final class GroupView: NSView {
     }
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// Die Gruppe selbst nimmt keine Events (Canvas testet), nur eingehängte Terminals in den Kacheln.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let p = convert(point, from: superview)
+        guard bounds.contains(p) else { return nil }
+        for sub in subviews.reversed() { if let v = sub.hitTest(p) { return v } }
+        return nil
+    }
 
     /// Trefferflächen der Icons in eigenen Koordinaten.
     var plusRect: CGRect { CGRect(x: headerRect.maxX - 72, y: headerRect.midY - 8, width: 16, height: 16) }

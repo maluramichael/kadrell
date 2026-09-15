@@ -13,7 +13,7 @@ struct Layout {
     static let cellHeaderScreen: CGFloat = 26
     static let minScale: CGFloat = 0.03
     static let maxScale: CGFloat = 8
-    static let defaultGroupSize = CGSize(width: 760, height: 500)
+    static let defaultGroupSize = CGSize(width: 760, height: 520)
     static let minGroupSize = CGSize(width: 320, height: 200)
 
     struct GroupInput { let id: String; let cellKeys: [String]; let frame: CGRect }

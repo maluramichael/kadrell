@@ -41,6 +41,8 @@ final class CanvasView: NSView {
     var onHelp: (() -> Void)?
     /// Gruppe per Drag verschoben oder in der Größe geändert (Weltkoordinaten), zum Persistieren.
     var onGroupFrameChange: ((String, CGRect) -> Void)?
+    /// Gruppe wurde nach vorn geholt (Reihenfolge persistieren).
+    var onGroupRaised: ((String) -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -80,17 +82,19 @@ final class CanvasView: NSView {
             if let v = groupViews[g.id] { v.group = g } else {
                 let v = GroupView(group: g)
                 groupViews[g.id] = v
-                addSubview(v, positioned: .below, relativeTo: nil)
+                addSubview(v)
             }
         }
         let keys = Set(self.sessions.keys)
         for (k, v) in cellViews where !keys.contains(k) { v.removeFromSuperview(); cellViews[k] = nil }
         for s in sessions {
-            if let v = cellViews[s.id] { v.session = s } else {
-                let v = CellView(session: s)
-                cellViews[s.id] = v
-                addSubview(v)
-            }
+            let v = cellViews[s.id] ?? CellView(session: s)
+            v.session = s
+            cellViews[s.id] = v
+            // Kachel gehört als Subview zu ihrer Gruppe, damit überlappende Gruppen sauber stapeln.
+            let gv = group(forSession: s.id).flatMap { groupViews[$0.id] }
+            if let gv, v.superview !== gv { v.removeFromSuperview(); gv.addSubview(v) }
+            if gv == nil { v.removeFromSuperview() }
         }
         if let f = focusedKey, self.sessions[f] == nil { focusedKey = nil; onFocusChange?(nil) }
         applyLayout()
@@ -99,11 +103,23 @@ final class CanvasView: NSView {
     func group(forSession key: String) -> Group? { groups.first { $0.sessionIds.contains(key) } }
     func session(_ key: String) -> Session? { sessions[key] }
     var sessionCount: Int { sessions.count }
+    /// Kachel-Frame in Canvas-Koordinaten (die Kachel liegt in ihrer Gruppe).
+    private func screenFrame(_ v: CellView) -> CGRect {
+        guard let g = v.superview else { return v.frame }
+        return v.frame.offsetBy(dx: g.frame.minX, dy: g.frame.minY)
+    }
+
+    /// Gruppe nach vorn (Z-Order), z. B. beim Klick oder Drag.
+    private func raise(_ gid: String) {
+        guard let v = groupViews[gid], subviews.last !== v else { return }
+        addSubview(v, positioned: .above, relativeTo: nil)
+    }
+
     /// Session-Keys sortiert nach Abstand zur Viewport-Mitte (Reihenfolge der Attach-Queue).
     func sessionsByDistanceToCenter() -> [Session] {
         let c = CGPoint(x: bounds.midX, y: bounds.midY)
         return sessions.values.sorted {
-            let a = cellViews[$0.id]?.frame ?? .zero, b = cellViews[$1.id]?.frame ?? .zero
+            let a = cellViews[$0.id].map(screenFrame) ?? .zero, b = cellViews[$1.id].map(screenFrame) ?? .zero
             return hypot(a.midX - c.x, a.midY - c.y) < hypot(b.midX - c.x, b.midY - c.y)
         }
     }
@@ -150,14 +166,15 @@ final class CanvasView: NSView {
             v.needsDisplay = true
         }
         for (key, v) in cellViews {
-            guard let r = layout.cells[key], let s = sessions[key] else { v.isHidden = true; continue }
+            guard let r = layout.cells[key], let s = sessions[key], let gv = v.superview else { v.isHidden = true; continue }
             v.isHidden = false
-            let f = toScreen(r).integral
+            let f = toScreen(r).integral.offsetBy(dx: -gv.frame.minX, dy: -gv.frame.minY)
             if v.frame != f { v.frame = f }
             let g = group(forSession: key)
             v.groupName = g?.name ?? ""
             v.groupColor = NSColor(hexString: g?.color ?? "#6c7086")
             v.lod = focusedKey == key ? 3 : Layout.lod(cellScreenWidth: f.width)
+            if focusedKey == key { gv.addSubview(v, positioned: .above, relativeTo: nil) }
             v.focused = focusedKey == key
             v.hovered = hoveredCell == key
             v.attached = attach?.isAttached(key) ?? false
@@ -233,9 +250,9 @@ final class CanvasView: NSView {
     private var refitting = false
     private func ensureFocusedFills() {
         guard let f = focusedKey, !isAnimating, !refitting, let v = cellViews[f] else { return }
-        let want = bounds
-        if abs(v.frame.minX - want.minX) > 1 || abs(v.frame.minY - want.minY) > 1 ||
-            abs(v.frame.width - want.width) > 2 || abs(v.frame.height - want.height) > 2 {
+        let want = bounds, have = screenFrame(v)
+        if abs(have.minX - want.minX) > 1 || abs(have.minY - want.minY) > 1 ||
+            abs(have.width - want.width) > 2 || abs(have.height - want.height) > 2 {
             refitting = true
             fit(pad: 0, animated: false) { $0.cells[f] }
             refitting = false
@@ -406,12 +423,17 @@ final class CanvasView: NSView {
     enum Hit { case cell(String), cellClose(String), header(String), pen(String), close(String), plus(String), resize(String), none }
 
     func hit(at p: CGPoint) -> Hit {
-        for (key, v) in cellViews where !v.isHidden && v.frame.contains(p) {
-            let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
-            if v.lod >= 2, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .cellClose(key) }
-            return .cell(key)
-        }
-        for (id, v) in groupViews where v.frame.contains(p) {
+        // Von vorn nach hinten: die oberste Gruppe gewinnt, darin zuerst die Kacheln.
+        for gv in subviews.reversed() {
+            guard let gvv = gv as? GroupView, gv.frame.contains(p), let id = groupViews.first(where: { $0.value === gvv })?.key else { continue }
+            for (key, v) in cellViews where v.superview === gvv && !v.isHidden {
+                let f = screenFrame(v)
+                guard f.contains(p) else { continue }
+                let local = CGPoint(x: p.x - f.minX, y: p.y - f.minY)
+                if v.lod >= 2, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .cellClose(key) }
+                return .cell(key)
+            }
+            let v = gvv
             let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
             if v.lod >= 1 {
                 if v.plusRect.insetBy(dx: -4, dy: -4).contains(local) { return .plus(id) }
@@ -420,8 +442,17 @@ final class CanvasView: NSView {
                 if v.resizeRect.insetBy(dx: -4, dy: -4).contains(local) { return .resize(id) }
             }
             if v.headerRect.insetBy(dx: 0, dy: -6).contains(local) { return .header(id) }
+            return .none   // innerhalb der Gruppe, aber ohne Ziel: keine Gruppe dahinter treffen
         }
         return .none
+    }
+
+    /// Gruppe unter dem Punkt (oberste zuerst), für Hover und Z-Order.
+    private func groupId(at p: CGPoint) -> String? {
+        for gv in subviews.reversed() where gv.frame.contains(p) {
+            if let e = groupViews.first(where: { $0.value === gv }) { return e.key }
+        }
+        return nil
     }
 
     // MARK: Events
@@ -435,8 +466,8 @@ final class CanvasView: NSView {
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         var cell: String?, group: String?
-        for (key, v) in cellViews where !v.isHidden && v.frame.contains(p) { cell = key; break }
-        if cell == nil { for (id, v) in groupViews where v.frame.contains(p) { group = id; break } }
+        if case .cell(let k) = hit(at: p) { cell = k } else if case .cellClose(let k) = hit(at: p) { cell = k }
+        if cell == nil { group = groupId(at: p) }
         // Cursor nach Ziel: Icons Zeigehand, Kacheln Pfeil, Griff Kreuz, Kopf und Leere Greifhand.
         switch hit(at: p) {
         case .pen, .close, .plus, .cellClose: NSCursor.pointingHand.set()
@@ -463,6 +494,7 @@ final class CanvasView: NSView {
         let p = convert(event.locationInWindow, from: nil)
         drag = (p, offset, false)
         groupDrag = nil
+        if let g = groupId(at: p) { raise(g); onGroupRaised?(g) }
         switch hit(at: p) {
         case .header(let g): if let f = layout.groups[g] { groupDrag = (g, f, false) }
         case .resize(let g): if let f = layout.groups[g] { groupDrag = (g, f, true) }
