@@ -17,7 +17,7 @@ struct AboutView: View {
         }
         return fixed + rows + [
             ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"),
-            ("⌘W", "Fokussierte Session stoppen"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner, Tastenkürzel"), ("F1", "diese Hilfe"),
+            ("⌘W", "Fenster schließen"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner, Tastenkürzel"), ("F1", "diese Hilfe"),
         ]
     }
     private var version: String {

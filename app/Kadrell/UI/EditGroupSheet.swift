@@ -51,8 +51,8 @@ struct EditGroupView: View {
             }
             .padding(14)
             Divider().overlay(Theme.lineColor)
-            FolderInput(path: $model.cwd, selected: $model.compSelected) { }
-            DialogFoot(hint: "Tab oder ⏎ vervollständigen · Esc abbrechen", button: "Speichern") { model.save() }
+            FolderInput(path: $model.cwd, selected: $model.compSelected) { model.save() }
+            DialogFoot(hint: "Tab vervollständigen · / Unterordner · Esc abbrechen", button: "Speichern") { model.save() }
         }
         .font(.custom("JetBrainsMonoNF-Regular", size: 12))
         .foregroundStyle(Theme.fgColor)

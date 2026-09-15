@@ -122,7 +122,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
+            guard let self else { return event }
+            // Offene Hilfe hat selbst die Tastatur: F1 schließt sie wieder.
+            if event.keyCode == 122, overlayIsAbout, event.window === overlay { dismissSheet(); return nil }
+            guard event.window === self.window else { return event }
             if let action = Hotkeys.action(for: event) { self.perform(action); return nil }
             // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
             if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
@@ -233,6 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let file = NSMenu(title: "Datei")
         file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
         file.addItem(withTitle: "Neue Session im selben Ordner", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
+        file.addItem(.separator())
+        file.addItem(withTitle: "Fenster schließen", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
 
         let edit = NSMenu(title: "Bearbeiten")
@@ -262,7 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Ansicht", action: nil, keyEquivalent: "").submenu = view
 
         let session = NSMenu(title: "Session")
-        session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "w")
+        session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "")
         main.addItem(withTitle: "Session", action: nil, keyEquivalent: "").submenu = session
         NSApp.mainMenu = main
     }

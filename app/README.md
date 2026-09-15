@@ -16,7 +16,7 @@ Bedienung: Klick im Baum zeigt nur diese Session, ⌘-Klick nimmt sie dazu oder 
 Bereich seit dem letzten Klick, Klick auf eine Gruppe zeigt alle ihre Sessions. Ziehen im Baum oder an der Titelzeile
 einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf eine fremde Gruppe zieht die ganze Gruppe mit).
 ⌘B blendet den Baum aus, ⌘N neue Session, ⌘⏎ neue Session im Ordner der fokussierten, ⌘P Suche
-(`>` Kommandos), ⌘W stoppt die fokussierte Session. F1 zeigt die Hilfe, beim ersten Start automatisch.
+(`>` Kommandos), ⌘W schließt das Fenster wie der rote Knopf, Sessions laufen weiter. F1 zeigt die Hilfe, beim ersten Start automatisch.
 
 Belegbare Kürzel (⌘, Einstellungen, Defaults wie in der tmux-Config): ⌥-Pfeile Fokus, ⌥⇧-Pfeile Kachel
 tauschen, ⌥1…⌥9 Kachel direkt, ⌥N/⌥P nächste/vorige, ⌥⇥ zuletzt fokussierte, ⌥Z Zoom (Fokus-Kachel allein,
