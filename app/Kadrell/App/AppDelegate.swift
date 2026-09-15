@@ -277,7 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
         file.addItem(withTitle: "Neue Session im selben Ordner", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
         file.addItem(.separator())
-        file.addItem(withTitle: "Fenster schließen", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        file.addItem(withTitle: "Session schließen", action: #selector(menuCloseSession), keyEquivalent: "w")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
 
         let edit = NSMenu(title: "Bearbeiten")
@@ -420,6 +420,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var overlayIsAbout = false
     @objc private func menuPalette() { togglePalette() }
+    /// ⌘W: fokussierte Session beenden und entfernen, wie das X an der Kachel. Das Fenster bleibt offen.
+    @objc private func menuCloseSession() {
+        guard NSApp.keyWindow === window, let key = workspace.focused else { NSSound.beep(); return }
+        closeSession(key)
+    }
     @objc private func menuStop() {
         guard let key = workspace.focused, let s = workspace.session(key) else { NSSound.beep(); return }
         stopSession(s)
@@ -574,7 +579,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Fenster schließen (roter Knopf, ⌘W) heißt Kadrell beenden: über die Rückfrage, das Fenster bleibt bis dahin offen.
+/// Fenster schließen (roter Knopf) heißt Kadrell beenden: über die Rückfrage, das Fenster bleibt bis dahin offen.
 extension AppDelegate: NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         NSApp.terminate(nil)

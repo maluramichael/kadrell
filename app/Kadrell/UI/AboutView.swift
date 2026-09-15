@@ -14,10 +14,10 @@ struct AboutView: View {
                 + [("⌘P", "Suche, mit > Kommandos")]),
             ("Kacheln verwalten", rows([.swapLeft, .swapRight, .swapUp, .swapDown, .zoom, .nextLayout, .closeFocused]) + [
                 ("Ziehen", "Session oder Gruppe umsortieren, Baum und Kacheln gleich"),
-                ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"),
+                ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"),
             ]),
             ("Fenster und App", [
-                ("⌘M", "Im Dock ablegen"), ("⌘W", "Fenster schließen"),
+                ("⌘M", "Im Dock ablegen"),
                 ("⌘,", "Einstellungen: Startordner, Darstellung, Tastenkürzel"), ("F1", "diese Hilfe"),
             ]),
         ]
