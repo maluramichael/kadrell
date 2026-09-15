@@ -16,8 +16,8 @@ struct AboutView: View {
             rows.append((ks.count > 4 ? "\(first) … \(last)" : ks.joined(separator: " "), a.helpText))
         }
         return fixed + rows + [
-            ("⌘N", "Neue Session"), ("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"), ("⌘W", "Fokussierte Session stoppen"),
-            ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner, Tastenkürzel"), ("F1", "diese Hilfe"),
+            ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"),
+            ("⌘W", "Fokussierte Session stoppen"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner, Tastenkürzel"), ("F1", "diese Hilfe"),
         ]
     }
     private var version: String {

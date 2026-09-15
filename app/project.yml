@@ -38,6 +38,7 @@ targets:
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "Michael Malura"
         CFBundleIconFile: Kadrell
+        NSMicrophoneUsageDescription: "Claude-Sessions im Terminal nutzen das Mikrofon für die Spracheingabe."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.malura.kadrell

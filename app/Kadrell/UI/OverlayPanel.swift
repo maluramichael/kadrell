@@ -46,11 +46,14 @@ final class OverlayPanel: NSPanel {
         reanchor()
         parent.addChildWindow(self, ordered: .above)
         makeKeyAndOrderFront(nil)
+        Backdrop.sync(parent)
     }
 
     func dismiss() {
-        parent?.removeChildWindow(self)
+        let p = parent
+        p?.removeChildWindow(self)
         orderOut(nil)
+        Backdrop.sync(p)
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -60,4 +63,31 @@ final class OverlayPanel: NSPanel {
     }
 
     override func cancelOperation(_ sender: Any?) { onCancel?() }
+}
+
+/// Graut und blurrt das Hauptfenster, solange ein Overlay (Dialog oder ⌘P) als Kindfenster offen ist.
+/// Fängt auch die Klicks ab, damit dahinter nichts ungewollt bedient wird.
+@MainActor
+enum Backdrop {
+    private static let id = NSUserInterfaceItemIdentifier("KadrellBackdrop")
+
+    static func sync(_ window: NSWindow?) {
+        guard let root = window?.contentView else { return }
+        let existing = root.subviews.first { $0.identifier == id }
+        let open = window?.childWindows?.contains { $0.isVisible } == true
+        if !open { existing?.removeFromSuperview(); return }
+        guard existing == nil else { return }
+        let blur = NSVisualEffectView(frame: root.bounds)
+        blur.identifier = id
+        blur.blendingMode = .withinWindow
+        blur.material = .fullScreenUI
+        blur.state = .active
+        blur.autoresizingMask = [.width, .height]
+        let dim = NSView(frame: blur.bounds)
+        dim.wantsLayer = true
+        dim.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
+        dim.autoresizingMask = [.width, .height]
+        blur.addSubview(dim)
+        root.addSubview(blur)
+    }
 }

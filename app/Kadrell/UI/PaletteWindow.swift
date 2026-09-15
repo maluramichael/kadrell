@@ -99,14 +99,17 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         field.stringValue = prefix
         parent.addChildWindow(self, ordered: .above)
         makeKeyAndOrderFront(nil)
+        Backdrop.sync(parent)
         makeFirstResponder(field)
         field.currentEditor()?.moveToEndOfLine(nil)
         refreshList()
     }
 
     func dismiss(runHighlightReset: Bool = true) {
-        parent?.removeChildWindow(self)
+        let p = parent
+        p?.removeChildWindow(self)
         orderOut(nil)
+        Backdrop.sync(p)
         if runHighlightReset { onHighlight?(nil) }
     }
 
