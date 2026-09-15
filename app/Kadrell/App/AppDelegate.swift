@@ -19,6 +19,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var firstLoad = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: "de.malura.kadrell")
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        if let other = others.first, NSClassFromString("XCTestCase") == nil {
+            other.activate()
+            NSApp.terminate(nil)
+            return
+        }
         buildMenu()
         buildWindow()
         // Unter XCTest nur das Fenster, kein Polling.
