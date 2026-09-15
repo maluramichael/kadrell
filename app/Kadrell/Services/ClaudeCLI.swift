@@ -84,8 +84,10 @@ final class ClaudeCLI: Sendable {
     }
 
     /// Startet eine Hintergrund-Session und liefert die kurze Id aus `backgrounded · <id> · <name>`.
-    func start(cwd: String, name: String, prompt: String) async throws -> String? {
-        var args = ["--bg", "--name", name]
+    /// Ohne `--name`: Claude Code benennt die Session nach der ersten Nachricht selbst (Haiku-Titel),
+    /// der Name landet in `claude agents --json` und damit im Baum.
+    func start(cwd: String, prompt: String) async throws -> String? {
+        var args = ["--bg"]
         if !prompt.isEmpty { args.append(prompt) }
         let out = try await run(args, cwd: cwd)
         return ClaudeCLI.parseBackgroundedId(out)

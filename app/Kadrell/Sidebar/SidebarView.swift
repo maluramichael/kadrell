@@ -45,6 +45,24 @@ final class SidebarView: NSView {
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
 
+    /// Im NSScrollView passt niemand die Breite des Dokuments an: hier selbst dem Clip-View folgen,
+    /// sonst wandern Icons und Laufzeiten rechts aus dem sichtbaren Bereich.
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        guard let clip = superview as? NSClipView else { return }
+        clip.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.fitWidth() }
+        }
+        fitWidth()
+    }
+
+    private func fitWidth() {
+        guard let clip = superview else { return }
+        let w = clip.bounds.width
+        if frame.width != w { setFrameSize(NSSize(width: w, height: max(frame.height, clip.bounds.height))); needsDisplay = true }
+    }
+
     func reload(groups: [Group], sessions: [Session]) {
         self.groups = groups
         self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })

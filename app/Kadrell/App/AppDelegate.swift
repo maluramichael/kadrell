@@ -18,7 +18,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let usage = UsageService()
     private var palette: PaletteWindow!
     private var overlay: OverlayPanel?
-    private var sessionCounter = 0
     private var keyMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -123,6 +122,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.attach = attach
         sidebar.attach = attach
         attach.onChange = { [weak self] in self?.workspace.relayout() }
+        // Ctrl-C/Ctrl-D im Terminal beendet den Attach-Client: dann ist die Session gemeint, nicht nur der Client.
+        attach.onClientExit = { [weak self] key in
+            guard let self, let s = workspace.session(key), s.canAttach else { return }
+            closeSession(key, force: true)
+        }
         registry = SessionRegistry(cli: cli)
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
         registry.onError = { error in AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)") }
@@ -397,15 +401,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startSession(group: Group?, cwd: String) {
-        sessionCounter += 1
-        let name = ClaudeCLI.shortName(prompt: "", cwd: cwd, counter: sessionCounter)
+        let t0 = Date().timeIntervalSince1970 * 1000 - 2000
+        let known = Set(workspace.sessions.keys)
         Task {
             do {
-                let shortId = try await cli.start(cwd: cwd, name: name, prompt: "")
+                let shortId = try await cli.start(cwd: cwd, prompt: "")
                 guard let fresh = await registry.waitFor(timeout: 10, { s in
-                    (shortId != nil && s.shortId == shortId) || (s.name == name && s.cwd.hasSuffix(URL(fileURLWithPath: cwd).lastPathComponent))
+                    (shortId != nil && s.shortId == shortId) || (s.isBackground && !known.contains(s.id) && s.cwd == cwd && s.startedAt >= t0)
                 }) else {
-                    report(CLIError(command: "claude --bg", status: 0, output: "Session „\(name)“ ist nach 10 s nicht in `claude agents` aufgetaucht."))
+                    report(CLIError(command: "claude --bg", status: 0, output: "Die neue Session in \(cwd) ist nach 10 s nicht in `claude agents` aufgetaucht."))
                     return
                 }
                 var target = group ?? store.group(forCwd: cwd)

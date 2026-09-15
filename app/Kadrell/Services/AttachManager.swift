@@ -2,10 +2,25 @@ import AppKit
 import SwiftTerm
 import os
 
+/// Meldet Titel-Escapes (OSC 0/2) weiter; die View selbst kann den Delegate nicht spielen, ihre
+/// gleichnamigen Methoden kollidieren mit dem Protokoll.
+final class TitleWatcher: LocalProcessTerminalViewDelegate {
+    let onTitle: @MainActor (String) -> Void
+    init(onTitle: @escaping @MainActor (String) -> Void) { self.onTitle = onTitle }
+    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    func processTerminated(source: TerminalView, exitCode: Int32?) {}
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        MainActor.assumeIsolated { onTitle(title) }
+    }
+}
+
 /// Terminal einer angehängten Session.
 @MainActor
 final class KadrellTerminalView: LocalProcessTerminalView {
     var onExit: (() -> Void)?
+    /// `processDelegate` ist weak, deshalb hier festhalten.
+    var titleWatcher: TitleWatcher? { didSet { processDelegate = titleWatcher } }
 
     /// `keyDown` ist in SwiftTerm nicht `open`; `performKeyEquivalent` sieht jedes Tastenereignis vorher.
     /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt.
@@ -33,9 +48,13 @@ final class AttachManager {
     /// Attach-Clients, die sofort wieder beendet wurden (z. B. „no saved transcript“): nicht automatisch neu versuchen.
     private(set) var failed: Set<String> = []
     private var startedAt: [String: Date] = [:]
+    /// Von Kadrell selbst beendete Clients (SIGHUP): deren Exit ist kein Nutzer-Ausstieg.
+    private var closing: Set<String> = []
     private var queueTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
     var onChange: (() -> Void)?
+    /// Der Nutzer hat den Attach-Client selbst verlassen (Ctrl-C/Ctrl-D), die Session lief dabei noch.
+    var onClientExit: ((String) -> Void)?
 
     init(cli: ClaudeCLI) {
         self.cli = cli
@@ -76,6 +95,13 @@ final class AttachManager {
         t.nativeForegroundColor = Theme.fg
         t.caretColor = Theme.fg
         let key = session.id
+        // Ctrl-C/Ctrl-D/← in der Session detacht in den Agent-View, der setzt den Titel „… claude agents“.
+        // Für Kadrell heißt das: der Nutzer ist raus, Client beenden und wie einen Ausstieg behandeln.
+        t.titleWatcher = TitleWatcher { [weak self] title in
+            guard let self, title.hasSuffix("claude agents"), self.terminals[key] != nil else { return }
+            self.detach(key)
+            self.onClientExit?(key)
+        }
         t.onExit = { [weak self] in
             guard let self else { return }
             if let t0 = self.startedAt[key], Date().timeIntervalSince(t0) < 5 {
@@ -83,7 +109,9 @@ final class AttachManager {
                 self.snapshots[key] = t.terminalStateSnapshot().visibleRows.map(\.text).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                 AttachManager.log.warning("attach \(key, privacy: .public) sofort beendet: \(self.snapshots[key]?.joined(separator: " ") ?? "", privacy: .public)")
             }
+            let expected = self.closing.remove(key) != nil || self.failed.contains(key)
             self.detach(key, signal: false)
+            if !expected { self.onClientExit?(key) }
         }
         t.startProcess(executable: cli.binary, args: ["attach", id], environment: cli.environmentList,
                        execName: "claude", currentDirectory: session.cwd)
@@ -94,7 +122,7 @@ final class AttachManager {
     /// Hängt aus: `SIGHUP` an den Attach-Client (die Hintergrund-Session läuft weiter, siehe docs/kadrell-verifikation.md).
     func detach(_ key: String, signal: Bool = true) {
         guard let t = terminals.removeValue(forKey: key) else { return }
-        if signal, t.process.running { kill(t.process.shellPid, SIGHUP) }
+        if signal, t.process.running { closing.insert(key); kill(t.process.shellPid, SIGHUP) }
         t.removeFromSuperview()
         if !failed.contains(key) { snapshots[key] = nil }
         onChange?()
