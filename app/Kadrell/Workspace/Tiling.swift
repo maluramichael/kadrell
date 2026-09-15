@@ -31,7 +31,7 @@ enum Tiling {
 
     /// Stack (i3-Akkordeon): jede Kachel eine Titelzeile, die aktive bekommt ihren Körper direkt darunter,
     /// die Zeilen danach bleiben darunter.
-    static func stack(count n: Int, active: Int, in b: CGRect) -> (rows: [CGRect], body: CGRect) {
+    static func stack(count n: Int, active: Int, in b: CGRect, rowHeight: CGFloat = Tiling.rowHeight) -> (rows: [CGRect], body: CGRect) {
         var rows: [CGRect] = [], body = CGRect.zero
         var y = b.minY.rounded()
         let bodyH = max(0, b.height - CGFloat(n) * rowHeight).rounded()

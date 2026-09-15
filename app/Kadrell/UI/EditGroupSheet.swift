@@ -36,10 +36,10 @@ struct EditGroupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("GRUPPE BEARBEITEN").font(.custom("JetBrainsMonoNF-Regular", size: 11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
+            Text("GRUPPE BEARBEITEN").font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
             HStack(spacing: 12) {
-                TextField("Name", text: $model.name).textFieldStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 15))
+                TextField("Name", text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                     .focused($focused)
                 ColorPicker("", selection: $model.color, supportsOpacity: false).labelsHidden()
                 HStack(spacing: 4) {
@@ -54,9 +54,9 @@ struct EditGroupView: View {
             FolderInput(path: $model.cwd, selected: $model.compSelected) { }
             DialogFoot(hint: "Tab oder ⏎ vervollständigen · Esc abbrechen", button: "Speichern") { model.save() }
         }
-        .font(.custom("JetBrainsMonoNF-Regular", size: 12))
+        .font(Theme.ui(12))
         .foregroundStyle(Theme.fgColor)
-        .frame(width: 640)
+        .frame(width: 640 * Theme.scale)
         .background(Theme.panelColor)
         .onAppear { focused = true }
     }

@@ -90,7 +90,8 @@ final class AttachManager {
         queue.removeAll { $0.id == session.id }
         failed.remove(session.id)
         startedAt[session.id] = Date()
-        let t = KadrellTerminalView(frame: NSRect(x: 0, y: 0, width: 960, height: 600), font: Theme.font(12), options: .default)
+        let t = KadrellTerminalView(frame: NSRect(x: 0, y: 0, width: 960, height: 600), font: Settings.terminalFont, options: .default)
+        t.lineSpacing = CGFloat(Settings.terminalLineSpacing)
         t.nativeBackgroundColor = Theme.bg
         t.nativeForegroundColor = Theme.fg
         t.caretColor = Theme.fg
@@ -132,6 +133,15 @@ final class AttachManager {
     func sync(with sessions: [Session]) {
         let live = Set(sessions.filter(\.canAttach).map(\.id))
         for key in terminals.keys where !live.contains(key) { detach(key) }
+    }
+
+    /// Schrift und Zeilenabstand aus den Einstellungen auf alle offenen Terminals; SwiftTerm passt Spalten und Zeilen selbst an.
+    func applyTerminalSettings() {
+        let font = Settings.terminalFont, spacing = CGFloat(Settings.terminalLineSpacing)
+        for t in terminals.values {
+            if t.font != font { t.font = font }
+            if t.lineSpacing != spacing { t.lineSpacing = spacing }
+        }
     }
 
     func detachAll() {

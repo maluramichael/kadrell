@@ -84,7 +84,7 @@ final class SidebarView: NSView {
             for s in g.sessionIds.compactMap({ self.sessions[$0] }) { rows.append(.session(s, g)) }
         }
         let h = rows.reduce(CGFloat(12)) { $0 + rowHeight($1) } + CGFloat(groups.count) * 6
-        let want = max(h, superview?.bounds.height ?? 0)
+        let want = max((h * Theme.scale).rounded(.up), superview?.bounds.height ?? 0)
         if frame.height != want { setFrameSize(NSSize(width: frame.width, height: want)) }
         needsDisplay = true
     }
@@ -96,7 +96,7 @@ final class SidebarView: NSView {
         for (j, r) in rows.enumerated() {
             if case .group = r, j > 0 { y += 6 }
             let h = rowHeight(r)
-            if j == i { return CGRect(x: 0, y: y, width: bounds.width, height: h) }
+            if j == i { return CGRect(x: 0, y: y, width: bounds.width / Theme.scale, height: h) }
             y += h
         }
         return .zero
@@ -113,9 +113,19 @@ final class SidebarView: NSView {
 
     // MARK: Zeichnen
 
-    override func draw(_ dirtyRect: NSRect) {
+    /// Zeilen, Zeichnen und Trefferflächen in unskalierten Punkten, siehe `local`.
+    override func draw(_ dirty: NSRect) {
         Theme.panel.setFill()
-        dirtyRect.fill()
+        dirty.fill()
+        Theme.scaled(bounds) { _ in drawRows(dirty.scaled(1 / Theme.scale)) }
+    }
+
+    private func local(_ event: NSEvent) -> CGPoint {
+        let p = convert(event.locationInWindow, from: nil)
+        return CGPoint(x: p.x / Theme.scale, y: p.y / Theme.scale)
+    }
+
+    private func drawRows(_ dirtyRect: CGRect) {
         for (i, row) in rows.enumerated() {
             let r = rowRect(i)
             guard r.intersects(dirtyRect) else { continue }
@@ -124,7 +134,7 @@ final class SidebarView: NSView {
             case .session(let s, let g): drawSession(s, group: g, in: r, hover: hovered == i)
             }
         }
-        if let y = dropLineY() { Theme.fg.setFill(); CGRect(x: 0, y: y - 1, width: bounds.width, height: 2).fill() }
+        if let y = dropLineY() { Theme.fg.setFill(); CGRect(x: 0, y: y - 1, width: bounds.width / Theme.scale, height: 2).fill() }
     }
 
     /// Einfügelinie: über dem Ziel beim Ziehen nach oben, darunter (bei Gruppen unter deren letzter Zeile) nach unten.
@@ -191,8 +201,8 @@ final class SidebarView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
-        guard p.x < bounds.width - ThinSplitView.grabWidth / 2 else { return }   // Griffzone des Trenners
+        guard convert(event.locationInWindow, from: nil).x < bounds.width - ThinSplitView.grabWidth / 2 else { return }   // Griffzone des Trenners
+        let p = local(event)
         let i = rowIndex(at: p)
         (i == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
         guard i != hovered else { return }
@@ -206,7 +216,7 @@ final class SidebarView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
+        let p = local(event)
         pressed = nil
         guard let i = rowIndex(at: p) else { return }
         let r = rowRect(i)
@@ -230,7 +240,7 @@ final class SidebarView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         guard let press = pressed else { return }
-        let p = convert(event.locationInWindow, from: nil)
+        let p = local(event)
         if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true; hovered = nil }
         guard dragging else { return }
         autoscroll(with: event)

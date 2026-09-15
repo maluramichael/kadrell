@@ -246,6 +246,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "2")
         view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
         view.addItem(.separator())
+        view.addItem(withTitle: "Terminal-Schrift größer", action: #selector(menuFontBigger), keyEquivalent: "+")
+        view.addItem(withTitle: "Terminal-Schrift kleiner", action: #selector(menuFontSmaller), keyEquivalent: "-")
+        view.addItem(withTitle: "Terminal-Schrift Standardgröße", action: #selector(menuFontReset), keyEquivalent: "0")
+        view.addItem(.separator())
         // Belegbare Kürzel: das Menü zeigt die aktuelle Belegung, ausgelöst werden sie im Event-Monitor.
         let keys = Hotkeys.current
         let tiles = NSMenu(title: "Kachel wählen")
@@ -276,8 +280,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuAbout() { showAbout() }
     @objc private func menuSettings() {
         let model = SettingsModel()
-        model.onDone = { [weak self] in self?.buildMenu(); self?.dismissSheet() }
+        model.onDone = { [weak self] in self?.buildMenu(); self?.dismissSheet(); self?.applyAppearance() }
         present(SettingsView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+    }
+    @objc private func menuFontBigger() { Settings.terminalFontSize += 1; applyAppearance() }
+    @objc private func menuFontSmaller() { Settings.terminalFontSize -= 1; applyAppearance() }
+    @objc private func menuFontReset() { Settings.terminalFontSize = Settings.defaultFontSize; applyAppearance() }
+
+    /// Darstellung aus den Einstellungen übernehmen, ohne Neustart: Leiste, Baum, Kacheln, Terminals, Palette.
+    private func applyAppearance() {
+        if Theme.scale != CGFloat(Settings.uiScale) {
+            Theme.scale = CGFloat(Settings.uiScale)
+            if palette.isVisible { palette.dismiss() }
+            palette = PaletteWindow()
+        }
+        let root = window.contentView!.bounds
+        bar.frame = NSRect(x: 0, y: 0, width: root.width, height: Theme.barHeight)
+        split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.width, height: root.height - Theme.barHeight)
+        bar.needsDisplay = true
+        sidebar.needsDisplay = true
+        attach?.applyTerminalSettings()
+        reloadViews()
     }
     /// ⌘A: in einem Textfeld die übliche Textauswahl, sonst alle Sessions rechts öffnen.
     @objc private func menuSelectAll() {

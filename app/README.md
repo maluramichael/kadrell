@@ -23,4 +23,8 @@ tauschen, ⌥1…⌥9 Kachel direkt, ⌥N/⌥P nächste/vorige, ⌥⇥ zuletzt f
 Badge „ZOOM“ in der Leiste und „Z“ in der Titelzeile), ⌥⏎ Grid ↔ Stack, ⌘Esc Kachel schließen
 (Esc selbst geht an Claude Code).
 
+Darstellung (⌘, Einstellungen): UI-Größe 90 bis 130 % für Baum, Leiste, Kacheln und Dialoge, Terminal-Schrift
+(alle installierten Monospace-Fonts), Schriftgröße, Zeilenabstand und Innenabstand der Terminals.
+⌘+ / ⌘- / ⌘0 ändern die Terminal-Schriftgröße direkt, für alle Terminals.
+
 Details, verifizierte CLI-Fakten und Abweichungen vom Brief: `../docs/kadrell-verifikation.md`.
