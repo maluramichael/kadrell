@@ -41,7 +41,7 @@ struct FolderInput: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            PathField(text: $path, onTab: complete, onSubmit: onSubmit,
+            PathField(text: $path, onTab: complete, onSubmit: complete,   // ⏎ wie Tab; starten nur per ⌘⏎ oder Button
                       onMove: { d in selected = max(0, min(max(completions.count - 1, 0), selected + d)) })
                 .frame(height: 20)
             Button("Ordner wählen …") {
@@ -75,5 +75,28 @@ struct FolderInput: View {
         guard !c.isEmpty else { return }
         path = c[min(selected, c.count - 1)]
         selected = 0
+    }
+}
+
+
+/// Fußleiste der Dialoge: Hinweis links, Aktion rechts als Button (⌘⏎ löst dieselbe Aktion aus).
+struct DialogFoot: View {
+    let hint: String
+    let button: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider().overlay(Theme.lineColor)
+            HStack(spacing: 12) {
+                Text(hint).font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+                Spacer()
+                Button(action: action) {
+                    Text("\(button)  ⌘⏎").font(.custom("JetBrainsMonoNF-Bold", size: 12)).foregroundStyle(Theme.bgColor)
+                        .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.runningColor)
+                }.buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+        }
     }
 }

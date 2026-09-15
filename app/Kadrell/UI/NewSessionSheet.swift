@@ -107,8 +107,8 @@ struct NewSessionView: View {
                 foot("⏎ starten · Esc abbrechen")
             } else {
                 label("Neue Session · Ordner")
-                FolderInput(path: $model.cwd, selected: $model.compSelected) { model.start() }
-                foot("Tab vervollständigen · ⏎ starten · Esc abbrechen")
+                FolderInput(path: $model.cwd, selected: $model.compSelected) { }
+                DialogFoot(hint: "Tab oder ⏎ vervollständigen · Esc abbrechen", button: "Starten") { model.start() }
             }
         }
         .font(.custom("JetBrainsMonoNF-Regular", size: 12))

@@ -40,7 +40,7 @@ struct EditGroupView: View {
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
             HStack(spacing: 12) {
                 TextField("Name", text: $model.name).textFieldStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 15))
-                    .focused($focused).onSubmit { model.save() }
+                    .focused($focused)
                 ColorPicker("", selection: $model.color, supportsOpacity: false).labelsHidden()
                 HStack(spacing: 4) {
                     ForEach(Theme.palette, id: \.self) { hex in
@@ -51,10 +51,8 @@ struct EditGroupView: View {
             }
             .padding(14)
             Divider().overlay(Theme.lineColor)
-            FolderInput(path: $model.cwd, selected: $model.compSelected) { model.save() }
-            Divider().overlay(Theme.lineColor)
-            Text("Tab vervollständigen · ⏎ speichern · Esc abbrechen").font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
-                .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
+            FolderInput(path: $model.cwd, selected: $model.compSelected) { }
+            DialogFoot(hint: "Tab oder ⏎ vervollständigen · Esc abbrechen", button: "Speichern") { model.save() }
         }
         .font(.custom("JetBrainsMonoNF-Regular", size: 12))
         .foregroundStyle(Theme.fgColor)

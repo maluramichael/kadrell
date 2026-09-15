@@ -60,7 +60,7 @@ struct SettingsView: View {
                 .padding(.horizontal, 16).padding(.top, 12)
             Text("Startordner für ⌘N").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.fgColor)
                 .padding(.horizontal, 16).padding(.top, 14)
-            FolderInput(path: $model.startFolder, selected: $model.compSelected) { model.save() }
+            FolderInput(path: $model.startFolder, selected: $model.compSelected) { }
             Divider().overlay(Theme.lineColor)
             HStack(spacing: 12) {
                 Text("Spalten pro Gruppe").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.fgColor)
@@ -89,9 +89,7 @@ struct SettingsView: View {
                 }
             }
             .padding(14)
-            Divider().overlay(Theme.lineColor)
-            Text("Tab vervollständigen · ⏎ speichern · Esc abbrechen").font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
-                .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
+            DialogFoot(hint: "Tab oder ⏎ vervollständigen · Esc abbrechen", button: "Speichern") { model.save() }
         }
         .frame(width: 640, alignment: .leading)
         .background(Theme.panelColor)
