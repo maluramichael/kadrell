@@ -11,12 +11,19 @@ enum Settings {
         }
         set { UserDefaults.standard.set(newValue, forKey: startFolderKey) }
     }
+
+    /// Letzte Antwort von Claude als zweite Zeile unter jeder Session im Baum.
+    static var showLastMessage: Bool {
+        get { UserDefaults.standard.bool(forKey: "showLastMessage") }
+        set { UserDefaults.standard.set(newValue, forKey: "showLastMessage") }
+    }
 }
 
 @Observable
 @MainActor
 final class SettingsModel {
     var startFolder = Settings.startFolder
+    var showLastMessage = Settings.showLastMessage
     var compSelected = 0
     var hotkeys = Hotkeys.current
     /// Aktion, deren Kürzel gerade aufgenommen wird.
@@ -28,6 +35,7 @@ final class SettingsModel {
         stopRecording()
         let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         if !p.isEmpty { Settings.startFolder = p }
+        Settings.showLastMessage = showLastMessage
         Hotkeys.current = hotkeys
         onDone?()
     }
@@ -71,6 +79,10 @@ struct SettingsView: View {
                 .padding(.horizontal, 16).padding(.top, 12)
             label("Startordner für ⌘N")
             FolderInput(path: $model.startFolder, selected: $model.compSelected) { }
+            Toggle(isOn: $model.showLastMessage) {
+                Text("Letzte Antwort von Claude im Baum zeigen").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.fgColor)
+            }
+            .toggleStyle(.checkbox).padding(.horizontal, 16).padding(.top, 14)
             label("Tastenkürzel")
             ScrollView {
                 VStack(spacing: 2) {

@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         split.addArrangedSubview(workspace)
         split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
         split.autosaveName = "KadrellSplit"
+        split.delegate = self
         split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.bounds.width, height: root.bounds.height - Theme.barHeight)
         split.autoresizingMask = [.width, .height]
         root.addSubview(split)
@@ -200,6 +201,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func syncSidebar() {
         sidebar.selected = Set(workspace.selected)
         sidebar.focused = workspace.focused
+        sidebar.showMessages = Settings.showLastMessage
+        sidebar.messages = registry?.lastMessages ?? [:]
         sidebar.reload(groups: displayGroups(), sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
         let focused = workspace.focused.flatMap { sessions[$0] }
@@ -276,7 +279,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuAbout() { showAbout() }
     @objc private func menuSettings() {
         let model = SettingsModel()
-        model.onDone = { [weak self] in self?.buildMenu(); self?.dismissSheet() }
+        model.onDone = { [weak self] in
+            guard let self else { return }
+            buildMenu()
+            dismissSheet()
+            reloadViews()
+            Task { await self.registry?.pollNow() }
+        }
         present(SettingsView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
     }
     /// ⌘A: in einem Textfeld die übliche Textauswahl, sonst alle Sessions rechts öffnen.
@@ -545,6 +554,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reloadViews()
         }
         present(EditGroupView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+    }
+}
+
+/// Der Baum ist höchstens halb so breit wie das Fenster: beim Ziehen und wenn das Fenster schmaler wird.
+extension AppDelegate: NSSplitViewDelegate {
+    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+        min(proposedMaximumPosition, splitView.bounds.width / 2)
+    }
+
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        let half = split.bounds.width / 2
+        if !sidebarScroll.isHidden, sidebarScroll.frame.width > half + 1 { split.setPosition(half, ofDividerAt: 0) }
     }
 }
 

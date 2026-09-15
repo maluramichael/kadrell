@@ -12,6 +12,9 @@ final class SidebarView: NSView {
     var selected: Set<String> = []
     var focused: String?
     var attach: AttachManager?
+    /// Eingeschaltet: jede Session-Zeile bekommt eine zweite Zeile mit `messages[id]`.
+    var showMessages = false
+    var messages: [String: String] = [:]
     private var collapsed: Set<String> = []
     private var rows: [Row] = []
     private var hovered: Int?
@@ -89,7 +92,11 @@ final class SidebarView: NSView {
         needsDisplay = true
     }
 
-    private func rowHeight(_ r: Row) -> CGFloat { if case .group = r { SidebarView.groupRow } else { SidebarView.sessionRow } }
+    private func rowHeight(_ r: Row) -> CGFloat {
+        if case .group = r { SidebarView.groupRow } else { SidebarView.sessionRow + (showMessages ? 14 : 0) }
+    }
+    /// Obere Zeile einer Session: Punkt, Titel, Laufzeit und Icon sitzen hier, auch mit Nachrichtenzeile darunter.
+    private func headRect(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: r.minY, width: r.width, height: SidebarView.sessionRow) }
 
     private func rowRect(_ i: Int) -> CGRect {
         var y: CGFloat = 6
@@ -157,12 +164,22 @@ final class SidebarView: NSView {
         }
     }
 
-    private func drawSession(_ s: Session, group g: Group, in r: CGRect, hover: Bool) {
+    private func drawSession(_ s: Session, group g: Group, in row: CGRect, hover: Bool) {
         let color = NSColor(hexString: g.color)
         let sel = selected.contains(s.id), foc = focused == s.id
-        if foc { color.mixed(0.14, into: Theme.surface).setFill(); r.fill() }
-        else if sel || hover { Theme.surface.setFill(); r.fill() }
-        if sel { color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
+        if foc { color.mixed(0.14, into: Theme.surface).setFill(); row.fill() }
+        else if sel || hover { Theme.surface.setFill(); row.fill() }
+        if sel { color.setFill(); CGRect(x: 0, y: row.minY, width: 3, height: row.height).fill() }
+        let r = headRect(row)
+        if showMessages, let m = messages[s.id] {
+            // Ende der Antwort: dort steht meist, worauf die Session wartet. Vorn abgeschnitten.
+            let style = NSMutableParagraphStyle()
+            style.lineBreakMode = .byTruncatingHead
+            var attrs = Theme.attrs(10.5, Theme.muted)
+            attrs[.paragraphStyle] = style
+            NSAttributedString(string: String(m.suffix(300)), attributes: attrs)
+                .draw(in: CGRect(x: 50, y: r.maxY - 4, width: max(0, row.maxX - 8 - 50), height: 14))
+        }
         let attached = attach?.isAttached(s.id) ?? false
         let c = attached || !s.canAttach ? Theme.color(for: s.status) : Theme.detached
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
@@ -223,7 +240,7 @@ final class SidebarView: NSView {
                 return
             }
         case .session(let s, _):
-            if iconRects(r, count: 1)[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseSession?(s.id, force); return }
+            if iconRects(headRect(r), count: 1)[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseSession?(s.id, force); return }
         }
         pressed = (p, rows[i], event.modifierFlags)
     }
