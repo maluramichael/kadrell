@@ -33,8 +33,8 @@ final class AttachManager {
     private var queue: [Session] = []
     /// Claude hat sich beendet (`/exit`, Absturz) oder wurde gestoppt: nicht automatisch neu starten, erst auf Klick.
     private(set) var ended: Set<String> = []
-    /// Von Kadrell selbst beendete Prozesse (SIGHUP).
-    private var closing: Set<String> = []
+    /// Von Kadrell selbst beendete Prozesse (SIGHUP), mit pid, bis ihr Ende gemeldet ist.
+    private var closing: [String: pid_t] = [:]
     private var queueTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
     var onChange: (() -> Void)?
@@ -85,7 +85,7 @@ final class AttachManager {
         let key = session.id
         t.onExit = { [weak self] in
             guard let self else { return }
-            if self.closing.remove(key) == nil {
+            if self.closing.removeValue(forKey: key) == nil {
                 self.ended.insert(key)
                 self.snapshots[key] = t.terminalStateSnapshot().visibleRows.map(\.text).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                 AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .public)")
@@ -103,7 +103,7 @@ final class AttachManager {
     /// Beendet den Claude-Prozess per `SIGHUP`. Die Konversation liegt im Transcript und lässt sich fortsetzen.
     func detach(_ key: String, signal: Bool = true) {
         guard let t = terminals.removeValue(forKey: key) else { return }
-        if signal, t.process.running { closing.insert(key); kill(t.process.shellPid, SIGHUP) }
+        if signal, t.process.running { closing[key] = t.process.shellPid; kill(t.process.shellPid, SIGHUP) }
         t.removeFromSuperview()
         if !ended.contains(key) { snapshots[key] = nil }
         onChange?()
@@ -134,6 +134,17 @@ final class AttachManager {
 
     func detachAll() {
         for key in Array(terminals.keys) { detach(key) }
+    }
+
+    /// Beenden der App: SIGHUP an alle, auf das gemeldete Ende warten, was nach `timeout` noch lebt, bekommt SIGKILL.
+    func shutdown(timeout: TimeInterval = 5) async {
+        detachAll()
+        let deadline = Date().addingTimeInterval(timeout)
+        while !closing.isEmpty, Date() < deadline { try? await Task.sleep(for: .milliseconds(100)) }
+        for (key, pid) in closing {
+            AttachManager.log.warning("claude \(key, privacy: .public) reagiert nicht auf SIGHUP, SIGKILL")
+            kill(pid, SIGKILL)
+        }
     }
 
     private func refreshSnapshots() {

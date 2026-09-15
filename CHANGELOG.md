@@ -6,6 +6,7 @@ Neueste Version oben.
 
 - Änderung: Kadrell startet Claude selbst statt als Hintergrund-Session. Claude arbeitet dadurch nicht mehr automatisch in einem eigenen Worktree.
 - Änderung: Beim Beenden von Kadrell enden die Sessions. Beim nächsten Start geht es in jeder angezeigten Session mit dem bisherigen Verlauf weiter.
+- Feature: Beenden (⌘Q, Fenster schließen, Dock, Abmelden) fragt nach, solange Claude läuft, und zeigt, welche Sessions gerade arbeiten. Erst nach der Bestätigung wird Claude sauber beendet.
 - Änderung: Eine neue Session steht sofort im Baum und rechts, ohne Wartezeit.
 - Änderung: Beendet sich Claude in einer Kachel, bleibt die Kachel stehen. Ein Klick darauf setzt die Session fort.
 - Änderung: Schließen entfernt die Session nur aus Kadrell, die Konversation bleibt erhalten.

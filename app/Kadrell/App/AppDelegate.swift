@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildWindow()
         // Unter XCTest nur das Fenster, kein Polling.
         guard NSClassFromString("XCTestCase") == nil else { return }
+        trapSignals()
         Task { await boot() }
         // Beim ersten Start die Hilfe zeigen: da steht alles, die Oberfläche selbst erklärt nichts.
         if !UserDefaults.standard.bool(forKey: "helpShown") {
@@ -45,9 +46,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    /// Laufen Claude-Prozesse, erst nachfragen (⌘Q, Menü, Dock, Abmelden, SIGTERM). Abbrechen und Rückfrage
+    /// statt `.terminateLater`: der Dialog ist ein eigenes Overlay und braucht die normale Run-Loop.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !quitConfirmed, let attach, attach.attachedCount > 0 else { return .terminateNow }
+        confirmQuit()
+        return .terminateCancel
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
-        // Claude-Prozesse bekommen SIGHUP und enden; beim nächsten Start setzt `--resume` sie fort.
+        // Nur noch Reste (z. B. Abmelden ohne Prozesse): SIGHUP, beim nächsten Start setzt `--resume` fort.
         attach?.detachAll()
+    }
+
+    private var quitConfirmed = false
+    private var signalSources: [DispatchSourceSignal] = []
+
+    private func confirmQuit() {
+        NSApp.unhide(nil)
+        window.deminiaturize(nil)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        Task {
+            await registry.pollNow()
+            let running = registry.sessions.filter { attach.isAttached($0.id) }
+            let busy = running.filter { $0.status == .running || $0.status == .waiting }
+            let list = running.map { s in
+                "· \(s.title)" + (s.status == .running ? "  ARBEITET" : s.status == .waiting ? "  WARTET AUF ANTWORT" : "")
+            }.joined(separator: "\n")
+            let title = busy.isEmpty ? "Kadrell beenden?" : "Kadrell beenden? \(busy.count) Session(s) arbeiten gerade!"
+            let info = "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. "
+                + "Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.\n\n\(list)"
+            confirm(title, info, button: "Beenden") { [weak self] in
+                guard let self else { return }
+                Task {
+                    await self.attach.shutdown()
+                    self.quitConfirmed = true
+                    NSApp.terminate(nil)
+                }
+            }
+        }
+    }
+
+    /// `kill` (SIGTERM) und Ctrl-C im Terminal laufen über dieselbe Rückfrage. Force Quit (SIGKILL) lässt sich nicht abfangen.
+    private func trapSignals() {
+        for sig in [SIGTERM, SIGINT] {
+            // Leerer Handler statt SIG_IGN: ignorierte Signale erben die Claude-Prozesse über fork/exec, Handler nicht.
+            signal(sig) { _ in }
+            let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            src.setEventHandler { NSApp.terminate(nil) }
+            src.resume()
+            signalSources.append(src)
+        }
     }
 
     // MARK: Aufbau
@@ -60,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = Theme.bg
         window.minSize = NSSize(width: 800, height: 500)
         window.setFrameAutosaveName("KadrellMain")
+        window.delegate = self
         let root = FlippedView(frame: window.contentRect(forFrameRect: window.frame))
         root.autoresizingMask = [.width, .height]
         bar.frame = NSRect(x: 0, y: 0, width: root.bounds.width, height: Theme.barHeight)
@@ -508,6 +559,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reloadViews()
         }
         present(EditGroupView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+    }
+}
+
+/// Fenster schließen (roter Knopf, ⌘W) heißt Kadrell beenden: über die Rückfrage, das Fenster bleibt bis dahin offen.
+extension AppDelegate: NSWindowDelegate {
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        NSApp.terminate(nil)
+        return false
     }
 }
 
