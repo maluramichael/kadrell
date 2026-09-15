@@ -8,8 +8,9 @@ final class GroupView: NSView {
     var lod = 3
     var hovered = false
     var dimmed = false
-    /// Kopfzeile in eigenen Koordinaten (von der Canvas gesetzt).
+    /// Kopf- und Fußstreifen in eigenen Koordinaten (von der Canvas gesetzt).
     var headerRect: CGRect = .zero
+    var footerRect: CGRect = .zero
     var color: NSColor { NSColor(hexString: group.color) }
 
     init(group: Group) {
@@ -22,9 +23,9 @@ final class GroupView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     /// Trefferflächen der Icons in eigenen Koordinaten.
-    var plusRect: CGRect { CGRect(x: headerRect.maxX - 60, y: headerRect.midY - 8, width: 16, height: 16) }
-    var penRect: CGRect { CGRect(x: headerRect.maxX - 38, y: headerRect.midY - 8, width: 16, height: 16) }
-    var xRect: CGRect { CGRect(x: headerRect.maxX - 16, y: headerRect.midY - 8, width: 16, height: 16) }
+    var plusRect: CGRect { CGRect(x: headerRect.maxX - 72, y: headerRect.midY - 8, width: 16, height: 16) }
+    var penRect: CGRect { CGRect(x: headerRect.maxX - 50, y: headerRect.midY - 8, width: 16, height: 16) }
+    var xRect: CGRect { CGRect(x: headerRect.maxX - 28, y: headerRect.midY - 8, width: 16, height: 16) }
 
     override func draw(_ dirtyRect: NSRect) {
         let b = bounds
@@ -35,14 +36,20 @@ final class GroupView: NSView {
         color.setFill()
         CGRect(x: 0, y: 0, width: 3, height: b.height).fill()
 
-        // Kopfzeile: ▪ Name, Pfad, Zahl, Icons
+        // Kopf- und Fußstreifen wie Leisten: eigener Hintergrund, 1 px Trennlinie
         let h = headerRect
         guard h.height > 4 else { return }
-        var x = h.minX
+        Theme.surface.withAlphaComponent(dimmed ? 0.4 : 1).setFill()
+        CGRect(x: 3, y: 0, width: b.width - 3, height: h.height).fill()
+        CGRect(x: 3, y: footerRect.minY, width: b.width - 3, height: footerRect.height).fill()
+        Theme.line.setFill()
+        CGRect(x: 3, y: h.height - 1, width: b.width - 3, height: 1).fill()
+        CGRect(x: 3, y: footerRect.minY, width: b.width - 3, height: 1).fill()
+        var x = h.minX + 12
         let nameAttrs = Theme.attrs(13, dimmed ? color.withAlphaComponent(0.4) : color, bold: true)
         let name = NSAttributedString(string: "▪ " + group.name, attributes: nameAttrs)
-        let iconsW: CGFloat = lod >= 1 ? 66 : 0
-        let rightW = iconsW + 8
+        let iconsW: CGFloat = lod >= 1 ? 78 : 0
+        let rightW = iconsW + 20
         let nameW = min(name.size().width, h.width - rightW)
         name.draw(with: CGRect(x: x, y: h.minY + (h.height - 17) / 2, width: nameW, height: 17), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         x += nameW + 8
@@ -66,7 +73,7 @@ final class GroupView: NSView {
         }
     }
 
-    var resizeRect: CGRect { CGRect(x: bounds.width - 16, y: bounds.height - 16, width: 16, height: 16) }
+    var resizeRect: CGRect { CGRect(x: bounds.width - 18, y: footerRect.midY - 8, width: 16, height: 16) }
 }
 
 /// Dünne Strichgrafiken, keine Systembuttons.

@@ -7,8 +7,9 @@ struct Layout {
     static let worldPad: CGFloat = 24
     static let groupPad: CGFloat = 12
     static let cellGap: CGFloat = 10
-    static let groupHeaderScreen: CGFloat = 18
-    static let groupHeaderGapWorld: CGFloat = 8
+    /// Kopfstreifen der Gruppe (Bildschirm-px) und Fußstreifen mit dem Griff, beide mit eigenem Hintergrund.
+    static let groupHeaderScreen: CGFloat = 30
+    static let groupFooterScreen: CGFloat = 18
     static let cellHeaderScreen: CGFloat = 26
     static let minScale: CGFloat = 0.03
     static let maxScale: CGFloat = 8
@@ -19,6 +20,7 @@ struct Layout {
 
     var groups: [String: CGRect] = [:]
     var headers: [String: CGRect] = [:]
+    var footers: [String: CGRect] = [:]
     var cells: [String: CGRect] = [:]
     var content: CGRect = .zero
     var groupOrder: [String] = []
@@ -33,17 +35,17 @@ struct Layout {
         var l = Layout()
         let s = Swift.max(scale, 0.0001)
         let headerH = groupHeaderScreen / s
+        let footerH = groupFooterScreen / s
         var union: CGRect?
         for g in groups {
             let f = g.frame
             l.groups[g.id] = f
             l.groupOrder.append(g.id)
             union = union.map { $0.union(f) } ?? f
-            l.headers[g.id] = CGRect(x: f.minX + groupPad, y: f.minY + groupPad, width: f.width - 2 * groupPad, height: headerH)
-            // unten mindestens 18 Bildschirm-px frei, damit der Griff nie unter einer Kachel liegt
-            let bottomPad = Swift.max(groupPad, 18 / s)
-            let inner = CGRect(x: f.minX + groupPad, y: f.minY + groupPad + headerH + groupHeaderGapWorld,
-                               width: f.width - 2 * groupPad, height: f.height - groupPad - bottomPad - headerH - groupHeaderGapWorld)
+            l.headers[g.id] = CGRect(x: f.minX, y: f.minY, width: f.width, height: headerH)
+            l.footers[g.id] = CGRect(x: f.minX, y: f.maxY - footerH, width: f.width, height: footerH)
+            let inner = CGRect(x: f.minX + groupPad, y: f.minY + headerH + groupPad,
+                               width: f.width - 2 * groupPad, height: f.height - headerH - footerH - 2 * groupPad)
             let n = g.cellKeys.count
             guard n > 0, inner.width > 0, inner.height > 0 else { continue }
             let cols = Swift.max(1, Swift.min(columns, n))

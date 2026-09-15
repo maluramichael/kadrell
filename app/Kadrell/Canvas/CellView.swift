@@ -98,7 +98,7 @@ final class CellView: NSView {
         let title = NSAttributedString(string: session.name, attributes: Theme.attrs(11.5, Theme.fg.withAlphaComponent(dim), bold: true))
         title.draw(with: CGRect(x: 24, y: 5, width: max(0, b.width - 24 - metaW - iconW - 16), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         meta.draw(at: CGPoint(x: b.width - iconW - 9 - metaW, y: 6))
-        if hovered { Icons.x(in: xRect, color: Theme.muted) }
+        Icons.x(in: xRect, color: hovered ? Theme.sub : Theme.muted)
 
         let body = bodyRect
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }

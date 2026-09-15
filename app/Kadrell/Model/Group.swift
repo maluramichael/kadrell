@@ -61,6 +61,9 @@ final class GroupStore {
     @discardableResult
     func assign(_ sessions: [Session]) -> Bool {
         let before = groups
+        // Migration: früher stand die sessionId (UUID) in den Gruppen, jetzt die kurze Id.
+        let byUUID = Dictionary(sessions.map { ($0.sessionId, $0.id) }, uniquingKeysWith: { a, _ in a })
+        for i in groups.indices { groups[i].sessionIds = groups[i].sessionIds.map { byUUID[$0] ?? $0 } }
         let known = Set(sessions.map(\.id))
         for i in groups.indices { groups[i].sessionIds.removeAll { !known.contains($0) } }
         for s in sessions where group(forSession: s.id) == nil {

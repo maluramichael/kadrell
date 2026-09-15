@@ -19,7 +19,8 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(c1.width, 363, accuracy: 0.01)
         XCTAssertEqual(c2.minX, c1.maxX + 10, accuracy: 0.01)
         XCTAssertEqual(c3.minY, c1.maxY + 10, accuracy: 0.01)
-        XCTAssertEqual(c3.maxY, 50 + 500 - 18, accuracy: 0.01)   // unten 18 px für den Griff
+        XCTAssertEqual(c3.maxY, 50 + 500 - 18 - 12, accuracy: 0.01)   // Fußstreifen 18 px plus Rand
+        XCTAssertEqual(c1.minY, 50 + 30 + 12, accuracy: 0.01)         // Kopfstreifen 30 px plus Rand
         XCTAssertEqual(c2.maxX, 100 + 760 - 12, accuracy: 0.01)
         XCTAssertEqual(l.groups["a"], g[0].frame)
         XCTAssertEqual(l.content, g[0].frame.insetBy(dx: -24, dy: -24))
