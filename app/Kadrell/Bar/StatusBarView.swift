@@ -12,6 +12,9 @@ final class StatusBarView: NSView {
     var usage = Usage.empty
     var layoutMode: LayoutMode = .grid
     var onToggleLayout: (() -> Void)?
+    /// Zoom aktiv: Badge „ZOOM“ links neben dem Breadcrumb, Klick hebt den Zoom auf.
+    var zoomed = false
+    var onToggleZoom: (() -> Void)?
 
     private var hitRects: [(CGRect, () -> Void)] = []
     private var clockTask: Task<Void, Never>?
@@ -44,7 +47,15 @@ final class StatusBarView: NSView {
         Icons.layout(layoutMode, in: CGRect(x: 11, y: midY - 7, width: 14, height: 14), color: Theme.sub)
         Theme.line.setFill(); CGRect(x: toggle.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((toggle, { [weak self] in self?.onToggleLayout?() }))
-        let leftEnd = toggle.maxX + 8
+        var leftEnd = toggle.maxX + 8
+        if zoomed {
+            let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.bg, bold: true))
+            let z = CGRect(x: leftEnd, y: midY - 9, width: zt.size().width + 12, height: 18)
+            Theme.waiting.setFill(); z.fill()
+            zt.draw(at: CGPoint(x: z.minX + 6, y: midY - 8))
+            hitRects.append((z, { [weak self] in self?.onToggleZoom?() }))
+            leftEnd = z.maxX + 8
+        }
 
         // Rechts: von rechts nach links
         var rx = b.width

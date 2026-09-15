@@ -8,9 +8,13 @@ final class WorkspaceView: NSView {
     private(set) var sessions: [String: Session] = [:]
     /// Geordnete Session-Ids, die rechts zu sehen sind.
     private(set) var selected: [String] = []
-    private(set) var focused: String?
+    private(set) var focused: String? {
+        didSet { if oldValue != focused, let o = oldValue { lastFocused = o } }
+    }
+    /// Für „zuletzt fokussierte Kachel“ (tmux M-Tab).
+    private var lastFocused: String?
     private(set) var mode: LayoutMode = LayoutMode(rawValue: UserDefaults.standard.string(forKey: "workspace.mode") ?? "") ?? .grid
-    /// Nur die Fokus-Kachel, bildschirmfüllend.
+    /// Zoom: nur die Fokus-Kachel, bildschirmfüllend, die Auswahl bleibt.
     private(set) var zen = false
     var attach: AttachManager?
 
@@ -120,6 +124,34 @@ final class WorkspaceView: NSView {
         setFocus(selected[j])
     }
 
+    /// Fokus-Kachel mit ihrem Nachbarn in Richtung `d` tauschen, der Fokus wandert mit.
+    func swapFocused(_ d: Tiling.Direction) {
+        guard let f = focused, let i = selected.firstIndex(of: f),
+              let j = Tiling.neighbor(of: i, count: selected.count, mode: mode, d) else { return }
+        selected.swapAt(i, j)
+        persist()
+        relayout()
+    }
+
+    /// Nächste (+1) oder vorige (-1) Kachel, am Ende wieder vorn.
+    func cycleFocus(_ step: Int) {
+        guard let f = focused, let i = selected.firstIndex(of: f) else { return }
+        let n = selected.count
+        setFocus(selected[((i + step) % n + n) % n])
+    }
+
+    func focusLast() { if let l = lastFocused { setFocus(l) } }
+
+    func focusTile(_ i: Int) { if selected.indices.contains(i) { setFocus(selected[i]) } }
+
+    /// tmux rotate-window: letzte Kachel nach vorn, alle anderen rücken eins weiter.
+    func rotate() {
+        guard selected.count > 1 else { return }
+        selected.insert(selected.removeLast(), at: 0)
+        persist()
+        relayout()
+    }
+
     func setMode(_ m: LayoutMode) {
         mode = m
         UserDefaults.standard.set(m.rawValue, forKey: "workspace.mode")
@@ -174,6 +206,7 @@ final class WorkspaceView: NSView {
             v.groupName = g?.name ?? ""
             v.groupColor = NSColor(hexString: g?.color ?? "#6c7086")
             v.focused = focused == key && visible.count > 1
+            v.zoomed = zen && selected.count > 1
             v.hovered = hoveredCell == key
             v.attached = attach?.isAttached(key) ?? false
             v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false

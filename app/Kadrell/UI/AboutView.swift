@@ -2,14 +2,24 @@ import SwiftUI
 
 /// F1 und „Über Kadrell“: Autor, Link, Tastenkürzel. Esc oder ⏎ schließt.
 struct AboutView: View {
-    private let keys: [(String, String)] = [
-        ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
-        ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "alle Sessions öffnen"),
-        ("⌘1 / ⌘2", "Grid / Stack"), ("⌘⌥ ← ↑ → ↓", "Fokus bewegen · im Stack auf- und zuklappen"),
-        ("⌘⇧ ⏎", "Fokus-Kachel allein (zen)"), ("⌘Esc", "Fokus-Kachel schließen (Esc selbst geht an Claude)"),
-        ("⌘N", "Neue Session"), ("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"), ("⌘W", "Fokussierte Session stoppen"),
-        ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner"), ("F1", "diese Hilfe"),
-    ]
+    private var keys: [(String, String)] {
+        let fixed: [(String, String)] = [
+            ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
+            ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "alle Sessions öffnen"), ("⌘1 / ⌘2", "Grid / Stack"),
+        ]
+        // Belegbare Kürzel, eine Zeile je Hilfetext; lange Reihen (Kachel 1–9) nur erstes … letztes.
+        let current = Hotkeys.current
+        var rows: [(String, String)] = []
+        for a in HotkeyAction.allCases where !rows.contains(where: { $0.1 == a.helpText }) {
+            let ks = HotkeyAction.allCases.filter { $0.helpText == a.helpText }.compactMap { current[$0]?.display }
+            guard let first = ks.first, let last = ks.last else { continue }
+            rows.append((ks.count > 4 ? "\(first) … \(last)" : ks.joined(separator: " "), a.helpText))
+        }
+        return fixed + rows + [
+            ("⌘N", "Neue Session"), ("⌘P", "Suche, mit > Kommandos"), ("⌘B", "Baum ein/aus"), ("⌘W", "Fokussierte Session stoppen"),
+            ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘,", "Einstellungen: Startordner, Tastenkürzel"), ("F1", "diese Hilfe"),
+        ]
+    }
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
     }
@@ -32,7 +42,7 @@ struct AboutView: View {
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(keys, id: \.0) { k, t in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(k).font(.custom("JetBrainsMonoNF-Bold", size: 12)).foregroundStyle(Theme.fgColor).frame(width: 130, alignment: .trailing)
+                        Text(k).font(.custom("JetBrainsMonoNF-Bold", size: 12)).foregroundStyle(Theme.fgColor).frame(width: 160, alignment: .trailing)
                         Text(t).font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.mutedColor)
                     }
                 }
@@ -42,7 +52,7 @@ struct AboutView: View {
             Text("Esc oder F1 schließen").font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .frame(width: 560, alignment: .leading)
+        .frame(width: 640, alignment: .leading)
         .background(Theme.panelColor)
     }
 }

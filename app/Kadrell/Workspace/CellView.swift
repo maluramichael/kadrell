@@ -17,6 +17,8 @@ final class CellView: NSView {
     var pulse: CGFloat = 1
     /// Stack: die Titelzeile zeichnet die Arbeitsfläche als Stack-Zeile, die Kachel nur den Körper.
     var headerHidden = false
+    /// Gezoomt, obwohl mehrere Sessions offen sind: Badge „Z“ in der Titelzeile wie in tmux.
+    var zoomed = false
 
     init(session: Session) {
         self.session = session
@@ -67,13 +69,20 @@ final class CellView: NSView {
         }
         let meta = NSAttributedString(string: session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
-        let iconW: CGFloat = hovered ? 24 : 0
+        var iconW: CGFloat = hovered ? 24 : 0
+        if zoomed {
+            let z = CGRect(x: b.width - iconW - 9 - metaW - 8 - 16, y: 5, width: 16, height: 16)
+            Theme.waiting.setFill(); z.fill()
+            let zt = NSAttributedString(string: "Z", attributes: Theme.attrs(11, Theme.bg, bold: true))
+            zt.draw(at: CGPoint(x: z.midX - zt.size().width / 2, y: z.minY + 1))
+            iconW += 24
+        }
         let title = NSAttributedString(string: session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
         let group = NSAttributedString(string: groupName, attributes: Theme.attrs(10.5, groupColor))
         let titleW = min(title.size().width, max(0, b.width - 24 - metaW - iconW - 16 - group.size().width - 8))
         title.draw(with: CGRect(x: 24, y: 5, width: titleW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         group.draw(with: CGRect(x: 24 + titleW + 8, y: 6, width: max(0, b.width - 24 - titleW - 8 - metaW - iconW - 16), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        meta.draw(at: CGPoint(x: b.width - iconW - 9 - metaW, y: 6))
+        meta.draw(at: CGPoint(x: b.width - (hovered ? 24 : 0) - 9 - metaW, y: 6))
         if hovered { Icons.x(in: xRect, color: Theme.sub) }
     }
 

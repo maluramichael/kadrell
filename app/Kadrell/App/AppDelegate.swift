@@ -110,11 +110,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
         sidebar.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
+        bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
 
-        // ⌘Esc schließt die Fokus-Kachel, F1 die Hilfe, egal ob Terminal oder Fläche die Tastatur hat. Esc allein geht an Claude.
+        // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
+        // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.window else { return event }
-            if event.keyCode == 53, event.modifierFlags.contains(.command) { self.workspace.removeFocused(); return nil }
+            if let action = Hotkeys.action(for: event) { self.perform(action); return nil }
             if event.keyCode == 122 { self.showAbout(); return nil }   // F1
             return event
         }
@@ -199,6 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
+        bar.zoomed = workspace.zen
         let attachable = sessions.values.filter(\.canAttach).count
         bar.attachText = "attach \(attach?.attachedCount ?? 0)/\(attachable)"
         bar.needsDisplay = true
@@ -232,17 +235,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let view = NSMenu(title: "Ansicht")
         view.addItem(withTitle: "Grid", action: #selector(menuGrid), keyEquivalent: "1")
         view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "2")
-        view.addItem(withTitle: "Kachel allein (zen)", action: #selector(menuZen), keyEquivalent: "\r").keyEquivalentModifierMask = [.command, .shift]
         view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
         view.addItem(.separator())
-        func arrow(_ title: String, _ key: Int, _ sel: Selector) {
-            let item = view.addItem(withTitle: title, action: sel, keyEquivalent: String(Character(UnicodeScalar(key)!)))
-            item.keyEquivalentModifierMask = [.command, .option]
+        // Belegbare Kürzel: das Menü zeigt die aktuelle Belegung, ausgelöst werden sie im Event-Monitor.
+        let keys = Hotkeys.current
+        let tiles = NSMenu(title: "Kachel wählen")
+        for a in HotkeyAction.allCases {
+            let item = NSMenuItem(title: a.title, action: #selector(menuHotkey(_:)), keyEquivalent: keys[a]?.menuEquivalent ?? "")
+            item.keyEquivalentModifierMask = keys[a]?.flags ?? []
+            item.representedObject = a.rawValue
+            if a.tileIndex != nil { tiles.addItem(item) } else { view.addItem(item) }
+            if a == .lastSession { view.addItem(withTitle: "Kachel wählen", action: nil, keyEquivalent: "").submenu = tiles }
         }
-        arrow("Fokus links", NSLeftArrowFunctionKey, #selector(menuFocusLeft))
-        arrow("Fokus rechts", NSRightArrowFunctionKey, #selector(menuFocusRight))
-        arrow("Fokus oben", NSUpArrowFunctionKey, #selector(menuFocusUp))
-        arrow("Fokus unten", NSDownArrowFunctionKey, #selector(menuFocusDown))
         view.addItem(.separator())
         view.addItem(withTitle: "Suche", action: #selector(menuPalette), keyEquivalent: "p")
         main.addItem(withTitle: "Ansicht", action: nil, keyEquivalent: "").submenu = view
@@ -257,7 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuAbout() { showAbout() }
     @objc private func menuSettings() {
         let model = SettingsModel()
-        model.onDone = { [weak self] in self?.dismissSheet() }
+        model.onDone = { [weak self] in self?.buildMenu(); self?.dismissSheet() }
         present(SettingsView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
     }
     /// ⌘A: in einem Textfeld die übliche Textauswahl, sonst alle Sessions rechts öffnen.
@@ -267,15 +271,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func menuGrid() { workspace.setMode(.grid) }
     @objc private func menuStack() { workspace.setMode(.stack) }
-    @objc private func menuZen() { workspace.toggleZen() }
     @objc private func menuSidebar() {
         sidebarScroll.isHidden.toggle()
         split.adjustSubviews()
     }
-    @objc private func menuFocusLeft() { workspace.moveFocus(.left) }
-    @objc private func menuFocusRight() { workspace.moveFocus(.right) }
-    @objc private func menuFocusUp() { workspace.moveFocus(.up) }
-    @objc private func menuFocusDown() { workspace.moveFocus(.down) }
+    @objc private func menuHotkey(_ sender: NSMenuItem) {
+        if let raw = sender.representedObject as? String, let a = HotkeyAction(rawValue: raw) { perform(a) }
+    }
+
+    private func perform(_ action: HotkeyAction) {
+        if let i = action.tileIndex { workspace.focusTile(i); return }
+        switch action {
+        case .focusLeft: workspace.moveFocus(.left)
+        case .focusRight: workspace.moveFocus(.right)
+        case .focusUp: workspace.moveFocus(.up)
+        case .focusDown: workspace.moveFocus(.down)
+        case .swapLeft: workspace.swapFocused(.left)
+        case .swapRight: workspace.swapFocused(.right)
+        case .swapUp: workspace.swapFocused(.up)
+        case .swapDown: workspace.swapFocused(.down)
+        case .nextSession: workspace.cycleFocus(1)
+        case .prevSession: workspace.cycleFocus(-1)
+        case .lastSession: workspace.focusLast()
+        case .zoom: workspace.toggleZen()
+        case .nextLayout: workspace.setMode(workspace.mode.other)
+        case .rotate: workspace.rotate()
+        default: workspace.removeFocused()
+        }
+    }
 
     private func showAbout() {
         if overlay?.isVisible == true, overlayIsAbout { dismissSheet(); return }
@@ -307,6 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         src.commands = [
             ("Grid", { [weak self] in self?.workspace.setMode(.grid) }),
             ("Stack", { [weak self] in self?.workspace.setMode(.stack) }),
+            ("Zoom ein/aus (fokussierte)", { [weak self] in self?.workspace.toggleZen() }),
             ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
             ("Session stoppen (fokussierte)", { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
             ("Session fortsetzen / neu starten (fokussierte)", { [weak self] in if let s = focusedSession, s.isDone || s.isStale { self?.resume(s) } }),
