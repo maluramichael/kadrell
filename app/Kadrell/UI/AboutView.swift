@@ -5,7 +5,7 @@ struct AboutView: View {
     private let keys: [(String, String)] = [
         ("⌘N", "Neue Session"), ("⌘P", "Omnisuche, mit > Kommandos"), ("F", "Alles einpassen"), ("+ / -", "Zoomen"),
         ("Klick", "Kachel fokussieren, Gruppenkopf einpassen"), ("Esc", "geht an Claude Code"), ("⌘Esc", "Terminal → Gruppe → alles"),
-        ("⌘ + Rad", "Zoomen über dem Terminal"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘W", "Fokussierte Session stoppen"),
+        ("⌘ + Rad", "Zoomen über dem Terminal"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘W", "Fokussierte Session stoppen"), ("⌘,", "Einstellungen"),
     ]
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"

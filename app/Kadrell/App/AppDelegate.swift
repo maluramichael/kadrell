@@ -117,6 +117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "Über Kadrell", action: #selector(menuAbout), keyEquivalent: "")
         appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Einstellungen …", action: #selector(menuSettings), keyEquivalent: ",")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Kadrell ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Kadrell beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -147,6 +149,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuNewSession() { openNewSession(groupId: nil) }
     @objc private func menuAbout() { showAbout() }
+    @objc private func menuSettings() {
+        let model = SettingsModel()
+        model.onDone = { [weak self] in self?.dismissSheet() }
+        present(SettingsView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+    }
 
     private func showAbout() {
         if overlay?.isVisible == true, overlayIsAbout { dismissSheet(); return }

@@ -47,7 +47,7 @@ final class NewSessionModel {
         self.counts = counts
         step = (preselected != nil || groups.isEmpty) ? 2 : 1
         chosen = preselected
-        cwd = preselected?.cwd ?? NSHomeDirectory() + "/"
+        cwd = preselected?.cwd ?? Settings.startFolder
     }
 
     var entries: [Entry] {
@@ -61,7 +61,7 @@ final class NewSessionModel {
         guard entries.indices.contains(i) else { return }
         chosen = entries[i].group
         if let g = chosen { onStart?(g, g.cwd); return }
-        cwd = NSHomeDirectory() + "/"
+        cwd = Settings.startFolder
         step = 2
         focusRequest += 1
     }
