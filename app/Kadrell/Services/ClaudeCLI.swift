@@ -17,7 +17,13 @@ final class ClaudeCLI: Sendable {
 
     init(binary: String, environment: [String: String]) {
         self.binary = binary
-        var env = environment
+        // Aus einer Claude-Session heraus gestartet, erben die Prozesse sonst deren Marker: Claude Code
+        // speichert dann kein Transcript („inherited CLAUDE_CODE_CHILD_SESSION marker“) und `--resume` findet nichts.
+        // Nur die sitzungsbezogenen Variablen, Einstellungen wie CLAUDE_CODE_MAX_OUTPUT_TOKENS bleiben.
+        let markers: Set = ["CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT",
+                            "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
+                            "CLAUDE_CODE_EXECPATH", "CLAUDE_PID", "CLAUDE_JOB_DIR"]
+        var env = environment.filter { !markers.contains($0.key) }
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
         if env["LANG"] == nil { env["LANG"] = "en_US.UTF-8" }
@@ -77,54 +83,18 @@ final class ClaudeCLI: Sendable {
         return r.output
     }
 
-    func agents() async throws -> [Session] {
+    func agents() async throws -> [Agent] {
         let out = try await run(["agents", "--json", "--all"])
         guard let start = out.firstIndex(of: "[") else { return [] }
-        return try Session.decodeList(Data(out[start...].utf8))
+        return try Agent.decodeList(Data(out[start...].utf8))
     }
 
-    /// Startet eine Hintergrund-Session und liefert die kurze Id aus `backgrounded · <id> · <name>`.
-    /// Ohne `--name`: Claude Code benennt die Session nach der ersten Nachricht selbst (Haiku-Titel),
-    /// der Name landet in `claude agents --json` und damit im Baum.
-    func start(cwd: String, prompt: String) async throws -> String? {
-        var args = ["--bg"]
-        if !prompt.isEmpty { args.append(prompt) }
-        let out = try await run(args, cwd: cwd)
-        return ClaudeCLI.parseBackgroundedId(out)
-    }
-
-    func resume(sessionId: String, cwd: String) async throws -> String? {
-        ClaudeCLI.parseBackgroundedId(try await run(["--bg", "--resume", sessionId], cwd: cwd))
-    }
-
+    /// Hält eine Hintergrund-Session aus `claude --bg` an; die Konversation bleibt für `--resume` erhalten.
     func stop(id: String) async throws { try await run(["stop", id]) }
-    func respawn(id: String) async throws { try await run(["respawn", id]) }
-    /// `stop` kehrt zurück, bevor der Prozess weg ist. Sein Worktree-Lock blockiert `rm` noch kurz, deshalb bis 5 s wiederholen.
-    /// Sperrt danach noch ein Prozess, wirft der letzte Versuch; `lockingPid` liest die PID aus der Meldung.
-    func remove(id: String) async throws {
-        for _ in 0..<10 {
-            do { try await run(["rm", id]); return } catch let e as CLIError where ClaudeCLI.lockingPid(e.output) != nil {
-                try await Task.sleep(for: .milliseconds(500))
-            }
-        }
-        try await run(["rm", id])
-    }
-    func logs(id: String) async throws -> String { try await run(["logs", id]) }
 
-    static func parseBackgroundedId(_ output: String) -> String? {
-        guard let r = output.range(of: "backgrounded · ([0-9a-f]{8})", options: .regularExpression) else { return nil }
-        return String(output[r].suffix(8))
-    }
-
-    /// `claude rm`: „A Claude Code lock on the worktree names a process that is still running (pid 28440).“
-    static func lockingPid(_ output: String) -> Int? {
-        guard let r = output.range(of: "still running \\(pid [0-9]+\\)", options: .regularExpression) else { return nil }
-        return Int(output[r].filter(\.isNumber))
-    }
-
-    static func shortName(prompt: String, cwd: String, counter: Int) -> String {
-        let p = prompt.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
-        if !p.isEmpty { return String(p.prefix(48)) }
-        return "\(URL(fileURLWithPath: cwd).lastPathComponent)-\(counter)"
+    /// Argumente für den Claude-Prozess einer Kachel: vorhandene Konversation fortsetzen, sonst unter
+    /// derselben sessionId neu beginnen (ohne erste Nachricht gibt es kein Transcript, `--resume` scheitert dann).
+    static func sessionArgs(sessionId: String, hasTranscript: Bool) -> [String] {
+        hasTranscript ? ["--resume", sessionId] : ["--session-id", sessionId]
     }
 }

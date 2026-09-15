@@ -12,102 +12,103 @@ final class SessionParsingTests: XCTestCase {
       { "pid": 18859, "id": "86f99758", "cwd": "/private/tmp/kadrell-spike", "kind": "background", "startedAt": 1789479734977,
         "sessionId": "86f99758-a2e1-4923-b27e-1374ddea59b9", "name": "kadrell-spike", "status": "busy", "state": "working" },
       { "pid": 76489, "cwd": "/x", "kind": "interactive", "startedAt": 1789452498737, "sessionId": "c6994699-de7e-4a0a-86dc-e79a90802d67",
-        "name": "export", "status": "waiting", "waitingFor": "input needed" },
-      { "id": "6e07ff2a", "cwd": "/y", "kind": "background", "startedAt": 1787083409084, "sessionId": "6e07ff2a-0a44-47ed-826b-42c7be0e2d9f",
-        "name": "Docker", "state": "done" }
+        "name": "export", "status": "waiting", "waitingFor": "input needed" }
     ]
     """
 
     func testDecodeAgentsJSON() throws {
-        let list = try Session.decodeList(Data(json.utf8))
-        XCTAssertEqual(list.count, 5)
+        let list = try Agent.decodeList(Data(json.utf8))
+        XCTAssertEqual(list.count, 4)
         XCTAssertEqual(list[0].shortId, "0ace1aab")
-        XCTAssertEqual(list[0].id, "0ace1aab")   // kurze Id als Schlüssel
-        XCTAssertEqual(list[1].id, "b746c5bb-ecfe-45d8-b268-7df9b23b5e44")   // ohne kurze Id: sessionId
-        XCTAssertTrue(list[0].isBackground)
-        XCTAssertFalse(list[0].canAttach)   // blocked ohne pid: Prozess weg
-        XCTAssertTrue(list[0].isStale)
-        XCTAssertTrue(list[2].canAttach)
-        XCTAssertFalse(list[2].isStale)
+        XCTAssertFalse(list[0].isRunningBackground)   // ohne pid: gestoppt oder weg
         XCTAssertNil(list[1].shortId)
-        XCTAssertTrue(list[1].isInteractive)
-        XCTAssertFalse(list[1].canAttach)
+        XCTAssertFalse(list[1].isRunningBackground)   // interaktiv
         XCTAssertEqual(list[1].pid, 5395)
+        XCTAssertTrue(list[2].isRunningBackground)
         XCTAssertEqual(list[3].waitingFor, "input needed")
-        XCTAssertTrue(list[4].isDone)
-        XCTAssertFalse(list[4].canAttach)
     }
 
-    /// `done` heißt nur „Antwort fertig“: mit `pid` lebt der Prozess und `attach` klappt (verifiziert 15.09.2026, 2.1.273).
-    func testDoneWithPidIsAttachable() throws {
-        let json = """
-        [{ "pid": 72412, "id": "68788841", "cwd": "/p", "kind": "background", "startedAt": 1,
-           "sessionId": "68788841-0000-0000-0000-000000000000", "name": "probe", "status": "idle", "state": "done" }]
-        """
-        let s = try Session.decodeList(Data(json.utf8))[0]
-        XCTAssertFalse(s.isDone)
-        XCTAssertFalse(s.isStale)
-        XCTAssertTrue(s.canAttach)
+    func testEntryWithoutNameDoesNotBreakTheList() throws {
+        let json = #"[{"id":"79a85a2c","cwd":"/p","kind":"background","startedAt":1,"sessionId":"79a85a2c-x","state":"blocked"},{"id":"aa","cwd":"/p","kind":"background","startedAt":2,"sessionId":"aa-x","name":"fix","pid":5,"status":"idle"}]"#
+        let l = try Agent.decodeList(Data(json.utf8))
+        XCTAssertEqual(l.count, 2)
+        XCTAssertEqual(l[0].name, "79a85a2c")
+        XCTAssertEqual(l[1].name, "fix")
     }
 
-    func testStatusMapping() throws {
-        let list = try Session.decodeList(Data(json.utf8))
-        XCTAssertEqual(list[0].status, .waiting)   // blocked
-        XCTAssertEqual(list[1].status, .idle)      // idle
-        XCTAssertEqual(list[2].status, .running)   // busy hat Vorrang vor working
-        XCTAssertEqual(list[3].status, .waiting)   // waiting
-        XCTAssertEqual(list[4].status, .idle)      // done
+    func testStatusMapping() {
+        XCTAssertEqual(Session.mapStatus(state: nil, status: "busy"), .running)
+        XCTAssertEqual(Session.mapStatus(state: nil, status: "waiting"), .waiting)
+        XCTAssertEqual(Session.mapStatus(state: nil, status: "idle"), .idle)
         XCTAssertEqual(Session.mapStatus(state: "working", status: nil), .running)
-        XCTAssertEqual(Session.mapStatus(state: "stopped", status: nil), .idle)
         XCTAssertEqual(Session.mapStatus(state: "failed", status: nil), .error)
-        XCTAssertEqual(Session.mapStatus(state: "errored", status: nil), .error)
-        XCTAssertEqual(Session.mapStatus(state: "active", status: nil), .running)
         XCTAssertEqual(Session.mapStatus(state: "somethingnew", status: nil), .idle)
         XCTAssertEqual(Session.mapStatus(state: nil, status: nil), .idle)
     }
 
-    func testDuplicateSessionIdsCollapse() throws {
-        let dup = """
-        [
-          { "pid": 1, "cwd": "/a", "kind": "interactive", "startedAt": 1, "sessionId": "same", "name": "x", "status": "idle" },
-          { "pid": 2, "id": "abcdef01", "cwd": "/a", "kind": "background", "startedAt": 1, "sessionId": "same", "name": "x", "state": "working" }
-        ]
-        """
-        let list = try Session.decodeList(Data(dup.utf8))
-        XCTAssertEqual(list.count, 1)
-        XCTAssertEqual(list[0].shortId, "abcdef01")
+    /// Verifiziert 16.09.2026 (2.1.273): ohne Titel heißen interaktive Sessions `<ordner>-<2 hex>`, bei jedem Start anders.
+    func testAutoNameAndTitle() {
+        XCTAssertTrue(Session.isAutoName("claude-agent-overview-ad", cwd: "/p/claude-agent-overview"))
+        XCTAssertTrue(Session.isAutoName("homelab-72", cwd: "/p/homelab"))
+        XCTAssertFalse(Session.isAutoName("homelab-fix", cwd: "/p/homelab"))
+        XCTAssertFalse(Session.isAutoName("kadrell-adopt-spike", cwd: "/tmp/kadrell-spike"))
+        XCTAssertEqual(Session(id: "abcdef12", cwd: "/p/homelab", startedAt: 0, sessionId: "x", name: "").title, "homelab · abcd")
+        XCTAssertEqual(Session(id: "abcdef12", cwd: "/p/homelab", startedAt: 0, sessionId: "x", name: "Fix").title, "Fix")
     }
 
-    func testParseBackgroundedId() {
-        let out = """
-        warning: --bg manages the session id; ignoring --session-id
-        Starting background service…
-        backgrounded · 86f99758 · kadrell-spike
-          claude attach 86f99758    open in this terminal
-        """
-        XCTAssertEqual(ClaudeCLI.parseBackgroundedId(out), "86f99758")
-        XCTAssertNil(ClaudeCLI.parseBackgroundedId("nothing"))
+    func testSessionArgs() {
+        XCTAssertEqual(ClaudeCLI.sessionArgs(sessionId: "u", hasTranscript: true), ["--resume", "u"])
+        XCTAssertEqual(ClaudeCLI.sessionArgs(sessionId: "u", hasTranscript: false), ["--session-id", "u"])
     }
 
-    func testLockingPid() {
-        let out = """
-        kept 10f507a8 — its worktree is still at "/x/.claude/worktrees/stacked-path-setting"
-          A Claude Code lock on the worktree names a process that is still running (pid 28440).
-        """
-        XCTAssertEqual(ClaudeCLI.lockingPid(out), 28440)
-        XCTAssertNil(ClaudeCLI.lockingPid("kept 10f507a8 — it has unpushed commits"))
-    }
-
-    func testShortNameAndElapsed() {
-        XCTAssertEqual(ClaudeCLI.shortName(prompt: String(repeating: "a", count: 60), cwd: "/x/y", counter: 1).count, 48)
-        XCTAssertEqual(ClaudeCLI.shortName(prompt: "  ", cwd: "/x/proj", counter: 3), "proj-3")
+    func testElapsed() {
         let now = Date()
-        let s = Session(shortId: nil, cwd: "/", kind: "background", startedAt: now.addingTimeInterval(-42 * 60).timeIntervalSince1970 * 1000, sessionId: "s", name: "n")
-        XCTAssertEqual(s.elapsed(now: now), "42m")
-        let h = Session(shortId: nil, cwd: "/", kind: "background", startedAt: now.addingTimeInterval(-130 * 60).timeIntervalSince1970 * 1000, sessionId: "s", name: "n")
-        XCTAssertEqual(h.elapsed(now: now), "2h")
-        let d = Session(shortId: nil, cwd: "/", kind: "background", startedAt: now.addingTimeInterval(-2 * 86400).timeIntervalSince1970 * 1000, sessionId: "s", name: "n")
-        XCTAssertEqual(d.elapsed(now: now), "2d")
+        func s(_ ago: TimeInterval) -> Session { Session(id: "s", cwd: "/", startedAt: now.addingTimeInterval(-ago).timeIntervalSince1970 * 1000, sessionId: "s", name: "n") }
+        XCTAssertEqual(s(42 * 60).elapsed(now: now), "42m")
+        XCTAssertEqual(s(130 * 60).elapsed(now: now), "2h")
+        XCTAssertEqual(s(2 * 86400).elapsed(now: now), "2d")
+    }
+}
+
+@MainActor
+final class SessionRegistryTests: XCTestCase {
+    func agents(_ json: String) throws -> [Agent] { try Agent.decodeList(Data(json.utf8)) }
+
+    /// Live-Werte nur über die eigene pid: der gestoppte Hintergrund-Eintrag mit derselben sessionId zählt nicht,
+    /// eine neue sessionId (nach `/clear`) wird übernommen, Auto-Namen überschreiben keinen Titel.
+    func testMergeByOwnPid() throws {
+        let stored = [Session(id: "a7adb9af", cwd: "/p/proj", startedAt: 1, sessionId: "old", name: "Fix"),
+                      Session(id: "k2", cwd: "/p/proj", startedAt: 2, sessionId: "k2", name: "")]
+        let list = try agents("""
+        [{ "id": "a7adb9af", "cwd": "/p/proj", "kind": "background", "startedAt": 1, "sessionId": "old", "name": "Fix", "state": "done" },
+         { "pid": 11, "cwd": "/p/proj", "kind": "interactive", "startedAt": 5, "sessionId": "new", "name": "proj-c6", "status": "busy" },
+         { "pid": 99, "cwd": "/p/proj", "kind": "interactive", "startedAt": 5, "sessionId": "k2", "name": "Fremd", "status": "busy" }]
+        """)
+        let merged = SessionRegistry.merge(stored, agents: list, pids: [11: "a7adb9af"])
+        XCTAssertEqual(merged[0].sessionId, "new")
+        XCTAssertEqual(merged[0].name, "Fix")
+        XCTAssertEqual(merged[0].status, .running)
+        XCTAssertEqual(merged[0].pid, 11)
+        XCTAssertNil(merged[1].pid)   // pid 99 gehört nicht Kadrell
+        XCTAssertEqual(merged[1].status, .idle)
+        XCTAssertEqual(merged[1].name, "")
+
+        let titled = SessionRegistry.merge(stored, agents: try agents(#"[{"pid":11,"cwd":"/p/proj","kind":"interactive","startedAt":5,"sessionId":"new","name":"Neuer Titel","status":"idle"}]"#), pids: [11: "a7adb9af"])
+        XCTAssertEqual(titled[0].name, "Neuer Titel")
+    }
+
+    func testPersistsAddAndRemove() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-tests-\(UUID().uuidString)/sessions.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let cli = ClaudeCLI(binary: "/usr/bin/false", environment: [:])
+        let r = SessionRegistry(cli: cli, url: url)
+        r.add(Session(id: "s1", cwd: "/p", startedAt: 1, sessionId: "s1", name: "", rawStatus: "busy", pid: 3))
+        r.add(Session(id: "s2", cwd: "/p", startedAt: 2, sessionId: "s2", name: "Zwei"))
+        r.remove(["s1"])
+        let reloaded = SessionRegistry(cli: cli, url: url).sessions
+        XCTAssertEqual(reloaded.map(\.id), ["s2"])
+        XCTAssertEqual(reloaded[0].name, "Zwei")
+        XCTAssertNil(reloaded[0].pid)
     }
 }
 
@@ -137,27 +138,7 @@ final class UsageParsingTests: XCTestCase {
     }
 }
 
-final class SessionDuplicateTests: XCTestCase {
-    func s(_ id: String, _ name: String, cwd: String = "/p/a", at: Double) -> Session {
-        Session(shortId: id, cwd: cwd, kind: "background", startedAt: at, sessionId: id + "-uuid", name: name)
-    }
-    func testKeepsNewestPerTitleAndFolder() {
-        let d = Session.duplicates(in: [s("a1", "fix", at: 1), s("a2", "fix", at: 3), s("a3", "fix", at: 2),
-                                        s("b1", "fix", cwd: "/p/b", at: 1), s("c1", "c1", at: 1), s("c2", "c2", at: 2)])
-        XCTAssertEqual(Set(d.map(\.id)), ["a1", "a3"])   // a2 ist die neueste; anderer Ordner und unbenannte bleiben
-    }
-}
-
-final class SessionTolerantDecodeTests: XCTestCase {
-    func testEntryWithoutNameDoesNotBreakTheList() throws {
-        let json = #"[{"id":"79a85a2c","cwd":"/p","kind":"background","startedAt":1,"sessionId":"79a85a2c-x","state":"blocked"},{"id":"aa","cwd":"/p","kind":"background","startedAt":2,"sessionId":"aa-x","name":"fix","pid":5,"status":"idle"}]"#
-        let l = try Session.decodeList(Data(json.utf8))
-        XCTAssertEqual(l.count, 2)
-        XCTAssertEqual(l[0].name, "79a85a2c")
-        XCTAssertEqual(l[0].title, "p · 79a8")
-        XCTAssertEqual(l[1].name, "fix")
-    }
-
+final class TranscriptTests: XCTestCase {
     /// Transcript: angeschnittene erste Zeile, Tool-Aufruf ohne Text und Sidechain-Antwort werden übersprungen.
     func testTranscriptLastText() {
         let jsonl = """

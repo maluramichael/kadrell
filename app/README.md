@@ -1,9 +1,13 @@
 # Kadrell
 
-Native macOS-App (AppKit, Swift 6), die alle laufenden Claude-Code-Sessions zeigt: links ein Baum
-Gruppe › Session, rechts die ausgewählten Sessions als Terminals im Grid oder als Stack (i3-Akkordeon).
-Reiner Client: Sessions laufen als `claude --bg`, die App pollt `claude agents --json --all` und hängt
-sich per SwiftTerm-PTY mit `claude attach <id>` an.
+Native macOS-App (AppKit, Swift 6) für Claude-Code-Sessions: links ein Baum Gruppe › Session, rechts die
+ausgewählten Sessions als Terminals im Grid oder als Stack (i3-Akkordeon).
+Kein `claude --bg`: jede Kachel startet Claude selbst als Kindprozess in einer SwiftTerm-PTY, neue Sessions mit
+`claude --session-id <uuid>`, bekannte mit `claude --resume <sessionId>`. Die Liste liegt in
+`~/Library/Application Support/de.malura.kadrell/sessions.json`. Beim Beenden von Kadrell enden die Prozesse,
+beim nächsten Start setzt `--resume` die angezeigten fort; ausgeblendete starten erst beim Anklicken. Status, Titel
+und aktuelle sessionId pollt die App über `claude agents --json --all`, zugeordnet über die pid des eigenen Prozesses.
+Laufende `claude --bg`-Sessions bietet sie beim Start zur Übernahme an (`claude stop`, dann `--resume`).
 
 ```bash
 /opt/homebrew/bin/xcodegen generate

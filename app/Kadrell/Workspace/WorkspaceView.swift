@@ -73,7 +73,7 @@ final class WorkspaceView: NSView {
     func session(_ key: String) -> Session? { sessions[key] }
     func group(forSession key: String) -> Group? { groups.first { $0.sessionIds.contains(key) } }
 
-    /// Nur sichtbare Sessions bekommen ein Terminal: jeder Attach-Client ist ein eigener Prozess.
+    /// Sichtbare Sessions starten ihren Claude-Prozess; einmal gestartet läuft er weiter, auch ausgeblendet.
     func shownSessions() -> [Session] { selected.compactMap { sessions[$0] } }
 
     // MARK: Auswahl
@@ -97,13 +97,14 @@ final class WorkspaceView: NSView {
         }
         zen = false
         sortSelected()
-        for (k, v) in cells where !selected.contains(k) { v.removeFromSuperview(); cells[k] = nil; attach?.detach(k) }
+        for (k, v) in cells where !selected.contains(k) { v.removeFromSuperview(); cells[k] = nil }
         for id in selected where cells[id] == nil {
             let v = CellView(session: sessions[id]!)
             addSubview(v)
             cells[id] = v
         }
-        for id in selected { attach?.attachNow(sessions[id]!) }
+        // Nur die angeklickten starten sofort, auch beendete; andere beendete bleiben stehen.
+        for id in ids where selected.contains(id) { attach?.attachNow(sessions[id]!) }
         persist()
         relayout()
         if takeKeyboard { focusTerminal() }
@@ -214,6 +215,7 @@ final class WorkspaceView: NSView {
             v.dropTarget = dragging && dropTarget == key
             v.hovered = hoveredCell == key
             v.attached = attach?.isAttached(key) ?? false
+            v.ended = attach?.isEnded(key) ?? false
             v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
             v.lines = attach?.lines(for: key) ?? []
             v.pulse = pulse
@@ -263,7 +265,7 @@ final class WorkspaceView: NSView {
         pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
         for (key, v) in cells where sessions[key]?.status == .running && !v.isHidden {
             v.pulse = pulse
-            if sessions[key]?.isPending == true { v.needsDisplay = true } else if !v.headerHidden { v.setNeedsDisplay(v.dotRect) }
+            if !v.headerHidden { v.setNeedsDisplay(v.dotRect) }
         }
         if !stackRows.isEmpty { needsDisplay = true }
     }
@@ -302,11 +304,9 @@ final class WorkspaceView: NSView {
         (on ? color : Theme.line).setFill()
         CGRect(x: r.minX, y: r.minY, width: on ? 3 : 1, height: r.height).fill()
         let attached = attach?.isAttached(key) ?? false
-        let c = attached || !s.canAttach ? Theme.color(for: s.status) : Theme.detached
-        if s.isPending { Icons.spinner(in: CGRect(x: r.minX + 11, y: r.midY - 5, width: 10, height: 10), color: Theme.sub) } else {
-            (s.status == .running && s.canAttach ? c.withAlphaComponent(pulse) : c).setFill()
-            NSBezierPath(ovalIn: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8)).fill()
-        }
+        let c = attached ? Theme.color(for: s.status) : Theme.detached
+        (s.status == .running && attached ? c.withAlphaComponent(pulse) : c).setFill()
+        NSBezierPath(ovalIn: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8)).fill()
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let grp = NSAttributedString(string: g?.name ?? "", attributes: Theme.attrs(10.5, color))
         var rx = r.maxX - 10
@@ -377,7 +377,11 @@ final class WorkspaceView: NSView {
         pressed = nil
         switch hit(at: p) {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
-        case .cell(let k), .row(let k): pressed = (p, k); setFocus(k)
+        case .cell(let k), .row(let k):
+            pressed = (p, k)
+            // Beendete Session: Klick setzt sie fort.
+            if attach?.isAttached(k) == false, let s = sessions[k] { attach?.attachNow(s) }
+            setFocus(k)
         case .none: window?.makeFirstResponder(self)
         }
     }

@@ -15,6 +15,8 @@ final class CellView: NSView {
     /// Beim Ziehen einer anderen Kachel: hier landet sie.
     var dropTarget = false
     var attached = false
+    /// Claude hat sich beendet oder wurde gestoppt; ohne das Flag startet der Prozess gerade.
+    var ended = false
     var lines: [String] = []
     var pulse: CGFloat = 1
     /// Stack: die Titelzeile zeichnet die Arbeitsfläche als Stack-Zeile, die Kachel nur den Körper.
@@ -52,7 +54,7 @@ final class CellView: NSView {
     private let dotRectLogical = CGRect(x: 9, y: 9, width: 8, height: 8)
     var xRect: CGRect { xRectLogical.scaled(Theme.scale) }
     var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
-    var statusColor: NSColor { attached || !session.canAttach ? Theme.color(for: session.status) : Theme.detached }
+    var statusColor: NSColor { attached ? Theme.color(for: session.status) : Theme.detached }
 
     override func draw(_ dirtyRect: NSRect) {
         Theme.bg.setFill()
@@ -65,16 +67,14 @@ final class CellView: NSView {
     private func drawHeader(_ head: CGRect) {
         let b = head
         let c = statusColor
-        let dot = session.status == .running && session.canAttach ? c.withAlphaComponent(pulse) : c
+        let dot = session.status == .running && attached ? c.withAlphaComponent(pulse) : c
         let headBase = keyboardFocus ? groupColor.mixed(0.22, into: Theme.surface) : session.status == .waiting ? Theme.waiting.mixed(0.12, into: Theme.surface) : Theme.surface
         headBase.setFill()
         head.fill()
         Theme.line.setFill()
         CGRect(x: 0, y: head.maxY - 1, width: b.width, height: 1).fill()
-        if session.isPending { Icons.spinner(in: dotRectLogical.insetBy(dx: -1, dy: -1), color: Theme.sub) } else {
-            dot.setFill()
-            NSBezierPath(ovalIn: dotRectLogical).fill()
-        }
+        dot.setFill()
+        NSBezierPath(ovalIn: dotRectLogical).fill()
         let meta = NSAttributedString(string: session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
         var iconW: CGFloat = hovered ? 24 : 0
@@ -96,20 +96,13 @@ final class CellView: NSView {
 
     private func drawBody(_ body: CGRect) {
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }
-        if session.isPending {
-            Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
-            drawLabel("STARTET …", in: body)
-        } else if session.isInteractive {
-            drawLabel("LÄUFT IN ANDEREM TERMINAL", in: body)
-        } else if session.isStale {
-            drawHatch(in: body)
-            drawLabel("PROZESS WEG · ⌘P › NEU STARTEN", in: body)
-        } else if session.isDone {
-            drawLabel(session.state == "stopped" ? "GESTOPPT · ⌘P › FORTSETZEN" : "BEENDET · ⌘P › FORTSETZEN", in: body)
-        } else if !attached {
+        if ended {
             drawHatch(in: body)
             if !lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
-            drawLabel(lines.isEmpty ? "NICHT ANGEHÄNGT" : "ATTACH FEHLGESCHLAGEN", in: body)
+            drawLabel("BEENDET · KLICK SETZT FORT", in: body)
+        } else if !attached {
+            Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
+            drawLabel("STARTET …", in: body)
         } else if !terminalMounted {
             drawLines(in: body.insetBy(dx: 10, dy: 8))
         }
@@ -119,7 +112,7 @@ final class CellView: NSView {
         let color: NSColor
         if dropTarget { color = Theme.fg }
         else if focused { color = groupColor }
-        else if session.status == .waiting, session.canAttach { color = Theme.waiting }
+        else if session.status == .waiting, attached { color = Theme.waiting }
         else if session.status == .error { color = Theme.error }
         else if hovered { color = Theme.detached }
         else { color = Theme.line }

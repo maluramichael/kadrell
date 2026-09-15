@@ -1,6 +1,30 @@
-# Kadrell: Verifikation (Stand 15.09.2026)
+# Kadrell: Verifikation (Stand 16.09.2026)
 
-Alles hier wurde real auf Michaels Mac geprüft (Claude CLI 2.1.272, Xcode 26.6, Swift 6.3.3).
+Alles hier wurde real auf Michaels Mac geprüft (Claude CLI 2.1.272/2.1.273, Xcode 26.6, Swift 6.3.3).
+
+## Ab 1.0.0: kein `--bg` mehr, Kindprozess plus `--resume` (16.09.2026, 2.1.273)
+
+Grund: `claude --bg` gibt Claude im Systemprompt einen Abschnitt „Background Session“ mit, der vor jeder
+Dateiänderung `EnterWorktree` erzwingt. Geprüft per Python-`pty.fork` in einer sauberen Umgebung:
+
+- `claude --session-id <uuid>` (interaktiv) erscheint sofort in `claude agents --json --all`: `kind: interactive`,
+  `pid`, `sessionId` wie vorgegeben, `status` (`idle`/`busy`/`waiting`), Name `<ordner>-<2 hex>`.
+- Frage „Enthält dein Systemprompt einen Abschnitt Background Session?“ → **NEIN**. Kein Worktree-Zwang.
+- `SIGHUP` beendet den Prozess (Exit 0), der Eintrag verschwindet aus `agents`.
+- `claude --resume <uuid>` setzt mit Verlauf fort, **gleiche sessionId**. Der Auto-Name ändert sich dabei
+  (`-ad` → `-c6`), deshalb speichert Kadrell nur Namen, die nicht diesem Muster folgen.
+- Ohne erste Nachricht gibt es kein Transcript: `--resume` scheitert mit „No conversation found with session ID“,
+  Exit 1. Kadrell startet dann mit `--session-id <dieselbe uuid>`.
+- **Aus einer Claude-Session heraus gestartet** erbt der Prozess `CLAUDE_CODE_CHILD_SESSION` usw.: „Transcript saving
+  is off … inherited CLAUDE_CODE_CHILD_SESSION marker“, die Session fehlt in `agents`. Kadrell filtert diese
+  Variablen aus der Umgebung.
+- Übernahme einer laufenden `--bg`-Session: `claude stop <id>` beendet den Prozess (pid weg, Eintrag `state: done`
+  ohne pid), danach `claude --resume <sessionId>` interaktiv mit Verlauf, Name und Modell. Der gestoppte
+  Hintergrund-Eintrag bleibt mit derselben sessionId in `agents --all` stehen, deshalb ordnet Kadrell Live-Werte nur
+  über die pid des eigenen Prozesses zu. `claude rm <id>` lässt das Transcript stehen, löscht laut Hilfe aber ggf.
+  den Worktree der Session; Kadrell ruft es nicht auf.
+- Interaktiv fragt Claude in einem noch nicht vertrauten Ordner erst „Is this a project you trust?“ (mit `--bg`
+  nicht). Die Frage erscheint im Terminal der Kachel.
 
 ## Spike: Attach-Client hängt sich auf, Session läuft weiter
 
@@ -33,7 +57,7 @@ backgrounded · 86f99758 · kadrell-spike
   dieser `id`.
 - `claude --bg --resume <sessionId>` weckt eine gestoppte Session **unter derselben `id`** wieder auf:
   `note: woke session 86f99758 with its saved options (--name, --model).` und dann dieselbe
-  `backgrounded · 86f99758 · kadrell-spike (idle — send a prompt to start)`-Zeile.
+  `backgrounded · 86f99758 · kadrell-spike (idle, send a prompt to start)`-Zeile.
 - `claude stop <id>` antwortet `stopped <id>`; die Session erscheint danach mit `state: stopped`
   (ohne `pid`, ohne `status`) in `agents --json --all`.
 

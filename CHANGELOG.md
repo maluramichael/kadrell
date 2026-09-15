@@ -2,16 +2,23 @@
 
 Neueste Version oben.
 
-## 0.3.1 (2026-09-16)
-
-- Fix: F1 schließt die offene Hilfe wieder, nicht nur Esc.
-- Fix: Versteckte Ordner wie `.claude` werden beim Abkürzen zu `.c` statt nur `.`.
-
-## 0.3.0 (2026-09-16)
+## 1.1.0 (2026-09-16)
 
 - Änderung: Der Pfad einer Gruppe steht in der Seitenleiste klein und eingerückt unter dem Gruppennamen, bei wenig Platz werden die vorderen Ordner abgekürzt (`~/d/p/projekt`).
 - Änderung: Stack-Zeilen zeigen den Pfad der Session jetzt standardmäßig, ebenfalls abgekürzt, wenn der Platz nicht reicht.
 - Entfernt: Der Ordner einer Gruppe lässt sich nicht mehr ändern, für einen anderen Ordner eine neue Gruppe anlegen.
+- Fix: F1 schließt die offene Hilfe wieder, nicht nur Esc.
+
+## 1.0.0 (2026-09-16)
+
+- Änderung: Kadrell startet Claude selbst statt als Hintergrund-Session. Claude arbeitet dadurch nicht mehr automatisch in einem eigenen Worktree.
+- Änderung: Beim Beenden von Kadrell enden die Sessions. Beim nächsten Start geht es in jeder angezeigten Session mit dem bisherigen Verlauf weiter.
+- Feature: Beenden (⌘Q, Fenster schließen, Dock, Abmelden) fragt nach, solange Claude läuft, und zeigt, welche Sessions gerade arbeiten. Erst nach der Bestätigung wird Claude sauber beendet.
+- Änderung: Eine neue Session steht sofort im Baum und rechts, ohne Wartezeit.
+- Änderung: Beendet sich Claude in einer Kachel, bleibt die Kachel stehen. Ein Klick darauf setzt die Session fort.
+- Änderung: Schließen entfernt die Session nur aus Kadrell, die Konversation bleibt erhalten.
+- Feature: Laufende Hintergrund-Sessions werden beim Start zur Übernahme angeboten.
+- Entfernt: Sessions aus anderen Terminals erscheinen nicht mehr automatisch, ebenso das Angebot, doppelte Sessions zu löschen.
 
 ## 0.2.1 (2026-09-16)
 

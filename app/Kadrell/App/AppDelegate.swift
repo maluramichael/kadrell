@@ -19,13 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var palette: PaletteWindow!
     private var overlay: OverlayPanel?
     private var keyMonitor: Any?
-    /// Platzhalter-Sessions, sofort sichtbar, bis `claude --bg` und der nächste Poll durch sind.
-    private var pending: [Session] = []
-    private var pendingGroups: [String: Group] = [:]
-    /// Beim Schließen sofort ausgeblendet, bis `claude rm` und der Poll durch sind. Sonst bleibt die Kachel
-    /// sekundenlang „nicht angehängt“ stehen und das Layout springt später, mitten ins nächste Schließen.
-    private var closing: Set<String> = []
-    private var firstLoad = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
@@ -42,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildWindow()
         // Unter XCTest nur das Fenster, kein Polling.
         guard NSClassFromString("XCTestCase") == nil else { return }
+        trapSignals()
         Task { await boot() }
         // Beim ersten Start die Hilfe zeigen: da steht alles, die Oberfläche selbst erklärt nichts.
         if !UserDefaults.standard.bool(forKey: "helpShown") {
@@ -52,9 +46,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    /// Laufen Claude-Prozesse, erst nachfragen (⌘Q, Menü, Dock, Abmelden, SIGTERM). Abbrechen und Rückfrage
+    /// statt `.terminateLater`: der Dialog ist ein eigenes Overlay und braucht die normale Run-Loop.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !quitConfirmed, let attach, attach.attachedCount > 0 else { return .terminateNow }
+        confirmQuit()
+        return .terminateCancel
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
-        // Attach-Clients bekommen SIGHUP, die Hintergrund-Sessions laufen weiter (verifiziert).
+        // Nur noch Reste (z. B. Abmelden ohne Prozesse): SIGHUP, beim nächsten Start setzt `--resume` fort.
         attach?.detachAll()
+    }
+
+    private var quitConfirmed = false
+    private var signalSources: [DispatchSourceSignal] = []
+
+    private func confirmQuit() {
+        NSApp.unhide(nil)
+        window.deminiaturize(nil)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        Task {
+            await registry.pollNow()
+            let running = registry.sessions.filter { attach.isAttached($0.id) }
+            let busy = running.filter { $0.status == .running || $0.status == .waiting }
+            let list = running.map { s in
+                "· \(s.title)" + (s.status == .running ? "  ARBEITET" : s.status == .waiting ? "  WARTET AUF ANTWORT" : "")
+            }.joined(separator: "\n")
+            let title = busy.isEmpty ? "Kadrell beenden?" : "Kadrell beenden? \(busy.count) Session(s) arbeiten gerade!"
+            let info = "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. "
+                + "Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.\n\n\(list)"
+            confirm(title, info, button: "Beenden") { [weak self] in
+                guard let self else { return }
+                Task {
+                    await self.attach.shutdown()
+                    self.quitConfirmed = true
+                    NSApp.terminate(nil)
+                }
+            }
+        }
+    }
+
+    /// `kill` (SIGTERM) und Ctrl-C im Terminal laufen über dieselbe Rückfrage. Force Quit (SIGKILL) lässt sich nicht abfangen.
+    private func trapSignals() {
+        for sig in [SIGTERM, SIGINT] {
+            // Leerer Handler statt SIG_IGN: ignorierte Signale erben die Claude-Prozesse über fork/exec, Handler nicht.
+            signal(sig) { _ in }
+            let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            src.setEventHandler { NSApp.terminate(nil) }
+            src.resume()
+            signalSources.append(src)
+        }
     }
 
     // MARK: Aufbau
@@ -67,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = Theme.bg
         window.minSize = NSSize(width: 800, height: 500)
         window.setFrameAutosaveName("KadrellMain")
+        window.delegate = self
         let root = FlippedView(frame: window.contentRect(forFrameRect: window.frame))
         root.autoresizingMask = [.width, .height]
         bar.frame = NSRect(x: 0, y: 0, width: root.bounds.width, height: Theme.barHeight)
@@ -141,15 +185,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.attach = attach
         sidebar.attach = attach
         attach.onChange = { [weak self] in self?.workspace.relayout() }
-        // Ctrl-C/Ctrl-D im Terminal beendet den Attach-Client: dann ist die Session gemeint, nicht nur der Client.
-        attach.onClientExit = { [weak self] key in
-            guard let self, let s = workspace.session(key), s.canAttach else { return }
-            closeSession(key, force: true)
-        }
         registry = SessionRegistry(cli: cli)
+        registry.pids = { [weak attach] in attach?.pids ?? [:] }
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
         registry.onError = { error in AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)") }
-        registry.start()
+        // Leer nicht abgleichen: das würde Gruppen alter Hintergrund-Sessions verwerfen, bevor sie übernommen sind.
+        if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
+        Task {
+            await registry.pollNow()
+            offerAdopt()
+            registry.start()
+        }
         usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true }
         usage.start()
     }
@@ -159,46 +205,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attach.sync(with: sessions)
         reloadViews()
         attach.enqueue(workspace.shownSessions())
-        if firstLoad { firstLoad = false; offerDedup(sessions) }
     }
 
-    /// Beim Start: Kopien mit gleichem Titel im gleichen Ordner anbieten zu entfernen, die neueste bleibt.
-    private func offerDedup(_ sessions: [Session]) {
-        let dupes = Session.duplicates(in: sessions).filter { $0.shortId != nil }
-        guard !dupes.isEmpty else { return }
-        let list = dupes.map { "· \($0.title) (\($0.elapsed()), \($0.state ?? "?"))" }.joined(separator: "\n")
-        confirm("\(dupes.count) doppelte Session(s) gefunden", "Gleicher Titel im gleichen Ordner, die neueste bleibt. Diese stoppen und mit claude rm löschen?\n\(list)", button: "Duplikate löschen") { [weak self] in
+    /// Hintergrund-Sessions aus `claude --bg` (frühere Kadrell-Versionen, andere Terminals) anbieten zu übernehmen:
+    /// `claude stop` hält sie an, danach setzt Kadrell sie als eigenen Prozess mit `--resume` fort. Die Kurz-Id bleibt
+    /// Schlüssel, damit Gruppen und Auswahl passen. Kein `claude rm`: das löscht ggf. den Worktree, in dem die Session arbeitet.
+    private func offerAdopt() {
+        let owned = Set(registry.sessions.map(\.sessionId))
+        let bg = registry.agents.filter { $0.isRunningBackground && !owned.contains($0.sessionId) }
+        guard !bg.isEmpty else { return }
+        let list = bg.map { "· \($0.name)\($0.status == "busy" ? " (arbeitet gerade)" : "")" }.joined(separator: "\n")
+        confirm("\(bg.count) Hintergrund-Session(s) übernehmen?", "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:\n\(list)", button: "Übernehmen", destructive: false) { [weak self] in
             guard let self else { return }
-            for s in dupes { attach.detach(s.id) }
             Task {
-                for s in dupes {
-                    guard let id = s.shortId else { continue }
-                    if !s.isDone { try? await self.cli.stop(id: id) }
-                    try? await self.cli.remove(id: id)
-                    self.store.removeSession(s.id)
+                for a in bg {
+                    guard let id = a.shortId else { continue }
+                    do { try await self.cli.stop(id: id) } catch { self.report(error); continue }
+                    self.registry.add(Session(id: id, cwd: a.cwd, startedAt: a.startedAt, sessionId: a.sessionId,
+                                              name: Session.isAutoName(a.name, cwd: a.cwd) ? "" : a.name))
                 }
-                await self.registry.pollNow()
-                self.reloadViews()
             }
         }
     }
 
     private func reloadViews() {
-        workspace.reload(groups: displayGroups(), sessions: ((registry?.sessions ?? []) + pending).filter { !closing.contains($0.id) })
+        workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
         syncSidebar()
-    }
-
-    /// Gruppen wie im Store, plus Platzhalter: in die Gruppe mit gleichem Ordner, sonst eine vorläufige Gruppe.
-    private func displayGroups() -> [Group] {
-        var groups = store.groups
-        for p in pending {
-            if let i = groups.firstIndex(where: { $0.cwd == p.cwd }) { groups[i].sessionIds.append(p.id); continue }
-            var g = pendingGroups[p.cwd] ?? store.makeGroup(cwd: p.cwd)
-            pendingGroups[p.cwd] = g
-            g.sessionIds = [p.id]
-            groups.append(g)
-        }
-        return groups
     }
 
     /// Baum und Leiste folgen der Arbeitsfläche (Auswahl, Fokus, Layout).
@@ -207,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.focused = workspace.focused
         sidebar.showMessages = Settings.showLastMessage
         sidebar.messages = registry?.lastMessages ?? [:]
-        sidebar.reload(groups: displayGroups(), sessions: Array(workspace.sessions.values))
+        sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
         let focused = workspace.focused.flatMap { sessions[$0] }
         let fg = focused.flatMap { workspace.group(forSession: $0.id) }
@@ -217,8 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
         bar.zoomed = workspace.zen
-        let attachable = sessions.values.filter(\.canAttach).count
-        bar.attachText = "attach \(attach?.attachedCount ?? 0)/\(attachable)"
+        bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
         bar.needsDisplay = true
     }
 
@@ -366,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Fokussierte Kachel bekommt die Tastatur; ist rechts nichts offen, die erste Session im Baum.
     private func focusWorkspace() {
         if let f = workspace.focused { workspace.setFocus(f); return }
-        let first = displayGroups().flatMap(\.sessionIds).first { workspace.session($0) != nil }
+        let first = store.groups.flatMap(\.sessionIds).first { workspace.session($0) != nil }
         workspace.select(first.map { [$0] } ?? [], add: false)
     }
 
@@ -403,7 +434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Zoom ein/aus (fokussierte)", { [weak self] in self?.workspace.toggleZen() }),
             ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
             ("Session stoppen (fokussierte)", { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
-            ("Session fortsetzen / neu starten (fokussierte)", { [weak self] in if let s = focusedSession, s.isDone || s.isStale { self?.resume(s) } }),
+            ("Session fortsetzen (fokussierte)", { [weak self] in if let s = focusedSession { self?.attach.attachNow(s); self?.workspace.select([s.id], add: false) } }),
             ("Session schließen (fokussierte)", { [weak self] in if let s = focusedSession { self?.closeSession(s.id) } }),
             ("Gruppe bearbeiten (der fokussierten Session)", { [weak self] in
                 if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
@@ -430,70 +461,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func stopSession(_ s: Session) {
-        guard let id = s.shortId else { NSSound.beep(); return }
-        confirm("Session „\(s.title)“ stoppen?", "Die Konversation bleibt erhalten und lässt sich fortsetzen.", button: "Stoppen") { [weak self] in
-            guard let self else { return }
-            attach.detach(s.id)
-            Task {
-                do { try await self.cli.stop(id: id); await self.registry.pollNow() } catch { self.report(error) }
-            }
+        guard attach.isAttached(s.id) else { NSSound.beep(); return }
+        confirm("Session „\(s.title)“ stoppen?", "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort.", button: "Stoppen") { [weak self] in
+            self?.attach.stop(s.id)
         }
     }
 
     private func closeSession(_ key: String, force: Bool = false) {
-        guard let s = workspace.session(key), !s.isPending else { return }
-        guard let id = s.shortId else {
-            confirm("Session „\(s.title)“ läuft in einem anderen Terminal", "Interaktive Sessions kann Kadrell nicht stoppen.", button: "OK", destructive: false) {}
-            return
-        }
-        confirm("Session „\(s.title)“ stoppen und entfernen?", "claude stop \(id) und claude rm \(id). Das lässt sich nicht rückgängig machen.", button: "Entfernen", skip: force) { [weak self] in
+        guard let s = workspace.session(key) else { return }
+        confirm("Session „\(s.title)“ beenden und entfernen?", "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)", button: "Entfernen", skip: force) { [weak self] in
             guard let self else { return }
             attach.detach(key)
-            closing.insert(key)
-            reloadViews()
-            Task {
-                do {
-                    if !s.isDone { try? await self.cli.stop(id: id) }
-                    try await self.cli.remove(id: id)
-                    self.store.removeSession(key)
-                    await self.registry.pollNow()
-                } catch let e as CLIError where self.blocker(of: e, besides: key) != nil {
-                    self.offerStopBlocker(self.blocker(of: e, besides: key)!, then: key)
-                } catch { self.report(error) }
-                self.closing.remove(key)
-                self.reloadViews()
-            }
-        }
-    }
-
-    /// Andere Session, deren Prozess den Worktree sperrt, den `claude rm` löschen will.
-    private func blocker(of error: CLIError, besides key: String) -> Session? {
-        guard let pid = ClaudeCLI.lockingPid(error.output) else { return nil }
-        return registry.sessions.first { $0.pid == pid && $0.id != key && $0.shortId != nil }
-    }
-
-    private func offerStopBlocker(_ blocker: Session, then key: String) {
-        confirm("Worktree wird noch von „\(blocker.title)“ genutzt", "Diese Session ebenfalls stoppen und danach entfernen?", button: "Beide stoppen") { [weak self] in
-            guard let self, let id = blocker.shortId else { return }
-            attach.detach(blocker.id)
-            Task {
-                do { try await self.cli.stop(id: id) } catch { self.report(error); return }
-                self.closeSession(key, force: true)
-            }
-        }
-    }
-
-    /// Beendete Sessions: `--bg --resume` (startet laut CLI ggf. eine Kopie, deshalb nur auf ausdrücklichen Befehl);
-    /// Einträge ohne Prozess: `respawn`. Danach anhängen und zeigen.
-    private func resume(_ s: Session) {
-        Task {
-            do {
-                if s.isStale, let id = s.shortId { try await cli.respawn(id: id) }
-                else { _ = try await cli.resume(sessionId: s.sessionId, cwd: s.cwd) }
-                if let fresh = await registry.waitFor(timeout: 10, { $0.id == s.id && $0.canAttach }) {
-                    workspace.select([fresh.id], add: false)
-                }
-            } catch { report(error) }
+            store.removeSession(key)
+            registry.remove([key])
         }
     }
 
@@ -508,30 +488,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closeGroup(_ gid: String, force: Bool = false) {
         guard let g = store.group(id: gid) else { return }
         let members = g.sessionIds.compactMap { workspace.session($0) }
-        let bg = members.filter { $0.shortId != nil }
         if members.isEmpty {
             store.remove(id: gid)
             reloadViews()
             return
         }
         confirm("Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?",
-                bg.isEmpty ? "Die Gruppe wird aus Kadrell entfernt." : "\(bg.count) Session(s) werden gestoppt und mit claude rm gelöscht. Das lässt sich nicht rückgängig machen.", button: "Schließen", skip: force) { [weak self] in
+                "Claude wird in allen Sessions beendet und die Gruppe entfernt. Die Konversationen bleiben erhalten.", button: "Schließen", skip: force) { [weak self] in
             guard let self else { return }
             for s in members { attach.detach(s.id) }
-            closing.formUnion(members.map(\.id))
-            reloadViews()
-            Task {
-                // stop hält nur an (die Session taucht sonst beim nächsten Poll als neue Gruppe wieder auf), rm löscht.
-                for s in bg {
-                    guard let id = s.shortId else { continue }
-                    if !s.isDone { try? await self.cli.stop(id: id) }
-                    try? await self.cli.remove(id: id)
-                }
-                self.store.remove(id: gid)
-                await self.registry.pollNow()
-                self.closing.subtract(members.map(\.id))
-                self.reloadViews()
-            }
+            store.remove(id: gid)
+            registry.remove(Set(members.map(\.id)))
         }
     }
 
@@ -568,46 +535,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         present(view, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.start() })
     }
 
+    /// Kadrell vergibt die sessionId selbst (`claude --session-id`): die Kachel steht sofort, kein Warten auf `claude agents`.
     private func startSession(group: Group?, cwd: String) {
-        let t0 = Date().timeIntervalSince1970 * 1000 - 2000
-        let known = Set(workspace.sessions.keys)
-        // Sofort sichtbar: Platzhalter im Baum und rechts als Kachel, bis die echte Session da ist.
-        let placeholder = Session.pending(cwd: cwd)
-        pending.append(placeholder)
-        reloadViews()
-        workspace.select([placeholder.id], add: !workspace.selected.isEmpty)
-        Task {
-            do {
-                let shortId = try await cli.start(cwd: cwd, prompt: "")
-                // Mit Kurz-Id nur genau diese: bei schnell hintereinander gestarteten Sessions im selben Ordner
-                // greift der Ordner-Fallback sonst die Session eines anderen Starts.
-                guard let fresh = await registry.waitFor(timeout: 10, { s in
-                    if let shortId { return s.shortId == shortId }
-                    return s.isBackground && !known.contains(s.id) && s.cwd == cwd && s.startedAt >= t0
-                }) else {
-                    pending.removeAll { $0.id == placeholder.id }
-                    reloadViews()
-                    report(CLIError(command: "claude --bg", status: 0, output: "Die neue Session in \(cwd) ist nach 10 s nicht in `claude agents` aufgetaucht."))
-                    return
-                }
-                pending.removeAll { $0.id == placeholder.id }
-                pendingGroups[cwd] = nil
-                var target = group ?? store.group(forCwd: cwd)
-                if target == nil {
-                    let g = store.makeGroup(cwd: cwd)
-                    store.add(g)
-                    target = g
-                }
-                store.attach(sessionId: fresh.id, to: target!.id)
-                reloadViews()   // räumt den Platzhalter aus der Auswahl
-                // Schon rechts: nur fokussieren. `add: false` würde die Auswahl auf diese eine Kachel ersetzen.
-                if workspace.selected.contains(fresh.id) { workspace.setFocus(fresh.id) } else { workspace.select([fresh.id], add: true) }
-            } catch {
-                pending.removeAll { $0.id == placeholder.id }
-                reloadViews()
-                report(error)
-            }
+        let id = UUID().uuidString.lowercased()
+        var target = group ?? store.group(forCwd: cwd)
+        if target == nil {
+            let g = store.makeGroup(cwd: cwd)
+            store.add(g)
+            target = g
         }
+        store.attach(sessionId: id, to: target!.id)
+        registry.add(Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: ""))
+        workspace.select([id], add: !workspace.selected.isEmpty)
     }
 
     private func openEditGroup(_ gid: String) {
@@ -620,6 +559,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reloadViews()
         }
         present(EditGroupView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+    }
+}
+
+/// Fenster schließen (roter Knopf, ⌘W) heißt Kadrell beenden: über die Rückfrage, das Fenster bleibt bis dahin offen.
+extension AppDelegate: NSWindowDelegate {
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        NSApp.terminate(nil)
+        return false
     }
 }
 
