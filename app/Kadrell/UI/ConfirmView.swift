@@ -11,26 +11,26 @@ struct ConfirmView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title).font(.custom("JetBrainsMonoNF-Bold", size: 14)).foregroundStyle(Theme.fgColor)
+            Text(title).font(Theme.ui(14, bold: true)).foregroundStyle(Theme.fgColor)
                 .padding(.horizontal, 16).padding(.top, 16)
             if !info.isEmpty {
-                Text(info).font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.mutedColor)
+                Text(info).font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
                     .padding(.horizontal, 16).padding(.top, 8)
             }
             HStack(spacing: 8) {
                 Spacer()
                 Button(action: onCancel) {
-                    Text("Abbrechen").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.mutedColor)
+                    Text("Abbrechen").font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
                 }.buttonStyle(.plain)
                 Button(action: onConfirm) {
-                    Text(button).font(.custom("JetBrainsMonoNF-Bold", size: 12)).foregroundStyle(Theme.bgColor)
+                    Text(button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.runningColor)
                 }.buttonStyle(.plain)
             }
             .padding(16)
         }
-        .frame(width: 520, alignment: .leading)
+        .frame(width: 520 * Theme.scale, alignment: .leading)
         .background(Theme.panelColor)
     }
 }

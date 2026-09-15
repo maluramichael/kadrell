@@ -49,7 +49,7 @@ final class NewSessionModel {
     func start() {
         guard step == 2 else { pick(selected); return }
         var dir = NewSessionModel.expand(cwd.trimmingCharacters(in: .whitespacesAndNewlines))
-        // ⌘⏎ mit markiertem Vorschlag: direkt in dem Ordner starten, statt im halb getippten Pfad.
+        // ⏎ bei halb getipptem Pfad: im markierten Vorschlag starten.
         var isDir: ObjCBool = false
         let typedExists = FileManager.default.fileExists(atPath: dir, isDirectory: &isDir) && isDir.boolValue
         let comps = completions
@@ -76,7 +76,7 @@ struct NewSessionView: View {
             if model.step == 1 {
                 label("Neue Session · Gruppe wählen")
                 TextField("Gruppe filtern …", text: $model.filter)
-                    .textFieldStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 15)).padding(14)
+                    .textFieldStyle(.plain).font(Theme.ui(15)).padding(14)
                     .focused($focus, equals: .filter)
                     .onChange(of: model.filter) { _, _ in model.selected = 0 }
                     .onSubmit { model.pick(model.selected) }
@@ -91,13 +91,13 @@ struct NewSessionView: View {
                                 HStack(spacing: 10) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(e.label).foregroundStyle(Theme.fgColor)
-                                        Text(e.sub).font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+                                        Text(e.sub).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                                     }
                                     Spacer()
-                                    Text(e.meta).font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+                                    Text(e.meta).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                                 }
                                 .padding(.vertical, 8).padding(.horizontal, 16)
-                                .frame(height: 46)
+                                .frame(height: 46 * Theme.scale)
                                 .background(i == model.selected ? Theme.surfaceColor : .clear)
                                 .overlay(alignment: .leading) { if i == model.selected { Rectangle().fill(Theme.runningColor).frame(width: 3) } }
                                 .contentShape(Rectangle())
@@ -106,19 +106,19 @@ struct NewSessionView: View {
                             }
                         }
                     }
-                    .frame(height: min(322, CGFloat(entries.count) * 46))
+                    .frame(height: min(322, CGFloat(entries.count) * 46) * Theme.scale)
                     .onChange(of: model.selected) { _, s in if entries.indices.contains(s) { proxy.scrollTo(entries[s].id) } }
                 }
                 foot("⏎ starten · Esc abbrechen")
             } else {
                 label("Neue Session · Ordner")
-                FolderInput(path: $model.cwd, selected: $model.compSelected) { }
-                DialogFoot(hint: "Tab oder ⏎ vervollständigen · Esc abbrechen", button: "Starten") { model.start() }
+                FolderInput(path: $model.cwd, selected: $model.compSelected) { model.start() }
+                DialogFoot(hint: "Tab vervollständigen · / Unterordner · Esc abbrechen", button: "Starten") { model.start() }
             }
         }
-        .font(.custom("JetBrainsMonoNF-Regular", size: 12))
+        .font(Theme.ui(12))
         .foregroundStyle(Theme.fgColor)
-        .frame(width: 640)
+        .frame(width: 640 * Theme.scale)
         .background(Theme.panelColor)
         .onAppear { focusStep() }
         .onChange(of: model.focusRequest) { _, _ in DispatchQueue.main.async { focusStep() } }
@@ -129,20 +129,25 @@ struct NewSessionView: View {
     }
 
     private func label(_ s: String) -> some View {
-        Text(s.uppercased()).font(.custom("JetBrainsMonoNF-Regular", size: 11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
+        Text(s.uppercased()).font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
     }
 
     private func foot(_ s: String) -> some View {
         VStack(spacing: 0) {
             Divider().overlay(Theme.lineColor)
-            Text(s).font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+            Text(s).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
     }
 }
 
 extension Theme {
+    /// Schrift der SwiftUI-Dialoge, mit der UI-Größe skaliert.
+    static func ui(_ size: CGFloat, bold: Bool = false) -> Font {
+        .custom(bold ? "JetBrainsMonoNF-Bold" : "JetBrainsMonoNF-Regular", size: size * scale)
+    }
+
     static let bgColor = Color(nsColor: bg)
     static let panelColor = Color(nsColor: panel)
     static let surfaceColor = Color(nsColor: surface)
@@ -165,7 +170,7 @@ struct PathField: NSViewRepresentable {
         f.isBordered = false
         f.drawsBackground = false
         f.focusRingType = .none
-        f.font = Theme.font(13)
+        f.font = Theme.font(13 * Theme.scale)
         f.textColor = Theme.fg
         f.usesSingleLineMode = true      // lange Pfade scrollen horizontal statt umzubrechen
         f.cell?.wraps = false
