@@ -1,7 +1,8 @@
 import SwiftUI
 import AppKit
 
-// Einheitliche Pfadeingabe: tippen, Tab vervollständigt, Pfeile wählen, ⏎ bestätigt, Button öffnet den Ordnerdialog.
+// Einheitliche Pfadeingabe: tippen, Tab übernimmt den Vorschlag (ohne Slash), Pfeile wählen, ⏎ bestätigt den Pfad im Feld.
+// Unterordner zeigt die Liste erst, wenn man selbst „/“ tippt.
 
 /// Unterordner, die zum getippten Pfad passen (nur Verzeichnisse, keine versteckten).
 func folderCompletions(for typed: String) -> [String] {
@@ -27,10 +28,10 @@ func folderCompletions(for typed: String) -> [String] {
     }
     ranked.sort { $0.rank != $1.rank ? $0.rank < $1.rank : $0.name.lowercased() < $1.name.lowercased() }
     let base = dir.hasSuffix("/") ? dir : dir + "/"
-    return ranked.prefix(8).map { base + $0.name + "/" }
+    return ranked.prefix(8).map { base + $0.name }
 }
 
-/// Nativer Ordnerdialog. Liefert den gewählten Pfad mit Slash oder nil.
+/// Nativer Ordnerdialog. Liefert den gewählten Pfad oder nil.
 @MainActor
 func chooseFolder(start: String, completion: @escaping (String?) -> Void) {
     let panel = NSOpenPanel()
@@ -41,7 +42,7 @@ func chooseFolder(start: String, completion: @escaping (String?) -> Void) {
     panel.directoryURL = URL(fileURLWithPath: NewSessionModel.expand(start))
     panel.prompt = "Wählen"
     panel.begin { resp in
-        completion(resp == .OK ? panel.url.map { $0.path + "/" } : nil)
+        completion(resp == .OK ? panel.url.map { $0.path } : nil)
     }
 }
 
@@ -54,13 +55,13 @@ struct FolderInput: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            PathField(text: $path, onTab: complete, onSubmit: complete,   // ⏎ wie Tab; starten nur per ⌘⏎ oder Button
+            PathField(text: $path, onTab: complete, onSubmit: onSubmit,
                       onMove: { d in selected = max(0, min(max(completions.count - 1, 0), selected + d)) })
-                .frame(height: 20)
+                .frame(height: 20 * Theme.scale)
             Button("Ordner wählen …") {
                 chooseFolder(start: path) { if let p = $0 { path = p } }
             }
-            .buttonStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+            .buttonStyle(.plain).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
             .padding(.horizontal, 10).padding(.vertical, 4).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
         }
         .padding(14)
@@ -70,7 +71,7 @@ struct FolderInput: View {
             Divider().overlay(Theme.lineColor)
             VStack(spacing: 0) {
                 ForEach(Array(comps.enumerated()), id: \.element) { i, c in
-                    Text(Theme.shortPath(c)).font(.custom("JetBrainsMonoNF-Regular", size: 12))
+                    Text(Theme.shortPath(c)).font(Theme.ui(12))
                         .foregroundStyle(i == selected ? Theme.fgColor : Theme.mutedColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 6).padding(.horizontal, 16)
@@ -102,10 +103,10 @@ struct DialogFoot: View {
         VStack(spacing: 0) {
             Divider().overlay(Theme.lineColor)
             HStack(spacing: 12) {
-                Text(hint).font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+                Text(hint).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 Spacer()
                 Button(action: action) {
-                    Text("\(button)  ⌘⏎").font(.custom("JetBrainsMonoNF-Bold", size: 12)).foregroundStyle(Theme.bgColor)
+                    Text("\(button)  ⌘⏎").font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.runningColor)
                 }.buttonStyle(.plain)
             }

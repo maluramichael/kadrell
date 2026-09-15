@@ -15,7 +15,20 @@ enum Theme {
     static let detached = NSColor(hex: 0x45475a)
     static let palette = ["#fab387", "#cba6f7", "#f5c2e7", "#89b4fa", "#a6e3a1",
                           "#94e2d5", "#f9e2af", "#eba0ac", "#b4befe", "#74c7ec"]
-    static let barHeight: CGFloat = 30
+    /// UI-Größe aus den Einstellungen. Gezeichnete Views skalieren per `scaled`, SwiftUI per `ui`, Terminals nicht.
+    nonisolated(unsafe) static var scale = CGFloat(Settings.uiScale)
+    static var barHeight: CGFloat { (30 * scale).rounded() }
+
+    /// Zeichnet `body` in unskalierten Punkten: Koordinatensystem an `r` verschoben und um `scale` vergrößert.
+    @MainActor static func scaled(_ r: CGRect, _ body: (CGRect) -> Void) {
+        NSGraphicsContext.saveGraphicsState()
+        let t = NSAffineTransform()
+        t.translateX(by: r.minX, yBy: r.minY)
+        t.scale(by: scale)
+        t.concat()
+        body(CGRect(x: 0, y: 0, width: r.width / scale, height: r.height / scale))
+        NSGraphicsContext.restoreGraphicsState()
+    }
 
     static func color(for status: SessionStatus) -> NSColor {
         switch status {
@@ -42,6 +55,10 @@ enum Theme {
         let home = NSHomeDirectory()
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
+}
+
+extension CGRect {
+    func scaled(_ s: CGFloat) -> CGRect { CGRect(x: minX * s, y: minY * s, width: width * s, height: height * s) }
 }
 
 extension NSColor {

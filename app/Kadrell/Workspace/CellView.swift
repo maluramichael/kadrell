@@ -39,25 +39,31 @@ final class CellView: NSView {
         return nil
     }
 
-    var headerHeight: CGFloat { headerHidden ? 0 : Tiling.rowHeight }
+    var headerHeight: CGFloat { headerHidden ? 0 : (Tiling.rowHeight * Theme.scale).rounded() }
     var headerRect: CGRect { CGRect(x: 0, y: 0, width: bounds.width, height: headerHeight) }
     var bodyRect: CGRect { CGRect(x: 0, y: headerHeight, width: bounds.width, height: max(0, bounds.height - headerHeight)) }
-    /// Terminal liegt 2 px innerhalb des Rahmens, sonst übermalt es den Rahmen links, rechts und unten.
-    var terminalRect: CGRect { CGRect(x: 2, y: headerHeight + (headerHidden ? 2 : 0), width: max(0, bounds.width - 4), height: max(0, bounds.height - headerHeight - 2 - (headerHidden ? 2 : 0))).integral }
-    var xRect: CGRect { CGRect(x: bounds.width - 24, y: 5, width: 16, height: 16) }
-    var dotRect: CGRect { CGRect(x: 9, y: 9, width: 8, height: 8) }
+    /// Terminal liegt 2 px innerhalb des Rahmens, sonst übermalt es den Rahmen links, rechts und unten. Dazu der Innenabstand.
+    var terminalRect: CGRect {
+        let p = CGFloat(Settings.terminalPadding), top = headerHeight + (headerHidden ? 2 : 0) + p
+        return CGRect(x: 2 + p, y: top, width: max(0, bounds.width - 4 - 2 * p), height: max(0, bounds.height - top - 2 - p)).integral
+    }
+    /// Logische Punkte der Titelzeile (vor `Theme.scale`).
+    private var xRectLogical: CGRect { CGRect(x: bounds.width / Theme.scale - 24, y: 5, width: 16, height: 16) }
+    private let dotRectLogical = CGRect(x: 9, y: 9, width: 8, height: 8)
+    var xRect: CGRect { xRectLogical.scaled(Theme.scale) }
+    var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
     var statusColor: NSColor { attached || !session.canAttach ? Theme.color(for: session.status) : Theme.detached }
 
     override func draw(_ dirtyRect: NSRect) {
         Theme.bg.setFill()
         bounds.fill()
-        if !headerHidden { drawHeader() }
-        drawBody()
+        if !headerHidden { Theme.scaled(headerRect) { drawHeader($0) } }
+        Theme.scaled(bodyRect) { drawBody($0) }
         drawBorder()
     }
 
-    private func drawHeader() {
-        let b = bounds, head = headerRect
+    private func drawHeader(_ head: CGRect) {
+        let b = head
         let c = statusColor
         let dot = session.status == .running && session.canAttach ? c.withAlphaComponent(pulse) : c
         let headBase = keyboardFocus ? groupColor.mixed(0.22, into: Theme.surface) : session.status == .waiting ? Theme.waiting.mixed(0.12, into: Theme.surface) : Theme.surface
@@ -65,9 +71,9 @@ final class CellView: NSView {
         head.fill()
         Theme.line.setFill()
         CGRect(x: 0, y: head.maxY - 1, width: b.width, height: 1).fill()
-        if session.isPending { Icons.spinner(in: dotRect.insetBy(dx: -1, dy: -1), color: Theme.sub) } else {
+        if session.isPending { Icons.spinner(in: dotRectLogical.insetBy(dx: -1, dy: -1), color: Theme.sub) } else {
             dot.setFill()
-            NSBezierPath(ovalIn: dotRect).fill()
+            NSBezierPath(ovalIn: dotRectLogical).fill()
         }
         let meta = NSAttributedString(string: session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
@@ -85,11 +91,10 @@ final class CellView: NSView {
         title.draw(with: CGRect(x: 24, y: 5, width: titleW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         group.draw(with: CGRect(x: 24 + titleW + 8, y: 6, width: max(0, b.width - 24 - titleW - 8 - metaW - iconW - 16), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         meta.draw(at: CGPoint(x: b.width - (hovered ? 24 : 0) - 9 - metaW, y: 6))
-        if hovered { Icons.x(in: xRect, color: Theme.sub) }
+        if hovered { Icons.x(in: xRectLogical, color: Theme.sub) }
     }
 
-    private func drawBody() {
-        let body = bodyRect
+    private func drawBody(_ body: CGRect) {
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }
         if session.isPending {
             Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
@@ -116,7 +121,6 @@ final class CellView: NSView {
         else if focused { color = groupColor }
         else if session.status == .waiting, session.canAttach { color = Theme.waiting }
         else if session.status == .error { color = Theme.error }
-        else if hovered { color = Theme.sub }
         else { color = Theme.line }
         color.setFill()
         bounds.frame(withWidth: focused || dropTarget ? 2 : 1)

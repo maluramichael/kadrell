@@ -17,6 +17,64 @@ enum Settings {
         get { UserDefaults.standard.bool(forKey: "showLastMessage") }
         set { UserDefaults.standard.set(newValue, forKey: "showLastMessage") }
     }
+
+    /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default aus.
+    static var stackShowPath: Bool {
+        get { UserDefaults.standard.bool(forKey: "stackShowPath") }
+        set { UserDefaults.standard.set(newValue, forKey: "stackShowPath") }
+    }
+
+    static let uiScales: [Double] = [0.9, 1, 1.15, 1.3]
+    static let lineSpacings: [Double] = [1, 1.1, 1.2, 1.35]
+    static let paddings: [Double] = [0, 4, 8, 12]
+    static let fontSizes = 9.0...28.0
+    static let defaultFontSize = 12.0
+    static let defaultFontName = "JetBrainsMonoNF-Regular"
+
+    private static func double(_ key: String, _ fallback: Double) -> Double {
+        UserDefaults.standard.object(forKey: key) as? Double ?? fallback
+    }
+
+    static var uiScale: Double {
+        get { double("uiScale", 1) }
+        set { UserDefaults.standard.set(newValue, forKey: "uiScale") }
+    }
+    static var terminalFontSize: Double {
+        get { min(max(double("terminal.fontSize", defaultFontSize), fontSizes.lowerBound), fontSizes.upperBound) }
+        set { UserDefaults.standard.set(min(max(newValue, fontSizes.lowerBound), fontSizes.upperBound), forKey: "terminal.fontSize") }
+    }
+    static var terminalFontName: String {
+        get { UserDefaults.standard.string(forKey: "terminal.fontName") ?? defaultFontName }
+        set { UserDefaults.standard.set(newValue, forKey: "terminal.fontName") }
+    }
+    static var terminalLineSpacing: Double {
+        get { double("terminal.lineSpacing", 1) }
+        set { UserDefaults.standard.set(newValue, forKey: "terminal.lineSpacing") }
+    }
+    /// Abstand zwischen Kachelrahmen und Terminaltext, zusätzlich zu den 2 px Rahmenschutz.
+    static var terminalPadding: Double {
+        get { double("terminal.padding", 0) }
+        set { UserDefaults.standard.set(newValue, forKey: "terminal.padding") }
+    }
+
+    static var terminalFont: NSFont {
+        let size = CGFloat(terminalFontSize)
+        return NSFont(name: terminalFontName, size: size) ?? Theme.font(size)
+    }
+
+    /// Installierte Monospace-Schriften, nur der normale Schnitt jeder Familie.
+    static var monospaceFonts: [(name: String, display: String)] {
+        let fm = NSFontManager.shared
+        var out: [(String, String)] = []
+        for family in fm.availableFontFamilies {
+            guard let members = fm.availableMembers(ofFontFamily: family) else { continue }
+            // Einträge: [PostScript-Name, Schnitt, Gewicht, Traits]
+            let regular = members.first { ($0[3] as? UInt).map { NSFontTraitMask(rawValue: $0).contains(.fixedPitchFontMask) } == true
+                && ($0[1] as? String) == "Regular" }
+            if let name = regular?[0] as? String { out.append((name, family)) }
+        }
+        return out
+    }
 }
 
 @Observable
@@ -24,8 +82,17 @@ enum Settings {
 final class SettingsModel {
     var startFolder = Settings.startFolder
     var showLastMessage = Settings.showLastMessage
-    var compSelected = 0
+    var stackShowPath = Settings.stackShowPath
     var hotkeys = Hotkeys.current
+    var uiScale = Settings.uiScale
+    var fontName = Settings.terminalFontName
+    var fontSize = Settings.terminalFontSize
+    var lineSpacing = Settings.terminalLineSpacing
+    var padding = Settings.terminalPadding
+    @ObservationIgnored lazy var fonts: [(name: String, display: String)] = {
+        let list = Settings.monospaceFonts
+        return list.contains { $0.name == fontName } ? list : [(fontName, fontName)] + list
+    }()
     /// Aktion, deren Kürzel gerade aufgenommen wird.
     var recording: HotkeyAction?
     var onDone: (() -> Void)?
@@ -36,7 +103,13 @@ final class SettingsModel {
         let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         if !p.isEmpty { Settings.startFolder = p }
         Settings.showLastMessage = showLastMessage
+        Settings.stackShowPath = stackShowPath
         Hotkeys.current = hotkeys
+        Settings.uiScale = uiScale
+        Settings.terminalFontName = fontName
+        Settings.terminalFontSize = fontSize
+        Settings.terminalLineSpacing = lineSpacing
+        Settings.terminalPadding = padding
         onDone?()
     }
 
@@ -69,20 +142,48 @@ struct SettingsView: View {
     @Bindable var model: SettingsModel
 
     private func label(_ s: String) -> some View {
-        Text(s).font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.fgColor)
+        Text(s).font(Theme.ui(12)).foregroundStyle(Theme.fgColor)
             .padding(.horizontal, 16).padding(.top, 14)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("EINSTELLUNGEN").font(.custom("JetBrainsMonoNF-Regular", size: 11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
+            Text("EINSTELLUNGEN").font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
                 .padding(.horizontal, 16).padding(.top, 12)
             label("Startordner für ⌘N")
-            FolderInput(path: $model.startFolder, selected: $model.compSelected) { }
-            Toggle(isOn: $model.showLastMessage) {
-                Text("Letzte Antwort von Claude im Baum zeigen").font(.custom("JetBrainsMonoNF-Regular", size: 12)).foregroundStyle(Theme.fgColor)
+            HStack(spacing: 10) {
+                Text(Theme.shortPath(model.startFolder)).font(Theme.ui(12)).foregroundStyle(Theme.fgColor)
+                    .lineLimit(1).truncationMode(.head)
+                Spacer()
+                Button("Ordner wählen …") {
+                    chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } }
+                }
+                .buttonStyle(.plain).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+                .padding(.horizontal, 10).padding(.vertical, 4).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
             }
-            .toggleStyle(.checkbox).padding(.horizontal, 16).padding(.top, 14)
+            .padding(.horizontal, 16).padding(.top, 8)
+            label("Darstellung")
+            VStack(spacing: 6) {
+                setting("UI-Größe") { choice(Settings.uiScales, $model.uiScale) { "\(Int(($0 * 100).rounded())) %" } }
+                setting("Terminal-Schrift") {
+                    Picker("", selection: $model.fontName) {
+                        ForEach(model.fonts, id: \.name) { Text($0.display).tag($0.name) }
+                    }
+                    .labelsHidden().pickerStyle(.menu).frame(width: 260 * Theme.scale)
+                }
+                setting("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0") {
+                    HStack(spacing: 2) {
+                        pill("−", on: false) { model.fontSize = max(Settings.fontSizes.lowerBound, model.fontSize - 1) }
+                        Text("\(Int(model.fontSize)) pt").font(Theme.ui(12, bold: true)).frame(width: 60 * Theme.scale)
+                        pill("+", on: false) { model.fontSize = min(Settings.fontSizes.upperBound, model.fontSize + 1) }
+                    }
+                }
+                setting("Zeilenabstand") { choice(Settings.lineSpacings, $model.lineSpacing) { "\(Int(($0 * 100).rounded())) %" } }
+                setting("Pfad in Stack-Zeilen") { pill(model.stackShowPath ? "an" : "aus", on: model.stackShowPath) { model.stackShowPath.toggle() } }
+                setting("Letzte Antwort von Claude im Baum") { pill(model.showLastMessage ? "an" : "aus", on: model.showLastMessage) { model.showLastMessage.toggle() } }
+                setting("Innenabstand") { choice(Settings.paddings, $model.padding) { "\(Int($0)) px" } }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 8)
             label("Tastenkürzel")
             ScrollView {
                 VStack(spacing: 2) {
@@ -90,12 +191,38 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
             }
-            .frame(height: 380)
+            .frame(height: 460 * Theme.scale)
             DialogFoot(hint: "Kürzel anklicken, Tasten drücken · ⌫ entfernt · Esc abbrechen", button: "Speichern") { model.save() }
         }
-        .frame(width: 640, alignment: .leading)
+        .frame(width: 900 * Theme.scale, alignment: .leading)
         .background(Theme.panelColor)
         .onDisappear { model.stopRecording() }
+    }
+
+    private func setting<C: View>(_ title: String, @ViewBuilder _ control: () -> C) -> some View {
+        HStack(spacing: 8) {
+            Text(title).foregroundStyle(Theme.fgColor)
+            Spacer()
+            control()
+        }
+        .font(Theme.ui(12))
+    }
+
+    /// Segmentierte Auswahl im App-Stil: gewählter Wert hervorgehoben.
+    private func choice(_ values: [Double], _ value: Binding<Double>, _ text: @escaping (Double) -> String) -> some View {
+        HStack(spacing: 2) {
+            ForEach(values, id: \.self) { v in pill(text(v), on: abs(value.wrappedValue - v) < 0.001) { value.wrappedValue = v } }
+        }
+    }
+
+    private func pill(_ text: String, on: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(text).font(Theme.ui(12, bold: on))
+                .foregroundStyle(on ? Theme.bgColor : Theme.fgColor)
+                .frame(minWidth: 28 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 3)
+                .background(on ? Theme.runningColor : Theme.bgColor)
+        }
+        .buttonStyle(.plain)
     }
 
     private func row(_ a: HotkeyAction) -> some View {
@@ -110,13 +237,13 @@ struct SettingsView: View {
             }
             Button { isRecording ? model.stopRecording() : model.record(a) } label: {
                 Text(isRecording ? "Tasten drücken …" : key?.display ?? "–")
-                    .font(.custom("JetBrainsMonoNF-Bold", size: 12))
+                    .font(Theme.ui(12, bold: true))
                     .foregroundStyle(isRecording ? Theme.bgColor : Theme.fgColor)
-                    .frame(width: 150).padding(.vertical, 3)
+                    .frame(width: 150 * Theme.scale).padding(.vertical, 3)
                     .background(isRecording ? Theme.runningColor : Theme.bgColor)
             }
             .buttonStyle(.plain)
         }
-        .font(.custom("JetBrainsMonoNF-Regular", size: 12))
+        .font(Theme.ui(12))
     }
 }

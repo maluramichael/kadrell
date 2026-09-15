@@ -78,8 +78,8 @@ final class WorkspaceView: NSView {
 
     // MARK: Auswahl
 
-    /// Ersetzt die Auswahl (Klick) oder toggelt jede Id (⌘-Klick).
-    func select(_ ids: [String], add: Bool) {
+    /// Ersetzt die Auswahl (Klick) oder toggelt jede Id (⌘-Klick). `takeKeyboard: false`: Pfeiltasten im Baum.
+    func select(_ ids: [String], add: Bool, takeKeyboard: Bool = true) {
         let ids = ids.filter { sessions[$0] != nil }
         if add {
             for id in ids {
@@ -106,7 +106,7 @@ final class WorkspaceView: NSView {
         for id in selected { attach?.attachNow(sessions[id]!) }
         persist()
         relayout()
-        focusTerminal()
+        if takeKeyboard { focusTerminal() }
     }
 
     /// ⇧-Bereich oder Gruppe mit Modifier: fehlende Sessions dazu, nichts weg.
@@ -192,7 +192,7 @@ final class WorkspaceView: NSView {
             for (id, r) in zip(selected, Tiling.grid(count: selected.count, in: inset)) { frames[id] = r }
         } else {
             let active = focused.flatMap { selected.firstIndex(of: $0) } ?? 0
-            let (rows, body) = Tiling.stack(count: selected.count, active: active, in: inset)
+            let (rows, body) = Tiling.stack(count: selected.count, active: active, in: inset, rowHeight: (Tiling.rowHeight * Theme.scale).rounded())
             stackRows = Array(zip(rows, selected))
             visible = selected.isEmpty ? [] : [selected[active]]
             if !selected.isEmpty { frames[selected[active]] = body }
@@ -276,12 +276,14 @@ final class WorkspaceView: NSView {
         if selected.isEmpty {
             let a = NSAttributedString(string: "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
             let b = NSAttributedString(string: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
-            a.draw(at: CGPoint(x: bounds.midX - a.size().width / 2, y: bounds.midY - 16))
-            b.draw(at: CGPoint(x: bounds.midX - b.size().width / 2, y: bounds.midY + 4))
+            Theme.scaled(bounds) { r in
+                a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
+                b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
+            }
             return
         }
         guard !stackRows.isEmpty, !zen else { return }
-        for (r, key) in stackRows { drawStackRow(r, key: key) }
+        for (r, key) in stackRows { Theme.scaled(r) { drawStackRow($0, key: key) } }
         if dragging, let t = dropTarget, let (r, _) = stackRows.first(where: { $0.1 == t }) {
             Theme.fg.setFill()
             r.frame(withWidth: 2)
@@ -311,6 +313,12 @@ final class WorkspaceView: NSView {
         if hover { Icons.x(in: CGRect(x: rx - 16, y: r.midY - 8, width: 16, height: 16), color: Theme.sub); rx -= 24 }
         rx -= age.size().width; age.draw(at: CGPoint(x: rx, y: r.midY - 7))
         rx -= 8 + grp.size().width; grp.draw(at: CGPoint(x: rx, y: r.midY - 7))
+        if Settings.stackShowPath {
+            let path = NSAttributedString(string: (s.cwd as NSString).abbreviatingWithTildeInPath, attributes: Theme.attrs(10.5, Theme.muted))
+            let w = min(path.size().width, max(0, (rx - 16 - r.minX - 28) / 2))
+            rx -= 16 + w
+            path.draw(with: CGRect(x: rx, y: r.midY - 7, width: w, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        }
         let title = NSAttributedString(string: s.title, attributes: Theme.attrs(11.5, on || hover ? Theme.fg : Theme.sub, bold: on))
         title.draw(with: CGRect(x: r.minX + 28, y: r.midY - 8, width: max(0, rx - 10 - r.minX - 28), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
@@ -321,7 +329,7 @@ final class WorkspaceView: NSView {
 
     private func hit(at p: CGPoint) -> Hit {
         for (r, key) in stackRows where r.contains(p) {
-            return CGRect(x: r.maxX - 30, y: r.minY, width: 30, height: r.height).contains(p) ? .rowClose(key) : .row(key)
+            return CGRect(x: r.maxX - 30 * Theme.scale, y: r.minY, width: 30 * Theme.scale, height: r.height).contains(p) ? .rowClose(key) : .row(key)
         }
         for (key, v) in cells where !v.isHidden && v.frame.contains(p) {
             let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)

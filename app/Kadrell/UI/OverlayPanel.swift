@@ -44,17 +44,21 @@ final class OverlayPanel: NSPanel {
         let pf = parent.frame
         anchor = CGPoint(x: pf.midX, y: pf.maxY - 0.12 * pf.height)
         reanchor()
+        host = parent
         parent.addChildWindow(self, ordered: .above)
         makeKeyAndOrderFront(nil)
         Backdrop.sync(parent)
     }
 
     func dismiss() {
-        let p = parent
-        p?.removeChildWindow(self)
+        host?.removeChildWindow(self)
         orderOut(nil)
-        Backdrop.sync(p)
     }
+
+    /// `parent` ist nach orderOut/close schon nil. Deshalb das Hauptfenster selbst merken, sonst bleibt der Blur liegen.
+    private weak var host: NSWindow?
+    override func orderOut(_ sender: Any?) { super.orderOut(sender); Backdrop.sync(host) }
+    override func close() { super.close(); Backdrop.sync(host) }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.keyCode == 53 { onCancel?(); return true }
