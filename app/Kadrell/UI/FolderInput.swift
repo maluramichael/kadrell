@@ -20,11 +20,14 @@ func folderCompletions(for typed: String) -> [String] {
         if l.contains(q) { return 1 }
         return PaletteWindow.fuzzy(q, l) ? 2 : nil
     }
-    return names.filter { !$0.hasPrefix(".") }
-        .compactMap { n in rank(n).map { (n, $0) } }
-        .filter { var d: ObjCBool = false; return FileManager.default.fileExists(atPath: dir + "/" + $0.0, isDirectory: &d) && d.boolValue }
-        .sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.lowercased() < $1.0.lowercased() }
-        .prefix(8).map { (dir.hasSuffix("/") ? dir : dir + "/") + $0.0 + "/" }
+    func isDir(_ n: String) -> Bool { var d: ObjCBool = false; return FileManager.default.fileExists(atPath: dir + "/" + n, isDirectory: &d) && d.boolValue }
+    var ranked: [(name: String, rank: Int)] = []
+    for n in names where !n.hasPrefix(".") {
+        if let r = rank(n), isDir(n) { ranked.append((n, r)) }
+    }
+    ranked.sort { $0.rank != $1.rank ? $0.rank < $1.rank : $0.name.lowercased() < $1.name.lowercased() }
+    let base = dir.hasSuffix("/") ? dir : dir + "/"
+    return ranked.prefix(8).map { base + $0.name + "/" }
 }
 
 /// Nativer Ordnerdialog. Liefert den gewählten Pfad mit Slash oder nil.
