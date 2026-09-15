@@ -84,7 +84,7 @@ final class CellView: NSView {
         NSBezierPath(ovalIn: dotRect).fill()
         let meta = NSAttributedString(string: focused ? "⌘⎋ zurück · " + session.elapsed() : session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted.withAlphaComponent(dim)))
         let metaW = meta.size().width
-        let iconW: CGFloat = hovered ? 24 : 0
+        let iconW: CGFloat = 24   // Platz immer reservieren, sonst springt der Titel beim Hover
         let title = NSAttributedString(string: session.name, attributes: Theme.attrs(11.5, Theme.fg.withAlphaComponent(dim), bold: true))
         title.draw(with: CGRect(x: 24, y: 5, width: max(0, b.width - 24 - metaW - iconW - 16), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         meta.draw(at: CGPoint(x: b.width - iconW - 9 - metaW, y: 6))

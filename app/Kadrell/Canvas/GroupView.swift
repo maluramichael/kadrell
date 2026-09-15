@@ -41,10 +41,8 @@ final class GroupView: NSView {
         var x = h.minX
         let nameAttrs = Theme.attrs(13, dimmed ? color.withAlphaComponent(0.4) : color, bold: true)
         let name = NSAttributedString(string: "▪ " + group.name, attributes: nameAttrs)
-        let countStr = NSAttributedString(string: "\(count)", attributes: Theme.attrs(11, Theme.muted))
-        let countW = countStr.size().width
-        let iconsW: CGFloat = (hovered && lod >= 1) ? 44 : 0
-        let rightW = countW + iconsW + 8
+        let iconsW: CGFloat = lod >= 1 ? 44 : 0
+        let rightW = iconsW + 8
         let nameW = min(name.size().width, h.width - rightW)
         name.draw(with: CGRect(x: x, y: h.minY + (h.height - 17) / 2, width: nameW, height: 17), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         x += nameW + 8
@@ -53,7 +51,6 @@ final class GroupView: NSView {
             let w = max(0, h.maxX - rightW - x)
             if w > 20 { path.draw(with: CGRect(x: x, y: h.minY + (h.height - 15) / 2 + 1, width: w, height: 15), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine]) }
         }
-        countStr.draw(at: CGPoint(x: h.maxX - iconsW - countW, y: h.minY + (h.height - 15) / 2 + 1))
         if hovered, lod >= 1 {
             Icons.pen(in: penRect, color: Theme.muted)
             Icons.x(in: xRect, color: Theme.muted)
