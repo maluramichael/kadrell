@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Platzhalter-Sessions, sofort sichtbar, bis `claude --bg` und der nächste Poll durch sind.
     private var pending: [Session] = []
     private var pendingGroups: [String: Group] = [:]
+    /// Beim Schließen sofort ausgeblendet, bis `claude rm` und der Poll durch sind. Sonst bleibt die Kachel
+    /// sekundenlang „nicht angehängt“ stehen und das Layout springt später, mitten ins nächste Schließen.
+    private var closing: Set<String> = []
     private var firstLoad = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -118,7 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
+            guard let self else { return event }
+            // Offene Hilfe hat selbst die Tastatur: F1 schließt sie wieder.
+            if event.keyCode == 122, overlayIsAbout, event.window === overlay { dismissSheet(); return nil }
+            guard event.window === self.window else { return event }
             if let action = Hotkeys.action(for: event) { self.perform(action); return nil }
             // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
             if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
@@ -176,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func reloadViews() {
-        workspace.reload(groups: displayGroups(), sessions: (registry?.sessions ?? []) + pending)
+        workspace.reload(groups: displayGroups(), sessions: ((registry?.sessions ?? []) + pending).filter { !closing.contains($0.id) })
         syncSidebar()
     }
 
@@ -390,6 +396,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         confirm("Session „\(s.title)“ stoppen und entfernen?", "claude stop \(id) und claude rm \(id). Das lässt sich nicht rückgängig machen.", button: "Entfernen", skip: force) { [weak self] in
             guard let self else { return }
             attach.detach(key)
+            closing.insert(key)
+            reloadViews()
             Task {
                 do {
                     if !s.isDone { try? await self.cli.stop(id: id) }
@@ -397,6 +405,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.store.removeSession(key)
                     await self.registry.pollNow()
                 } catch { self.report(error) }
+                self.closing.remove(key)
+                self.reloadViews()
             }
         }
     }
@@ -436,6 +446,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bg.isEmpty ? "Die Gruppe wird aus Kadrell entfernt." : "\(bg.count) Session(s) werden gestoppt und mit claude rm gelöscht. Das lässt sich nicht rückgängig machen.", button: "Schließen", skip: force) { [weak self] in
             guard let self else { return }
             for s in members { attach.detach(s.id) }
+            closing.formUnion(members.map(\.id))
+            reloadViews()
             Task {
                 // stop hält nur an (die Session taucht sonst beim nächsten Poll als neue Gruppe wieder auf), rm löscht.
                 for s in bg {
@@ -445,6 +457,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.store.remove(id: gid)
                 await self.registry.pollNow()
+                self.closing.subtract(members.map(\.id))
                 self.reloadViews()
             }
         }
@@ -494,8 +507,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             do {
                 let shortId = try await cli.start(cwd: cwd, prompt: "")
+                // Mit Kurz-Id nur genau diese: bei schnell hintereinander gestarteten Sessions im selben Ordner
+                // greift der Ordner-Fallback sonst die Session eines anderen Starts.
                 guard let fresh = await registry.waitFor(timeout: 10, { s in
-                    (shortId != nil && s.shortId == shortId) || (s.isBackground && !known.contains(s.id) && s.cwd == cwd && s.startedAt >= t0)
+                    if let shortId { return s.shortId == shortId }
+                    return s.isBackground && !known.contains(s.id) && s.cwd == cwd && s.startedAt >= t0
                 }) else {
                     pending.removeAll { $0.id == placeholder.id }
                     reloadViews()
@@ -512,7 +528,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 store.attach(sessionId: fresh.id, to: target!.id)
                 reloadViews()   // räumt den Platzhalter aus der Auswahl
-                workspace.select([fresh.id], add: !workspace.selected.contains(fresh.id))
+                // Schon rechts: nur fokussieren. `add: false` würde die Auswahl auf diese eine Kachel ersetzen.
+                if workspace.selected.contains(fresh.id) { workspace.setFocus(fresh.id) } else { workspace.select([fresh.id], add: true) }
             } catch {
                 pending.removeAll { $0.id == placeholder.id }
                 reloadViews()
