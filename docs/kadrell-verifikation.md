@@ -88,6 +88,10 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
   sind Leichen: `claude attach` antwortet „Couldn't wake … This session has no saved transcript … `claude
   respawn <id>` starts this one fresh“ und beendet sich mit Exit 1. Die App zeigt solche Kacheln als
   „PROZESS WEG · KLICK STARTET NEU“ und ruft bei Klick `claude respawn <id>`.
+- **`done` heißt nicht „beendet“** (15.09.2026, 2.1.273): nach der ersten Antwort springt `state` von
+  `working` auf `done`, `status: idle`, gleiche `pid`, und `claude attach` funktioniert weiter. Beendet ist
+  nur `stopped` oder `done` ohne `pid`. Vorher hat Kadrell solche Sessions abgehängt und „Fortsetzen“
+  angeboten, das per `--bg --resume` eine Kopie mit gleichem Namen startete.
 - **Tippen kommt an:** Fokus auf eine angehängte Session, Text getippt, Enter, Claude Code antwortet im
   Terminal der Kachel (Screenshots `10-focus-typed.png`, `11-focus-answer.png`).
 - **`claude --bg` im fremden Terminal** erscheint beim nächsten 2-s-Poll in der App, Gruppe nach `cwd`.

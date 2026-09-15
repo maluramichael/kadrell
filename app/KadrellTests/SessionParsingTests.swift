@@ -38,6 +38,18 @@ final class SessionParsingTests: XCTestCase {
         XCTAssertFalse(list[4].canAttach)
     }
 
+    /// `done` heißt nur „Antwort fertig“: mit `pid` lebt der Prozess und `attach` klappt (verifiziert 15.09.2026, 2.1.273).
+    func testDoneWithPidIsAttachable() throws {
+        let json = """
+        [{ "pid": 72412, "id": "68788841", "cwd": "/p", "kind": "background", "startedAt": 1,
+           "sessionId": "68788841-0000-0000-0000-000000000000", "name": "probe", "status": "idle", "state": "done" }]
+        """
+        let s = try Session.decodeList(Data(json.utf8))[0]
+        XCTAssertFalse(s.isDone)
+        XCTAssertFalse(s.isStale)
+        XCTAssertTrue(s.canAttach)
+    }
+
     func testStatusMapping() throws {
         let list = try Session.decodeList(Data(json.utf8))
         XCTAssertEqual(list[0].status, .waiting)   // blocked

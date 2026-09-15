@@ -58,8 +58,9 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
                 startedAt: Date().timeIntervalSince1970 * 1000, sessionId: "", name: "startet …", rawStatus: "starting")
     }
     var isInteractive: Bool { kind == "interactive" }
-    /// Beendet oder gestoppt: sichtbar, aber erst nach `--bg --resume` wieder anhängbar.
-    var isDone: Bool { state == "done" || state == "stopped" }
+    /// Gestoppt, oder `done` ohne Prozess: sichtbar, aber erst nach `--bg --resume` wieder anhängbar.
+    /// `done` mit `pid` heißt nur „Antwort fertig“, der Prozess wartet am Prompt und bleibt anhängbar.
+    var isDone: Bool { state == "stopped" || (state == "done" && pid == nil) }
     /// Hintergrund-Eintrag ohne `pid`: der Prozess ist weg, `attach` scheitert („no saved transcript“); nur `respawn` hilft.
     var isStale: Bool { isBackground && !isDone && pid == nil && !isPending }
     var canAttach: Bool { isBackground && !isDone && shortId != nil && pid != nil }
