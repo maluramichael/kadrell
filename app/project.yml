@@ -9,8 +9,9 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
-    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_IDENTITY: "Apple Development: Michael Malura (BDU98TP9AX)"
     CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: 9XCGGAFET4
     ENABLE_APP_SANDBOX: NO
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_STRICT_CONCURRENCY: complete
@@ -31,8 +32,8 @@ targets:
       properties:
         CFBundleName: Kadrell
         CFBundleDisplayName: Kadrell
-        CFBundleShortVersionString: "1.3.0"
-        CFBundleVersion: "8"
+        CFBundleShortVersionString: "1.3.1"
+        CFBundleVersion: "9"
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true
