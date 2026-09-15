@@ -6,12 +6,8 @@ final class StatusBarView: NSView {
     var crumb: (group: String, session: String)?
     var crumbGroupAttrs: [NSAttributedString.Key: Any]?
     var sessionCount = 0
-    var counts: [SessionStatus: Int] = [:]
     var zoomPercent = 100
     var attachText = "attach 0/0"
-    var onNew: (() -> Void)?
-    var onPalette: (() -> Void)?
-    var onFit: (() -> Void)?
 
     private var hitRects: [(CGRect, () -> Void)] = []
     private var clockTask: Task<Void, Never>?
@@ -37,7 +33,6 @@ final class StatusBarView: NSView {
         let f = Theme.attrs(11.5, Theme.sub)
         let fMuted = Theme.attrs(11.5, Theme.muted)
         let fFg = Theme.attrs(11.5, Theme.fg, bold: true)
-        let kbd = Theme.attrs(10, Theme.muted)
         let midY = b.midY
 
         let leftEnd: CGFloat = 8
@@ -68,10 +63,6 @@ final class StatusBarView: NSView {
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         module([NSAttributedString(string: attachText, attributes: f)])
         module([NSAttributedString(string: "\(zoomPercent)%", attributes: f)])
-        module([NSAttributedString(string: "fit", attributes: f), NSAttributedString(string: "F", attributes: kbd)]) { [weak self] in self?.onFit?() }
-        module([NSAttributedString(string: "suche", attributes: f), NSAttributedString(string: "⌘P", attributes: kbd)]) { [weak self] in self?.onPalette?() }
-        module([NSAttributedString(string: "neu", attributes: f), NSAttributedString(string: "⌘N", attributes: kbd)]) { [weak self] in self?.onNew?() }
-        module([], dots: SessionStatus.allCases.map { (Theme.color(for: $0), counts[$0] ?? 0) })
 
         // Mitte: Breadcrumb
         let mid: NSAttributedString

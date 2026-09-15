@@ -37,6 +37,7 @@ targets:
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "Michael Malura"
+        CFBundleIconFile: Kadrell
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.malura.kadrell

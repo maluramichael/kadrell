@@ -12,15 +12,42 @@ final class NewSessionModel {
     var selected = 0
     var chosen: Group?
     var cwd: String
+    var compSelected = 0
     var focusRequest = 0
     var onStart: ((Group?, String) -> Void)?
+
+    /// Unterordner, die zum getippten Pfad passen (nur Verzeichnisse, keine versteckten).
+    var completions: [String] {
+        let path = NewSessionModel.expand(cwd)
+        let dir: String, prefix: String
+        if path.hasSuffix("/") { dir = path; prefix = "" } else {
+            let u = URL(fileURLWithPath: path)
+            dir = u.deletingLastPathComponent().path; prefix = u.lastPathComponent
+        }
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
+        return names.filter { !$0.hasPrefix(".") && $0.lowercased().hasPrefix(prefix.lowercased()) }
+            .filter { var d: ObjCBool = false; return FileManager.default.fileExists(atPath: dir + "/" + $0, isDirectory: &d) && d.boolValue }
+            .sorted().prefix(8).map { (dir.hasSuffix("/") ? dir : dir + "/") + $0 + "/" }
+    }
+
+    static func expand(_ s: String) -> String {
+        s.hasPrefix("~") ? NSHomeDirectory() + s.dropFirst() : s
+    }
+
+    /// Tab: gewählten Vorschlag übernehmen.
+    func complete() {
+        let c = completions
+        guard !c.isEmpty else { return }
+        cwd = c[min(compSelected, c.count - 1)]
+        compSelected = 0
+    }
 
     init(groups: [Group], counts: [String: Int], preselected: Group?) {
         self.groups = groups
         self.counts = counts
         step = (preselected != nil || groups.isEmpty) ? 2 : 1
         chosen = preselected
-        cwd = preselected?.cwd ?? ""
+        cwd = preselected?.cwd ?? NSHomeDirectory() + "/"
     }
 
     var entries: [Entry] {
@@ -34,15 +61,14 @@ final class NewSessionModel {
         guard entries.indices.contains(i) else { return }
         chosen = entries[i].group
         if let g = chosen { onStart?(g, g.cwd); return }
-        cwd = ""
+        cwd = NSHomeDirectory() + "/"
         step = 2
         focusRequest += 1
     }
 
     func start() {
         guard step == 2 else { pick(selected); return }
-        var dir = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
-        if dir.hasPrefix("~") { dir = NSHomeDirectory() + dir.dropFirst() }
+        var dir = NewSessionModel.expand(cwd.trimmingCharacters(in: .whitespacesAndNewlines))
         while dir.count > 1, dir.hasSuffix("/") { dir.removeLast() }
         guard !dir.isEmpty else { focusRequest += 1; return }
         onStart?(chosen, dir)
@@ -101,11 +127,31 @@ struct NewSessionView: View {
                 foot("⏎ starten · Esc abbrechen")
             } else {
                 label("Neue Session · Ordner")
-                TextField("/Users/dev/development/…", text: $model.cwd)
+                TextField("~/…", text: $model.cwd)
                     .textFieldStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 13)).padding(14)
                     .focused($focus, equals: .cwd)
+                    .onChange(of: model.cwd) { _, _ in model.compSelected = 0 }
                     .onSubmit { model.start() }
-                foot("⏎ starten · Esc abbrechen")
+                    .onKeyPress(.tab) { model.complete(); return .handled }
+                    .onKeyPress(.downArrow) { model.compSelected = min(max(model.completions.count - 1, 0), model.compSelected + 1); return .handled }
+                    .onKeyPress(.upArrow) { model.compSelected = max(0, model.compSelected - 1); return .handled }
+                let comps = model.completions
+                if !comps.isEmpty {
+                    Divider().overlay(Theme.lineColor)
+                    VStack(spacing: 0) {
+                        ForEach(Array(comps.enumerated()), id: \.element) { i, c in
+                            Text(Theme.shortPath(c)).font(.custom("JetBrainsMonoNF-Regular", size: 12))
+                                .foregroundStyle(i == model.compSelected ? Theme.fgColor : Theme.mutedColor)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 6).padding(.horizontal, 16)
+                                .background(i == model.compSelected ? Theme.surfaceColor : .clear)
+                                .overlay(alignment: .leading) { if i == model.compSelected { Rectangle().fill(Theme.runningColor).frame(width: 3) } }
+                                .contentShape(Rectangle())
+                                .onTapGesture { model.compSelected = i; model.complete() }
+                        }
+                    }
+                }
+                foot("Tab vervollständigen · ⏎ starten · Esc abbrechen")
             }
         }
         .font(.custom("JetBrainsMonoNF-Regular", size: 12))

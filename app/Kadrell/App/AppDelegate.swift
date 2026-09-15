@@ -66,9 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         canvas.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
         canvas.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         canvas.onActivateSession = { [weak self] s in self?.resume(s) }
-        bar.onNew = { [weak self] in self?.openNewSession(groupId: nil) }
-        bar.onPalette = { [weak self] in self?.togglePalette() }
-        bar.onFit = { [weak self] in self?.canvas.fitAll() }
+        canvas.onHelp = { [weak self] in self?.showAbout() }
     }
 
     private func boot() async {
@@ -106,9 +104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.crumb = focused.map { (fg?.name ?? "", $0.name) }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, NSColor(hexString: $0.color)) }
         bar.sessionCount = sessions.count
-        var counts: [SessionStatus: Int] = [:]
-        for s in sessions.values { counts[s.status, default: 0] += 1 }
-        bar.counts = counts
         bar.zoomPercent = Int((canvas.scale * 100).rounded())
         let attachable = sessions.values.filter(\.canAttach).count
         bar.attachText = "attach \(attach?.attachedCount ?? 0)/\(attachable)"
@@ -120,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() {
         let main = NSMenu()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Über Kadrell", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Über Kadrell", action: #selector(menuAbout), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Kadrell ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
@@ -151,6 +146,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func menuNewSession() { openNewSession(groupId: nil) }
+    @objc private func menuAbout() { showAbout() }
+
+    private func showAbout() {
+        if overlay?.isVisible == true, overlayIsAbout { dismissSheet(); return }
+        overlayIsAbout = true
+        present(AboutView(), plainReturn: true, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { [weak self] in self?.dismissSheet() })
+    }
+    private var overlayIsAbout = false
     @objc private func menuFit() { canvas.fitAll() }
     @objc private func menuPalette() { togglePalette() }
     @objc private func menuStop() {
@@ -290,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func dismissSheet() {
         overlay?.dismiss()
         overlay = nil
+        overlayIsAbout = false
         window.makeFirstResponder(canvas)
     }
 
