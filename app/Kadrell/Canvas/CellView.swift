@@ -40,7 +40,7 @@ final class CellView: NSView {
     var headerRect: CGRect { CGRect(x: 0, y: 0, width: bounds.width, height: Layout.cellHeaderScreen) }
     var bodyRect: CGRect { CGRect(x: 0, y: Layout.cellHeaderScreen, width: bounds.width, height: max(0, bounds.height - Layout.cellHeaderScreen)) }
     /// Terminal liegt 2 px innerhalb des Rahmens, sonst übermalt es den Rahmen links, rechts und unten.
-    var terminalRect: CGRect { focused ? bodyRect : CGRect(x: 2, y: Layout.cellHeaderScreen, width: max(0, bounds.width - 4), height: max(0, bounds.height - Layout.cellHeaderScreen - 2)) }
+    var terminalRect: CGRect { (focused ? bodyRect : CGRect(x: 2, y: Layout.cellHeaderScreen, width: max(0, bounds.width - 4), height: max(0, bounds.height - Layout.cellHeaderScreen - 2))).integral }
     var xRect: CGRect { CGRect(x: bounds.width - 24, y: 5, width: 16, height: 16) }
     var dotRect: CGRect { CGRect(x: 9, y: 9, width: 8, height: 8) }
     var statusColor: NSColor { attached || !session.canAttach ? Theme.color(for: session.status) : Theme.detached }

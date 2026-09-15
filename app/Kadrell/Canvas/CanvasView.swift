@@ -146,8 +146,11 @@ final class CanvasView: NSView {
         return Layout.compute(groups: layoutInputs(), scale: s, columns: Settings.columns, focused: focusedKey, viewportAspect: aspect)
     }
 
+    /// Welt → Bildschirm, Kanten auf ganze Punkte gerundet: keine halben Pixel, keine 1-px-Versätze.
     private func toScreen(_ r: CGRect) -> CGRect {
-        CGRect(x: r.minX * scale + offset.x, y: r.minY * scale + offset.y, width: r.width * scale, height: r.height * scale)
+        let x0 = (r.minX * scale + offset.x).rounded(), y0 = (r.minY * scale + offset.y).rounded()
+        let x1 = (r.maxX * scale + offset.x).rounded(), y1 = (r.maxY * scale + offset.y).rounded()
+        return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 
     func applyLayout() {
@@ -155,7 +158,7 @@ final class CanvasView: NSView {
         let baseLod = Layout.lod(cellScreenWidth: 320 * scale)
         for g in groups {
             guard let v = groupViews[g.id], let r = layout.groups[g.id] else { continue }
-            let f = toScreen(r).integral
+            let f = toScreen(r)
             if v.frame != f { v.frame = f }
             v.headerRect = toScreen(layout.headers[g.id] ?? .zero).offsetBy(dx: -f.minX, dy: -f.minY)
             v.footerRect = toScreen(layout.footers[g.id] ?? .zero).offsetBy(dx: -f.minX, dy: -f.minY)
@@ -168,7 +171,7 @@ final class CanvasView: NSView {
         for (key, v) in cellViews {
             guard let r = layout.cells[key], let s = sessions[key], let gv = v.superview else { v.isHidden = true; continue }
             v.isHidden = false
-            let f = toScreen(r).integral.offsetBy(dx: -gv.frame.minX, dy: -gv.frame.minY)
+            let f = toScreen(r).offsetBy(dx: -gv.frame.minX, dy: -gv.frame.minY)
             if v.frame != f { v.frame = f }
             let g = group(forSession: key)
             v.groupName = g?.name ?? ""
