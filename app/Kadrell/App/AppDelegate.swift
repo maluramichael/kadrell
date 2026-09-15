@@ -84,16 +84,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func sessionsChanged(_ sessions: [Session]) {
+        let groupsBefore = Set(store.groups.map(\.id))
         store.assign(sessions)
         attach.sync(with: sessions)
         canvas.reload(groups: store.groups, sessions: sessions)
         if firstLoad {
             firstLoad = false
             canvas.fitAll(animated: false)
-            attach.enqueue(canvas.sessionsByDistanceToCenter())
-        } else {
-            attach.enqueue(canvas.sessionsByDistanceToCenter())
+        } else if !groupsBefore.isSubset(of: Set(store.groups.map(\.id))) {
+            // Eine Gruppe ist weg: die Ansicht zeigt sonst ins Leere.
+            canvas.fitAll()
         }
+        attach.enqueue(canvas.sessionsByDistanceToCenter())
         updateBar()
     }
 
@@ -228,7 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try await self.cli.remove(id: id)
                     self.store.removeSession(key)
                     await self.registry.pollNow()
-                    if let gid, self.store.group(id: gid) != nil { self.canvas.fitGroup(gid) }
+                    if let gid, self.store.group(id: gid) != nil { self.canvas.fitGroup(gid) } else { self.canvas.fitAll() }
                 } catch { self.report(error) }
             }
         }
@@ -291,19 +293,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openNewSession(groupId: String?) {
+        if let gid = groupId, let g = store.group(id: gid) { startSession(group: g, cwd: g.cwd); return }
         let sessions = canvas.sessions
         let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
         let model = NewSessionModel(groups: store.groups, counts: counts, preselected: groupId.flatMap { store.group(id: $0) })
-        let view = NewSessionView(model: model) { [weak self] g, cwd, prompt in self?.dismissSheet(); self?.startSession(group: g, cwd: cwd, prompt: prompt) }
+        let view = NewSessionView(model: model) { [weak self] g, cwd in self?.dismissSheet(); self?.startSession(group: g, cwd: cwd) }
         present(view, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.start() })
     }
 
-    private func startSession(group: Group?, cwd: String, prompt: String) {
+    private func startSession(group: Group?, cwd: String) {
         sessionCounter += 1
-        let name = ClaudeCLI.shortName(prompt: prompt, cwd: cwd, counter: sessionCounter)
+        let name = ClaudeCLI.shortName(prompt: "", cwd: cwd, counter: sessionCounter)
         Task {
             do {
-                let shortId = try await cli.start(cwd: cwd, name: name, prompt: prompt)
+                let shortId = try await cli.start(cwd: cwd, name: name, prompt: "")
                 guard let fresh = await registry.waitFor(timeout: 10, { s in
                     (shortId != nil && s.shortId == shortId) || (s.name == name && s.cwd.hasSuffix(URL(fileURLWithPath: cwd).lastPathComponent))
                 }) else {

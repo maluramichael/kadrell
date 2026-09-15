@@ -8,6 +8,8 @@ final class CellView: NSView {
     var groupColor = Theme.muted
     var lod = 3
     var focused = false
+    /// Das Terminal dieser Kachel hat gerade die Tastatur (auch im Gruppenzoom mit mehreren Terminals).
+    var keyboardFocus = false
     var hovered = false
     var attached = false
     var lines: [String] = []
@@ -76,7 +78,8 @@ final class CellView: NSView {
         Theme.bg.withAlphaComponent(dim).setFill()
         b.fill()
         let head = headerRect
-        (status == .waiting ? Theme.waiting.mixed(0.12, into: Theme.surface) : Theme.surface).withAlphaComponent(dim).setFill()
+        let headBase = keyboardFocus ? groupColor.mixed(0.22, into: Theme.surface) : status == .waiting ? Theme.waiting.mixed(0.12, into: Theme.surface) : Theme.surface
+        headBase.withAlphaComponent(dim).setFill()
         head.fill()
         Theme.line.withAlphaComponent(dim).setFill()
         CGRect(x: 0, y: head.maxY - 1, width: b.width, height: 1).fill()
@@ -111,14 +114,14 @@ final class CellView: NSView {
 
     private func drawBorder(_ dim: CGFloat) {
         let color: NSColor
-        if focused { color = groupColor }
+        if focused || keyboardFocus { color = groupColor }
         else if highlight == true { color = .white }
         else if session.status == .waiting, session.canAttach { color = Theme.waiting }
         else if session.status == .error { color = Theme.error }
         else if hovered { color = Theme.sub }
         else { color = Theme.line }
         color.withAlphaComponent(dim).setFill()
-        let w: CGFloat = (focused || highlight == true) ? 2 : 1
+        let w: CGFloat = (focused || keyboardFocus || highlight == true) ? 2 : 1
         bounds.frame(withWidth: w)
     }
 

@@ -12,9 +12,8 @@ final class NewSessionModel {
     var selected = 0
     var chosen: Group?
     var cwd: String
-    var prompt = ""
     var focusRequest = 0
-    var onStart: ((Group?, String, String) -> Void)?
+    var onStart: ((Group?, String) -> Void)?
 
     init(groups: [Group], counts: [String: Int], preselected: Group?) {
         self.groups = groups
@@ -30,10 +29,12 @@ final class NewSessionModel {
             + [Entry(id: "new", label: "Neue Gruppe …", sub: "Ordner wählen, Ordnername wird Gruppenname", meta: "", group: nil)]
     }
 
+    /// Bestehende Gruppe: Session startet sofort in deren Ordner. „Neue Gruppe“: Ordner abfragen.
     func pick(_ i: Int) {
         guard entries.indices.contains(i) else { return }
         chosen = entries[i].group
-        cwd = chosen?.cwd ?? ""
+        if let g = chosen { onStart?(g, g.cwd); return }
+        cwd = ""
         step = 2
         focusRequest += 1
     }
@@ -44,7 +45,7 @@ final class NewSessionModel {
         if dir.hasPrefix("~") { dir = NSHomeDirectory() + dir.dropFirst() }
         while dir.count > 1, dir.hasSuffix("/") { dir.removeLast() }
         guard !dir.isEmpty else { focusRequest += 1; return }
-        onStart?(chosen, dir, prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+        onStart?(chosen, dir)
     }
 }
 
@@ -52,9 +53,9 @@ final class NewSessionModel {
 struct NewSessionView: View {
     @Bindable var model: NewSessionModel
     @FocusState private var focus: Field?
-    enum Field { case filter, cwd, prompt }
+    enum Field { case filter, cwd }
 
-    init(model: NewSessionModel, onStart: @escaping (Group?, String, String) -> Void) {
+    init(model: NewSessionModel, onStart: @escaping (Group?, String) -> Void) {
         self.model = model
         model.onStart = onStart
     }
@@ -97,23 +98,14 @@ struct NewSessionView: View {
                     .frame(height: min(322, CGFloat(entries.count) * 46))
                     .onChange(of: model.selected) { _, s in if entries.indices.contains(s) { proxy.scrollTo(entries[s].id) } }
                 }
-                foot("⏎ weiter · Esc abbrechen")
+                foot("⏎ starten · Esc abbrechen")
             } else {
-                label("Neue Session · Ordner & erster Prompt")
+                label("Neue Session · Ordner")
                 TextField("/Users/dev/development/…", text: $model.cwd)
                     .textFieldStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 13)).padding(14)
                     .focused($focus, equals: .cwd)
-                    .onSubmit { focus = .prompt }
-                Divider().overlay(Theme.lineColor)
-                TextEditor(text: $model.prompt)
-                    .font(.custom("JetBrainsMonoNF-Regular", size: 13))
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 90).padding(10)
-                    .focused($focus, equals: .prompt)
-                    .overlay(alignment: .topLeading) {
-                        if model.prompt.isEmpty { Text("Erster Prompt (optional). ⌘⏎ startet.").foregroundStyle(Theme.mutedColor).padding(15).allowsHitTesting(false) }
-                    }
-                foot("⌘⏎ starten · Esc abbrechen")
+                    .onSubmit { model.start() }
+                foot("⏎ starten · Esc abbrechen")
             }
         }
         .font(.custom("JetBrainsMonoNF-Regular", size: 12))
@@ -125,7 +117,7 @@ struct NewSessionView: View {
     }
 
     private func focusStep() {
-        focus = model.step == 1 ? .filter : (model.cwd.isEmpty ? .cwd : .prompt)
+        focus = model.step == 1 ? .filter : .cwd
     }
 
     private func label(_ s: String) -> some View {

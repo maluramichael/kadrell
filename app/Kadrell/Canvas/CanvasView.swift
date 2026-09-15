@@ -150,6 +150,7 @@ final class CanvasView: NSView {
             v.focused = focusedKey == key
             v.hovered = hoveredCell == key
             v.attached = attach?.isAttached(key) ?? false
+            v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
             v.lines = attach?.lines(for: key) ?? []
             v.highlight = highlightKeys.map { $0.contains(key) }
             v.pulse = pulse
@@ -299,7 +300,16 @@ final class CanvasView: NSView {
         }
     }
 
+    private weak var lastFirstResponder: NSResponder?
     private func tickPulse() {
+        // Klick in ein Terminal macht es still zum First Responder: Rahmen der Kachel nachziehen.
+        if window?.firstResponder !== lastFirstResponder {
+            lastFirstResponder = window?.firstResponder
+            for (key, v) in cellViews {
+                let has = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
+                if v.keyboardFocus != has { v.keyboardFocus = has; v.needsDisplay = true }
+            }
+        }
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
         pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
         for (key, v) in cellViews where sessions[key]?.status == .running && v.lod >= 2 && !v.isHidden {
