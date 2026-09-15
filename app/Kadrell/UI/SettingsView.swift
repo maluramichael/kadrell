@@ -84,6 +84,12 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "terminal.padding") }
     }
 
+    /// SwiftTerm zeichnet per Metal auf der GPU statt per CoreGraphics auf dem Main-Thread, Default an.
+    static var terminalMetal: Bool {
+        get { UserDefaults.standard.object(forKey: "terminal.metal") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "terminal.metal") }
+    }
+
     static var terminalFont: NSFont {
         let size = CGFloat(terminalFontSize)
         return NSFont(name: terminalFontName, size: size) ?? Theme.font(size)
@@ -125,6 +131,7 @@ final class SettingsModel {
     var fontSize = Settings.terminalFontSize
     var lineSpacing = Settings.terminalLineSpacing
     var padding = Settings.terminalPadding
+    var metal = Settings.terminalMetal
     @ObservationIgnored lazy var fonts: [(name: String, display: String)] = {
         let list = Settings.monospaceFonts
         return list.contains { $0.name == fontName } ? list : [(fontName, fontName)] + list
@@ -151,6 +158,7 @@ final class SettingsModel {
         Settings.terminalFontSize = fontSize
         Settings.terminalLineSpacing = lineSpacing
         Settings.terminalPadding = padding
+        Settings.terminalMetal = metal
         onDone?()
     }
 
@@ -260,6 +268,7 @@ struct SettingsView: View {
                 }
                 setting("Zeilenabstand") { choice(Settings.lineSpacings, $model.lineSpacing) { "\(Int(($0 * 100).rounded())) %" } }
                 setting("Innenabstand der Kacheln") { choice(Settings.paddings, $model.padding) { "\(Int($0)) px" } }
+                setting("Terminal auf der GPU zeichnen (Metal)") { pill(model.metal ? "an" : "aus", on: model.metal) { model.metal.toggle() } }
             }
             .padding(.horizontal, 16)
 

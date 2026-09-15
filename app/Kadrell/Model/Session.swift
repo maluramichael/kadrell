@@ -104,4 +104,13 @@ struct Agent: Decodable, Equatable, Sendable {
     var isRunningBackground: Bool { kind == "background" && shortId != nil && pid != nil }
 
     static func decodeList(_ data: Data) throws -> [Agent] { try JSONDecoder().decode([Agent].self, from: data) }
+
+    /// Claude Code schreibt je laufendem Prozess `<configDir>/sessions/<pid>.json` mit denselben Feldern, die
+    /// `claude agents --json` liefert. Die Datei zu lesen kostet nichts, der CLI-Aufruf rund 0,3 s CPU und 180 MB.
+    static func local(pids: [Int], configDir: String) -> [Agent] {
+        pids.compactMap { pid in
+            guard let data = FileManager.default.contents(atPath: configDir + "/sessions/\(pid).json") else { return nil }
+            return try? JSONDecoder().decode(Agent.self, from: data)
+        }
+    }
 }

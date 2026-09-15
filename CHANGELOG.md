@@ -2,6 +2,13 @@
 
 Neueste Version oben.
 
+## Unreleased
+
+- Änderung: Terminals werden auf der GPU gezeichnet (Metal). Das senkt die CPU-Last bei laufender Ausgabe deutlich; abschaltbar in den Einstellungen unter Darstellung.
+- Änderung: Der Status der Sessions kommt direkt aus den Session-Dateien von Claude Code, statt alle zwei Sekunden einen Claude-Prozess zu starten.
+- Fix: Der Baum zeichnet beim Pulsieren nur noch die Statuspunkte laufender Sessions neu, nicht mehr alle Zeilen.
+- Fix: Textänderungen in sichtbaren Terminals lösen kein Neuzeichnen aller Kacheln und des Baums mehr aus.
+
 ## 1.6.0 (2026-09-16)
 
 - Feature: Die Kopfzeile jeder Session zeigt den aktuellen Git-Branch des Projektordners.

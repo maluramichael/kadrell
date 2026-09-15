@@ -236,6 +236,8 @@ final class WorkspaceView: NSView {
         if t.nativeBackgroundColor != bg { t.nativeBackgroundColor = bg }
         let body = cell.terminalRect
         if t.frame != body { t.frame = body }
+        // Erst im Fenster umschalten, so will es SwiftTerm. Scheitert Metal, bleibt CoreGraphics.
+        if t.window != nil, t.isUsingMetalRenderer != Settings.terminalMetal { try? t.setUseMetal(Settings.terminalMetal) }
     }
 
     private func unmountTerminal(for key: String) {

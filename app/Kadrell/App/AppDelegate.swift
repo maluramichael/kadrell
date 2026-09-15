@@ -195,12 +195,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registry = SessionRegistry(cli: cli)
         registry.pids = { [weak attach] in attach?.pids ?? [:] }
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
-        registry.onError = { error in AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)") }
         // Leer nicht abgleichen: das würde Gruppen alter Hintergrund-Sessions verwerfen, bevor sie übernommen sind.
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
             await registry.pollNow()
-            offerAdopt()
+            await offerAdopt()
             registry.start()
         }
         usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true }
@@ -217,9 +216,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Hintergrund-Sessions aus `claude --bg` (frühere Kadrell-Versionen, andere Terminals) anbieten zu übernehmen:
     /// `claude stop` hält sie an, danach setzt Kadrell sie als eigenen Prozess mit `--resume` fort. Die Kurz-Id bleibt
     /// Schlüssel, damit Gruppen und Auswahl passen. Kein `claude rm`: das löscht ggf. den Worktree, in dem die Session arbeitet.
-    private func offerAdopt() {
+    private func offerAdopt() async {
         let owned = Set(registry.sessions.map(\.sessionId))
-        let bg = registry.agents.filter { $0.isRunningBackground && !owned.contains($0.sessionId) }
+        let agents: [Agent]
+        do { agents = try await cli.agents() } catch { AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)"); return }
+        let bg = agents.filter { $0.isRunningBackground && !owned.contains($0.sessionId) }
         guard !bg.isEmpty else { return }
         let list = bg.map { "· \($0.name)\($0.status == "busy" ? " (arbeitet gerade)" : "")" }.joined(separator: "\n")
         confirm("\(bg.count) Hintergrund-Session(s) übernehmen?", "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:\n\(list)", button: "Übernehmen", destructive: false) { [weak self] in

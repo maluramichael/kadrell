@@ -156,7 +156,10 @@ final class AttachManager {
         for (key, t) in terminals {
             var rows = t.terminalStateSnapshot().visibleRows.map { $0.text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
             while rows.last?.isEmpty == true { rows.removeLast() }
-            if snapshots[key] != rows { snapshots[key] = rows; changed = true }
+            guard snapshots[key] != rows else { continue }
+            snapshots[key] = rows
+            // Nur Kacheln ohne eingehängtes Terminal zeigen den Snapshot; eingehängte zeichnen sich selbst.
+            if t.superview == nil { changed = true }
         }
         if changed { onChange?() }
     }

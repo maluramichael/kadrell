@@ -52,10 +52,17 @@ final class SidebarView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         pulseTask = Task { [weak self] in
+            var ticks = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(80))
-                guard let self, self.sessions.values.contains(where: { $0.status == .running }) else { continue }
-                self.needsDisplay = true
+                guard let self else { continue }
+                ticks += 1
+                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Punkte laufender Sessions.
+                if ticks % 750 == 0 { self.needsDisplay = true; continue }
+                for (i, row) in self.rows.enumerated() {
+                    guard case .session(let s, _) = row, s.status == .running else { continue }
+                    self.setNeedsDisplay(self.dotRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
+                }
             }
         }
     }
@@ -100,6 +107,8 @@ final class SidebarView: NSView {
     }
     /// Obere Zeile einer Session: Punkt, Titel, Laufzeit und Icon sitzen hier, auch mit Nachrichtenzeile darunter.
     private func headRect(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: r.minY, width: r.width, height: SidebarView.sessionRow) }
+    /// Statuspunkt links in der Kopfzeile einer Session.
+    private func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
 
     private func rowRect(_ i: Int) -> CGRect {
         var y: CGFloat = 6
@@ -202,7 +211,7 @@ final class SidebarView: NSView {
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
         let pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
         (s.status == .running && attached ? c.withAlphaComponent(pulse) : c).setFill()
-        NSBezierPath(ovalIn: CGRect(x: 27, y: r.midY - 4, width: 8, height: 8)).fill()
+        NSBezierPath(ovalIn: dotRect(row)).fill()
         if hover { Icons.x(in: iconRects(r, count: 1)[0], color: Theme.muted) }
         var right = r.maxX - 8 - 20   // Icon-Platz immer reserviert
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))

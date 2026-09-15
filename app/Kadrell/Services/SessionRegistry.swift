@@ -1,21 +1,18 @@
 import Foundation
 
-/// Die Sessions, die Kadrell verwaltet, persistiert als JSON unter Application Support. Pollt
-/// `claude agents --json --all` alle 2 s für Status, Name und aktuelle sessionId und meldet nur echte Änderungen.
+/// Die Sessions, die Kadrell verwaltet, persistiert als JSON unter Application Support. Liest alle 2 s die
+/// Session-Dateien der eigenen Claude-Prozesse (Status, Name, aktuelle sessionId) und meldet nur echte Änderungen.
 @MainActor
 final class SessionRegistry {
     let cli: ClaudeCLI
     let url: URL
     private(set) var sessions: [Session] = []
-    /// Alles aus dem letzten Poll, auch fremde Sessions (für die Übernahme alter Hintergrund-Sessions).
-    private(set) var agents: [Agent] = []
     /// Letzte Textantwort von Claude je Session (`Session.id`), nur wenn in den Einstellungen eingeschaltet.
     private(set) var lastMessages: [String: String] = [:]
     private var transcripts: [String: Transcript.Entry] = [:]
     /// Schlüssel der Session je pid des eigenen Claude-Prozesses, liefert der AttachManager.
     var pids: () -> [Int: String] = { [:] }
     var onChange: (([Session]) -> Void)?
-    var onError: ((Error) -> Void)?
     private var task: Task<Void, Never>?
 
     static var defaultURL: URL {
@@ -52,24 +49,21 @@ final class SessionRegistry {
     }
 
     func pollNow() async {
-        do {
-            agents = try await cli.agents()
-            let merged = SessionRegistry.merge(sessions, agents: agents, pids: pids())
-            var messages: [String: String] = [:]
-            if Settings.showLastMessage {
-                let ids = merged.map(\.sessionId), cache = transcripts
-                transcripts = await Task.detached { Transcript.refresh(ids, cache: cache) }.value
-                for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
-            }
-            if merged != sessions || messages != lastMessages {
-                let persisted = merged.map(\.stored) != sessions.map(\.stored)
-                sessions = merged
-                lastMessages = messages
-                if persisted { save() }
-                onChange?(merged)
-            }
-        } catch {
-            onError?(error)
+        let pids = pids()
+        let agents = Agent.local(pids: Array(pids.keys), configDir: cli.configDir)
+        let merged = SessionRegistry.merge(sessions, agents: agents, pids: pids)
+        var messages: [String: String] = [:]
+        if Settings.showLastMessage {
+            let ids = merged.map(\.sessionId), cache = transcripts
+            transcripts = await Task.detached { Transcript.refresh(ids, cache: cache) }.value
+            for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
+        }
+        if merged != sessions || messages != lastMessages {
+            let persisted = merged.map(\.stored) != sessions.map(\.stored)
+            sessions = merged
+            lastMessages = messages
+            if persisted { save() }
+            onChange?(merged)
         }
     }
 
