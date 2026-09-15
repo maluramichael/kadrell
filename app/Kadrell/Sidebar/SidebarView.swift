@@ -122,8 +122,7 @@ final class SidebarView: NSView {
         if any { color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
         Icons.chevron(in: CGRect(x: 6, y: r.midY - 8, width: 16, height: 16), open: !collapsed.contains(g.id), color: Theme.muted)
         let name = NSAttributedString(string: "▪ " + g.name, attributes: Theme.attrs(12, color, bold: true))
-        let icons = hover ? 3 : 0
-        let right = r.maxX - 8 - CGFloat(icons) * 20
+        let right = r.maxX - 8 - 3 * 20   // Platz für die Icons immer reservieren, sonst springt der Text beim Hover
         let nameW = min(name.size().width, max(0, right - 26))
         name.draw(with: CGRect(x: 26, y: r.midY - 8, width: nameW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         let path = NSAttributedString(string: Theme.shortPath(g.cwd), attributes: Theme.attrs(10.5, Theme.muted))
@@ -149,15 +148,11 @@ final class SidebarView: NSView {
         let pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
         (s.status == .running && s.canAttach ? c.withAlphaComponent(pulse) : c).setFill()
         NSBezierPath(ovalIn: CGRect(x: 27, y: r.midY - 4, width: 8, height: 8)).fill()
-        var right = r.maxX - 8
-        if hover {
-            Icons.x(in: iconRects(r, count: 1)[0], color: Theme.muted)
-            right -= 20
-        } else {
-            let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
-            right -= age.size().width
-            age.draw(at: CGPoint(x: right, y: r.midY - 7))
-        }
+        if hover { Icons.x(in: iconRects(r, count: 1)[0], color: Theme.muted) }
+        var right = r.maxX - 8 - 20   // Icon-Platz immer reserviert
+        let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
+        right -= age.size().width
+        age.draw(at: CGPoint(x: right, y: r.midY - 7))
         let title = NSAttributedString(string: s.title, attributes: Theme.attrs(12, sel || hover ? Theme.fg : Theme.sub))
         title.draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 8 - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
