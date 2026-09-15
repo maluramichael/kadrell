@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Platzhalter-Sessions, sofort sichtbar, bis `claude --bg` und der nächste Poll durch sind.
     private var pending: [Session] = []
     private var pendingGroups: [String: Group] = [:]
+    private var firstLoad = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
@@ -143,6 +144,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attach.sync(with: sessions)
         reloadViews()
         attach.enqueue(workspace.shownSessions())
+        if firstLoad { firstLoad = false; offerDedup(sessions) }
+    }
+
+    /// Beim Start: Kopien mit gleichem Titel im gleichen Ordner anbieten zu entfernen, die neueste bleibt.
+    private func offerDedup(_ sessions: [Session]) {
+        let dupes = Session.duplicates(in: sessions).filter { $0.shortId != nil }
+        guard !dupes.isEmpty else { return }
+        let list = dupes.map { "· \($0.title) (\($0.elapsed()), \($0.state ?? "?"))" }.joined(separator: "\n")
+        confirm("\(dupes.count) doppelte Session(s) gefunden", "Gleicher Titel im gleichen Ordner, die neueste bleibt. Diese stoppen und mit claude rm löschen?\n\(list)", button: "Duplikate löschen") { [weak self] in
+            guard let self else { return }
+            for s in dupes { attach.detach(s.id) }
+            Task {
+                for s in dupes {
+                    guard let id = s.shortId else { continue }
+                    if !s.isDone { try? await self.cli.stop(id: id) }
+                    try? await self.cli.remove(id: id)
+                    self.store.removeSession(s.id)
+                }
+                await self.registry.pollNow()
+                self.reloadViews()
+            }
+        }
     }
 
     private func reloadViews() {

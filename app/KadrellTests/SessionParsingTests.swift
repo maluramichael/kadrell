@@ -115,3 +115,14 @@ final class UsageParsingTests: XCTestCase {
         XCTAssertEqual(Usage.parse(Data("[1,2]".utf8)), .empty)
     }
 }
+
+final class SessionDuplicateTests: XCTestCase {
+    func s(_ id: String, _ name: String, cwd: String = "/p/a", at: Double) -> Session {
+        Session(shortId: id, cwd: cwd, kind: "background", startedAt: at, sessionId: id + "-uuid", name: name)
+    }
+    func testKeepsNewestPerTitleAndFolder() {
+        let d = Session.duplicates(in: [s("a1", "fix", at: 1), s("a2", "fix", at: 3), s("a3", "fix", at: 2),
+                                        s("b1", "fix", cwd: "/p/b", at: 1), s("c1", "c1", at: 1), s("c2", "c2", at: 2)])
+        XCTAssertEqual(Set(d.map(\.id)), ["a1", "a3"])   // a2 ist die neueste; anderer Ordner und unbenannte bleiben
+    }
+}

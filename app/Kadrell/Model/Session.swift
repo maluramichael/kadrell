@@ -90,6 +90,14 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
         return out
     }
 
+    /// Doppelte Sessions: gleicher Titel im gleichen Ordner (z. B. Kopien durch `--resume`). Pro Gruppe bleibt
+    /// die neueste, zurück kommen die älteren, die weg können.
+    static func duplicates(in sessions: [Session]) -> [Session] {
+        let named = sessions.filter { $0.isBackground && $0.name != $0.id && !$0.isPending }
+        let groups = Dictionary(grouping: named) { $0.cwd + "\u{0}" + $0.name }
+        return groups.values.filter { $0.count > 1 }.flatMap { $0.sorted { $0.startedAt > $1.startedAt }.dropFirst() }
+    }
+
     func elapsed(now: Date = Date()) -> String {
         let m = Int((now.timeIntervalSince(startDate) / 60).rounded())
         if m < 60 { return "\(max(m, 0))m" }
