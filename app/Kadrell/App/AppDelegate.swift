@@ -106,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .replace: workspace.select(ids, add: false)
             case .toggle: workspace.select(ids, add: true)
             case .add: workspace.addMissing(ids)
+            case .cursor: workspace.select(ids, add: false, takeKeyboard: false)
             }
         }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
@@ -242,8 +243,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Bearbeiten", action: nil, keyEquivalent: "").submenu = edit
 
         let view = NSMenu(title: "Ansicht")
-        view.addItem(withTitle: "Grid", action: #selector(menuGrid), keyEquivalent: "1")
-        view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "2")
+        view.addItem(withTitle: "Grid", action: #selector(menuGrid), keyEquivalent: "")
+        view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "")
         view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
         view.addItem(.separator())
         // Belegbare Kürzel: das Menü zeigt die aktuelle Belegung, ausgelöst werden sie im Event-Monitor.
@@ -266,7 +267,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = main
     }
 
-    @objc private func menuNewSession() { openNewSession(groupId: nil) }
+    /// Hat der Baum die Tastatur (⌘1), gleich in die Gruppe der fokussierten Session, ohne Dialog.
+    @objc private func menuNewSession() {
+        let inTree = window.firstResponder === sidebar
+        openNewSession(groupId: inTree ? workspace.focused.flatMap { workspace.group(forSession: $0)?.id } : nil)
+    }
     @objc private func menuNewSessionHere() { newSessionInFocusedFolder() }
     /// Ohne fokussierte Session gibt es keinen Ordner: dann wie ⌘N.
     private func newSessionInFocusedFolder() {
@@ -310,8 +315,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .lastSession: workspace.focusLast()
         case .zoom: workspace.toggleZen()
         case .nextLayout: workspace.setMode(workspace.mode.other)
+        case .focusSidebar: focusSidebar()
+        case .focusWorkspace: focusWorkspace()
         default: workspace.removeFocused()
         }
+    }
+
+    private func focusSidebar() {
+        if sidebarScroll.isHidden { menuSidebar() }
+        window.makeFirstResponder(sidebar)
+    }
+
+    /// Fokussierte Kachel bekommt die Tastatur; ist rechts nichts offen, die erste Session im Baum.
+    private func focusWorkspace() {
+        if let f = workspace.focused { workspace.setFocus(f); return }
+        let first = displayGroups().flatMap(\.sessionIds).first { workspace.session($0) != nil }
+        workspace.select(first.map { [$0] } ?? [], add: false)
     }
 
     private func showAbout() {
