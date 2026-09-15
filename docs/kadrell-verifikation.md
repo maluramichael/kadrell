@@ -100,6 +100,8 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
   Ohne Fokus reicht Esc wie im Prototyp.
 - **Nur Hintergrund-Sessions.** Interaktive Sessions (`kind: interactive`, laufen in iTerm/tmux) werden
   nicht angezeigt; die Registry filtert sie weg. Punkt 3 des Briefs entfällt damit.
+- **Leere Gruppen verschwinden** beim nächsten Abgleich von selbst; das X an einer leeren Gruppe fragt
+  nicht nach. Rückfragen bestätigt plain ⏎, Esc bricht ab.
 - **Keine Gruppen-Chips in der Statusleiste** (bei 30 Gruppen zu voll). Links steht nur der Breadcrumb.
 - **Rückfragen und Fehler** sind eigene Overlays im App-Design (`ConfirmView`), kein `NSAlert`.
   Es ist immer nur ein Overlay offen; ⌘P schließt ⌘N und umgekehrt.
