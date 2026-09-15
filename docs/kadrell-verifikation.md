@@ -94,10 +94,8 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
 
 ## Abweichungen vom Brief (mit Michael am 15.09. abgestimmt)
 
-- **Esc geht an Claude Code**, nicht an die App: Esc ist in Claude Code der Interrupt. Das Terminal
-  verlässt man mit **⌘Esc** (stufenweise Terminal → Gruppe → alles), mit **⌘ + Scrollrad** oder Pinch
-  (beide zoomen auch über dem eingehängten Terminal). Die Kachel-Kopfzeile zeigt im Fokus „⌘Esc zurück“.
-  Ohne Fokus reicht Esc wie im Prototyp.
+- **Esc geht an Claude Code**, nicht an die App: Esc ist in Claude Code der Interrupt. Die Fokus-Kachel
+  schließt man mit **⌘Esc** (im Zen-Modus erst zurück ins Layout).
 - **Nur Hintergrund-Sessions.** Interaktive Sessions (`kind: interactive`, laufen in iTerm/tmux) werden
   nicht angezeigt; die Registry filtert sie weg. Punkt 3 des Briefs entfällt damit.
 - **Leere Gruppen verschwinden** beim nächsten Abgleich von selbst; das X an einer leeren Gruppe fragt
@@ -105,28 +103,23 @@ to your shell. The session keeps running either way.“ Der Attach-Client aktivi
 - **Keine Gruppen-Chips in der Statusleiste** (bei 30 Gruppen zu voll). Links steht nur der Breadcrumb.
 - **Rückfragen und Fehler** sind eigene Overlays im App-Design (`ConfirmView`), kein `NSAlert`.
   Es ist immer nur ein Overlay offen; ⌘P schließt ⌘N und umgekehrt.
-- **Layout i3-artig statt CSS-Grid (Michaels Wunsch vom 15.09.):** jede Gruppe ist ein frei
-  platzierbares Rechteck in Weltkoordinaten (`Group.frame` in `groups.json`), verschiebbar am Kopf,
-  größenveränderbar am Griff unten rechts. Die Kacheln füllen die Gruppe als Raster mit einstellbarer
-  Spaltenzahl (⌘, → „Spalten pro Gruppe“, Default 2), kein festes 16:10 mehr. Im Fokus wächst die
-  Kachel auf das Fensterformat. Neue Gruppen landen rechts neben den bestehenden, sonst darunter.
-  Header-Icons (+, Stift, X) sind immer sichtbar; `+` startet eine Session ohne hinzuzoomen.
-- **Zwei Zoom-Modi (⌘,):** „Layout“ wie im Brief (Text bildschirmkonstant, Terminal ab 320 px Kachelbreite).
-  „Geometrisch“: in Ruhe ist die Terminalschrift 12 pt × Maßstab bei Frame = Kachel, Spalten und Zeilen
-  bleiben beim Zoomen konstant; während der Bewegung wird das eingehängte Terminal nur per Layer skaliert.
-  Falle: SwiftTerm zeichnet nur innerhalb von `visibleRect`, das Layer-Transformationen ignoriert. Ein
-  dauerhaft per Layer verkleinertes Terminal mit übergroßem Frame verliert deshalb die unteren Zeilen.
-  Unter 3 px Schrift wird ausgehängt und der mitskalierte Text-Snapshot gezeigt.
+- **Baum plus Tiling statt Karte (Michaels Wunsch vom 15.09., abends):** die zoombare Karte mit frei
+  platzierbaren Gruppen, Raster, Snap und LOD ist raus (`Canvas/`, `Group.frame`, Zoom-Modi, Spalten).
+  Links steht ein Baum Gruppe › Session (`Sidebar/SidebarView.swift`, handgezeichnet wie die Leiste),
+  rechts die ausgewählten Sessions (`Workspace/WorkspaceView.swift`) als Grid (ceil(√n) Spalten) oder
+  Stack im i3-Akkordeon: jede Kachel eine Titelzeile, die aktive klappt an ihrer Stelle auf, die Zeilen
+  danach bleiben darunter. Die Mathe dazu ist `Workspace/Tiling.swift` (`TilingTests`). Auswahl und
+  Layout liegen in UserDefaults (`workspace.selected`, `workspace.mode`). Terminals werden nur in sichtbare
+  Kacheln eingehängt, angehängt werden weiterhin alle (sichtbare zuerst), damit ⌘P in den Zeilen suchen kann.
+  Icons im Baum (+, Stift, X) erscheinen nur bei Hover, Laufzeiten stehen rechtsbündig in einer Flucht.
+  Der Layout-Umschalter in der Leiste ist ein einzelnes Icon ohne Text, F1 beim ersten Start zeigt alles.
+  Fokusbewegung liegt auf ⌘⌥-Pfeilen, weil ⌥-Pfeile in Claude Code Wortsprünge sind.
 - **Claude-Nutzung in der Leiste:** `GET https://api.anthropic.com/api/oauth/usage` mit dem OAuth-Token
   aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (derselbe Weg wie die CLI), Header
   `anthropic-beta: oauth-2025-04-20`. Gelesen wird das `limits`-Array (kind `session`, `weekly_all`,
   `weekly_scoped` mit `scope.model.display_name` „Fable“), Fallback `five_hour`/`seven_day`. Jeder
   Parse- oder HTTP-Fehler ergibt „–%“ (bzw. behält die letzten Werte), nie ein Absturz. Abfrage alle drei
   Minuten; der Endpunkt antwortet schnell mit HTTP 429, dann verdoppelt sich die Pause bis 15 Minuten.
-- **Spaltenzahl der Karte (alt, ersetzt):** mindestens so viele wie in die Fensterbreite passen, bei vielen Gruppen
-  mehr, damit die Karte ungefähr das Seitenverhältnis des Fensters hat (`Layout.worldWidth`). Mit
-  30 Gruppen in einer Spalte wäre „Fit alles“ ein 5-%-Turm gewesen.
-
 ## Build
 
 ```bash

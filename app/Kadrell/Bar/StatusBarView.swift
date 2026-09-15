@@ -1,16 +1,17 @@
 import AppKit
 
-/// 30 px Leiste: Gruppen-Chips, Breadcrumb, Zähler, Buttons, Zoom, Attach, Uhr. Alles gezeichnet, Hit-Rects von Hand.
+/// 30 px Leiste: Layout-Toggle links, Breadcrumb in der Mitte, rechts Nutzung, Attach und Uhr.
+/// Alles gezeichnet, Hit-Rects von Hand.
 @MainActor
 final class StatusBarView: NSView {
     var crumb: (group: String, session: String)?
     var crumbGroupAttrs: [NSAttributedString.Key: Any]?
     var sessionCount = 0
-    var zoomPercent = 100
+    var openCount = 0
     var attachText = "attach 0/0"
     var usage = Usage.empty
-    var onToggleSnap: (() -> Void)?
-    var onCycleGrid: (() -> Void)?
+    var layoutMode: LayoutMode = .grid
+    var onToggleLayout: (() -> Void)?
 
     private var hitRects: [(CGRect, () -> Void)] = []
     private var clockTask: Task<Void, Never>?
@@ -38,37 +39,29 @@ final class StatusBarView: NSView {
         let fFg = Theme.attrs(11.5, Theme.fg, bold: true)
         let midY = b.midY
 
-        let leftEnd: CGFloat = 8
+        // Links: Layout-Toggle, zeigt den aktuellen Modus, Klick wechselt zum anderen.
+        let toggle = CGRect(x: 0, y: 0, width: 36, height: b.height - 1)
+        Icons.layout(layoutMode, in: CGRect(x: 11, y: midY - 7, width: 14, height: 14), color: Theme.sub)
+        Theme.line.setFill(); CGRect(x: toggle.maxX, y: 0, width: 1, height: b.height - 1).fill()
+        hitRects.append((toggle, { [weak self] in self?.onToggleLayout?() }))
+        let leftEnd = toggle.maxX + 8
 
         // Rechts: von rechts nach links
         var rx = b.width
-        func module(_ parts: [NSAttributedString], action: (() -> Void)? = nil, dots: [(NSColor, Int)] = []) {
+        func module(_ parts: [NSAttributedString]) {
             var w: CGFloat = 20
             for p in parts { w += p.size().width }
             w += CGFloat(max(0, parts.count - 1)) * 5
-            for (_, n) in dots { w += 11 + NSAttributedString(string: "\(n)", attributes: f).size().width }
-            w += CGFloat(max(0, dots.count - 1)) * 6
             rx -= w
             Theme.line.setFill(); CGRect(x: rx, y: 0, width: 1, height: b.height - 1).fill()
             var px = rx + 10
-            for (i, (c, n)) in dots.enumerated() {
-                c.setFill(); CGRect(x: px, y: midY - 3.5, width: 7, height: 7).fill()
-                px += 11
-                let s = NSAttributedString(string: "\(n)", attributes: f)
-                s.draw(at: CGPoint(x: px, y: midY - 8)); px += s.size().width + (i < dots.count - 1 ? 6 : 0)
-            }
             for (i, p) in parts.enumerated() {
                 p.draw(at: CGPoint(x: px, y: midY - 8 + (i > 0 ? 1 : 0))); px += p.size().width + 5
             }
-            if let action { hitRects.append((CGRect(x: rx, y: 0, width: w, height: b.height), action)) }
         }
         let df = DateFormatter(); df.dateFormat = "HH:mm"
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         module([NSAttributedString(string: attachText, attributes: f)])
-        module([NSAttributedString(string: "\(zoomPercent)%", attributes: f)])
-        module([NSAttributedString(string: "grid", attributes: fMuted), NSAttributedString(string: Settings.gridSize > 0 ? "\(Int(Settings.gridSize))" : "aus", attributes: f)]) { [weak self] in self?.onCycleGrid?() }
-        module([NSAttributedString(string: "snap", attributes: fMuted),
-                NSAttributedString(string: Settings.snapToGrid ? "an" : "aus", attributes: Settings.snapToGrid ? Theme.attrs(11.5, Theme.idle) : fMuted)]) { [weak self] in self?.onToggleSnap?() }
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
         func pctString(_ v: Int?) -> NSAttributedString {
             guard let v else { return NSAttributedString(string: "–%", attributes: fMuted) }
@@ -84,13 +77,14 @@ final class StatusBarView: NSView {
         if let c = crumb {
             let m = NSMutableAttributedString(string: c.group + " › ", attributes: crumbGroupAttrs ?? fMuted)
             m.append(NSAttributedString(string: c.session, attributes: fFg))
+            if openCount > 1 { m.append(NSAttributedString(string: " · \(openCount) offen", attributes: fMuted)) }
             mid = m
         } else {
             mid = NSAttributedString(string: "kadrell · \(sessionCount) sessions", attributes: fMuted)
         }
         let avail = rx - leftEnd - 16
         let mw = min(mid.size().width, max(0, avail))
-        mid.draw(with: CGRect(x: leftEnd + 8, y: midY - 8, width: mw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        mid.draw(with: CGRect(x: leftEnd + (avail - mw) / 2, y: midY - 8, width: mw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     override func mouseDown(with event: NSEvent) {

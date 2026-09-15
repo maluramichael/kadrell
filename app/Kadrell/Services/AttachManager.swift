@@ -2,23 +2,14 @@ import AppKit
 import SwiftTerm
 import os
 
-/// Terminal einer angehängten Session. Esc verlässt den Fokus statt an Claude zu gehen.
+/// Terminal einer angehängten Session.
 @MainActor
 final class KadrellTerminalView: LocalProcessTerminalView {
-    var onEscape: (() -> Void)?
     var onExit: (() -> Void)?
-    /// Maßstab beim letzten Ruhezustand im geometrischen Zoom-Modus (Schrift = 12 × Maßstab).
-    var restFontScale: CGFloat = 1
-    /// Per Layer verkleinert: Mauskoordinaten stimmen nicht mehr, Klicks gehen an die Canvas (Fokus).
-    var passthroughMouse = false
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        passthroughMouse ? nil : super.hitTest(point)
-    }
 
     /// `keyDown` ist in SwiftTerm nicht `open`; `performKeyEquivalent` sieht jedes Tastenereignis vorher.
     /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt.
-    /// ⌘Esc fängt die Canvas fensterweit ab (Event-Monitor), Esc allein geht an Claude.
+    /// ⌘Esc fängt die App fensterweit ab (Event-Monitor), Esc allein geht an Claude.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.shift, .capsLock, .numericPad, .function])
         if mods.isEmpty, window?.firstResponder === self { keyDown(with: event); return true }
@@ -45,7 +36,6 @@ final class AttachManager {
     private var queueTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
     var onChange: (() -> Void)?
-    var onEscape: (() -> Void)?
 
     init(cli: ClaudeCLI) {
         self.cli = cli
@@ -62,7 +52,7 @@ final class AttachManager {
     func terminal(for key: String) -> KadrellTerminalView? { terminals[key] }
     func lines(for key: String) -> [String] { snapshots[key] ?? [] }
 
-    /// Ersetzt die Warteschlange; Reihenfolge = Abstand zur Viewport-Mitte, eine Session alle 500 ms.
+    /// Ersetzt die Warteschlange; Reihenfolge wie übergeben (sichtbare zuerst), eine Session alle 500 ms.
     func enqueue(_ sessions: [Session]) {
         queue = sessions.filter { $0.canAttach && terminals[$0.id] == nil && !failed.contains($0.id) }
         guard queueTask == nil, !queue.isEmpty else { return }
@@ -85,7 +75,6 @@ final class AttachManager {
         t.nativeBackgroundColor = Theme.bg
         t.nativeForegroundColor = Theme.fg
         t.caretColor = Theme.fg
-        t.onEscape = { [weak self] in self?.onEscape?() }
         let key = session.id
         t.onExit = { [weak self] in
             guard let self else { return }

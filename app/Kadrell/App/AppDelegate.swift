@@ -7,7 +7,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "app")
     private var window: NSWindow!
     private let bar = StatusBarView(frame: .zero)
-    private let canvas = CanvasView(frame: .zero)
+    private let split = ThinSplitView(frame: .zero)
+    private let sidebarScroll = NSScrollView(frame: .zero)
+    private let sidebar = SidebarView(frame: .zero)
+    private let workspace = WorkspaceView(frame: .zero)
     private let store = GroupStore()
     private var cli: ClaudeCLI!
     private var registry: SessionRegistry!
@@ -16,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var palette: PaletteWindow!
     private var overlay: OverlayPanel?
     private var sessionCounter = 0
-    private var firstLoad = true
+    private var keyMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
@@ -32,6 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Unter XCTest nur das Fenster, kein Polling.
         guard NSClassFromString("XCTestCase") == nil else { return }
         Task { await boot() }
+        // Beim ersten Start die Hilfe zeigen: da steht alles, die Oberfläche selbst erklärt nichts.
+        if !UserDefaults.standard.bool(forKey: "helpShown") {
+            UserDefaults.standard.set(true, forKey: "helpShown")
+            showAbout()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -55,45 +63,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         root.autoresizingMask = [.width, .height]
         bar.frame = NSRect(x: 0, y: 0, width: root.bounds.width, height: Theme.barHeight)
         bar.autoresizingMask = [.width, .maxYMargin]
-        canvas.frame = NSRect(x: 0, y: Theme.barHeight, width: root.bounds.width, height: root.bounds.height - Theme.barHeight)
-        canvas.autoresizingMask = [.width, .height]
-        root.addSubview(canvas)
+
+        sidebarScroll.documentView = sidebar
+        sidebarScroll.hasVerticalScroller = true
+        sidebarScroll.autohidesScrollers = true
+        sidebarScroll.drawsBackground = true
+        sidebarScroll.backgroundColor = Theme.panel
+        sidebar.autoresizingMask = [.width]
+        sidebar.frame = NSRect(x: 0, y: 0, width: 260, height: 10)
+        split.isVertical = true
+        split.dividerStyle = .thin
+        split.addArrangedSubview(sidebarScroll)
+        split.addArrangedSubview(workspace)
+        split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
+        split.autosaveName = "KadrellSplit"
+        split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.bounds.width, height: root.bounds.height - Theme.barHeight)
+        split.autoresizingMask = [.width, .height]
+        root.addSubview(split)
         root.addSubview(bar)
         window.contentView = root
         window.center()
         window.makeKeyAndOrderFront(nil)
-        window.makeFirstResponder(canvas)
+        if split.arrangedSubviews[0].frame.width < 120 { split.setPosition(260, ofDividerAt: 0) }
+        window.makeFirstResponder(workspace)
         NSApp.activate()
 
         palette = PaletteWindow()
-        palette.onHighlight = { [weak self] keys in self?.canvas.setHighlight(keys) }
 
-        canvas.onFocusChange = { [weak self] _ in self?.updateBar() }
-        canvas.onViewChange = { [weak self] in self?.updateBar() }
-        canvas.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
-        canvas.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
-        canvas.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
-        canvas.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
-        canvas.onActivateSession = { [weak self] s in self?.resume(s) }
-        canvas.onHelp = { [weak self] in self?.showAbout() }
-        bar.onToggleSnap = { [weak self] in Settings.snapToGrid.toggle(); self?.bar.needsDisplay = true }
-        bar.onCycleGrid = { [weak self] in
-            let sizes = Settings.gridSizes
-            let i = sizes.firstIndex(of: Settings.gridSize) ?? 2
-            Settings.gridSize = sizes[(i + 1) % sizes.count]
-            self?.bar.needsDisplay = true
-            self?.canvas.needsDisplay = true
+        workspace.onChange = { [weak self] in self?.syncSidebar() }
+        workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
+        workspace.onActivateSession = { [weak self] s in self?.resume(s) }
+        sidebar.onSelectSession = { [weak self] key, add in self?.workspace.select([key], add: add) }
+        sidebar.onSelectGroup = { [weak self] gid, add in
+            guard let self, let g = store.group(id: gid) else { return }
+            if add { workspace.addMissing(g.sessionIds) } else { workspace.select(g.sessionIds, add: false) }
         }
-        canvas.onGroupFrameChange = { [weak self] gid, rect in self?.store.setFrame(rect, for: gid) }
-        canvas.onGroupRaised = { [weak self] gid in self?.store.moveToEnd(id: gid) }
+        sidebar.onActivateSession = { [weak self] s in self?.resume(s) }
+        sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
+        sidebar.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
+        sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
+        sidebar.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
+        bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
+
+        // ⌘Esc schließt die Fokus-Kachel, F1 die Hilfe, egal ob Terminal oder Fläche die Tastatur hat. Esc allein geht an Claude.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            if event.keyCode == 53, event.modifierFlags.contains(.command) { self.workspace.removeFocused(); return nil }
+            if event.keyCode == 122 { self.showAbout(); return nil }   // F1
+            return event
+        }
     }
 
     private func boot() async {
         cli = await ClaudeCLI.resolve()
         attach = AttachManager(cli: cli)
-        canvas.attach = attach
-        attach.onChange = { [weak self] in self?.canvas.applyLayout() }
-        attach.onEscape = { [weak self] in self?.canvas.escapeStep() }
+        workspace.attach = attach
+        sidebar.attach = attach
+        attach.onChange = { [weak self] in self?.workspace.relayout() }
         registry = SessionRegistry(cli: cli)
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
         registry.onError = { error in AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)") }
@@ -103,29 +129,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func sessionsChanged(_ sessions: [Session]) {
-        let groupsBefore = Set(store.groups.map(\.id))
         store.assign(sessions)
         attach.sync(with: sessions)
-        canvas.reload(groups: store.groups, sessions: sessions)
-        if firstLoad {
-            firstLoad = false
-            canvas.fitAll(animated: false)
-        } else if !groupsBefore.isSubset(of: Set(store.groups.map(\.id))) {
-            // Eine Gruppe ist weg: die Ansicht zeigt sonst ins Leere.
-            canvas.fitAll()
-        }
-        attach.enqueue(canvas.sessionsByDistanceToCenter())
-        updateBar()
+        reloadViews()
+        attach.enqueue(workspace.sessionsByPriority())
     }
 
-    private func updateBar() {
-        let sessions = canvas.sessions
-        let focused = canvas.focusedKey.flatMap { sessions[$0] }
-        let fg = focused.flatMap { canvas.group(forSession: $0.id) }
+    private func reloadViews() {
+        workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
+        syncSidebar()
+    }
+
+    /// Baum und Leiste folgen der Arbeitsfläche (Auswahl, Fokus, Layout).
+    private func syncSidebar() {
+        sidebar.selected = Set(workspace.selected)
+        sidebar.focused = workspace.focused
+        sidebar.reload(groups: store.groups, sessions: registry?.sessions ?? [])
+        let sessions = workspace.sessions
+        let focused = workspace.focused.flatMap { sessions[$0] }
+        let fg = focused.flatMap { workspace.group(forSession: $0.id) }
         bar.crumb = focused.map { (fg?.name ?? "", $0.name) }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, NSColor(hexString: $0.color)) }
         bar.sessionCount = sessions.count
-        bar.zoomPercent = Int((canvas.scale * 100).rounded())
+        bar.openCount = workspace.selected.count
+        bar.layoutMode = workspace.mode
         let attachable = sessions.values.filter(\.canAttach).count
         bar.attachText = "attach \(attach?.attachedCount ?? 0)/\(attachable)"
         bar.needsDisplay = true
@@ -157,8 +184,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Bearbeiten", action: nil, keyEquivalent: "").submenu = edit
 
         let view = NSMenu(title: "Ansicht")
-        let fit = view.addItem(withTitle: "Fit alles", action: #selector(menuFit), keyEquivalent: "f")
-        fit.keyEquivalentModifierMask = []
+        view.addItem(withTitle: "Grid", action: #selector(menuGrid), keyEquivalent: "1")
+        view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "2")
+        view.addItem(withTitle: "Kachel allein (zen)", action: #selector(menuZen), keyEquivalent: "\r").keyEquivalentModifierMask = [.command, .shift]
+        view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
+        view.addItem(.separator())
+        func arrow(_ title: String, _ key: Int, _ sel: Selector) {
+            let item = view.addItem(withTitle: title, action: sel, keyEquivalent: String(Character(UnicodeScalar(key)!)))
+            item.keyEquivalentModifierMask = [.command, .option]
+        }
+        arrow("Fokus links", NSLeftArrowFunctionKey, #selector(menuFocusLeft))
+        arrow("Fokus rechts", NSRightArrowFunctionKey, #selector(menuFocusRight))
+        arrow("Fokus oben", NSUpArrowFunctionKey, #selector(menuFocusUp))
+        arrow("Fokus unten", NSDownArrowFunctionKey, #selector(menuFocusDown))
+        view.addItem(.separator())
         view.addItem(withTitle: "Suche", action: #selector(menuPalette), keyEquivalent: "p")
         main.addItem(withTitle: "Ansicht", action: nil, keyEquivalent: "").submenu = view
 
@@ -175,6 +214,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onDone = { [weak self] in self?.dismissSheet() }
         present(SettingsView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
     }
+    @objc private func menuGrid() { workspace.setMode(.grid) }
+    @objc private func menuStack() { workspace.setMode(.stack) }
+    @objc private func menuZen() { workspace.toggleZen() }
+    @objc private func menuSidebar() {
+        sidebarScroll.isHidden.toggle()
+        split.adjustSubviews()
+    }
+    @objc private func menuFocusLeft() { workspace.moveFocus(.left) }
+    @objc private func menuFocusRight() { workspace.moveFocus(.right) }
+    @objc private func menuFocusUp() { workspace.moveFocus(.up) }
+    @objc private func menuFocusDown() { workspace.moveFocus(.down) }
 
     private func showAbout() {
         if overlay?.isVisible == true, overlayIsAbout { dismissSheet(); return }
@@ -182,10 +232,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         present(AboutView(), plainReturn: true, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { [weak self] in self?.dismissSheet() })
     }
     private var overlayIsAbout = false
-    @objc private func menuFit() { canvas.fitAll() }
     @objc private func menuPalette() { togglePalette() }
     @objc private func menuStop() {
-        guard let key = canvas.focusedKey, let s = canvas.session(key) else { NSSound.beep(); return }
+        guard let key = workspace.focused, let s = workspace.session(key) else { NSSound.beep(); return }
         stopSession(s)
     }
 
@@ -195,28 +244,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if palette.isVisible { palette.switchToCommandMode(); return }
         dismissSheet()
         var src = PaletteWindow.Source()
-        let sessions = canvas.sessions
+        let sessions = workspace.sessions
         src.sessions = store.groups.flatMap { g in g.sessionIds.compactMap { sessions[$0] }.map { ($0, group: g, lines: attach?.lines(for: $0.id) ?? []) } }
         src.groups = store.groups
-        src.onFocusSession = { [weak self] key in self?.canvas.focus(key) }
-        src.onFitGroup = { [weak self] gid in self?.canvas.fitGroup(gid) }
-        let focusedSession = canvas.focusedKey.flatMap { sessions[$0] }
+        src.onFocusSession = { [weak self] key in self?.workspace.select([key], add: false) }
+        src.onFitGroup = { [weak self] gid in
+            guard let self, let g = store.group(id: gid) else { return }
+            workspace.select(g.sessionIds, add: false)
+        }
+        let focusedSession = workspace.focused.flatMap { sessions[$0] }
         src.commands = [
-            ("Fit alles", { [weak self] in self?.canvas.fitAll() }),
+            ("Grid", { [weak self] in self?.workspace.setMode(.grid) }),
+            ("Stack", { [weak self] in self?.workspace.setMode(.stack) }),
             ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
             ("Alle anhängen", { [weak self] in self?.attachAll() }),
             ("Session stoppen (fokussierte)", { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
             ("Session schließen (fokussierte)", { [weak self] in if let s = focusedSession { self?.closeSession(s.id) } }),
             ("Gruppe bearbeiten (der fokussierten Session)", { [weak self] in
-                if let s = focusedSession, let g = self?.canvas.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
-            ("Reload", { [weak self] in Task { await self?.registry.pollNow(); self?.canvas.applyLayout() } }),
-        ] + store.groups.map { g in ("Zoom auf Gruppe \(g.name)", { [weak self] in self?.canvas.fitGroup(g.id) }) }
+                if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
+            ("Reload", { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
+        ] + store.groups.map { g in ("Alle Sessions von \(g.name)", { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
         palette.source = src
         palette.open(over: window)
     }
 
     private func attachAll() {
-        for s in canvas.sessions.values where s.canAttach { attach.attachNow(s) }
+        for s in workspace.sessions.values where s.canAttach { attach.attachNow(s) }
     }
 
     // MARK: Sessions
@@ -247,14 +300,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func closeSession(_ key: String, force: Bool = false) {
-        guard let s = canvas.session(key) else { return }
+        guard let s = workspace.session(key) else { return }
         guard let id = s.shortId else {
             confirm("Session „\(s.name)“ läuft in einem anderen Terminal", "Interaktive Sessions kann Kadrell nicht stoppen.", button: "OK", destructive: false) {}
             return
         }
         confirm("Session „\(s.name)“ stoppen und entfernen?", "claude stop \(id) und claude rm \(id). Das lässt sich nicht rückgängig machen.", button: "Entfernen", skip: force) { [weak self] in
             guard let self else { return }
-            let gid = canvas.group(forSession: key)?.id
             attach.detach(key)
             Task {
                 do {
@@ -262,20 +314,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try await self.cli.remove(id: id)
                     self.store.removeSession(key)
                     await self.registry.pollNow()
-                    if let gid, self.store.group(id: gid) != nil { self.canvas.fitGroup(gid) } else { self.canvas.fitAll() }
                 } catch { self.report(error) }
             }
         }
     }
 
-    /// Beendete Sessions: `--bg --resume`; Einträge ohne Prozess: `respawn`. Danach anhängen und fokussieren.
+    /// Beendete Sessions: `--bg --resume`; Einträge ohne Prozess: `respawn`. Danach anhängen und zeigen.
     private func resume(_ s: Session) {
         Task {
             do {
                 if s.isStale, let id = s.shortId { try await cli.respawn(id: id) }
                 else { _ = try await cli.resume(sessionId: s.sessionId, cwd: s.cwd) }
                 if let fresh = await registry.waitFor(timeout: 10, { $0.id == s.id && $0.canAttach }) {
-                    canvas.focus(fresh.id)
+                    workspace.select([fresh.id], add: false)
                 }
             } catch { report(error) }
         }
@@ -283,12 +334,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func closeGroup(_ gid: String, force: Bool = false) {
         guard let g = store.group(id: gid) else { return }
-        let members = g.sessionIds.compactMap { canvas.session($0) }
+        let members = g.sessionIds.compactMap { workspace.session($0) }
         let bg = members.filter { $0.shortId != nil }
         if members.isEmpty {
             store.remove(id: gid)
-            canvas.reload(groups: store.groups, sessions: registry.sessions)
-            canvas.fitAll()
+            reloadViews()
             return
         }
         confirm("Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?",
@@ -304,8 +354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.store.remove(id: gid)
                 await self.registry.pollNow()
-                self.canvas.reload(groups: self.store.groups, sessions: self.registry.sessions)
-                self.canvas.fitAll()
+                self.reloadViews()
             }
         }
     }
@@ -327,12 +376,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay?.dismiss()
         overlay = nil
         overlayIsAbout = false
-        window.makeFirstResponder(canvas)
+        window.makeFirstResponder(workspace)
     }
 
     private func openNewSession(groupId: String?) {
         if let gid = groupId, let g = store.group(id: gid) { startSession(group: g, cwd: g.cwd); return }
-        let sessions = canvas.sessions
+        let sessions = workspace.sessions
         let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
         let model = NewSessionModel(groups: store.groups, counts: counts, preselected: groupId.flatMap { store.group(id: $0) })
         let view = NewSessionView(model: model) { [weak self] g, cwd in self?.dismissSheet(); self?.startSession(group: g, cwd: cwd) }
@@ -358,10 +407,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     target = g
                 }
                 store.attach(sessionId: fresh.id, to: target!.id)
-                canvas.reload(groups: store.groups, sessions: registry.sessions)
-                updateBar()
-                if let s = registry.sessions.first(where: { $0.id == fresh.id }) { attach.attachNow(s) }
-                if group == nil { canvas.fitAll() }   // neue Gruppe sichtbar machen; bei + bleibt die Ansicht
+                reloadViews()
+                // Neue Session kommt zur Auswahl dazu und bekommt den Fokus.
+                workspace.select([fresh.id], add: !workspace.selected.contains(fresh.id))
             } catch { report(error) }
         }
     }
@@ -373,9 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             dismissSheet()
             store.update(updated)
-            canvas.reload(groups: store.groups, sessions: registry.sessions)
-            updateBar()
-            canvas.fitGroup(updated.id)
+            reloadViews()
         }
         present(EditGroupView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
     }
@@ -383,4 +429,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+/// Split-View mit 1-px-Trenner in der Linienfarbe des Themes.
+final class ThinSplitView: NSSplitView {
+    override var dividerColor: NSColor { Theme.line }
+    override var dividerThickness: CGFloat { 1 }
 }

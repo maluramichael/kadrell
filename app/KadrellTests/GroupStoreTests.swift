@@ -26,10 +26,6 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(store.groups[1].name, "malura")
         XCTAssertEqual(store.groups[0].color, Theme.palette[0])
         XCTAssertEqual(store.groups[1].color, Theme.palette[1])
-        // beide Gruppen platziert, ohne Überlappung
-        let f0 = store.groups[0].frame!.rect, f1 = store.groups[1].frame!.rect
-        XCTAssertFalse(f0.intersects(f1))
-        XCTAssertEqual(f0.size, Settings.snapped(CGRect(origin: .zero, size: Layout.defaultGroupSize)).size)   // rasterabhängig
         XCTAssertFalse(store.assign([session("s1", cwd: "/p/homelab"), session("s2", cwd: "/p/homelab"), session("s3", cwd: "/p/malura")]))
 
         let reloaded = GroupStore(url: url)
