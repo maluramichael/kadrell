@@ -29,7 +29,8 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
     private var selected = 0
 
     init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 640, height: 420), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let s = Theme.scale, W = (640 * s).rounded(), H = (420 * s).rounded()
+        super.init(contentRect: NSRect(x: 0, y: 0, width: W, height: H), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isFloatingPanel = true
         level = .floating
         isOpaque = false
@@ -46,24 +47,24 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.font = Theme.font(15)
+        field.font = Theme.font(15 * s)
         field.textColor = Theme.fg
-        field.placeholderAttributedString = NSAttributedString(string: "Session, Gruppe, Pfad suchen …  ( > für Kommandos )", attributes: [.font: Theme.font(15), .foregroundColor: Theme.muted])
+        field.placeholderAttributedString = NSAttributedString(string: "Session, Gruppe, Pfad suchen …  ( > für Kommandos )", attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
         field.delegate = self
-        field.frame = NSRect(x: 16, y: 420 - 44, width: 640 - 32, height: 24)
+        field.frame = NSRect(x: 16 * s, y: H - 44 * s, width: W - 32 * s, height: 24 * s)
         field.autoresizingMask = [.width, .minYMargin]
         root.addSubview(field)
-        let sep = NSView(frame: NSRect(x: 0, y: 420 - 56, width: 640, height: 1))
+        let sep = NSView(frame: NSRect(x: 0, y: H - 56 * s, width: W, height: 1))
         sep.wantsLayer = true; sep.layer?.backgroundColor = Theme.line.cgColor
         sep.autoresizingMask = [.width, .minYMargin]
         root.addSubview(sep)
 
         let col = NSTableColumn(identifier: .init("c"))
-        col.width = 600
+        col.width = W - 40
         table.addTableColumn(col)
         table.headerView = nil
         table.backgroundColor = .clear
-        table.rowHeight = 44
+        table.rowHeight = (44 * s).rounded()
         table.intercellSpacing = .zero
         table.selectionHighlightStyle = .none
         table.dataSource = self
@@ -73,17 +74,17 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         scroll.documentView = table
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
-        scroll.frame = NSRect(x: 0, y: 34, width: 640, height: 420 - 56 - 34)
+        scroll.frame = NSRect(x: 0, y: 34 * s, width: W, height: H - 90 * s)
         scroll.autoresizingMask = [.width, .height]
         root.addSubview(scroll)
 
-        foot.font = Theme.font(11)
+        foot.font = Theme.font(11 * s)
         foot.textColor = Theme.muted
         foot.alignment = .right
-        foot.frame = NSRect(x: 16, y: 10, width: 640 - 32, height: 16)
+        foot.frame = NSRect(x: 16 * s, y: 10 * s, width: W - 32 * s, height: 16 * s)
         foot.autoresizingMask = [.width, .maxYMargin]
         root.addSubview(foot)
-        let sep2 = NSView(frame: NSRect(x: 0, y: 34, width: 640, height: 1))
+        let sep2 = NSView(frame: NSRect(x: 0, y: 34 * s, width: W, height: 1))
         sep2.wantsLayer = true; sep2.layer?.backgroundColor = Theme.line.cgColor
         sep2.autoresizingMask = [.width, .maxYMargin]
         root.addSubview(sep2)
@@ -95,7 +96,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
 
     func open(over parent: NSWindow, prefix: String = "") {
         let pf = parent.frame
-        setFrameOrigin(NSPoint(x: pf.midX - 320, y: pf.maxY - 0.12 * pf.height - 420))
+        setFrameOrigin(NSPoint(x: pf.midX - frame.width / 2, y: pf.maxY - 0.12 * pf.height - frame.height))
         field.stringValue = prefix
         host = parent
         parent.addChildWindow(self, ordered: .above)
@@ -198,8 +199,9 @@ final class PaletteRow: NSView {
     var item: PaletteWindow.Item?
     var selected = false
     override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
-        let b = bounds
+    override func draw(_ dirtyRect: NSRect) { Theme.scaled(bounds) { drawRow($0) } }
+
+    private func drawRow(_ b: CGRect) {
         if selected {
             Theme.surface.setFill(); b.fill()
             Theme.running.setFill(); CGRect(x: 0, y: 0, width: 3, height: b.height).fill()

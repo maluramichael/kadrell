@@ -32,9 +32,13 @@ final class StatusBarView: NSView {
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
 
+    /// Gezeichnet in unskalierten Punkten, die Hit-Rects auch.
     override func draw(_ dirtyRect: NSRect) {
         hitRects = []
-        let b = bounds
+        Theme.scaled(bounds) { drawBar($0) }
+    }
+
+    private func drawBar(_ b: CGRect) {
         Theme.panel.setFill(); b.fill()
         Theme.line.setFill(); CGRect(x: 0, y: b.height - 1, width: b.width, height: 1).fill()
         let f = Theme.attrs(11.5, Theme.sub)
@@ -99,7 +103,8 @@ final class StatusBarView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
+        let v = convert(event.locationInWindow, from: nil)
+        let p = CGPoint(x: v.x / Theme.scale, y: v.y / Theme.scale)
         for (r, action) in hitRects where r.contains(p) { action(); return }
     }
 }
