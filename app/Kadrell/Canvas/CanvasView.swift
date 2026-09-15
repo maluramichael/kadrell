@@ -25,6 +25,7 @@ final class CanvasView: NSView {
     private var drag: (start: CGPoint, offset: CGPoint, moved: Bool)?
     private var pulseTask: Task<Void, Never>?
     private var wheelMonitor: Any?
+    private var keyMonitor: Any?
 
     var onFocusChange: ((String?) -> Void)?
     var onViewChange: (() -> Void)?
@@ -48,6 +49,12 @@ final class CanvasView: NSView {
         wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, event.modifierFlags.contains(.command), event.window === self.window else { return event }
             self.scrollWheel(with: event)
+            return nil
+        }
+        // ⌘Esc verlässt den Fokus, egal ob Terminal oder Canvas die Tastatur hat. Esc allein geht an Claude.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window, event.keyCode == 53, event.modifierFlags.contains(.command) else { return event }
+            self.escapeStep()
             return nil
         }
     }

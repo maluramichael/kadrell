@@ -9,13 +9,11 @@ final class KadrellTerminalView: LocalProcessTerminalView {
     var onExit: (() -> Void)?
 
     /// `keyDown` ist in SwiftTerm nicht `open`; `performKeyEquivalent` sieht jedes Tastenereignis vorher.
-    /// Esc geht an Claude (Interrupt), ⌘Esc verlässt den Fokus. Alle anderen Tasten ohne Modifier gehen
-    /// direkt ins Terminal, damit Menü-Kürzel ohne Modifier (`F` für Fit) das Tippen nicht abfangen.
+    /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt.
+    /// ⌘Esc fängt die Canvas fensterweit ab (Event-Monitor), Esc allein geht an Claude.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard window?.firstResponder === self else { return super.performKeyEquivalent(with: event) }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.shift, .capsLock, .numericPad, .function])
-        if event.keyCode == 53, mods == [.command] { onEscape?(); return true }
-        if mods.isEmpty { keyDown(with: event); return true }
+        if mods.isEmpty, window?.firstResponder === self { keyDown(with: event); return true }
         return super.performKeyEquivalent(with: event)
     }
 
