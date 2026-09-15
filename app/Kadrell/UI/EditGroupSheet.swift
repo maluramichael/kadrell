@@ -7,6 +7,7 @@ final class EditGroupModel {
     var name: String
     var color: Color
     var cwd: String
+    var compSelected = 0
     var onSave: ((Group) -> Void)?
 
     init(group: Group) {
@@ -21,8 +22,8 @@ final class EditGroupModel {
         let n = name.trimmingCharacters(in: .whitespaces)
         if !n.isEmpty { g.name = n }
         g.color = NSColor(color).hexString
-        var dir = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
-        if dir.hasPrefix("~") { dir = NSHomeDirectory() + dir.dropFirst() }
+        var dir = NewSessionModel.expand(cwd.trimmingCharacters(in: .whitespacesAndNewlines))
+        while dir.count > 1, dir.hasSuffix("/") { dir.removeLast() }
         if !dir.isEmpty { g.cwd = dir }
         onSave?(g)
     }
@@ -50,10 +51,9 @@ struct EditGroupView: View {
             }
             .padding(14)
             Divider().overlay(Theme.lineColor)
-            TextField("Ordner für neue Sessions", text: $model.cwd).textFieldStyle(.plain).font(.custom("JetBrainsMonoNF-Regular", size: 13))
-                .padding(14).onSubmit { model.save() }
+            FolderInput(path: $model.cwd, selected: $model.compSelected) { model.save() }
             Divider().overlay(Theme.lineColor)
-            Text("⏎ speichern · Esc abbrechen").font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
+            Text("Tab vervollständigen · ⏎ speichern · Esc abbrechen").font(.custom("JetBrainsMonoNF-Regular", size: 11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .font(.custom("JetBrainsMonoNF-Regular", size: 12))
