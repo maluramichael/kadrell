@@ -232,6 +232,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let file = NSMenu(title: "Datei")
         file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
         file.addItem(withTitle: "Neue Session im selben Ordner", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
+        file.addItem(.separator())
+        file.addItem(withTitle: "Fenster schließen", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
 
         let edit = NSMenu(title: "Bearbeiten")
@@ -261,7 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Ansicht", action: nil, keyEquivalent: "").submenu = view
 
         let session = NSMenu(title: "Session")
-        session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "w")
+        session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "")
         main.addItem(withTitle: "Session", action: nil, keyEquivalent: "").submenu = session
         NSApp.mainMenu = main
     }
