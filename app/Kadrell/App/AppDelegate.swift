@@ -414,7 +414,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sessions = workspace.sessions
         let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
         let model = NewSessionModel(groups: store.groups, counts: counts, preselected: groupId.flatMap { store.group(id: $0) })
-        let view = NewSessionView(model: model) { [weak self] g, cwd in self?.dismissSheet(); self?.startSession(group: g, cwd: cwd) }
+        let view = NewSessionView(model: model) { [weak self] g, cwd in
+            self?.dismissSheet()
+            if g == nil { Settings.startFolder = cwd }   // letzte Ordnerwahl merken: beim nächsten ⌘N steht sie schon da
+            self?.startSession(group: g, cwd: cwd)
+        }
         present(view, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.start() })
     }
 
