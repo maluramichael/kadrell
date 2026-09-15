@@ -49,6 +49,11 @@ final class NewSessionModel {
     func start() {
         guard step == 2 else { pick(selected); return }
         var dir = NewSessionModel.expand(cwd.trimmingCharacters(in: .whitespacesAndNewlines))
+        // ⌘⏎ mit markiertem Vorschlag: direkt in dem Ordner starten, statt im halb getippten Pfad.
+        var isDir: ObjCBool = false
+        let typedExists = FileManager.default.fileExists(atPath: dir, isDirectory: &isDir) && isDir.boolValue
+        let comps = completions
+        if !typedExists, !comps.isEmpty { dir = comps[min(compSelected, comps.count - 1)] }
         while dir.count > 1, dir.hasSuffix("/") { dir.removeLast() }
         guard !dir.isEmpty else { focusRequest += 1; return }
         onStart?(chosen, dir)
