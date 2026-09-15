@@ -1,0 +1,404 @@
+import AppKit
+
+/// Welt, Zoom, Pan, Hit-Test und Animation. Kacheln und Gruppen sind Subviews, deren Frames pro
+/// Frame aus dem Welt-Layout und dem aktuellen Maßstab gesetzt werden (kein Layer-Scaling).
+@MainActor
+final class CanvasView: NSView {
+    private(set) var groups: [Group] = []
+    private(set) var sessions: [String: Session] = [:]
+    var attach: AttachManager?
+
+    private(set) var scale: CGFloat = 1
+    private(set) var offset = CGPoint.zero
+    private(set) var focusedKey: String?
+    private(set) var layout = Layout()
+    private var groupViews: [String: GroupView] = [:]
+    private var cellViews: [String: CellView] = [:]
+    private var hoveredCell: String?
+    private var hoveredGroup: String?
+    private var highlightKeys: Set<String>?
+    private var pulse: CGFloat = 1
+
+    private var displayLink: CADisplayLink?
+    private var anim: (from: (CGFloat, CGPoint), to: (CGFloat, CGPoint), start: CFTimeInterval, duration: CFTimeInterval, completion: (() -> Void)?)?
+    var isAnimating: Bool { anim != nil }
+    private var drag: (start: CGPoint, offset: CGPoint, moved: Bool)?
+    private var pulseTask: Task<Void, Never>?
+    private var wheelMonitor: Any?
+
+    var onFocusChange: ((String?) -> Void)?
+    var onViewChange: (() -> Void)?
+    var onNewSession: ((String?) -> Void)?
+    var onEditGroup: ((String) -> Void)?
+    var onCloseGroup: ((String) -> Void)?
+    var onCloseSession: ((String) -> Void)?
+    var onActivateSession: ((Session) -> Void)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = Theme.bg.cgColor
+        pulseTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(80))
+                self?.tickPulse()
+            }
+        }
+        // ⌘ + Rad zoomt auch über einem eingehängten Terminal (das sonst selbst scrollt).
+        wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self, event.modifierFlags.contains(.command), event.window === self.window else { return event }
+            self.scrollWheel(with: event)
+            return nil
+        }
+    }
+    required init?(coder: NSCoder) { nil }
+    override var isFlipped: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
+
+    // MARK: Daten
+
+    func reload(groups: [Group], sessions: [Session]) {
+        self.groups = groups
+        self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        let groupIds = Set(groups.map(\.id))
+        for (id, v) in groupViews where !groupIds.contains(id) { v.removeFromSuperview(); groupViews[id] = nil }
+        for g in groups {
+            if let v = groupViews[g.id] { v.group = g } else {
+                let v = GroupView(group: g)
+                groupViews[g.id] = v
+                addSubview(v, positioned: .below, relativeTo: nil)
+            }
+        }
+        let keys = Set(self.sessions.keys)
+        for (k, v) in cellViews where !keys.contains(k) { v.removeFromSuperview(); cellViews[k] = nil }
+        for s in sessions {
+            if let v = cellViews[s.id] { v.session = s } else {
+                let v = CellView(session: s)
+                cellViews[s.id] = v
+                addSubview(v)
+            }
+        }
+        if let f = focusedKey, self.sessions[f] == nil { focusedKey = nil; onFocusChange?(nil) }
+        applyLayout()
+    }
+
+    func group(forSession key: String) -> Group? { groups.first { $0.sessionIds.contains(key) } }
+    func session(_ key: String) -> Session? { sessions[key] }
+    var sessionCount: Int { sessions.count }
+    /// Session-Keys sortiert nach Abstand zur Viewport-Mitte (Reihenfolge der Attach-Queue).
+    func sessionsByDistanceToCenter() -> [Session] {
+        let c = CGPoint(x: bounds.midX, y: bounds.midY)
+        return sessions.values.sorted {
+            let a = cellViews[$0.id]?.frame ?? .zero, b = cellViews[$1.id]?.frame ?? .zero
+            return hypot(a.midX - c.x, a.midY - c.y) < hypot(b.midX - c.x, b.midY - c.y)
+        }
+    }
+
+    func setHighlight(_ keys: Set<String>?) {
+        highlightKeys = keys
+        applyLayout()
+    }
+
+    // MARK: Layout
+
+    private func layoutInputs() -> [Layout.GroupInput] {
+        groups.map { g in Layout.GroupInput(id: g.id, cellKeys: g.sessionIds.filter { sessions[$0] != nil }) }
+    }
+
+    private func computeLayout(scale s: CGFloat) -> Layout {
+        let aspect = bounds.height > 0 ? bounds.width / bounds.height : Layout.cellAspect
+        return Layout.compute(groups: layoutInputs(), worldWidth: Layout.worldWidth(viewport: bounds.size, groupCount: groups.count),
+                              scale: s, focused: focusedKey, viewportAspect: aspect)
+    }
+
+    private func toScreen(_ r: CGRect) -> CGRect {
+        CGRect(x: r.minX * scale + offset.x, y: r.minY * scale + offset.y, width: r.width * scale, height: r.height * scale)
+    }
+
+    func applyLayout() {
+        layout = computeLayout(scale: scale)
+        let refWidth = Layout.cellMin * scale
+        let baseLod = Layout.lod(cellScreenWidth: refWidth)
+        for g in groups {
+            guard let v = groupViews[g.id], let r = layout.groups[g.id] else { continue }
+            let f = toScreen(r).integral
+            if v.frame != f { v.frame = f }
+            v.headerRect = toScreen(layout.headers[g.id] ?? .zero).offsetBy(dx: -f.minX, dy: -f.minY)
+            v.plusRect = toScreen(layout.plus[g.id] ?? .zero).offsetBy(dx: -f.minX, dy: -f.minY)
+            v.count = g.sessionIds.filter { sessions[$0] != nil }.count
+            v.lod = baseLod
+            v.hovered = hoveredGroup == g.id
+            v.dimmed = false
+            v.needsDisplay = true
+        }
+        for (key, v) in cellViews {
+            guard let r = layout.cells[key], let s = sessions[key] else { v.isHidden = true; continue }
+            v.isHidden = false
+            let f = toScreen(r).integral
+            if v.frame != f { v.frame = f }
+            let g = group(forSession: key)
+            v.groupName = g?.name ?? ""
+            v.groupColor = NSColor(hexString: g?.color ?? "#6c7086")
+            v.lod = focusedKey == key ? 3 : Layout.lod(cellScreenWidth: f.width)
+            v.focused = focusedKey == key
+            v.hovered = hoveredCell == key
+            v.attached = attach?.isAttached(key) ?? false
+            v.lines = attach?.lines(for: key) ?? []
+            v.highlight = highlightKeys.map { $0.contains(key) }
+            v.pulse = pulse
+            mountTerminal(for: key, in: v, session: s)
+            v.needsDisplay = true
+        }
+        // Verschwindet ein Terminal (Session beendet, Attach-Client weg), fällt der First Responder aufs
+        // Fenster zurück und Esc käme nirgends an. Dann holt sich die Canvas die Tastatur zurück.
+        if let w = window, w.firstResponder === w { w.makeFirstResponder(self) }
+        onViewChange?()
+    }
+
+    /// Terminal nur eingehängt, wenn die Kachel ≥ 320 px breit ist und keine Animation läuft (Punkt 10).
+    private func mountTerminal(for key: String, in cell: CellView, session: Session) {
+        guard let t = attach?.terminal(for: key) else { return }
+        let want = cell.lod >= 3 && !isAnimating
+        if want {
+            if t.superview !== cell { cell.addSubview(t) }
+            let body = cell.bodyRect
+            if t.frame != body { t.frame = body }
+        } else if t.superview != nil {
+            if window?.firstResponder === t { window?.makeFirstResponder(self) }
+            t.removeFromSuperview()
+        }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let changed = newSize != frame.size
+        super.setFrameSize(newSize)
+        if changed, !groups.isEmpty { fitAll(animated: false) }
+    }
+
+    // MARK: Ansicht
+
+    private func setView(scale s: CGFloat, offset o: CGPoint) {
+        scale = Layout.clamp(s)
+        offset = o
+        applyLayout()
+    }
+
+    func zoom(by factor: CGFloat, at p: CGPoint) {
+        if focusedKey != nil { unfocus() }
+        let s = Layout.clamp(scale * factor)
+        let k = s / scale
+        setView(scale: s, offset: CGPoint(x: p.x - (p.x - offset.x) * k, y: p.y - (p.y - offset.y) * k))
+    }
+
+    func pan(by d: CGPoint) { setView(scale: scale, offset: CGPoint(x: offset.x + d.x, y: offset.y + d.y)) }
+
+    /// Fit im Zielmaßstab rechnen: das Layout hängt vom Maßstab ab, deshalb iterieren.
+    private func fit(pad: CGFloat, animated: Bool, completion: (() -> Void)? = nil, rect: (Layout) -> CGRect?) {
+        var s = scale, o = offset
+        for _ in 0..<4 {
+            guard let r = rect(computeLayout(scale: s)), r.width > 0, r.height > 0 else { return }
+            (s, o) = Layout.fit(r, in: bounds.size, pad: pad)
+        }
+        animate(to: s, offset: o, duration: animated ? 0.35 : 0, completion: completion)
+    }
+
+    func fitAll(animated: Bool = true) {
+        unfocus()
+        fit(pad: 12, animated: animated) { $0.content }
+    }
+
+    func fitGroup(_ id: String, animated: Bool = true) {
+        unfocus()
+        fit(pad: 6, animated: animated) { $0.groups[id] }
+    }
+
+    func focus(_ key: String) {
+        guard let s = sessions[key] else { return }
+        focusedKey = key
+        attach?.attachNow(s)
+        onFocusChange?(key)
+        fit(pad: 0, animated: true, completion: { [weak self] in
+            guard let self, self.focusedKey == key, let t = self.attach?.terminal(for: key) else { return }
+            self.window?.makeFirstResponder(t)
+        }) { $0.cells[key] }
+    }
+
+    func unfocus() {
+        guard focusedKey != nil else { return }
+        focusedKey = nil
+        window?.makeFirstResponder(self)
+        onFocusChange?(nil)
+    }
+
+    func escapeStep() {
+        if let f = focusedKey {
+            let g = group(forSession: f)
+            unfocus()
+            if let g { fitGroup(g.id) } else { fitAll() }
+        } else {
+            fitAll()
+        }
+    }
+
+    // MARK: Animation
+
+    private func animate(to s: CGFloat, offset o: CGPoint, duration: CFTimeInterval, completion: (() -> Void)? = nil) {
+        stopAnimation()
+        if duration <= 0 {
+            setView(scale: s, offset: o)
+            completion?()
+            return
+        }
+        anim = ((scale, offset), (Layout.clamp(s), o), CACurrentMediaTime(), duration, completion)
+        let link = displayLink(target: self, selector: #selector(tick(_:)))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+        applyLayout()
+    }
+
+    private func stopAnimation() {
+        displayLink?.invalidate()
+        displayLink = nil
+        anim = nil
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        guard let a = anim else { stopAnimation(); return }
+        let k = min(1, (CACurrentMediaTime() - a.start) / a.duration)
+        let e = 1 - pow(1 - k, 3)
+        let s = a.from.0 + (a.to.0 - a.from.0) * e
+        let o = CGPoint(x: a.from.1.x + (a.to.1.x - a.from.1.x) * e, y: a.from.1.y + (a.to.1.y - a.from.1.y) * e)
+        if k >= 1 {
+            stopAnimation()
+            setView(scale: a.to.0, offset: a.to.1)
+            a.completion?()
+        } else {
+            setView(scale: s, offset: o)
+        }
+    }
+
+    private func tickPulse() {
+        let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
+        pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
+        for (key, v) in cellViews where sessions[key]?.status == .running && v.lod >= 2 && !v.isHidden {
+            v.pulse = pulse
+            v.setNeedsDisplay(v.dotRect)
+        }
+        for (_, v) in cellViews where v.lod == 0 && !v.isHidden { v.pulse = pulse; v.needsDisplay = true }
+    }
+
+    // MARK: Hit-Test
+
+    enum Hit { case cell(String), cellClose(String), header(String), pen(String), close(String), plus(String), none }
+
+    func hit(at p: CGPoint) -> Hit {
+        for (key, v) in cellViews where !v.isHidden && v.frame.contains(p) {
+            let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
+            if v.lod >= 2, v.xRect.insetBy(dx: -4, dy: -4).contains(local), hoveredCell == key { return .cellClose(key) }
+            return .cell(key)
+        }
+        for (id, v) in groupViews where v.frame.contains(p) {
+            let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
+            if v.lod >= 1, hoveredGroup == id {
+                if v.penRect.insetBy(dx: -4, dy: -4).contains(local) { return .pen(id) }
+                if v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .close(id) }
+            }
+            if v.plusRect.contains(local) { return .plus(id) }
+            if v.headerRect.insetBy(dx: 0, dy: -6).contains(local) { return .header(id) }
+        }
+        return .none
+    }
+
+    // MARK: Events
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        var cell: String?, group: String?
+        for (key, v) in cellViews where !v.isHidden && v.frame.contains(p) { cell = key; break }
+        if cell == nil { for (id, v) in groupViews where v.frame.contains(p) { group = id; break } }
+        if cell != hoveredCell || group != hoveredGroup {
+            let old = (hoveredCell, hoveredGroup)
+            hoveredCell = cell; hoveredGroup = group
+            for k in [old.0, cell].compactMap({ $0 }) { cellViews[k]?.hovered = hoveredCell == k; cellViews[k]?.needsDisplay = true }
+            for g in [old.1, group].compactMap({ $0 }) { groupViews[g]?.hovered = hoveredGroup == g; groupViews[g]?.needsDisplay = true }
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if let c = hoveredCell { cellViews[c]?.hovered = false; cellViews[c]?.needsDisplay = true }
+        if let g = hoveredGroup { groupViews[g]?.hovered = false; groupViews[g]?.needsDisplay = true }
+        hoveredCell = nil; hoveredGroup = nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        drag = (convert(event.locationInWindow, from: nil), offset, false)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard var d = drag else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        let dx = p.x - d.start.x, dy = p.y - d.start.y
+        if !d.moved, hypot(dx, dy) < 4 { return }
+        d.moved = true
+        drag = d
+        stopAnimation()
+        setView(scale: scale, offset: CGPoint(x: d.offset.x + dx, y: d.offset.y + dy))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let wasDrag = drag?.moved ?? false
+        drag = nil
+        if wasDrag { return }
+        let p = convert(event.locationInWindow, from: nil)
+        switch hit(at: p) {
+        case .cellClose(let k): onCloseSession?(k)
+        case .cell(let k):
+            guard k != focusedKey, let s = sessions[k] else { return }
+            if s.isDone { onActivateSession?(s) } else { focus(k) }
+        case .header(let g): fitGroup(g)
+        case .pen(let g): onEditGroup?(g)
+        case .close(let g): onCloseGroup?(g)
+        case .plus(let g): onNewSession?(g)
+        case .none: break
+        }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        stopAnimation()
+        if event.modifierFlags.contains(.shift) {
+            let d = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.scrollingDeltaY
+            pan(by: CGPoint(x: d, y: 0))
+            return
+        }
+        // Rad und Trackpad zoomen immer um den Zeiger (Shift pannt, Drag pannt).
+        let k: CGFloat = event.hasPreciseScrollingDeltas ? 0.005 : 0.15
+        zoom(by: exp(event.scrollingDeltaY * k), at: p)
+    }
+
+    override func magnify(with event: NSEvent) {
+        stopAnimation()
+        zoom(by: 1 + event.magnification, at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { escapeStep(); return }
+        if event.modifierFlags.contains(.command) { super.keyDown(with: event); return }
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        switch event.charactersIgnoringModifiers {
+        case "f": fitAll()
+        case "+", "=": stopAnimation(); zoom(by: 1.3, at: center)
+        case "-": stopAnimation(); zoom(by: 1 / 1.3, at: center)
+        default: super.keyDown(with: event)
+        }
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+}

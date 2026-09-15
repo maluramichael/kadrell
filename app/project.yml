@@ -1,0 +1,66 @@
+name: Kadrell
+options:
+  bundleIdPrefix: de.malura
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_APP_SANDBOX: NO
+    ENABLE_HARDENED_RUNTIME: NO
+    SWIFT_STRICT_CONCURRENCY: complete
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    revision: 233c6ba
+targets:
+  Kadrell:
+    type: application
+    platform: macOS
+    sources:
+      - path: Kadrell
+    dependencies:
+      - package: SwiftTerm
+    info:
+      path: Kadrell/Info.plist
+      properties:
+        CFBundleName: Kadrell
+        CFBundleDisplayName: Kadrell
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "15.0"
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: true
+        NSHumanReadableCopyright: "Michael Malura"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.malura.kadrell
+        PRODUCT_NAME: Kadrell
+  KadrellTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: KadrellTests
+    dependencies:
+      - target: Kadrell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.malura.kadrell.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Kadrell:
+    build:
+      targets:
+        Kadrell: all
+        KadrellTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - KadrellTests
