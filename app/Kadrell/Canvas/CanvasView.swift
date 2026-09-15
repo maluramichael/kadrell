@@ -403,6 +403,13 @@ final class CanvasView: NSView {
         var cell: String?, group: String?
         for (key, v) in cellViews where !v.isHidden && v.frame.contains(p) { cell = key; break }
         if cell == nil { for (id, v) in groupViews where v.frame.contains(p) { group = id; break } }
+        // Cursor nach Ziel: Icons Zeigehand, Kacheln Pfeil, Griff Kreuz, Kopf und Leere Greifhand.
+        switch hit(at: p) {
+        case .pen, .close, .plus, .cellClose: NSCursor.pointingHand.set()
+        case .cell: NSCursor.arrow.set()
+        case .resize: NSCursor.crosshair.set()
+        case .header, .none: NSCursor.openHand.set()
+        }
         if cell != hoveredCell || group != hoveredGroup {
             let old = (hoveredCell, hoveredGroup)
             hoveredCell = cell; hoveredGroup = group
@@ -510,7 +517,6 @@ final class CanvasView: NSView {
         }
     }
 
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
 
     // MARK: Hintergrund: feines Linienraster in Weltkoordinaten
 
