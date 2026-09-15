@@ -97,6 +97,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         let pf = parent.frame
         setFrameOrigin(NSPoint(x: pf.midX - 320, y: pf.maxY - 0.12 * pf.height - 420))
         field.stringValue = prefix
+        host = parent
         parent.addChildWindow(self, ordered: .above)
         makeKeyAndOrderFront(nil)
         Backdrop.sync(parent)
@@ -106,12 +107,15 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
     }
 
     func dismiss(runHighlightReset: Bool = true) {
-        let p = parent
-        p?.removeChildWindow(self)
+        host?.removeChildWindow(self)
         orderOut(nil)
-        Backdrop.sync(p)
         if runHighlightReset { onHighlight?(nil) }
     }
+
+    /// Wie bei OverlayPanel: `parent` ist nach orderOut/close nil, der Blur hängt am gemerkten Hauptfenster.
+    private weak var host: NSWindow?
+    override func orderOut(_ sender: Any?) { super.orderOut(sender); Backdrop.sync(host) }
+    override func close() { super.close(); Backdrop.sync(host) }
 
     func switchToCommandMode() {
         if !isCommandMode { field.stringValue = ">"; field.currentEditor()?.moveToEndOfLine(nil); refreshList() }
