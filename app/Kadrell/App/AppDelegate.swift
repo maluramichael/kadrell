@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleSnap = { [weak self] in Settings.snapToGrid.toggle(); self?.bar.needsDisplay = true }
         bar.onCycleGrid = { [weak self] in
             let sizes = Settings.gridSizes
-            let i = sizes.firstIndex(of: Settings.gridSize) ?? 1
+            let i = sizes.firstIndex(of: Settings.gridSize) ?? 2
             Settings.gridSize = sizes[(i + 1) % sizes.count]
             self?.bar.needsDisplay = true
             self?.canvas.needsDisplay = true

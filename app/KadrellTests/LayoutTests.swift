@@ -15,8 +15,8 @@ final class LayoutTests: XCTestCase {
         let g = [Layout.GroupInput(id: "a", cellKeys: ["1", "2", "3"], frame: CGRect(x: 100, y: 50, width: 760, height: 500))]
         let l = Layout.compute(groups: g, scale: 1, columns: 2)
         let c1 = l.cells["1"]!, c2 = l.cells["2"]!, c3 = l.cells["3"]!
-        // innen: 760 - 24 = 736 breit → zwei Spalten à 363; zwei Zeilen
-        XCTAssertEqual(c1.width, 363, accuracy: 0.01)
+        // innen: 760 - 24 - 3 (Farbbalken) = 733 breit → zwei Spalten à 361,5; zwei Zeilen
+        XCTAssertEqual(c1.width, 361.5, accuracy: 0.01)
         XCTAssertEqual(c2.minX, c1.maxX + 10, accuracy: 0.01)
         XCTAssertEqual(c3.minY, c1.maxY + 10, accuracy: 0.01)
         XCTAssertEqual(c3.maxY, 50 + 500 - 18 - 12, accuracy: 0.01)   // Fußstreifen 18 px plus Rand
@@ -26,7 +26,7 @@ final class LayoutTests: XCTestCase {
         XCTAssertEqual(l.content, g[0].frame.insetBy(dx: -24, dy: -24))
         // eine Kachel: eine Spalte, füllt alles
         let single = Layout.compute(groups: [Layout.GroupInput(id: "a", cellKeys: ["1"], frame: g[0].frame)], scale: 1, columns: 3)
-        XCTAssertEqual(single.cells["1"]!.width, 736, accuracy: 0.01)
+        XCTAssertEqual(single.cells["1"]!.width, 733, accuracy: 0.01)
     }
 
     func testHeaderIsScreenConstant() {

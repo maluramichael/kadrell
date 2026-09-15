@@ -12,10 +12,11 @@ enum Settings {
     static let startFolderKey = "startFolder"
     static let gridSizeKey = "gridSize"
     static let snapKey = "snapToGrid"
-    static let gridSizes: [CGFloat] = [20, 40, 80, 160]
-    /// Rasterweite in Weltpunkten (Hintergrundlinien und Einrasten).
+    /// 0 = Raster aus (keine Linien, kein Einrasten).
+    static let gridSizes: [CGFloat] = [0, 20, 40, 80, 160]
+    /// Rasterweite in Weltpunkten (Hintergrundlinien und Einrasten), 0 = aus.
     static var gridSize: CGFloat {
-        get { let v = UserDefaults.standard.double(forKey: gridSizeKey); return v > 0 ? v : 40 }
+        get { UserDefaults.standard.object(forKey: gridSizeKey) == nil ? 40 : CGFloat(UserDefaults.standard.double(forKey: gridSizeKey)) }
         set { UserDefaults.standard.set(Double(newValue), forKey: gridSizeKey) }
     }
     static var snapToGrid: Bool {
@@ -23,8 +24,8 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: snapKey) }
     }
     static func snapped(_ r: CGRect) -> CGRect {
-        guard snapToGrid else { return r }
         let g = gridSize
+        guard snapToGrid, g > 0 else { return r }
         func q(_ v: CGFloat) -> CGFloat { (v / g).rounded() * g }
         return CGRect(x: q(r.minX), y: q(r.minY), width: max(g, q(r.width)), height: max(g, q(r.height)))
     }

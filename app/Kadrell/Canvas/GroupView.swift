@@ -37,10 +37,11 @@ final class GroupView: NSView {
         let b = bounds
         (dimmed ? Theme.panel.withAlphaComponent(0.4) : Theme.panel).setFill()
         b.fill()
-        Theme.line.setFill()
-        b.insetBy(dx: 0, dy: 0).frame(withWidth: 1)
         color.setFill()
         CGRect(x: 0, y: 0, width: 3, height: b.height).fill()
+        // umlaufender Rahmen, gleiche Linie wie die Kacheln innen
+        (hovered ? Theme.sub : Theme.line).setFill()
+        b.frame(withWidth: 1)
 
         // Kopf- und Fußstreifen wie Leisten: eigener Hintergrund, 1 px Trennlinie
         let h = headerRect

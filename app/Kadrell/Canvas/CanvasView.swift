@@ -593,6 +593,7 @@ final class CanvasView: NSView {
         guard scale > 0 else { return }
         // Linienraster in Weltpunkten, Abstand so, dass auf dem Bildschirm mindestens 36 px bleiben.
         var step: CGFloat = Settings.gridSize
+        guard step > 0 else { drawHints(); return }
         while step * scale < 36 { step *= 2 }
         let grid = NSBezierPath()
         var wx = floor((dirtyRect.minX - offset.x) / scale / step) * step

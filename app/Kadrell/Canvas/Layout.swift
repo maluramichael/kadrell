@@ -44,8 +44,10 @@ struct Layout {
             union = union.map { $0.union(f) } ?? f
             l.headers[g.id] = CGRect(x: f.minX, y: f.minY, width: f.width, height: headerH)
             l.footers[g.id] = CGRect(x: f.minX, y: f.maxY - footerH, width: f.width, height: footerH)
-            let inner = CGRect(x: f.minX + groupPad, y: f.minY + headerH + groupPad,
-                               width: f.width - 2 * groupPad, height: f.height - headerH - footerH - 2 * groupPad)
+            // Innenabstand: 12 Weltpunkte, aber nie unter 6 Bildschirm-px, sonst liegen Kacheln auf Balken und Rahmen
+            let pad = Swift.max(groupPad, 6 / s)
+            let inner = CGRect(x: f.minX + pad + 3 / s, y: f.minY + headerH + pad,
+                               width: f.width - 2 * pad - 3 / s, height: f.height - headerH - footerH - 2 * pad)
             let n = g.cellKeys.count
             guard n > 0, inner.width > 0, inner.height > 0 else { continue }
             let cols = Swift.max(1, Swift.min(columns, n))

@@ -66,7 +66,7 @@ final class StatusBarView: NSView {
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         module([NSAttributedString(string: attachText, attributes: f)])
         module([NSAttributedString(string: "\(zoomPercent)%", attributes: f)])
-        module([NSAttributedString(string: "grid", attributes: fMuted), NSAttributedString(string: "\(Int(Settings.gridSize))", attributes: f)]) { [weak self] in self?.onCycleGrid?() }
+        module([NSAttributedString(string: "grid", attributes: fMuted), NSAttributedString(string: Settings.gridSize > 0 ? "\(Int(Settings.gridSize))" : "aus", attributes: f)]) { [weak self] in self?.onCycleGrid?() }
         module([NSAttributedString(string: "snap", attributes: fMuted),
                 NSAttributedString(string: Settings.snapToGrid ? "an" : "aus", attributes: Settings.snapToGrid ? Theme.attrs(11.5, Theme.idle) : fMuted)]) { [weak self] in self?.onToggleSnap?() }
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
