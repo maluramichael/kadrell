@@ -18,9 +18,9 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "showLastMessage") }
     }
 
-    /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default aus.
+    /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default an.
     static var stackShowPath: Bool {
-        get { UserDefaults.standard.bool(forKey: "stackShowPath") }
+        get { UserDefaults.standard.object(forKey: "stackShowPath") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "stackShowPath") }
     }
 

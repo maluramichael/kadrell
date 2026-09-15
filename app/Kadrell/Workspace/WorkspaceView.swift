@@ -314,8 +314,10 @@ final class WorkspaceView: NSView {
         rx -= age.size().width; age.draw(at: CGPoint(x: rx, y: r.midY - 7))
         rx -= 8 + grp.size().width; grp.draw(at: CGPoint(x: rx, y: r.midY - 7))
         if Settings.stackShowPath {
-            let path = NSAttributedString(string: (s.cwd as NSString).abbreviatingWithTildeInPath, attributes: Theme.attrs(10.5, Theme.muted))
-            let w = min(path.size().width, max(0, (rx - 16 - r.minX - 28) / 2))
+            let pa = Theme.attrs(10.5, Theme.muted)
+            let maxW = max(0, (rx - 16 - r.minX - 28) / 2)
+            let path = NSAttributedString(string: Theme.fitPath(s.cwd, width: maxW, attrs: pa), attributes: pa)
+            let w = min(path.size().width, maxW)
             rx -= 16 + w
             path.draw(with: CGRect(x: rx, y: r.midY - 7, width: w, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }

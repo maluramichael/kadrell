@@ -4,7 +4,7 @@ import AppKit
 /// setzt seine Höhe selbst.
 @MainActor
 final class SidebarView: NSView {
-    static let groupRow: CGFloat = 26
+    static let groupRow: CGFloat = 38
     static let sessionRow: CGFloat = 24
 
     private(set) var groups: [Group] = []
@@ -159,16 +159,17 @@ final class SidebarView: NSView {
         let any = g.sessionIds.contains { selected.contains($0) }
         if hover { Theme.surface.setFill(); r.fill() }
         if any { color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
-        Icons.chevron(in: CGRect(x: 6, y: r.midY - 8, width: 16, height: 16), open: !collapsed.contains(g.id), color: Theme.muted)
+        Icons.chevron(in: CGRect(x: 6, y: r.minY + 4, width: 16, height: 16), open: !collapsed.contains(g.id), color: Theme.muted)
+        let head = headRect(r)
         let name = NSAttributedString(string: "▪ " + g.name, attributes: Theme.attrs(12, color, bold: true))
         let right = r.maxX - 8 - 3 * 20   // Platz für die Icons immer reservieren, sonst springt der Text beim Hover
-        let nameW = min(name.size().width, max(0, right - 26))
-        name.draw(with: CGRect(x: 26, y: r.midY - 8, width: nameW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        let path = NSAttributedString(string: Theme.shortPath(g.cwd), attributes: Theme.attrs(10.5, Theme.muted))
-        let px = 26 + nameW + 6
-        if right - px > 20 { path.draw(with: CGRect(x: px, y: r.midY - 7, width: right - px, height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine]) }
+        name.draw(with: CGRect(x: 26, y: head.midY - 8, width: max(0, right - 26), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        let pa = Theme.attrs(10.5, Theme.muted)
+        let pw = max(0, r.maxX - 8 - 42)
+        NSAttributedString(string: Theme.fitPath(g.cwd, width: pw, attrs: pa), attributes: pa)
+            .draw(with: CGRect(x: 42, y: head.maxY - 4, width: pw, height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         if hover {
-            let rects = iconRects(r, count: 3)
+            let rects = iconRects(head, count: 3)
             Icons.x(in: rects[0], color: Theme.muted)
             Icons.pen(in: rects[1], color: Theme.muted)
             Icons.plus(in: rects[2], color: Theme.muted)
@@ -262,7 +263,7 @@ final class SidebarView: NSView {
         let force = event.modifierFlags.contains(.command)
         switch rows[i] {
         case .group(let g):
-            let icons = iconRects(r, count: 3)
+            let icons = iconRects(headRect(r), count: 3)
             if icons[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseGroup?(g.id, force); return }
             if icons[1].insetBy(dx: -3, dy: -3).contains(p) { onEditGroup?(g.id); return }
             if icons[2].insetBy(dx: -3, dy: -3).contains(p) { onNewSession?(g.id); return }

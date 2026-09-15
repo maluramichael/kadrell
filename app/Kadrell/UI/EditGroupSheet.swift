@@ -6,15 +6,12 @@ final class EditGroupModel {
     let group: Group
     var name: String
     var color: Color
-    var cwd: String
-    var compSelected = 0
     var onSave: ((Group) -> Void)?
 
     init(group: Group) {
         self.group = group
         name = group.name
         color = Color(nsColor: NSColor(hexString: group.color))
-        cwd = group.cwd
     }
 
     func save() {
@@ -22,14 +19,11 @@ final class EditGroupModel {
         let n = name.trimmingCharacters(in: .whitespaces)
         if !n.isEmpty { g.name = n }
         g.color = NSColor(color).hexString
-        var dir = NewSessionModel.expand(cwd.trimmingCharacters(in: .whitespacesAndNewlines))
-        while dir.count > 1, dir.hasSuffix("/") { dir.removeLast() }
-        if !dir.isEmpty { g.cwd = dir }
         onSave?(g)
     }
 }
 
-/// Stift am Gruppen-Header: Name, Farbe (nativer Picker plus Palette), Ordner für neue Sessions.
+/// Stift am Gruppen-Header: Name und Farbe (nativer Picker plus Palette). Der Ordner bleibt fest.
 struct EditGroupView: View {
     @Bindable var model: EditGroupModel
     @FocusState private var focused: Bool
@@ -41,6 +35,7 @@ struct EditGroupView: View {
             HStack(spacing: 12) {
                 TextField("Name", text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                     .focused($focused)
+                    .onSubmit { model.save() }
                 ColorPicker("", selection: $model.color, supportsOpacity: false).labelsHidden()
                 HStack(spacing: 4) {
                     ForEach(Theme.palette, id: \.self) { hex in
@@ -50,9 +45,9 @@ struct EditGroupView: View {
                 }
             }
             .padding(14)
-            Divider().overlay(Theme.lineColor)
-            FolderInput(path: $model.cwd, selected: $model.compSelected) { model.save() }
-            DialogFoot(hint: "Tab vervollständigen · / Unterordner · Esc abbrechen", button: "Speichern") { model.save() }
+            Text(Theme.shortPath(model.group.cwd)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
+            DialogFoot(hint: "Esc abbrechen", button: "Speichern") { model.save() }
         }
         .font(Theme.ui(12))
         .foregroundStyle(Theme.fgColor)

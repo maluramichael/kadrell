@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 0.3.0 (2026-09-16)
+
+- Änderung: Der Pfad einer Gruppe steht in der Seitenleiste klein und eingerückt unter dem Gruppennamen, bei wenig Platz werden die vorderen Ordner abgekürzt (`~/d/p/projekt`).
+- Änderung: Stack-Zeilen zeigen den Pfad der Session jetzt standardmäßig, ebenfalls abgekürzt, wenn der Platz nicht reicht.
+- Entfernt: Der Ordner einer Gruppe lässt sich nicht mehr ändern, für einen anderen Ordner eine neue Gruppe anlegen.
+
 ## 0.2.1 (2026-09-16)
 
 - Fix: Der Rahmen einer Kachel unter der Maus wird nur noch minimal heller statt fast weiß.

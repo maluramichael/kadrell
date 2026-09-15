@@ -55,6 +55,19 @@ enum Theme {
         let home = NSHomeDirectory()
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
+
+    /// `shortPath`, bei Platzmangel von vorn Ordner auf den Anfangsbuchstaben gekürzt (`~/d/p/projekt`).
+    /// Der letzte Ordner bleibt ganz, reicht es dann immer noch nicht, schneidet das Zeichnen ab.
+    static func fitPath(_ path: String, width: CGFloat, attrs: [NSAttributedString.Key: Any]) -> String {
+        var parts = shortPath(path).split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        var s = parts.joined(separator: "/")
+        for i in parts.indices.dropLast() where NSAttributedString(string: s, attributes: attrs).size().width > width {
+            guard let c = parts[i].first, parts[i] != "~" else { continue }
+            parts[i] = String(c)
+            s = parts.joined(separator: "/")
+        }
+        return s
+    }
 }
 
 extension CGRect {
