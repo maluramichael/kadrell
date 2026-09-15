@@ -9,6 +9,12 @@ final class KadrellTerminalView: LocalProcessTerminalView {
     var onExit: (() -> Void)?
     /// Schriftfaktor (≥ 1) beim letzten Ruhezustand im geometrischen Zoom-Modus; darunter nur Layer-Skalierung.
     var restFontScale: CGFloat = 1
+    /// Per Layer verkleinert: Mauskoordinaten stimmen nicht mehr, Klicks gehen an die Canvas (Fokus).
+    var passthroughMouse = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        passthroughMouse ? nil : super.hitTest(point)
+    }
 
     /// `keyDown` ist in SwiftTerm nicht `open`; `performKeyEquivalent` sieht jedes Tastenereignis vorher.
     /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt.

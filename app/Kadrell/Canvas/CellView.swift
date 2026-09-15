@@ -31,6 +31,8 @@ final class CellView: NSView {
     /// Nur ein eingehängtes Terminal nimmt Events; alles andere geht an die Canvas.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
+        // Das Terminal kann (per Layer skaliert) größer sein als die Kachel: nur innerhalb der Kachel treffen.
+        guard bounds.contains(p) else { return nil }
         for sub in subviews { if let v = sub.hitTest(p) { return v } }
         return nil
     }

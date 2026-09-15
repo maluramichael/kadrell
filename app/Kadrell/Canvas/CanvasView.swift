@@ -205,6 +205,7 @@ final class CanvasView: NSView {
             let frame = CGRect(x: r.minX, y: r.minY, width: (r.width / k).rounded(), height: (r.height / k).rounded())
             if t.frame != frame { t.frame = frame }
             t.layer?.transform = CATransform3DMakeScale(k, k, 1)
+            t.passthroughMouse = k < 0.999
             return
         }
         let want = cell.lod >= 3 && !isAnimating
@@ -212,6 +213,7 @@ final class CanvasView: NSView {
             if t.superview !== cell { cell.addSubview(t) }
             t.layer?.transform = CATransform3DIdentity
             t.restFontScale = 1
+            t.passthroughMouse = false
             if abs(t.font.pointSize - 12) > 0.05 { t.font = Theme.font(12) }
             let body = cell.terminalRect
             if t.frame != body { t.frame = body }
