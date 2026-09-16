@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.32.2 (2026-09-16)
+
+- Fix: Der Schieberegler für die UI-Größe übernimmt den Wert erst beim Loslassen, der Einstellungsdialog springt beim Ziehen nicht mehr mit.
+
 ## 1.32.1 (2026-09-16)
 
 - Änderung: Zahlenwerte in den Einstellungen (Schriftgröße, Zeilenabstand, UI-Größe, Abstände, Deckkraft) haben Schieberegler statt langer Dropdowns, der Wert steht daneben.

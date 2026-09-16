@@ -380,7 +380,7 @@ struct SettingsView: View {
             heading("Darstellung")
             table {
                 setting("Farbschema") { menu($model.colorTheme, ColorTheme.all.map { ($0.id, $0.name) }) }
-                setting("UI-Größe") { slider($model.uiScale, Settings.uiScalePercent, step: 5, factor: 100, unit: "%") }
+                setting("UI-Größe") { slider($model.uiScale, Settings.uiScalePercent, step: 5, factor: 100, unit: "%", live: false) }
                 setting("Terminal-Schrift") { menu($model.fontName, model.fonts.map { ($0.name, $0.display) }) }
                 setting("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad") { slider($model.fontSize, Settings.fontSizes, step: 1, unit: "pt") }
                 setting("Zeilenabstand") { slider($model.lineSpacing, Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
@@ -504,13 +504,9 @@ struct SettingsView: View {
     }
 
     /// Ganzzahliger Schieberegler mit Wert rechts daneben. `factor` rechnet gespeicherte Faktoren in Prozent um.
-    private func slider(_ value: Binding<Double>, _ range: ClosedRange<Double>, step: Double, factor: Double = 1, unit: String) -> some View {
-        let shown = Binding(get: { (value.wrappedValue * factor).rounded() }, set: { value.wrappedValue = ($0 / step).rounded() * step / factor })
-        return HStack(spacing: 10) {
-            Slider(value: shown, in: range, step: step).controlSize(.small).tint(Theme.runningColor)
-            Text("\(Int(shown.wrappedValue)) \(unit)").monospacedDigit().foregroundStyle(Theme.fgColor)
-                .frame(width: 60 * Theme.scale, alignment: .trailing)
-        }
+    /// `live: false` übernimmt erst beim Loslassen (UI-Größe: sonst skaliert der Dialog unter der Maus mit).
+    private func slider(_ value: Binding<Double>, _ range: ClosedRange<Double>, step: Double, factor: Double = 1, unit: String, live: Bool = true) -> some View {
+        IntSlider(value: value, range: range, step: step, factor: factor, unit: unit, live: live)
     }
 
     private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, "an"), (false, "aus")]) }
@@ -541,6 +537,28 @@ struct SettingsView: View {
         }
         .font(Theme.ui(12))
         .padding(.horizontal, 10).padding(.vertical, 5)
+    }
+}
+
+private struct IntSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>, step: Double, factor: Double, unit: String, live: Bool
+    /// Wert während des Ziehens, solange er noch nicht übernommen ist.
+    @State private var draft: Double?
+
+    var body: some View {
+        let shown = draft ?? (value * factor).rounded()
+        HStack(spacing: 10) {
+            Slider(value: Binding(get: { shown }, set: { v in
+                let r = (v / step).rounded() * step
+                if live { value = r / factor } else { draft = r }
+            }), in: range, step: step) { editing in
+                if !editing, let d = draft { value = d / factor; draft = nil }
+            }
+            .controlSize(.small).tint(Theme.runningColor)
+            Text("\(Int(shown)) \(unit)").monospacedDigit().foregroundStyle(Theme.fgColor)
+                .frame(width: 60 * Theme.scale, alignment: .trailing)
+        }
     }
 }
 
