@@ -9,7 +9,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case previewNext, previewPrev
     case focus1, focus2, focus3, focus4, focus5, focus6, focus7, focus8, focus9
     case zoom, nextLayout, closeFocused, openEditor, renameSession, syncInput
-    case focusSidebar, focusWorkspace
+    case focusSidebar, focusWorkspace, cycleSort
 
     /// 0-basiert für focus1…focus9.
     var tileIndex: Int? { rawValue.hasPrefix("focus") ? Int(rawValue.dropFirst(5)).map { $0 - 1 } : nil }
@@ -36,6 +36,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .focusWorkspace: return "Arbeitsfläche: Tastatur an Claude"
         case .openEditor: return "Ordner im externen Editor öffnen"
         case .renameSession: return "Session umbenennen"
+        case .cycleSort: return "Baum sortieren: aus → A–Z → Status"
         case .syncInput: return "Sync: Eingabe an alle Kacheln"
         default: return "Fokus-Kachel schließen"
         }
@@ -79,6 +80,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .focusWorkspace: return Hotkey(.command, "2")
         case .openEditor: return Hotkey(.option, "e")
         case .renameSession: return Hotkey([], "F2")
+        case .cycleSort: return Hotkey(.option, "o")
         case .syncInput: return Hotkey(.option, "i")
         default: return Hotkey(.command, "Esc")
         }

@@ -10,7 +10,7 @@ final class OverlayPanel: NSPanel {
     /// Rückfragen: auch plain ⏎ bestätigt. Dialoge mit Textfeldern brauchen ⏎ selbst und nehmen nur ⌘⏎.
     var primaryOnPlainReturn = false
 
-    private var anchor = CGPoint.zero   // Mitte oben: bleibt beim Wachsen und Schrumpfen fest
+    private var anchor = CGPoint.zero   // Mitte des Hauptfensters: Dialog wächst nach oben und unten gleich
     private var resizeObserver: NSObjectProtocol?
 
     private let limit = OverlayLimit()
@@ -38,14 +38,14 @@ final class OverlayPanel: NSPanel {
 
     private func reanchor() {
         let f = frame
-        let o = NSPoint(x: anchor.x - f.width / 2, y: anchor.y - f.height)
+        let o = NSPoint(x: anchor.x - f.width / 2, y: anchor.y - f.height / 2)
         if abs(o.x - f.origin.x) > 0.5 || abs(o.y - f.origin.y) > 0.5 { setFrameOrigin(o) }
     }
 
     func open(over parent: NSWindow) {
         let pf = parent.frame
-        anchor = CGPoint(x: pf.midX, y: pf.maxY - 0.12 * pf.height)
-        limit.maxHeight = anchor.y - pf.minY - 24
+        anchor = CGPoint(x: pf.midX, y: pf.midY)
+        limit.maxHeight = pf.height - 2 * 24
         reanchor()
         host = parent
         parent.addChildWindow(self, ordered: .above)
@@ -78,7 +78,7 @@ final class OverlayLimit {
     var maxHeight = CGFloat.infinity
 }
 
-/// Höher als bis 24 pt über den Fensterrand wird ein Dialog nicht, der Rest scrollt.
+/// Höher als bis je 24 pt an den oberen und unteren Fensterrand wird ein Dialog nicht, der Rest scrollt.
 struct OverlayScroll<Content: View>: View {
     let limit: OverlayLimit
     let content: Content

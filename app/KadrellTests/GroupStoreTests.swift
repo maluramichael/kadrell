@@ -98,5 +98,10 @@ final class GroupStoreTests: XCTestCase {
         let status = SidebarSort.status.apply(groups, sessions: s)
         XCTAssertEqual(status.map(\.id), ["2", "1"])
         XCTAssertEqual(status.map(\.sessionIds), [["c", "d"], ["b", "a"]])
+
+        let tree = SidebarView(frame: .zero)
+        tree.sort = .alpha
+        tree.reload(groups: groups, sessions: Array(s.values))
+        XCTAssertEqual(tree.sessionId(after: nil, step: 1), "c")
     }
 }

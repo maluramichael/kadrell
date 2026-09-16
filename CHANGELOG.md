@@ -2,6 +2,18 @@
 
 Neueste Version oben.
 
+## 1.21.0 (2026-09-16)
+
+- Feature: ⌥O schaltet die Sortierung des Baums weiter (aus, A–Z, Status).
+- Fix: Die gewählte Sortierung ordnet den Baum jetzt wirklich um, auch beim Blättern mit ⌥J und ⌥K.
+- Änderung: Dialoge erscheinen mittig im Fenster und wachsen nach oben und unten.
+
+## 1.22.0 (2026-09-16)
+
+- Fix: Sortierung A–Z und Status wirkt jetzt wirklich im Baum.
+- Feature: ⌥O schaltet die Sortierung des Baums weiter (aus, A–Z, Status).
+- Änderung: Dialoge stehen mittig im Fenster, oben und unten mit gleichem Abstand.
+
 ## 1.20.0 (2026-09-16)
 
 - Feature: Sync-Eingabe: Mit ⌥I oder Klick auf „SYNC“ oben links geht alles, was du tippst oder einfügst, an alle offenen Sessions gleichzeitig.

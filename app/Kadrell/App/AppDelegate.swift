@@ -176,7 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
         bar.onToggleAuto = { [weak self] in self?.workspace.toggleAuto() }
         bar.onToggleSync = { [weak self] in self?.workspace.toggleSync() }
-        bar.onCycleSort = { [weak self] in Settings.sidebarSort = Settings.sidebarSort.next; self?.syncSidebar() }
+        bar.onCycleSort = { [weak self] in self?.cycleSort() }
 
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
@@ -489,10 +489,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .focusWorkspace: focusWorkspace()
         case .openEditor: openEditor()
         case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
+        case .cycleSort: cycleSort()
         case .syncInput: workspace.toggleSync()
         default: workspace.removeFocused()
         }
     }
+
+    private func cycleSort() { Settings.sidebarSort = Settings.sidebarSort.next; syncSidebar() }
 
     /// Tastatur-Besitzer vor der Vorschau: Esc gibt sie ihm zurück.
     private weak var previewResponder: NSResponder?

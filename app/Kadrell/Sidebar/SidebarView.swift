@@ -98,7 +98,7 @@ final class SidebarView: NSView {
         self.groups = sort.apply(groups, sessions: Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) }))
         self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
         rows = []
-        for g in groups {
+        for g in self.groups {
             rows.append(.group(g))
             guard !collapsed.contains(g.id) else { continue }
             for s in g.sessionIds.compactMap({ self.sessions[$0] }) { rows.append(.session(s, g)) }
