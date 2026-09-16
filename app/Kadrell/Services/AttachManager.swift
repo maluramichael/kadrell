@@ -7,6 +7,18 @@ import os
 final class KadrellTerminalView: LocalProcessTerminalView {
     var onExit: (() -> Void)?
 
+    /// Sync: Taste an ein Terminal ohne Tastatur. `keyDown` taugt dafür nur bei Funktionstasten (Pfeile, F-Tasten, Pos1/Ende),
+    /// die SwiftTerm selbst kodiert. Text, ⏎, ⌫, Esc und ⌃-Tasten laufen dort über das Eingabesystem von macOS, und das liefert
+    /// immer an das Terminal mit der Tastatur. Deshalb gehen deren Zeichen direkt per `insertText` raus.
+    /// ponytail: im Kitty-Tastaturmodus kommen Esc und ⌃-Tasten so als klassische Bytes an, und tote Tasten (^ e) nur als Grundzeichen.
+    static func forward(_ event: NSEvent, to t: TerminalView) {
+        if let s = event.charactersIgnoringModifiers?.unicodeScalars.first, (0xF700...0xF8FF).contains(s.value) {
+            t.keyDown(with: event)
+        } else if let chars = event.characters, !chars.isEmpty {
+            t.insertText(chars, replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+    }
+
     /// `keyDown` ist in SwiftTerm nicht `open`; `performKeyEquivalent` sieht jedes Tastenereignis vorher.
     /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt.
     /// ⌘Esc fängt die App fensterweit ab (Event-Monitor), Esc allein geht an Claude.

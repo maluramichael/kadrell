@@ -194,11 +194,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
             if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
             if event.keyCode == 122 { self.showAbout(); return nil }   // F1
-            // Sync: dieselbe Taste an alle anderen Kacheln, jedes Terminal kodiert sie selbst. ⌘V fügt überall ein, andere ⌘-Kürzel bleiben lokal.
+            // Sync: dieselbe Taste an alle anderen Kacheln (siehe `forward`). ⌘V fügt überall ein, andere ⌘-Kürzel bleiben lokal.
             if let src = window.firstResponder as? KadrellTerminalView {
                 let mods = event.modifierFlags.intersection(Hotkey.modMask)
                 for t in workspace.syncTargets(except: src) {
-                    if !mods.contains(.command) { t.keyDown(with: event) }
+                    if !mods.contains(.command) { KadrellTerminalView.forward(event, to: t) }
                     else if mods == .command, event.charactersIgnoringModifiers == "v" { t.paste(self) }
                 }
             }

@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.21.1 (2026-09-16)
+
+- Fix: Sync-Eingabe schickt Tippen jetzt wirklich an alle offenen Kacheln statt mehrfach in die aktive.
+
 ## 1.21.0 (2026-09-16)
 
 - Feature: ⌥O schaltet die Sortierung des Baums weiter (aus, A–Z, Status).
