@@ -291,158 +291,142 @@ struct SettingsView: View {
             Divider().overlay(Theme.lineColor).padding(.top, 12)
 
             heading("Sessions", first: true)
-            VStack(spacing: 6) {
+            table {
                 setting("Startordner für ⌘N") {
-                    HStack(spacing: 10) {
-                        Text(Theme.shortPath(model.startFolder)).font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
-                            .lineLimit(1).truncationMode(.head)
-                        Button("Ordner wählen …") {
-                            chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } }
-                        }
-                        .buttonStyle(.plain).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
-                        .padding(.horizontal, 10).padding(.vertical, 4).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+                    Button { chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } } } label: {
+                        Text(Theme.shortPath(model.startFolder)).lineLimit(1).truncationMode(.head)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Theme.bgColor)
                     }
+                    .buttonStyle(.plain).help("Ordner wählen …")
                 }
                 setting("Externer Editor (Kommando wie im Terminal)") {
                     TextField("z. B. code", text: $model.editorCommand)
-                        .textFieldStyle(.plain).font(Theme.ui(12)).foregroundStyle(Theme.fgColor)
-                        .frame(width: 260 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Theme.bgColor)
+                        .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
+                        .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
                 }
                 setting("Wenn Claude endet (zweimal ⌃C, /exit)") {
-                    HStack(spacing: 2) {
-                        pill("Kachel bleibt, Klick setzt fort", on: !model.closeTileOnExit) { model.closeTileOnExit = false }
-                        pill("Kachel schließen", on: model.closeTileOnExit) { model.closeTileOnExit = true }
-                    }
+                    menu($model.closeTileOnExit, [(false, "Kachel bleibt, Klick setzt fort"), (true, "Kachel schließen")])
                 }
             }
-            .padding(.horizontal, 16)
 
             heading("Claude", note: "gilt für neu gestartete Claude-Prozesse")
-            VStack(spacing: 6) {
-                setting("Bypass-Modus erlauben (--allow-dangerously-skip-permissions)") {
-                    pill(model.claudeAllowBypass ? "an" : "aus", on: model.claudeAllowBypass) { model.claudeAllowBypass.toggle() }
-                }
+            table {
+                setting("Bypass-Modus erlauben (--allow-dangerously-skip-permissions)") { onOff($model.claudeAllowBypass) }
                 setting("Startmodus") { options(Settings.claudeModes, $model.claudeMode) }
                 setting("Modell") { options(Settings.claudeModels, $model.claudeModel) }
                 setting("Effort") { options(Settings.claudeEfforts, $model.claudeEffort) }
             }
-            .padding(.horizontal, 16)
 
             heading("Darstellung")
-            VStack(spacing: 6) {
-                setting("Farbschema") {
-                    Picker("", selection: $model.colorTheme) {
-                        ForEach(ColorTheme.all, id: \.id) { Text($0.name).tag($0.id) }
-                    }
-                    .labelsHidden().pickerStyle(.menu).frame(width: 260 * Theme.scale)
-                }
-                setting("UI-Größe") { choice(Settings.uiScales, $model.uiScale) { "\(Int(($0 * 100).rounded())) %" } }
-                setting("Terminal-Schrift") {
-                    Picker("", selection: $model.fontName) {
-                        ForEach(model.fonts, id: \.name) { Text($0.display).tag($0.name) }
-                    }
-                    .labelsHidden().pickerStyle(.menu).frame(width: 260 * Theme.scale)
-                }
+            table {
+                setting("Farbschema") { menu($model.colorTheme, ColorTheme.all.map { ($0.id, $0.name) }) }
+                setting("UI-Größe") { menu($model.uiScale, Settings.uiScales.map { ($0, "\(Int(($0 * 100).rounded())) %") }) }
+                setting("Terminal-Schrift") { menu($model.fontName, model.fonts.map { ($0.name, $0.display) }) }
                 setting("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad") {
-                    HStack(spacing: 2) {
-                        pill("−", on: false) { model.fontSize = max(Settings.fontSizes.lowerBound, model.fontSize - 1) }
-                        Text("\(Int(model.fontSize)) pt").font(Theme.ui(12, bold: true)).frame(width: 60 * Theme.scale)
-                        pill("+", on: false) { model.fontSize = min(Settings.fontSizes.upperBound, model.fontSize + 1) }
-                    }
+                    menu(Binding(get: { model.fontSize.rounded() }, set: { model.fontSize = $0 }),
+                         stride(from: Settings.fontSizes.lowerBound, through: Settings.fontSizes.upperBound, by: 1).map { ($0, "\(Int($0)) pt") })
                 }
-                setting("Zeilenabstand") { choice(Settings.lineSpacings, $model.lineSpacing) { "\(Int(($0 * 100).rounded())) %" } }
-                setting("Innenabstand der Kacheln") { choice(Settings.paddings, $model.padding) { "\(Int($0)) px" } }
-                setting("Terminal auf der GPU zeichnen (Metal)") { pill(model.metal ? "an" : "aus", on: model.metal) { model.metal.toggle() } }
+                setting("Zeilenabstand") { menu($model.lineSpacing, Settings.lineSpacings.map { ($0, "\(Int(($0 * 100).rounded())) %") }) }
+                setting("Innenabstand der Kacheln") { menu($model.padding, Settings.paddings.map { ($0, "\(Int($0)) px") }) }
+                setting("Terminal auf der GPU zeichnen (Metal)") { onOff($model.metal) }
             }
-            .padding(.horizontal, 16)
 
             heading("Baum und Kacheln")
-            VStack(spacing: 6) {
-                setting("Design des Baums") {
-                    HStack(spacing: 2) {
-                        ForEach(SidebarStyle.allCases, id: \.self) { st in pill(st.title, on: model.sidebarStyle == st) { model.sidebarStyle = st } }
-                    }
-                }
-                setting("Laufzeit im Baum") { pill(model.sidebarShowAge ? "an" : "aus", on: model.sidebarShowAge) { model.sidebarShowAge.toggle() } }
-                setting("Pfad in Stack-Zeilen") { pill(model.stackShowPath ? "an" : "aus", on: model.stackShowPath) { model.stackShowPath.toggle() } }
-                setting("Letzte Antwort von Claude im Baum") { pill(model.showLastMessage ? "an" : "aus", on: model.showLastMessage) { model.showLastMessage.toggle() } }
+            table {
+                setting("Design des Baums") { menu($model.sidebarStyle, SidebarStyle.allCases.map { ($0, $0.title) }) }
+                setting("Laufzeit im Baum") { onOff($model.sidebarShowAge) }
+                setting("Pfad in Stack-Zeilen") { onOff($model.stackShowPath) }
+                setting("Letzte Antwort von Claude im Baum") { onOff($model.showLastMessage) }
                 setting("Auto-Modus zeigt") {
-                    HStack(spacing: 2) {
-                        pill("wartende", on: model.autoWaiting) { model.autoWaiting.toggle() }
-                        pill("arbeitende", on: model.autoRunning) { model.autoRunning.toggle() }
-                    }
+                    menu(Binding(get: { AutoShow(waiting: model.autoWaiting, running: model.autoRunning) },
+                                 set: { model.autoWaiting = $0.waiting; model.autoRunning = $0.running }),
+                         [(AutoShow(waiting: true, running: false), "wartende"), (AutoShow(waiting: false, running: true), "arbeitende"),
+                          (AutoShow(waiting: true, running: true), "wartende und arbeitende"), (AutoShow(waiting: false, running: false), "keine")])
                 }
             }
-            .padding(.horizontal, 16)
 
             heading("Rückfragen", note: "aus = ohne Nachfrage ausführen")
-            VStack(spacing: 6) {
+            table {
                 ForEach(Settings.Ask.allCases, id: \.self) { a in
-                    let on = model.ask[a] ?? true
-                    setting(a.title) { pill(on ? "an" : "aus", on: on) { model.ask[a] = !on } }
+                    setting(a.title) { onOff(Binding(get: { model.ask[a] ?? true }, set: { model.ask[a] = $0 })) }
                 }
             }
-            .padding(.horizontal, 16)
 
-            heading("Tastenkürzel")
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(hotkeyGroups, id: \.0) { title, actions in
-                        Text(title).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.mutedColor)
-                            .padding(.top, title == hotkeyGroups.first?.0 ? 0 : 12).padding(.bottom, 4)
-                        ForEach(actions, id: \.self) { a in row(a) }
-                    }
-                }
-                .padding(.horizontal, 16).padding(.vertical, 4)
+            heading("Tastenkürzel", note: "Kürzel anklicken, Tasten drücken · ⌫ entfernt")
+            ForEach(hotkeyGroups, id: \.0) { title, actions in
+                Text(title).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.mutedColor)
+                    .padding(.horizontal, 16).padding(.top, title == hotkeyGroups.first?.0 ? 0 : 12).padding(.bottom, 4)
+                table { ForEach(actions, id: \.self) { a in row(a) } }
             }
-            .frame(height: 320 * Theme.scale)
-            DialogFoot(hint: "Kürzel anklicken, Tasten drücken · ⌫ entfernt · Esc abbrechen", button: "Speichern") { model.save() }
+            Color.clear.frame(height: 12)
+            DialogFoot(hint: "Esc abbrechen", button: "Speichern") { model.save() }
         }
         .frame(width: 900 * Theme.scale, alignment: .leading)
         .background(Theme.panelColor)
         .onDisappear { model.stopRecording() }
     }
 
+    /// Breite der rechten Spalte: jedes Dropdown, Feld und Kürzel ist gleich breit, die Einstellungen lesen sich wie eine Tabelle.
+    private var controlWidth: CGFloat { 300 * Theme.scale }
+
+    /// Zeilen einer Tabelle mit feiner Linie dazwischen.
+    private func table<C: View>(@ViewBuilder _ rows: () -> C) -> some View {
+        VStack(spacing: 0) {
+            SwiftUI.Group(subviews: rows()) { subviews in
+                ForEach(subviews.indices, id: \.self) { i in
+                    if i > 0 { Divider().overlay(Theme.lineColor) }
+                    subviews[i]
+                }
+            }
+        }
+        .overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+        .padding(.horizontal, 16)
+    }
+
     private func setting<C: View>(_ title: String, @ViewBuilder _ control: () -> C) -> some View {
-        HStack(spacing: 8) {
-            Text(title).foregroundStyle(Theme.fgColor)
-            Spacer()
-            control()
+        HStack(spacing: 12) {
+            Text(title).foregroundStyle(Theme.fgColor).lineLimit(1)
+            Spacer(minLength: 12)
+            control().frame(width: controlWidth)
         }
         .font(Theme.ui(12))
+        .padding(.horizontal, 10).padding(.vertical, 5)
     }
 
-    /// Segmentierte Auswahl im App-Stil: gewählter Wert hervorgehoben.
-    private func choice(_ values: [Double], _ value: Binding<Double>, _ text: @escaping (Double) -> String) -> some View {
-        HStack(spacing: 2) {
-            ForEach(values, id: \.self) { v in pill(text(v), on: abs(value.wrappedValue - v) < 0.001) { value.wrappedValue = v } }
+    /// Dropdown im App-Stil, füllt die rechte Spalte. Das native Popup nimmt nur die Breite seines Textes.
+    private func menu<T: Hashable>(_ selection: Binding<T>, _ items: [(T, String)]) -> some View {
+        Menu {
+            Picker("", selection: selection) {
+                ForEach(items, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            .pickerStyle(.inline).labelsHidden()
+        } label: {
+            HStack(spacing: 4) {
+                Text(items.first { $0.0 == selection.wrappedValue }?.1 ?? "–").lineLimit(1).foregroundStyle(Theme.fgColor)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9 * Theme.scale)).foregroundStyle(Theme.mutedColor)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .frame(width: controlWidth).background(Theme.bgColor).contentShape(Rectangle())
         }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+        .frame(width: controlWidth)
     }
 
-    /// Wie `choice`, für Texte. "" heißt Claude-Default.
+    private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, "an"), (false, "aus")]) }
+
+    /// Texte als Dropdown. "" heißt Claude-Default.
     private func options(_ values: [String], _ value: Binding<String>) -> some View {
-        HStack(spacing: 2) {
-            ForEach(values, id: \.self) { v in pill(v.isEmpty ? "Standard" : v, on: value.wrappedValue == v) { value.wrappedValue = v } }
-        }
-    }
-
-    private func pill(_ text: String, on: Bool, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(text).font(Theme.ui(12, bold: on))
-                .foregroundStyle(on ? Theme.bgColor : Theme.fgColor)
-                .frame(minWidth: 28 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 3)
-                .background(on ? Theme.runningColor : Theme.bgColor)
-        }
-        .buttonStyle(.plain)
+        menu(value, values.map { ($0, $0.isEmpty ? "Standard" : $0) })
     }
 
     private func row(_ a: HotkeyAction) -> some View {
         let key = model.hotkeys[a]
         let isRecording = model.recording == a
         return HStack(spacing: 8) {
-            Text(a.title).foregroundStyle(Theme.fgColor)
-            Spacer()
+            Text(a.title).foregroundStyle(Theme.fgColor).lineLimit(1)
+            Spacer(minLength: 12)
             if key != a.defaultKey, !isRecording {
                 Button { model.hotkeys[a] = a.defaultKey } label: { Text("Standard").foregroundStyle(Theme.mutedColor) }
                     .buttonStyle(.plain).help("Zurück auf \(a.defaultKey.display)")
@@ -451,11 +435,18 @@ struct SettingsView: View {
                 Text(isRecording ? "Tasten drücken …" : key?.display ?? "–")
                     .font(Theme.ui(12, bold: true))
                     .foregroundStyle(isRecording ? Theme.bgColor : Theme.fgColor)
-                    .frame(width: 150 * Theme.scale).padding(.vertical, 3)
+                    .padding(.horizontal, 8).padding(.vertical, 3).frame(width: controlWidth, alignment: .leading)
                     .background(isRecording ? Theme.runningColor : Theme.bgColor)
             }
             .buttonStyle(.plain)
         }
         .font(Theme.ui(12))
+        .padding(.horizontal, 10).padding(.vertical, 5)
     }
+}
+
+/// Auswahl „Auto-Modus zeigt“: zwei Schalter als ein Dropdown.
+private struct AutoShow: Hashable {
+    let waiting: Bool
+    let running: Bool
 }

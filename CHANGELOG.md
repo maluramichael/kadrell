@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.26.0 (2026-09-16)
+
+- Änderung: Die Einstellungen sind jetzt eine Tabelle: jede Auswahl ist ein gleich breites Dropdown statt einer Reihe von Knöpfen, auch an/aus.
+- Änderung: Die Tastenkürzel scrollen mit den übrigen Einstellungen statt in einem eigenen kleinen Bereich.
+- Fix: In Dialogen bleibt die Fußleiste mit dem Knopf (z. B. Speichern) immer sichtbar, auch wenn der Inhalt scrollt.
+
 ## 1.25.1 (2026-09-16)
 
 - Änderung: Ungelesene Sessions sind nur noch am fetten Titel erkennbar, der kleine Punkt direkt vor dem Titel ist weg.

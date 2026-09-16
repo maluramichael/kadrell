@@ -79,17 +79,27 @@ final class OverlayLimit {
 }
 
 /// Höher als bis je 24 pt an den oberen und unteren Fensterrand wird ein Dialog nicht, der Rest scrollt.
+/// Eine `DialogFoot` im Inhalt steht fest darunter und scrollt nicht mit.
 struct OverlayScroll<Content: View>: View {
     let limit: OverlayLimit
     let content: Content
     @State private var height: CGFloat = 0
+    @State private var width: CGFloat = 0
+    @State private var footHeight: CGFloat = 0
+    @State private var foot: DialogFootData?
 
     var body: some View {
-        ScrollView(.vertical) {
-            content.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        VStack(spacing: 0) {
+            ScrollView(.vertical) {
+                content.onGeometryChange(for: CGSize.self) { $0.size } action: { height = $0.height; width = $0.width }
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(height: height > 0 ? min(height, limit.maxHeight - footHeight) : nil)
+            if let foot {
+                DialogFootBar(foot: foot).frame(width: width > 0 ? width : nil).onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footHeight = $0 }
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .frame(height: height > 0 ? min(height, limit.maxHeight) : nil)
+        .onPreferenceChange(DialogFootKey.self) { foot = $0 }
     }
 }
 
