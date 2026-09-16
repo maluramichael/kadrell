@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.13.1 (2026-09-16)
+
+- Fix: Beim Anklicken einer Session im Baum blitzt die vorher gewählte Zeile nicht mehr kurz mit einem Rahmen auf.
+
 ## 1.13.0 (2026-09-16)
 
 - Feature: Auto-Modus (Schalter „AUTO“ oben links): von den ausgewählten Sessions erscheinen nur die, die gerade auf deine Antwort warten. Nach der Antwort verschwindet die Kachel nach drei Sekunden wieder. In den Einstellungen lassen sich auch arbeitende Sessions dazunehmen.

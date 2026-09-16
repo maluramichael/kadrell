@@ -241,7 +241,9 @@ final class SidebarView: NSView {
 
     // MARK: Events
 
-    override var acceptsFirstResponder: Bool { true }
+    /// Nur per ⌘1, nicht per Klick: sonst zeigt die alte Fokus-Zeile zwischen Drücken und Loslassen kurz den
+    /// Tastatur-Rahmen, danach holt sich die Kachel die Tastatur ohnehin zurück (Flackern).
+    override var acceptsFirstResponder: Bool { NSApp.currentEvent?.type != .leftMouseDown }
     override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
     override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
 
