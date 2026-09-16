@@ -325,6 +325,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         edit.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Einsetzen", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Alles auswählen", action: #selector(menuSelectAll), keyEquivalent: "a")
+        edit.addItem(.separator())
+        // Suchleiste von SwiftTerm im Terminal mit der Tastatur, über die Responder-Kette.
+        for (title, key, shift, action) in [("Im Terminal suchen …", "f", false, NSTextFinder.Action.showFindInterface),
+                                            ("Weitersuchen", "g", false, .nextMatch), ("Rückwärts suchen", "g", true, .previousMatch)] {
+            let item = NSMenuItem(title: title, action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: key)
+            item.keyEquivalentModifierMask = shift ? [.command, .shift] : .command
+            item.tag = action.rawValue
+            edit.addItem(item)
+        }
+        let findAll = NSMenuItem(title: "In allen Terminals suchen …", action: #selector(menuFindAll), keyEquivalent: "f")
+        findAll.keyEquivalentModifierMask = [.command, .shift]
+        edit.addItem(findAll)
         main.addItem(withTitle: "Bearbeiten", action: nil, keyEquivalent: "").submenu = edit
 
         let view = NSMenu(title: "Ansicht")
@@ -496,6 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var overlayIsAbout = false
     @objc private func menuPalette() { togglePalette() }
+    @objc private func menuFindAll() { togglePalette(prefix: "/") }
     /// ⌘W: fokussierte Session beenden und entfernen, wie das X an der Kachel. Das Fenster bleibt offen.
     @objc private func menuCloseSession() {
         guard NSApp.keyWindow === window, let key = workspace.focused else { NSSound.beep(); return }
@@ -508,13 +521,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Palette
 
-    private func togglePalette() {
-        if palette.isVisible { palette.switchToCommandMode(); return }
+    private func togglePalette(prefix: String = "") {
+        if palette.isVisible {
+            guard !prefix.isEmpty else { palette.switchToCommandMode(); return }
+            palette.dismiss(runHighlightReset: false)
+        }
         dismissSheet()
         var src = PaletteWindow.Source()
         let sessions = workspace.sessions
         src.sessions = store.groups.flatMap { g in g.sessionIds.compactMap { sessions[$0] }.map { ($0, group: g, lines: attach?.lines(for: $0.id) ?? []) } }
         src.groups = store.groups
+        src.buffers = src.sessions.compactMap { s, g, _ in
+            attach.terminal(for: s.id).map { (s, group: g, lines: String(decoding: $0.getBufferAsData(kind: .active), as: UTF8.self).components(separatedBy: "\n")) }
+        }
+        src.onFindInSession = { [weak self] key, term, index in self?.findInSession(key, term: term, index: index) }
         src.onFocusSession = { [weak self] key in self?.workspace.select([key], add: false) }
         src.onFitGroup = { [weak self] gid in
             guard let self, let g = store.group(id: gid) else { return }
@@ -535,7 +555,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Reload", { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
         ] + store.groups.map { g in ("Alle Sessions von \(g.name)", { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
         palette.source = src
-        palette.open(over: window)
+        palette.open(over: window, prefix: prefix)
+    }
+
+    /// Treffer aus der Suche über alle Terminals: Session zeigen, Suchleiste dort mit dem Begriff öffnen und
+    /// bis zum gewählten Treffer weiterspringen. Danach blättern ⌘G / ⌘⇧G wie gewohnt.
+    private func findInSession(_ key: String, term: String, index: Int) {
+        workspace.select([key], add: false)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let t = attach.terminal(for: key), t.window === window else { return }
+            window.makeFirstResponder(t)
+            t.clearSearch()
+            let pb = NSPasteboard(name: .find)
+            pb.clearContents()
+            pb.setString(term, forType: .string)
+            let show = NSMenuItem()
+            show.tag = NSTextFinder.Action.showFindInterface.rawValue
+            t.performTextFinderAction(show)
+            for _ in 0..<index { t.findNext(term) }
+        }
     }
 
     // MARK: Sessions

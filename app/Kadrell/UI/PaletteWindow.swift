@@ -1,6 +1,7 @@
 import AppKit
 
-/// ⌘P Omni-Leiste: Fuzzy-Suche über Sessions, Gruppen, Pfade, letzte Zeilen; `>` schaltet in den Kommandomodus.
+/// ⌘P Omni-Leiste: Fuzzy-Suche über Sessions, Gruppen, Pfade, letzte Zeilen; `>` schaltet in den Kommandomodus,
+/// `/` durchsucht den Verlauf aller laufenden Terminals (⌘⇧F).
 @MainActor
 final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     struct Item {
@@ -17,6 +18,10 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         var commands: [(String, () -> Void)] = []
         var onFocusSession: (String) -> Void = { _ in }
         var onFitGroup: (String) -> Void = { _ in }
+        /// Verlauf je laufendem Terminal, beim Öffnen einmal gelesen.
+        var buffers: [(Session, group: Group?, lines: [String])] = []
+        /// Session, Suchbegriff, wievielter Treffer in ihrem Verlauf (ab 0).
+        var onFindInSession: (String, String, Int) -> Void = { _, _, _ in }
     }
 
     var source = Source()
@@ -49,7 +54,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         field.focusRingType = .none
         field.font = Theme.font(15 * s)
         field.textColor = Theme.fg
-        field.placeholderAttributedString = NSAttributedString(string: "Session, Gruppe, Pfad suchen …  ( > für Kommandos )", attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
+        field.placeholderAttributedString = NSAttributedString(string: "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals )", attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
         field.delegate = self
         field.frame = NSRect(x: 16 * s, y: H - 44 * s, width: W - 32 * s, height: 24 * s)
         field.autoresizingMask = [.width, .minYMargin]
@@ -137,6 +142,9 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
             items = source.commands.filter { t.isEmpty || PaletteWindow.fuzzy(t, $0.0) }
                 .map { Item(label: $0.0, sub: "Kommando", group: nil, status: nil, sessionKey: nil, run: $0.1) }
             onHighlight?(nil)
+        } else if q.hasPrefix("/") {
+            items = terminalMatches(String(q.dropFirst()))
+            onHighlight?(Set(items.compactMap(\.sessionKey)))
         } else {
             var list: [Item] = []
             if !q.isEmpty {
@@ -155,6 +163,31 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         }
         table.reloadData()
         if !items.isEmpty { table.scrollRowToVisible(0) }
+    }
+
+    /// Treffer zeilenweise, ohne Groß-/Kleinschreibung wie die Suchleiste im Terminal. Die Nummer des Treffers
+    /// in der Session springt dort per `findNext` an dieselbe Stelle.
+    private func terminalMatches(_ term: String) -> [Item] {
+        guard term.count >= 2 else { return [] }
+        var list: [Item] = []
+        for (s, g, lines) in source.buffers {
+            var n = 0
+            for line in lines {
+                var r = line.startIndex..<line.endIndex
+                var first: Int?
+                while let hit = line.range(of: term, options: .caseInsensitive, range: r) {
+                    if first == nil { first = n }
+                    n += 1
+                    r = hit.upperBound..<line.endIndex
+                }
+                guard let index = first else { continue }
+                list.append(Item(label: line.trimmingCharacters(in: .whitespaces), sub: s.title, group: g?.name, status: s.status,
+                                 sessionKey: s.id, run: { [source] in source.onFindInSession(s.id, term, index) }))
+                // ponytail: feste Obergrenze, sonst wird die Tabelle bei „e“-artigen Begriffen zäh.
+                if list.count >= 300 { return list }
+            }
+        }
+        return list
     }
 
     func controlTextDidChange(_ obj: Notification) { refreshList() }

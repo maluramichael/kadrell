@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.17.0 (2026-09-16)
+
+- Feature: ⌘F sucht im Terminal, ⌘G und ⌘⇧G springen zum nächsten und vorigen Treffer.
+- Feature: ⌘⇧F sucht in allen laufenden Terminals gleichzeitig. Ein Treffer öffnet die Session und springt genau an die Stelle.
+
 ## 1.16.0 (2026-09-16)
 
 - Feature: Neuer Sortier-Schalter oben in der Leiste: aus (eigene Reihenfolge), A–Z oder nach Status (wartet, arbeitet, fertig). Sortiert Gruppen und die Sessions darin.
