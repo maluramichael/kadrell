@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
     private var fontScrollAccum: CGFloat = 0
+    /// Session, für die zuletzt `session-focus` gefeuert hat.
+    private var hookFocus: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
@@ -273,6 +275,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
         let fg = focused.flatMap { workspace.group(forSession: $0.id) }
         bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
+        if let cli, let key = workspace.focused, key != hookFocus, let s = sessions[key] {
+            hookFocus = key
+            Hooks.fire(.sessionFocus, s, environment: cli.environment)
+        }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, NSColor(hexString: $0.color)) }
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count

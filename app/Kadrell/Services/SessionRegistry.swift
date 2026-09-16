@@ -42,6 +42,7 @@ final class SessionRegistry {
         sessions.append(session)
         save()
         onChange?(sessions)
+        Hooks.fire(.sessionNew, session, environment: cli.environment)
     }
 
     /// Leer = wieder der Titel von Claude Code.
@@ -54,6 +55,7 @@ final class SessionRegistry {
     }
 
     func remove(_ ids: Set<String>) {
+        for s in sessions where ids.contains(s.id) { Hooks.fire(.sessionRemove, s, environment: cli.environment) }
         sessions.removeAll { ids.contains($0.id) }
         save()
         onChange?(sessions)

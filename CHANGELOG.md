@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.10.0 (2026-09-16)
+
+- Feature: Hooks wie bei tmux. Eigene Skripte laufen, wenn eine Session angelegt, fokussiert oder entfernt wird, und bekommen Ordner, Session-Id und Titel mit. Damit lässt sich z. B. ein Zeiterfassungs-Ticket beim Wechseln der Session umschalten.
+
 ## 1.9.0 (2026-09-16)
 
 - Feature: Rückfragen wie „Session beenden und entfernen?“ haben ein Häkchen „Nicht mehr fragen“. In den Einstellungen unter „Rückfragen“ lässt sich jede einzeln wieder ein- und ausschalten.
