@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hookFocus: String?
     /// Wartende Sessions beim letzten Abgleich: neu dazugekommene lösen `requestUserAttention` aus.
     private var lastWaitingIds: Set<String> = []
+    /// Status angehängter Sessions beim letzten Abgleich: Wechsel spielen Sound und lassen den Punkt im Baum aufblitzen.
+    private var lastStatuses: [String: SessionStatus] = [:]
     /// ⌘A/⌘⇧A: Auswahl davor und danach, damit ein zweiter Druck zurückschaltet.
     private var selectAllUndo: (shift: Bool, before: [String], focus: String?, after: Set<String>)?
     var controlServer: ControlServer?
@@ -214,8 +216,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
-        bar.onToggleAuto = { [weak self] in self?.workspace.toggleAuto() }
-        bar.onToggleSync = { [weak self] in self?.workspace.toggleSync() }
+        bar.onToggleAuto = { [weak self] in Feedback.play(.toggle); self?.workspace.toggleAuto() }
+        bar.onToggleSync = { [weak self] in Feedback.play(.toggle); self?.workspace.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
         bar.onSelectWaiting = { [weak self] in guard let self else { return }; workspace.select(waitingIds(), add: false) }
 
@@ -376,6 +378,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Neu dazugekommene wartende Session, Fenster nicht im Vordergrund: kurz im Dock hüpfen, ohne Notification-Rechte.
         if !waitingSet.subtracting(lastWaitingIds).isEmpty, window?.isKeyWindow == false { NSApp.requestUserAttention(.informationalRequest) }
         lastWaitingIds = waitingSet
+        let statuses = sessions.filter { attach?.isAttached($0.key) ?? false }.mapValues(\.status)
+        let changed = Feedback.transitions(from: lastStatuses, to: statuses)
+        lastStatuses = statuses
+        // Klang nur für das, was man gerade nicht sieht: andere Session oder Fenster im Hintergrund.
+        let unseen = { (id: String) in id != self.workspace.focused || self.window?.isKeyWindow == false }
+        if changed.waiting.contains(where: unseen) { Feedback.play(.waiting) } else if changed.done.contains(where: unseen) { Feedback.play(.done) }
+        sidebar.flash(waiting: changed.waiting, done: changed.done)
         bar.waitingCount = waiting.count
         bar.needsDisplay = true
         updateStatusItem(Array(sessions.values))
@@ -774,6 +783,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             : "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)"
         confirm("„\(s.title)“ beenden und entfernen?", info, button: "Entfernen", skip: force || s.isRemote, ask: .closeSession) { [weak self] in
             guard let self else { return }
+            Feedback.play(.close)
             attach.detach(key)
             store.removeSession(key)
             registry.remove([key])
@@ -799,6 +809,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         confirm("Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?",
                 "Claude wird in allen Sessions beendet und die Gruppe entfernt. Die Konversationen bleiben erhalten.", button: "Schließen", skip: force, ask: .closeGroup) { [weak self] in
             guard let self else { return }
+            Feedback.play(.close)
             for s in members { attach.detach(s.id) }
             store.remove(id: gid)
             registry.remove(Set(members.map(\.id)))
@@ -878,6 +889,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
         if let prompt { attach.initialPrompts[id] = prompt }
         registry.add(session)
+        Feedback.play(.open)
         if show { workspace.select([id], add: !workspace.selected.isEmpty) } else { attach.attachNow(session) }
         return id
     }

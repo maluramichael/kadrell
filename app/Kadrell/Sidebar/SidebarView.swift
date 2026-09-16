@@ -36,6 +36,12 @@ final class SidebarView: NSView {
     private var dropTarget: Row?
     /// ⌘ gehalten: der „+“-Knopf einer Gruppe zeigt ein Terminal-Icon und öffnet ein Terminal ohne Claude.
     private var cmdDown = false
+    /// Statuswechsel: Punkt blitzt auf (fertig) bzw. pulsiert zweimal (wartet).
+    private var flashes: [String: (start: CFTimeInterval, waiting: Bool)] = [:]
+    /// Neu aufgetauchte Sessions gleiten von links ein. nil bis zum ersten Laden: beim Start gleitet nichts.
+    private var appeared: [String: CFTimeInterval] = [:]
+    private var knownIds: Set<String>?
+    private static let flashDuration: CFTimeInterval = 0.8, appearDuration: CFTimeInterval = 0.25
     private var flagsMonitor: Any?
 
     enum SelectMode { case replace, toggle, add, cursor }
@@ -71,13 +77,15 @@ final class SidebarView: NSView {
         wantsLayer = true
         registerForDraggedTypes([.fileURL])
         pulseTask = Task { [weak self] in
-            var ticks = 0
+            var lastFull = CACurrentMediaTime(), wasAnimating = false
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(80))
+                // Solange etwas aufblitzt oder einfährt, flüssig zeichnen, sonst reicht der langsame Takt.
+                try? await Task.sleep(for: .milliseconds(wasAnimating ? 16 : 80))
                 guard let self else { continue }
-                ticks += 1
+                let now = CACurrentMediaTime(), animating = self.pruneAnimations(now)
+                if animating || wasAnimating { wasAnimating = animating; self.needsDisplay = true; continue }
                 // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Punkte laufender Sessions.
-                if ticks % 750 == 0 { self.needsDisplay = true; continue }
+                if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true; continue }
                 for (i, row) in self.rows.enumerated() {
                     guard case .session(let s, _) = row, s.status == .running else { continue }
                     self.setNeedsDisplay(self.renderer.dotRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
@@ -107,6 +115,9 @@ final class SidebarView: NSView {
     }
 
     func reload(groups: [Group], sessions: [Session]) {
+        let ids = Set(sessions.map(\.id)), now = CACurrentMediaTime()
+        if let known = knownIds { for id in ids.subtracting(known) { appeared[id] = now } }
+        knownIds = ids
         self.groups = sort.apply(groups, sessions: Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) }))
         self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
         rows = []
@@ -119,6 +130,19 @@ final class SidebarView: NSView {
         let want = max((h * Theme.scale).rounded(.up), superview?.bounds.height ?? 0)
         if frame.height != want { setFrameSize(NSSize(width: frame.width, height: want)) }
         needsDisplay = true
+    }
+
+    func flash(waiting: Set<String>, done: Set<String>) {
+        let now = CACurrentMediaTime()
+        for id in done { flashes[id] = (now, false) }
+        for id in waiting { flashes[id] = (now, true) }
+    }
+
+    /// Abgelaufene Animationen entfernen; true, solange noch eine läuft.
+    private func pruneAnimations(_ now: CFTimeInterval) -> Bool {
+        flashes = flashes.filter { Feedback.progress(since: $0.value.start, duration: Self.flashDuration, now: now) != nil }
+        appeared = appeared.filter { Feedback.progress(since: $0.value, duration: Self.appearDuration, now: now) != nil }
+        return !flashes.isEmpty || !appeared.isEmpty
     }
 
     /// Ist irgendeine Gruppe offen, gehen alle zu, sonst alle auf.
@@ -242,6 +266,10 @@ final class SidebarView: NSView {
     private func dotColor(_ s: Session) -> NSColor {
         let attached = attach?.isAttached(s.id) ?? false
         let c = attached ? Theme.color(for: s.status) : Theme.detached
+        if let f = flashes[s.id], let p = Feedback.progress(since: f.start, duration: Self.flashDuration) {
+            let amount = f.waiting ? abs(sin(p * 2 * .pi)) : 1 - p
+            return NSColor.white.mixed(0.75 * amount, into: c)
+        }
         guard s.status == .running, attached else { return c }
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
         return c.withAlphaComponent(0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t)))
@@ -257,6 +285,13 @@ final class SidebarView: NSView {
     }
 
     private func drawSession(_ s: Session, group g: Group, in r: CGRect, hover: Bool) {
+        let slide = appeared[s.id].flatMap { Feedback.progress(since: $0, duration: Self.appearDuration) }
+        if let slide, let ctx = NSGraphicsContext.current?.cgContext {
+            NSGraphicsContext.saveGraphicsState()
+            ctx.translateBy(x: (1 - slide) * -24, y: 0)
+            ctx.setAlpha(slide)
+        }
+        defer { if slide != nil { NSGraphicsContext.restoreGraphicsState() } }
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,
@@ -399,7 +434,9 @@ final class SidebarView: NSView {
         guard dragging else { return }
         autoscroll(with: event)
         NSCursor.closedHand.set()
-        dropTarget = target(for: press.row, at: p)
+        let t = target(for: press.row, at: p)
+        if let t, t.key != dropTarget?.key { Feedback.snap() }
+        dropTarget = t
         needsDisplay = true
     }
 

@@ -48,6 +48,12 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "sidebar.showAge") }
     }
 
+    /// Welche Sounds Kadrell spielt, Default alle.
+    static var sounds: Feedback.Level {
+        get { UserDefaults.standard.string(forKey: "sounds").flatMap(Feedback.Level.init) ?? .all }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "sounds") }
+    }
+
     /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default an.
     static var stackShowPath: Bool {
         get { UserDefaults.standard.object(forKey: "stackShowPath") as? Bool ?? true }
@@ -182,6 +188,7 @@ final class SettingsModel {
     var stackShowPath = Settings.stackShowPath
     var sidebarStyle = Settings.sidebarStyle
     var sidebarShowAge = Settings.sidebarShowAge
+    var sounds = Settings.sounds
     var closeTileOnExit = Settings.closeTileOnExit
     var autoWaiting = Settings.autoWaiting
     var autoRunning = Settings.autoRunning
@@ -216,6 +223,7 @@ final class SettingsModel {
         Settings.stackShowPath = stackShowPath
         Settings.sidebarStyle = sidebarStyle
         Settings.sidebarShowAge = sidebarShowAge
+        Settings.sounds = sounds
         Settings.closeTileOnExit = closeTileOnExit
         Settings.autoWaiting = autoWaiting
         Settings.autoRunning = autoRunning
@@ -348,6 +356,7 @@ struct SettingsView: View {
                 setting("Laufzeit im Baum") { onOff($model.sidebarShowAge) }
                 setting("Pfad in Stack-Zeilen") { onOff($model.stackShowPath) }
                 setting("Letzte Antwort von Claude im Baum") { onOff($model.showLastMessage) }
+                setting("Sounds") { menu($model.sounds, Feedback.Level.allCases.map { ($0, $0.title) }) }
                 setting("Auto-Modus zeigt") {
                     menu(Binding(get: { AutoShow(waiting: model.autoWaiting, running: model.autoRunning) },
                                  set: { model.autoWaiting = $0.waiting; model.autoRunning = $0.running }),

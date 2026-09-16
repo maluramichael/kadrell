@@ -31,6 +31,7 @@ final class WorkspaceView: NSView {
     private var lastTiles: [String] = []
 
     private var cells: [String: CellView] = [:]
+    private var loaded = false
     private var stackRows: [(CGRect, String)] = []
     private var hoveredCell: String?
     private var hoveredRow: String?
@@ -84,13 +85,21 @@ final class WorkspaceView: NSView {
         if let p = preview, self.sessions[p] == nil { preview = nil }
         sortSelected()
         if let f = focused, !selected.contains(f) { focused = selected.first }
-        for (k, v) in cells where self.sessions[k] == nil { v.removeFromSuperview(); cells[k] = nil }
+        // Entfernte Kacheln blenden kurz aus, neue ein. Beim allerersten Laden erscheint alles sofort.
+        for (k, v) in cells where self.sessions[k] == nil {
+            cells[k] = nil
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.15; v.animator().alphaValue = 0 }, completionHandler: { v.removeFromSuperview() })
+        }
         for id in selected {
             let v = cells[id] ?? CellView(session: self.sessions[id]!)
             v.session = self.sessions[id]!
-            if v.superview == nil { addSubview(v) }
+            if v.superview == nil {
+                addSubview(v)
+                if loaded { v.alphaValue = 0; NSAnimationContext.runAnimationGroup { $0.duration = 0.18; v.animator().alphaValue = 1 } }
+            }
             cells[id] = v
         }
+        loaded = true
         relayout()
     }
 
@@ -548,6 +557,7 @@ final class WorkspaceView: NSView {
         case .none: t = nil
         }
         guard t != dropTarget else { return }
+        if t != nil { Feedback.snap() }
         dropTarget = t
         relayout()
     }

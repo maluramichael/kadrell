@@ -67,7 +67,21 @@ final class CellView: NSView {
         bounds.fill()
         if !headerHidden { Theme.scaled(headerRect) { drawHeader($0) } }
         Theme.scaled(bodyRect) { drawBody($0) }
-        drawBorder()
+    }
+
+    /// Rahmen als Layer-Rand: liegt über dem Terminal und blendet bei Fokuswechsel in 120 ms über statt zu springen.
+    override func viewWillDraw() {
+        super.viewWillDraw()
+        guard let layer else { return }
+        let c = borderColor.cgColor, w: CGFloat = focused || dropTarget ? 2 : 1
+        guard layer.borderColor != c || layer.borderWidth != w else { return }
+        let anim = CABasicAnimation(keyPath: "borderColor")
+        anim.fromValue = layer.borderColor
+        anim.toValue = c
+        anim.duration = 0.12
+        layer.add(anim, forKey: "borderColor")
+        layer.borderColor = c
+        layer.borderWidth = w
     }
 
     private func drawHeader(_ head: CGRect) {
@@ -128,16 +142,12 @@ final class CellView: NSView {
         }
     }
 
-    private func drawBorder() {
-        let color: NSColor
-        if dropTarget { color = Theme.fg }
-        else if focused { color = groupColor }
-        else if session.status == .waiting, attached { color = Theme.waiting }
-        else if session.status == .error { color = Theme.error }
-        else if hovered { color = groupColor.mixed(0.7, into: Theme.bg) }
-        else { color = groupColor.mixed(0.45, into: Theme.bg) }
-        color.setFill()
-        bounds.frame(withWidth: focused || dropTarget ? 2 : 1)
+    private var borderColor: NSColor {
+        if dropTarget { return Theme.fg }
+        if focused { return groupColor }
+        if session.status == .waiting, attached { return Theme.waiting }
+        if session.status == .error { return Theme.error }
+        return groupColor.mixed(hovered ? 0.7 : 0.45, into: Theme.bg)
     }
 
     private func drawLines(in r: CGRect) {

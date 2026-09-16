@@ -14,17 +14,22 @@ final class StatusBarView: NSView {
     /// Sessions, die gerade auf dich warten (Status waiting, angehängt). Modul „N warten“ nur bei > 0.
     var waitingCount = 0
     var onSelectWaiting: (() -> Void)?
-    var usage = Usage.empty
+    /// Neue Werte zählen vom alten Stand hoch bzw. herunter.
+    var usage = Usage.empty {
+        didSet { if usage != oldValue { usageFrom = oldValue; usageAt = CACurrentMediaTime(); animate(0.5) } }
+    }
+    private var usageFrom = Usage.empty
+    private var usageAt: CFTimeInterval = 0
     var layoutMode: LayoutMode = .grid
     var onToggleLayout: (() -> Void)?
     /// Auto-Modus: nur Sessions, die etwas wollen. An = gefülltes Badge.
-    var auto = false
+    var auto = false { didSet { toggled(auto != oldValue, "auto") } }
     var onToggleAuto: (() -> Void)?
     /// Sync: Eingaben gehen an alle Kacheln. An = rotes Badge, damit es niemand vergisst.
-    var sync = false
+    var sync = false { didSet { toggled(sync != oldValue, "sync") } }
     var onToggleSync: (() -> Void)?
     /// Sortierung des Baums: Klick schaltet aus → A–Z → Status weiter. Aktiv = gefülltes Badge.
-    var sort: SidebarSort = .off
+    var sort: SidebarSort = .off { didSet { toggled(sort != oldValue, "sort") } }
     var onCycleSort: (() -> Void)?
     /// Zoom aktiv: Badge „ZOOM“ links neben dem Breadcrumb, Klick hebt den Zoom auf.
     var zoomed = false
@@ -32,6 +37,37 @@ final class StatusBarView: NSView {
 
     private var hitRects: [(CGRect, () -> Void)] = []
     private var clockTask: Task<Void, Never>?
+    /// Umgeschaltete Badges: die Füllung wächst aus der Mitte auf.
+    private var toggledAt: [String: CFTimeInterval] = [:]
+    private var animUntil: CFTimeInterval = 0
+    private var animTask: Task<Void, Never>?
+
+    private func toggled(_ changed: Bool, _ key: String) {
+        guard changed else { return }
+        toggledAt[key] = CACurrentMediaTime()
+        animate(0.2)
+    }
+
+    /// Kurz flüssig neu zeichnen, die Uhr allein tickt nur jede Sekunde.
+    private func animate(_ duration: CFTimeInterval) {
+        animUntil = max(animUntil, CACurrentMediaTime() + duration)
+        guard animTask == nil else { return }
+        animTask = Task { [weak self] in
+            while let self, CACurrentMediaTime() < self.animUntil {
+                self.needsDisplay = true
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            self?.needsDisplay = true
+            self?.animTask = nil
+        }
+    }
+
+    /// Badge-Füllung, während des Umschaltens von der Mitte aus breiter.
+    private func badge(_ r: CGRect, _ key: String) -> CGRect {
+        let b = r.insetBy(dx: 5, dy: 6)
+        guard let t = toggledAt[key], let p = Feedback.progress(since: t, duration: 0.2) else { return b }
+        return b.insetBy(dx: b.width * (1 - p) / 2, dy: b.height * (1 - p) / 2)
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -67,20 +103,20 @@ final class StatusBarView: NSView {
         hitRects.append((toggle, { [weak self] in self?.onToggleLayout?() }))
         let at = NSAttributedString(string: "AUTO", attributes: Theme.attrs(10, auto ? Theme.bg : Theme.muted, bold: true))
         let autoRect = CGRect(x: toggle.maxX + 1, y: 0, width: at.size().width + 20, height: b.height - 1)
-        if auto { Theme.waiting.setFill(); autoRect.insetBy(dx: 5, dy: 6).fill() }
+        if auto { Theme.waiting.setFill(); badge(autoRect, "auto").fill() }
         at.draw(at: CGPoint(x: autoRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: autoRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((autoRect, { [weak self] in self?.onToggleAuto?() }))
         let syt = NSAttributedString(string: "SYNC", attributes: Theme.attrs(10, sync ? Theme.bg : Theme.muted, bold: true))
         let syncRect = CGRect(x: autoRect.maxX + 1, y: 0, width: syt.size().width + 20, height: b.height - 1)
-        if sync { Theme.error.setFill(); syncRect.insetBy(dx: 5, dy: 6).fill() }
+        if sync { Theme.error.setFill(); badge(syncRect, "sync").fill() }
         syt.draw(at: CGPoint(x: syncRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: syncRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((syncRect, { [weak self] in self?.onToggleSync?() }))
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
         let st = NSAttributedString(string: sortLabel, attributes: Theme.attrs(10, sort == .off ? Theme.muted : Theme.bg, bold: true))
         let sortRect = CGRect(x: syncRect.maxX + 1, y: 0, width: st.size().width + 20, height: b.height - 1)
-        if sort != .off { Theme.sub.setFill(); sortRect.insetBy(dx: 5, dy: 6).fill() }
+        if sort != .off { Theme.sub.setFill(); badge(sortRect, "sort").fill() }
         st.draw(at: CGPoint(x: sortRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: sortRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((sortRect, { [weak self] in self?.onCycleSort?() }))
@@ -121,14 +157,17 @@ final class StatusBarView: NSView {
         }
         module([NSAttributedString(string: attachText, attributes: f)])
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
-        func pctString(_ v: Int?) -> NSAttributedString {
-            guard let v else { return NSAttributedString(string: "–%", attributes: fMuted) }
+        let countUp = Feedback.progress(since: usageAt, duration: 0.5)
+        func pctString(_ target: Int?, from: Int?) -> NSAttributedString {
+            guard let target else { return NSAttributedString(string: "–%", attributes: fMuted) }
+            var v = target
+            if let countUp, let from { v = from + Int((CGFloat(target - from) * countUp).rounded()) }
             let c: NSColor = v >= 90 ? Theme.error : v >= 70 ? Theme.waiting : Theme.idle
             return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, c))
         }
-        module([NSAttributedString(string: "fable", attributes: fMuted), pctString(usage.fable)])
-        module([NSAttributedString(string: "7d", attributes: fMuted), pctString(usage.weekly)])
-        module([NSAttributedString(string: "5h", attributes: fMuted), pctString(usage.session)])
+        module([NSAttributedString(string: "fable", attributes: fMuted), pctString(usage.fable, from: usageFrom.fable)])
+        module([NSAttributedString(string: "7d", attributes: fMuted), pctString(usage.weekly, from: usageFrom.weekly)])
+        module([NSAttributedString(string: "5h", attributes: fMuted), pctString(usage.session, from: usageFrom.session)])
 
         // Mitte: Breadcrumb
         let mid: NSAttributedString

@@ -2,6 +2,14 @@
 
 Neueste Version oben.
 
+## 1.29.0 (2026-09-16)
+
+- Feature: Sounds: leiser Ton, wenn eine Session auf dich wartet oder fertig wird, die du gerade nicht siehst. Dazu kurze Töne beim Öffnen und Entfernen von Sessions und beim Umschalten von AUTO und SYNC. Einstellbar unter „Sounds“ (aus, nur wartet und fertig, alle).
+- Feature: Der Statuspunkt im Baum pulsiert zweimal, wenn eine Session zu warten beginnt, und blitzt kurz auf, wenn sie fertig ist.
+- Feature: Neue Sessions gleiten im Baum ein, Kacheln blenden beim Öffnen ein und beim Entfernen aus.
+- Feature: Der Kachelrahmen blendet beim Fokuswechsel weich über, AUTO, SYNC und SORT füllen sich beim Einschalten aus der Mitte, die Nutzungswerte zählen zum neuen Stand hoch.
+- Feature: Beim Umsortieren per Ziehen rastet ein Force-Touch-Trackpad spürbar ein.
+
 ## 1.28.0 (2026-09-16)
 
 - Feature: Remote-Sessions: ⌘⇧N oder „@“ in der Palette verbindet per ssh mit einem Host aus der ssh-Konfiguration (inklusive eingebundener Dateien) und hängt sich an dessen tmux. „@host:“ zeigt die tmux-Sessions des Hosts zur Auswahl oder legt eine neue an. Jeder Host bekommt eine eigene Gruppe mit Server-Symbol, mehrere Sessions pro Host sind möglich, nach einem Neustart wird neu verbunden.
