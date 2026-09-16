@@ -65,7 +65,7 @@ final class SessionRegistry {
         let pids = pids()
         let agents = Agent.local(pids: Array(pids.keys), configDir: cli.configDir)
         var merged = SessionRegistry.merge(sessions, agents: agents, pids: pids)
-        let missing = merged.filter { $0.name.isEmpty && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
+        let missing = merged.filter { $0.name.isEmpty && !$0.isShell && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
         if !missing.isEmpty {
             let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
                 if let p = Transcript.path(sessionId: id), let t = Transcript.firstPrompt(path: p) { r[id] = t }

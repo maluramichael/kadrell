@@ -31,7 +31,13 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName }
 
     var title: String { customName ?? autoTitle }
-    var autoTitle: String { name.isEmpty ? firstPrompt ?? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name }
+    var autoTitle: String {
+        if isShell { return "Terminal · " + URL(fileURLWithPath: cwd).lastPathComponent }
+        return name.isEmpty ? firstPrompt ?? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name
+    }
+    /// Terminal ohne Claude (⌘T): Login-Shell statt `claude`, erkennbar am Schlüssel.
+    static let shellPrefix = "shell-"
+    var isShell: Bool { id.hasPrefix(Session.shellPrefix) }
     var status: SessionStatus { Session.mapStatus(state: nil, status: rawStatus) }
     var startDate: Date { Date(timeIntervalSince1970: startedAt / 1000) }
 

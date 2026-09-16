@@ -226,7 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attach.onChange = { [weak self] in self?.workspace.relayout() }
         // Einstellung: Kachel einer beendeten Session schließen statt mit „Klick setzt fort" stehen zu lassen.
         attach.onEnded = { [weak self] key in
-            guard let self, Settings.closeTileOnExit, workspace.selected.contains(key) else { return }
+            guard let self else { return }
+            // `exit` in einem Terminal ohne Claude: nichts fortzusetzen, Kachel und Eintrag weg.
+            if workspace.session(key)?.isShell == true { closeSession(key, force: true); return }
+            guard Settings.closeTileOnExit, workspace.selected.contains(key) else { return }
             workspace.select([key], add: true)
             syncSidebar()
         }
@@ -328,6 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let file = NSMenu(title: "Datei")
         file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
         file.addItem(withTitle: "Neue Session im selben Ordner", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
+        file.addItem(withTitle: "Neues Terminal ohne Claude", action: #selector(menuNewShell), keyEquivalent: "t")
         file.addItem(.separator())
         file.addItem(withTitle: "Session schließen", action: #selector(menuCloseSession), keyEquivalent: "w")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
@@ -400,6 +404,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func newSessionInFocusedFolder() {
         guard let s = workspace.focused.flatMap({ workspace.session($0) }), !s.cwd.isEmpty else { openNewSession(groupId: nil); return }
         startSession(group: workspace.group(forSession: s.id), cwd: s.cwd)
+    }
+    /// ⌘T: Login-Shell im Ordner der fokussierten Session, sonst im Startordner.
+    @objc private func menuNewShell() {
+        let cwd = workspace.focused.flatMap { workspace.session($0) }?.cwd ?? Settings.startFolder
+        startSession(group: nil, cwd: cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
     }
     @objc private func menuAbout() { showAbout() }
     @objc private func menuSettings() {
@@ -586,6 +595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Stack", { [weak self] in self?.workspace.setMode(.stack) }),
             ("Zoom ein/aus (fokussierte)", { [weak self] in self?.workspace.toggleZen() }),
             ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
+            ("Neues Terminal ohne Claude", { [weak self] in self?.menuNewShell() }),
             ("Session stoppen (fokussierte)", { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
             ("Session fortsetzen (fokussierte)", { [weak self] in if let s = focusedSession { self?.attach.attachNow(s); self?.workspace.select([s.id], add: false) } }),
             ("Session umbenennen (fokussierte)", { [weak self] in if let s = focusedSession { self?.renameSession(s.id) } }),
@@ -644,7 +654,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func closeSession(_ key: String, force: Bool = false) {
         guard let s = workspace.session(key) else { return }
-        confirm("Session „\(s.title)“ beenden und entfernen?", "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)", button: "Entfernen", skip: force, ask: .closeSession) { [weak self] in
+        let info = s.isShell ? "Die Shell und alles, was darin läuft, wird beendet."
+            : "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)"
+        confirm("„\(s.title)“ beenden und entfernen?", info, button: "Entfernen", skip: force, ask: .closeSession) { [weak self] in
             guard let self else { return }
             attach.detach(key)
             store.removeSession(key)

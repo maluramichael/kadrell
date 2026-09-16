@@ -117,16 +117,25 @@ final class AttachManager {
             self.detach(key, signal: false)
             if self.ended.contains(key) { self.onEnded?(key) }
         }
-        let hasTranscript = Transcript.path(sessionId: session.sessionId) != nil
-        var args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
-            + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
-        AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .public) in \(session.cwd, privacy: .public)")
-        if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { args.append(prompt) }
         // Wie $TMUX_PANE: `kadrell` in dieser Session weiß, wo es läuft, und findet den Socket.
         var env = cli.environment
         env["KADRELL_SESSION_KEY"] = key
         env["KADRELL_SOCKET"] = ControlSocket.defaultPath
         env["KADRELL"] = Bundle.main.executablePath
+        if session.isShell {
+            // Login-Shell des Nutzers: argv[0] mit Bindestrich, wie Terminal.app sie startet.
+            let shell = env["SHELL"] ?? "/bin/zsh"
+            t.startProcess(executable: shell, environment: env.map { "\($0.key)=\($0.value)" },
+                           execName: "-" + URL(fileURLWithPath: shell).lastPathComponent, currentDirectory: session.cwd)
+            terminals[key] = t
+            onChange?()
+            return
+        }
+        let hasTranscript = Transcript.path(sessionId: session.sessionId) != nil
+        var args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
+            + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
+        AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .public) in \(session.cwd, privacy: .public)")
+        if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { args.append(prompt) }
         t.startProcess(executable: cli.binary, args: args, environment: env.map { "\($0.key)=\($0.value)" },
                        execName: "claude", currentDirectory: session.cwd)
         terminals[key] = t
