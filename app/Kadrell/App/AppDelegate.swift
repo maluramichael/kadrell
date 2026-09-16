@@ -226,6 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Offene Hilfe hat selbst die Tastatur: F1 schließt sie wieder.
             if event.keyCode == 122, overlayIsAbout, event.window === overlay { dismissSheet(); return nil }
             guard event.window === self.window else { return event }
+            // Dialog offen, aber nicht mehr Key (nach Dropdown, Klick daneben oder App-Wechsel): Esc landet am
+            // Hauptfenster statt am Panel. Ohne das schließt nichts den Dialog, der Blur bleibt liegen und blockt
+            // alle Klicks (Softlock). onCancel räumt den Backdrop mit ab.
+            if event.keyCode == 53, let overlay, overlay.isVisible { overlay.onCancel?(); return nil }
             // Vorschau offen: ⏎ übernimmt die Session als Auswahl, Esc zeigt wieder die alte.
             if workspace.preview != nil, event.modifierFlags.intersection(Hotkey.modMask).isEmpty, [36, 76, 53].contains(event.keyCode) {
                 endPreview(commit: event.keyCode != 53)

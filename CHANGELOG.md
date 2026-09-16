@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.27.1 (2026-09-16)
+
+- Fix: Einstellungen ließen sich immer mit Esc schließen, auch wenn der Dialog nach einem Klick daneben oder einem Dropdown den Fokus verloren hatte. Vorher konnte die abgedunkelte Fläche liegen bleiben und alle Klicks blockieren.
+
 ## 1.27.0 (2026-09-16)
 
 - Feature: ⌘N ist jetzt ein einziges Suchfeld: ein paar Buchstaben finden Gruppen, zuletzt benutzte Ordner und alle Git-Projekte unter dem Projektordner. Oft und kürzlich benutzte Ordner stehen oben.
