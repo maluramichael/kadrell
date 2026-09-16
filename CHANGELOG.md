@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.20.0 (2026-09-16)
+
+- Feature: Sync-Eingabe: Mit ⌥I oder Klick auf „SYNC“ oben links geht alles, was du tippst oder einfügst, an alle offenen Sessions gleichzeitig.
+
 ## 1.19.0 (2026-09-16)
 
 - Feature: ⌘⇧B klappt alle Gruppen im Baum auf einmal zu, nochmal ⌘⇧B klappt alle wieder auf. Auch im Menü Ansicht.

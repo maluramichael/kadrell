@@ -188,6 +188,21 @@ final class WorkspaceView: NSView {
         focusTerminal()
     }
 
+    /// Sync (tmux synchronize-panes): Eingaben im Fokus-Terminal gehen an alle Kacheln. Bewusst nicht gespeichert.
+    private(set) var sync = false
+
+    func toggleSync() {
+        sync.toggle()
+        relayout()
+        focusTerminal()
+    }
+
+    /// Terminals der übrigen Kacheln, an die im Sync-Modus Eingaben mitgehen.
+    func syncTargets(except source: KadrellTerminalView) -> [KadrellTerminalView] {
+        guard sync else { return [] }
+        return tiles.compactMap { attach?.terminal(for: $0) }.filter { $0 !== source }
+    }
+
     /// Kacheln rechts: die Auswahl, im Auto-Modus gefiltert samt Nachlauf.
     private var tiles: [String] { auto ? selected.filter { matchesAuto($0) || linger[$0] != nil } : selected }
 

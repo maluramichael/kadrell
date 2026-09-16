@@ -8,7 +8,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case nextSession, prevSession, lastSession
     case previewNext, previewPrev
     case focus1, focus2, focus3, focus4, focus5, focus6, focus7, focus8, focus9
-    case zoom, nextLayout, closeFocused, openEditor, renameSession
+    case zoom, nextLayout, closeFocused, openEditor, renameSession, syncInput
     case focusSidebar, focusWorkspace
 
     /// 0-basiert für focus1…focus9.
@@ -36,6 +36,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .focusWorkspace: return "Arbeitsfläche: Tastatur an Claude"
         case .openEditor: return "Ordner im externen Editor öffnen"
         case .renameSession: return "Session umbenennen"
+        case .syncInput: return "Sync: Eingabe an alle Kacheln"
         default: return "Fokus-Kachel schließen"
         }
     }
@@ -51,6 +52,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .closeFocused: return "Fokus-Kachel schließen (Esc selbst geht an Claude)"
         case .openEditor: return "Ordner der Fokus-Session im Editor aus den Einstellungen öffnen"
         case .renameSession: return "Fokus-Session umbenennen, auch im Baum · Claude überschreibt den Namen danach nicht mehr"
+        case .syncInput: return "Sync: Tippen und ⌘V gehen an alle offenen Kacheln gleichzeitig · Badge „SYNC“"
         default: return title
         }
     }
@@ -77,6 +79,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .focusWorkspace: return Hotkey(.command, "2")
         case .openEditor: return Hotkey(.option, "e")
         case .renameSession: return Hotkey([], "F2")
+        case .syncInput: return Hotkey(.option, "i")
         default: return Hotkey(.command, "Esc")
         }
     }

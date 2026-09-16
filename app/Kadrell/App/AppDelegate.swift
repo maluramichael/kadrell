@@ -175,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
         bar.onToggleAuto = { [weak self] in self?.workspace.toggleAuto() }
+        bar.onToggleSync = { [weak self] in self?.workspace.toggleSync() }
         bar.onCycleSort = { [weak self] in Settings.sidebarSort = Settings.sidebarSort.next; self?.syncSidebar() }
 
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
@@ -193,6 +194,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
             if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
             if event.keyCode == 122 { self.showAbout(); return nil }   // F1
+            // Sync: dieselbe Taste an alle anderen Kacheln, jedes Terminal kodiert sie selbst. ⌘V fügt überall ein, andere ⌘-Kürzel bleiben lokal.
+            if let src = window.firstResponder as? KadrellTerminalView {
+                let mods = event.modifierFlags.intersection(Hotkey.modMask)
+                for t in workspace.syncTargets(except: src) {
+                    if !mods.contains(.command) { t.keyDown(with: event) }
+                    else if mods == .command, event.charactersIgnoringModifiers == "v" { t.paste(self) }
+                }
+            }
             return event
         }
         // ⌘ + Mausrad: Schriftgröße aller Terminals wie ⌘+/⌘-. Trackpad-Deltas sammeln, sonst springt es pro Wisch zweistellig.
@@ -295,6 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.layoutMode = workspace.mode
         bar.zoomed = workspace.zen
         bar.auto = workspace.auto
+        bar.sync = workspace.sync
         bar.sort = sidebar.sort
         bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
         bar.needsDisplay = true
@@ -479,6 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .focusWorkspace: focusWorkspace()
         case .openEditor: openEditor()
         case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
+        case .syncInput: workspace.toggleSync()
         default: workspace.removeFocused()
         }
     }

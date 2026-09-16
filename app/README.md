@@ -23,7 +23,7 @@ einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf e
 (`>` Kommandos, `/` Text in allen laufenden Terminals, direkt per ⌘⇧F), ⌘F Suchleiste im fokussierten Terminal (⌘G / ⌘⇧G weiter), ⌘W schließt das Fenster wie der rote Knopf, Sessions laufen weiter. F1 zeigt die Hilfe, beim ersten Start automatisch.
 
 Belegbare Kürzel (⌘, Einstellungen, Defaults wie in der tmux-Config): ⌥-Pfeile Fokus, ⌥⇧-Pfeile Kachel
-tauschen, ⌥1…⌥9 Kachel direkt, ⌥N/⌥P nächste/vorige, ⌥J/⌥K Vorschau: blättert durch den Baum und zeigt die Session allein, ohne die Auswahl anzufassen (⏎ übernimmt, Esc zurück), ⌥⇥ zuletzt fokussierte, ⌥Z Zoom (Fokus-Kachel allein,
+tauschen, ⌥1…⌥9 Kachel direkt, ⌥N/⌥P nächste/vorige, ⌥J/⌥K Vorschau: blättert durch den Baum und zeigt die Session allein, ohne die Auswahl anzufassen (⏎ übernimmt, Esc zurück), ⌥⇥ zuletzt fokussierte, ⌥I Sync (Tippen und ⌘V gehen an alle offenen Kacheln, rotes Badge „SYNC“ in der Leiste, auch per Klick), ⌥Z Zoom (Fokus-Kachel allein,
 Badge „ZOOM“ in der Leiste und „Z“ in der Titelzeile), ⌥E Ordner der Fokus-Session im externen Editor (Kommando in den Einstellungen, z. B. `code`),
 F2 oder Stift an Kachel/Baum-Zeile benennt die Session um (eigener Name geht immer vor dem Titel von Claude Code, leer = zurück),
 ⌘L Grid ↔ Stack, ⌘Esc Kachel schließen

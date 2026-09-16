@@ -15,6 +15,9 @@ final class StatusBarView: NSView {
     /// Auto-Modus: nur Sessions, die etwas wollen. An = gefülltes Badge.
     var auto = false
     var onToggleAuto: (() -> Void)?
+    /// Sync: Eingaben gehen an alle Kacheln. An = rotes Badge, damit es niemand vergisst.
+    var sync = false
+    var onToggleSync: (() -> Void)?
     /// Sortierung des Baums: Klick schaltet aus → A–Z → Status weiter. Aktiv = gefülltes Badge.
     var sort: SidebarSort = .off
     var onCycleSort: (() -> Void)?
@@ -63,9 +66,15 @@ final class StatusBarView: NSView {
         at.draw(at: CGPoint(x: autoRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: autoRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((autoRect, { [weak self] in self?.onToggleAuto?() }))
+        let syt = NSAttributedString(string: "SYNC", attributes: Theme.attrs(10, sync ? Theme.bg : Theme.muted, bold: true))
+        let syncRect = CGRect(x: autoRect.maxX + 1, y: 0, width: syt.size().width + 20, height: b.height - 1)
+        if sync { Theme.error.setFill(); syncRect.insetBy(dx: 5, dy: 6).fill() }
+        syt.draw(at: CGPoint(x: syncRect.minX + 10, y: midY - 7))
+        Theme.line.setFill(); CGRect(x: syncRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
+        hitRects.append((syncRect, { [weak self] in self?.onToggleSync?() }))
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
         let st = NSAttributedString(string: sortLabel, attributes: Theme.attrs(10, sort == .off ? Theme.muted : Theme.bg, bold: true))
-        let sortRect = CGRect(x: autoRect.maxX + 1, y: 0, width: st.size().width + 20, height: b.height - 1)
+        let sortRect = CGRect(x: syncRect.maxX + 1, y: 0, width: st.size().width + 20, height: b.height - 1)
         if sort != .off { Theme.sub.setFill(); sortRect.insetBy(dx: 5, dy: 6).fill() }
         st.draw(at: CGPoint(x: sortRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: sortRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
