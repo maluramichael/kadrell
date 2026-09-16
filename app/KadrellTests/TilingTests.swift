@@ -14,6 +14,8 @@ final class TilingTests: XCTestCase {
         XCTAssertEqual(five[3].minY, five[0].maxY + Tiling.gap)
         XCTAssertEqual(five[3].minX, 0); XCTAssertEqual(five[4].maxY, 600)
         for r in five { XCTAssertEqual(r.minX, r.minX.rounded()); XCTAssertEqual(r.width, r.width.rounded()) }
+        let wide = Tiling.grid(count: 2, in: b, gap: 40)
+        XCTAssertEqual(wide[1].minX, wide[0].maxX + 40); XCTAssertEqual(wide[1].maxX, 1000)
     }
 
     func testStackAccordionKeepsRowsBelowActive() {

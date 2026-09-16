@@ -102,10 +102,12 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "claude.effort") }
     }
 
-    static let uiScales: [Double] = [0.9, 1, 1.15, 1.3]
-    static let lineSpacings: [Double] = [1, 1.1, 1.2, 1.35]
-    static let paddings: [Double] = [0, 4, 8, 12]
-    static let fontSizes = 9.0...28.0
+    /// Prozentwerte in 5er-Schritten als Faktor, Pixelwerte in 2er-Schritten: ganze Zahlen im Menü, lange Listen bleiben bedienbar.
+    static let uiScales = stride(from: 50, through: 200, by: 5).map { Double($0) / 100 }
+    static let lineSpacings = stride(from: 50, through: 300, by: 5).map { Double($0) / 100 }
+    static let paddings = stride(from: 0, through: 64, by: 2).map(Double.init)
+    static let tileGaps = stride(from: 0, through: 64, by: 2).map(Double.init)
+    static let fontSizes = 6.0...72.0
     static let defaultFontSize = 12.0
     static let defaultFontName = "JetBrainsMonoNF-Regular"
 
@@ -133,6 +135,12 @@ enum Settings {
     static var terminalPadding: Double {
         get { double("terminal.padding", 0) }
         set { UserDefaults.standard.set(newValue, forKey: "terminal.padding") }
+    }
+
+    /// Abstand zwischen den Kacheln und zum Rand der Arbeitsfläche.
+    static var tileGap: Double {
+        get { double("tiles.gap", 6) }
+        set { UserDefaults.standard.set(newValue, forKey: "tiles.gap") }
     }
 
     /// SwiftTerm zeichnet per Metal auf der GPU statt per CoreGraphics auf dem Main-Thread, Default an.
@@ -209,6 +217,7 @@ final class SettingsModel {
     var fontSize = Settings.terminalFontSize
     var lineSpacing = Settings.terminalLineSpacing
     var padding = Settings.terminalPadding
+    var tileGap = Settings.tileGap
     var metal = Settings.terminalMetal
     var ask = Dictionary(uniqueKeysWithValues: Settings.Ask.allCases.map { ($0, $0.enabled) })
     @ObservationIgnored lazy var fonts: [(name: String, display: String)] = {
@@ -256,6 +265,7 @@ final class SettingsModel {
         Settings.terminalFontSize = fontSize
         Settings.terminalLineSpacing = lineSpacing
         Settings.terminalPadding = padding
+        Settings.tileGap = tileGap
         Settings.terminalMetal = metal
         for (a, on) in ask { a.enabled = on }
     }
@@ -364,6 +374,7 @@ struct SettingsView: View {
                 }
                 setting("Zeilenabstand") { menu($model.lineSpacing, Settings.lineSpacings.map { ($0, "\(Int(($0 * 100).rounded())) %") }) }
                 setting("Innenabstand der Kacheln") { menu($model.padding, Settings.paddings.map { ($0, "\(Int($0)) px") }) }
+                setting("Abstand zwischen Kacheln") { menu($model.tileGap, Settings.tileGaps.map { ($0, "\(Int($0)) px") }) }
                 setting("Terminal auf der GPU zeichnen (Metal)") { onOff($model.metal) }
             }
 

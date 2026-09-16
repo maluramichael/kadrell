@@ -16,7 +16,7 @@ enum Tiling {
     static func columns(for n: Int) -> Int { n <= 1 ? 1 : Int(Double(n).squareRoot().rounded(.up)) }
 
     /// Grid: n Kacheln in ceil(√n) Spalten, Zeilen von oben; Kanten auf ganze Punkte gerundet.
-    static func grid(count n: Int, in b: CGRect) -> [CGRect] {
+    static func grid(count n: Int, in b: CGRect, gap: CGFloat = Tiling.gap) -> [CGRect] {
         guard n > 0 else { return [] }
         let cols = columns(for: n), rows = (n + cols - 1) / cols
         let w = (b.width - CGFloat(cols - 1) * gap) / CGFloat(cols)

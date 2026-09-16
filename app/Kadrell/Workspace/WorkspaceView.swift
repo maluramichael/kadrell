@@ -282,7 +282,8 @@ final class WorkspaceView: NSView {
     // MARK: Layout
 
     func relayout() {
-        let inset = bounds.insetBy(dx: 6, dy: 6)
+        let gap = CGFloat(Settings.tileGap)
+        let inset = bounds.insetBy(dx: gap, dy: gap)
         var frames: [String: CGRect] = [:]
         stackRows = []
         updateLinger()
@@ -311,7 +312,7 @@ final class WorkspaceView: NSView {
             frames[f] = inset
         } else if mode == .grid {
             visible = tiles
-            for (id, r) in zip(tiles, Tiling.grid(count: tiles.count, in: inset)) { frames[id] = r }
+            for (id, r) in zip(tiles, Tiling.grid(count: tiles.count, in: inset, gap: gap)) { frames[id] = r }
         } else {
             let active = focused.flatMap { tiles.firstIndex(of: $0) } ?? 0
             let (rows, body) = Tiling.stack(count: tiles.count, active: active, in: inset, rowHeight: (Tiling.rowHeight * Theme.scale).rounded())

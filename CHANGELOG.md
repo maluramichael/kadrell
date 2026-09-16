@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.31.0 (2026-09-16)
+
+- Feature: Neue Einstellung „Abstand zwischen Kacheln“, von 0 bis 64 px.
+- Änderung: Viel größere Bereiche in den Einstellungen: Terminal-Schrift 6 bis 72 pt, Zeilenabstand 50 bis 300 %, UI-Größe 50 bis 200 %, Innenabstand der Kacheln 0 bis 64 px.
+
 ## 1.30.0 (2026-09-16)
 
 - Feature: Einstellungen gelten sofort, ohne Speichern. Esc oder „Fertig“ schließt den Dialog.
