@@ -199,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
+        sidebar.onNewTerminal = { [weak self] gid in self?.openNewTerminal(groupId: gid) }
         sidebar.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
         sidebar.onToggleFavorite = { [weak self] gid in self?.store.toggleFavorite(id: gid); self?.reloadViews() }
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
@@ -800,6 +801,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayIsAbout = false
         window.makeFirstResponder(workspace)
         if let pending = pendingPresent { pendingPresent = nil; pending() }
+    }
+
+    /// ⌘ auf dem „+“ einer Gruppe: Terminal ohne Claude im Ordner der Gruppe, direkt in derselben Gruppe.
+    private func openNewTerminal(groupId: String) {
+        guard let g = store.group(id: groupId) else { return }
+        startSession(group: g, cwd: g.cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
     }
 
     private func openNewSession(groupId: String?) {

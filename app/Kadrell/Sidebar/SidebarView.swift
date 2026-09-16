@@ -34,12 +34,17 @@ final class SidebarView: NSView {
     private var pressed: (point: CGPoint, row: Row, flags: NSEvent.ModifierFlags)?
     private var dragging = false
     private var dropTarget: Row?
+    /// ⌘ gehalten: der „+“-Knopf einer Gruppe zeigt ein Terminal-Icon und öffnet ein Terminal ohne Claude.
+    private var cmdDown = false
+    private var flagsMonitor: Any?
 
     enum SelectMode { case replace, toggle, add, cursor }
     /// Klick = nur diese, ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu,
     /// ↑↓ (cursor) = nur diese, die Tastatur bleibt im Baum.
     var onSelect: (([String], SelectMode) -> Void)?
     var onNewSession: ((String) -> Void)?
+    /// ⌘ über der Gruppen-Toolbar: der „+“-Knopf öffnet ein Terminal ohne Claude statt einer Claude-Session.
+    var onNewTerminal: ((String) -> Void)?
     var onEditGroup: ((String) -> Void)?
     /// Favorit an/aus: eine favorisierte Gruppe bleibt auch ohne Sessions in der Liste.
     var onToggleFavorite: ((String) -> Void)?
@@ -187,7 +192,7 @@ final class SidebarView: NSView {
             switch (rows[i], k) {
             case (.group(let g), 0):
                 Icons.heart(in: ic.insetBy(dx: 1, dy: 1), color: g.isFavorite ? Theme.group(g.color) : color, filled: g.isFavorite)
-            case (.group, 1): Icons.plus(in: ic, color: color)
+            case (.group, 1): cmdDown ? Icons.computer(in: ic, color: color) : Icons.plus(in: ic, color: color)
             case (.group, 2), (.session, 0): Icons.pen(in: ic, color: color)
             default: Icons.x(in: ic, color: color)
             }
@@ -294,8 +299,28 @@ final class SidebarView: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            if let m = flagsMonitor { NSEvent.removeMonitor(m); flagsMonitor = nil }
+        } else if flagsMonitor == nil {
+            // ⌘ drücken/loslassen erreicht die Sidebar nicht als First Responder (das Terminal hat die Tastatur),
+            // daher ein lokaler Monitor, damit der „+“-Knopf beim Hovern sofort das Icon wechselt.
+            flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
+                self?.setCmdDown(e.modifierFlags.contains(.command)); return e
+            }
+        }
+    }
+
+    private func setCmdDown(_ down: Bool) {
+        guard down != cmdDown else { return }
+        cmdDown = down
+        if let i = hovered, case .group = rows[i] { needsDisplay = true }
+    }
+
     override func mouseMoved(with event: NSEvent) {
         guard convert(event.locationInWindow, from: nil).x < bounds.width - ThinSplitView.grabWidth / 2 else { return }   // Griffzone des Trenners
+        setCmdDown(event.modifierFlags.contains(.command))
         let p = local(event)
         let i = rowIndex(at: p)
         (i == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
@@ -327,7 +352,7 @@ final class SidebarView: NSView {
         if hovered == i, toolbarRect(i).contains(p) {
             switch (rows[i], button(at: p, row: i)) {
             case (.group(let g), 0): onToggleFavorite?(g.id)
-            case (.group(let g), 1): onNewSession?(g.id)
+            case (.group(let g), 1): event.modifierFlags.contains(.command) ? onNewTerminal?(g.id) : onNewSession?(g.id)
             case (.group(let g), 2): onEditGroup?(g.id)
             case (.group(let g), 3): onCloseGroup?(g.id, force)
             case (.session(let s, _), 0): onRenameSession?(s.id)

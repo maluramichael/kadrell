@@ -8,6 +8,7 @@ struct AboutView: View {
                 ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
                 ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "ganze Gruppen der Auswahl, nochmal: zurück"), ("⌘⇧A", "alle Sessions, nochmal: zurück"),
                 ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘T", "Terminal ohne Claude im Ordner der fokussierten"),
+                ("+ an Gruppe", "neue Session in der Gruppe · mit ⌘: Terminal ohne Claude"),
             ] + rows([.openEditor, .renameSession]) + [("Stift", "an Kachel und Baum-Zeile: umbenennen")]),
             ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
                                 + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace])
