@@ -7,7 +7,7 @@ struct AboutView: View {
             ("Sessions öffnen", [
                 ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
                 ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "ganze Gruppen der Auswahl, nochmal: zurück"), ("⌘⇧A", "alle Sessions, nochmal: zurück"),
-                ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘T", "Terminal ohne Claude im Ordner der fokussierten"),
+                ("⌘N", "Neue Session: Projekt suchen, ~/d/p abkürzen, ⌘O Finder, Ordner hineinziehen"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘T", "Terminal ohne Claude im Ordner der fokussierten"),
                 ("+ an Gruppe", "neue Session in der Gruppe · mit ⌘: Terminal ohne Claude"),
             ] + rows([.openEditor, .renameSession]) + [("Stift", "an Kachel und Baum-Zeile: umbenennen")]),
             ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
@@ -20,7 +20,7 @@ struct AboutView: View {
             ("Fenster und App", [
                 ("Rundes X", "Fenster nur verstecken, Sessions laufen weiter"), ("Menüleisten-Icon / Dock", "Fenster zurückholen"),
                 ("⌘M", "Im Dock ablegen"), ("⌘ Mausrad", "Terminal-Schrift aller Sessions größer/kleiner"),
-                ("⌘,", "Einstellungen: Startordner, Darstellung, Tastenkürzel"), ("F1", "diese Hilfe"),
+                ("⌘,", "Einstellungen: Projektordner, Darstellung, Tastenkürzel"), ("F1", "diese Hilfe"),
             ]),
         ]
     }

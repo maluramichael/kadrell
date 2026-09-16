@@ -32,14 +32,15 @@ targets:
       properties:
         CFBundleName: Kadrell
         CFBundleDisplayName: Kadrell
-        CFBundleShortVersionString: "1.26.2"
-        CFBundleVersion: "50"
+        CFBundleShortVersionString: "1.27.0"
+        CFBundleVersion: "51"
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "Michael Malura"
         CFBundleIconFile: Kadrell
         NSMicrophoneUsageDescription: "Claude-Sessions im Terminal nutzen das Mikrofon für die Spracheingabe."
+        NSAppleEventsUsageDescription: "Kadrell schlägt bei ⌘N den Ordner des vordersten Finder-Fensters vor."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.malura.kadrell

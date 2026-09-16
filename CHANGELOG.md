@@ -2,6 +2,15 @@
 
 Neueste Version oben.
 
+## 1.27.0 (2026-09-16)
+
+- Feature: ⌘N ist jetzt ein einziges Suchfeld: ein paar Buchstaben finden Gruppen, zuletzt benutzte Ordner und alle Git-Projekte unter dem Projektordner. Oft und kürzlich benutzte Ordner stehen oben.
+- Feature: Pfade lassen sich abkürzen: `~/d/p/kad` findet `~/development/projects/kadrell`. Tab übernimmt den markierten Pfad, ein `/` danach zeigt seine Unterordner.
+- Feature: Ordner aus dem Finder in den ⌘N-Dialog oder direkt in den Baum ziehen startet dort eine Session.
+- Feature: Ganz oben in ⌘N stehen der Ordner des vordersten Finder-Fensters und ein Ordnerpfad aus der Zwischenablage. Für den Finder fragt macOS einmal nach der Erlaubnis.
+- Feature: ⌘O im ⌘N-Dialog öffnet die Ordnerauswahl im Finder.
+- Änderung: Der Startordner in den Einstellungen heißt jetzt Projektordner, lässt sich direkt tippen (mit Tab-Abkürzung) oder hineinziehen und ist die Wurzel für die Projektsuche.
+
 ## 1.26.2 (2026-09-16)
 
 - Änderung: Dialoge (Einstellungen, neue Session, Gruppe bearbeiten, umbenennen) bestätigt jetzt ⏎ statt ⌘⏎. Rückfragen, die löschen oder beenden, brauchen weiter ⌘⏎.

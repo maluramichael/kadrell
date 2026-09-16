@@ -7,5 +7,8 @@
 	     claude als Kindprozess mit vollem Zugriff auf ~/.claude und die Projektordner. -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
+	<!-- ⌘N fragt den Finder nach dem Ordner seines vordersten Fensters (Apple Events). -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>

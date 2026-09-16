@@ -45,6 +45,8 @@ final class SidebarView: NSView {
     var onNewSession: ((String) -> Void)?
     /// ⌘ über der Gruppen-Toolbar: der „+“-Knopf öffnet ein Terminal ohne Claude statt einer Claude-Session.
     var onNewTerminal: ((String) -> Void)?
+    /// Ordner aus dem Finder in den Baum gezogen: neue Session dort, in dessen Gruppe oder einer neuen.
+    var onDropFolder: ((String) -> Void)?
     var onEditGroup: ((String) -> Void)?
     /// Favorit an/aus: eine favorisierte Gruppe bleibt auch ohne Sessions in der Liste.
     var onToggleFavorite: ((String) -> Void)?
@@ -67,6 +69,7 @@ final class SidebarView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        registerForDraggedTypes([.fileURL])
         pulseTask = Task { [weak self] in
             var ticks = 0
             while !Task.isCancelled {
@@ -297,6 +300,21 @@ final class SidebarView: NSView {
         super.updateTrackingAreas()
         for t in trackingAreas { removeTrackingArea(t) }
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    // MARK: Ordner hineinziehen
+
+    private func droppedFolder(_ info: NSDraggingInfo) -> String? {
+        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        return urls?.lazy.compactMap { FolderIndex.folder(for: $0.path) }.first
+    }
+
+    override func draggingEntered(_ info: NSDraggingInfo) -> NSDragOperation { droppedFolder(info) == nil ? [] : .copy }
+
+    override func performDragOperation(_ info: NSDraggingInfo) -> Bool {
+        guard let dir = droppedFolder(info) else { return false }
+        onDropFolder?(dir)
+        return true
     }
 
     override func viewDidMoveToWindow() {

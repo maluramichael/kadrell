@@ -200,6 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
         sidebar.onNewTerminal = { [weak self] gid in self?.openNewTerminal(groupId: gid) }
+        sidebar.onDropFolder = { [weak self] dir in self?.startSession(group: nil, cwd: dir) }
         sidebar.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
         sidebar.onToggleFavorite = { [weak self] gid in self?.store.toggleFavorite(id: gid); self?.reloadViews() }
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
@@ -813,10 +814,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let gid = groupId, let g = store.group(id: gid) { startSession(group: g, cwd: g.cwd); return }
         let sessions = workspace.sessions
         let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
-        let model = NewSessionModel(groups: store.groups, counts: counts, preselected: groupId.flatMap { store.group(id: $0) })
+        // Repos unter dem Startordner und neben allen bekannten Projekten; bis der Scan steht, gilt der gespeicherte Stand.
+        let model = NewSessionModel(groups: store.groups, counts: counts)
+        let known = store.groups.map(\.cwd) + FolderIndex.shared.uses.keys
+        FolderIndex.shared.refresh(roots: [Settings.startFolder] + known.map { ($0 as NSString).deletingLastPathComponent }) { [weak model] in
+            model?.refreshIfUntouched()
+        }
         let view = NewSessionView(model: model) { [weak self] g, cwd in
             self?.dismissSheet()
-            if g == nil { Settings.startFolder = cwd }   // letzte Ordnerwahl merken: beim nächsten ⌘N steht sie schon da
             self?.startSession(group: g, cwd: cwd)
         }
         present(view, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.start() })
@@ -834,6 +839,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             target = g
         }
         store.attach(sessionId: id, to: target!.id)
+        FolderIndex.shared.recordUse(cwd)
         let session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
         if let prompt { attach.initialPrompts[id] = prompt }
         registry.add(session)

@@ -292,13 +292,23 @@ struct SettingsView: View {
 
             heading("Sessions", first: true)
             table {
-                setting("Startordner für ⌘N") {
-                    Button { chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } } } label: {
-                        Text(Theme.shortPath(model.startFolder)).lineLimit(1).truncationMode(.head)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 8).padding(.vertical, 3)
+                setting("Projektordner für ⌘N (nach Git-Repos durchsucht)") {
+                    HStack(spacing: 4) {
+                        PathField(text: Binding(get: { Theme.shortPath(model.startFolder) }, set: { model.startFolder = $0 }), autofocus: false,
+                                  onTab: { if let p = FolderIndex.expandAbbreviated(model.startFolder).first { model.startFolder = p } },
+                                  onSubmit: {}, onMove: { _ in })
+                            .frame(height: 18 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 2)
                             .background(Theme.bgColor)
+                            .dropDestination(for: URL.self) { urls, _ in
+                                guard let d = urls.lazy.compactMap({ FolderIndex.folder(for: $0.path) }).first else { return false }
+                                model.startFolder = d
+                                return true
+                            }
+                        Button { chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } } } label: {
+                            Image(systemName: "folder").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
+                        }
+                        .buttonStyle(.plain).help("Im Finder wählen")
                     }
-                    .buttonStyle(.plain).help("Ordner wählen …")
                 }
                 setting("Externer Editor (Kommando wie im Terminal)") {
                     TextField("z. B. code", text: $model.editorCommand)
