@@ -9,7 +9,11 @@ final class WorkspaceView: NSView {
     /// Geordnete Session-Ids, die rechts zu sehen sind.
     private(set) var selected: [String] = []
     private(set) var focused: String? {
-        didSet { if oldValue != focused, let o = oldValue { lastFocused = o } }
+        didSet {
+            guard oldValue != focused else { return }
+            if let o = oldValue { lastFocused = o }
+            if let f = focused { onFocusChange?(f) }
+        }
     }
     /// Für „zuletzt fokussierte Kachel“ (tmux M-Tab).
     private var lastFocused: String?
@@ -39,6 +43,8 @@ final class WorkspaceView: NSView {
     private var dropTarget: String?
 
     var onChange: (() -> Void)?
+    /// Eine neue Kachel bekommt den Fokus (Klick, Pfeiltasten, ⌘-Zahlen, …).
+    var onFocusChange: ((String) -> Void)?
     /// Zweiter Parameter: ⌥ gehalten, dann ohne Rückfrage. Nicht ⌘: das kollidiert mit Auswahl im Baum.
     var onCloseSession: ((String, Bool) -> Void)?
     var onRenameSession: ((String) -> Void)?

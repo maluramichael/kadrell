@@ -184,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         palette = PaletteWindow()
 
         workspace.onChange = { [weak self] in self?.syncSidebar() }
+        workspace.onFocusChange = { [weak self] key in self?.registry?.markSeen(key) }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
         sidebar.onSelect = { [weak self] ids, mode in
@@ -340,6 +341,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.sort = Settings.sidebarSort
         sidebar.renderer = Settings.sidebarStyle.renderer
         sidebar.messages = registry?.lastMessages ?? [:]
+        sidebar.unread = registry?.unread ?? []
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
         let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }

@@ -37,6 +37,8 @@ struct SidebarSessionItem {
     let hover: Bool
     let message: String?
     let showAge: Bool
+    /// Antwort seit dem letzten Fokus: Titel fett plus Punkt, wie in Mail.
+    let unread: Bool
 }
 
 enum SidebarStyle: String, CaseIterable {
@@ -96,7 +98,13 @@ extension SidebarRenderer {
             age.draw(at: CGPoint(x: right, y: r.midY - 7))
             right -= 8
         }
-        let title = NSAttributedString(string: s.session.title, attributes: Theme.attrs(12, s.selected || s.hover ? Theme.fg : Theme.sub))
+        // Die fokussierte Zeile zeigt gerade selbst an, was neu ist: dort bleibt der Marker aus.
+        let unread = s.unread && !s.focused
+        if unread {
+            s.color.setFill()
+            NSBezierPath(ovalIn: CGRect(x: 36, y: r.midY - 2.5, width: 5, height: 5)).fill()
+        }
+        let title = NSAttributedString(string: s.session.title, attributes: Theme.attrs(12, s.selected || s.hover ? Theme.fg : Theme.sub, bold: unread))
         title.draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 

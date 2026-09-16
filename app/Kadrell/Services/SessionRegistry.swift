@@ -13,7 +13,14 @@ final class SessionRegistry {
     private(set) var lastError: String?
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     private(set) var polled = false
+    /// Sessions, deren Transcript seit dem letzten Fokus gewachsen ist (`Session.id`).
+    private(set) var unread: Set<String> = []
     private var transcripts: [String: Transcript.Entry] = [:]
+    /// Transcript-Größe je Session beim letzten Fokus, übersteht einen Neustart der App.
+    private var lastSeenSize: [String: Int] {
+        get { UserDefaults.standard.dictionary(forKey: "session.lastSeenSize") as? [String: Int] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "session.lastSeenSize") }
+    }
     /// Ersatztitel je sessionId. Die erste Nachricht ändert sich nicht, einmal gefunden wird nie wieder gelesen.
     private var firstPrompts: [String: String] = [:]
     /// Schlüssel der Session je pid des eigenen Claude-Prozesses, liefert der AttachManager.
@@ -75,9 +82,30 @@ final class SessionRegistry {
         let pids = pids()
         let agents = Agent.local(pids: Array(pids.keys), configDir: cli.configDir)
         var merged = SessionRegistry.merge(sessions, agents: agents, pids: pids)
+        applyShellCwd(&merged, pids: pids)
+        await fillFirstPrompts(&merged)
+        let (messages, unread) = await refreshTranscripts(merged)
+        // Erster Poll meldet sich auch ohne Änderung: Registrierte hören darauf, um den Lade-Zustand zu verlassen.
+        let firstPoll = !polled
+        polled = true
+        guard merged != sessions || messages != lastMessages || unread != self.unread || firstPoll else { return }
+        let persisted = merged.map(\.stored) != sessions.map(\.stored)
+        sessions = merged
+        lastMessages = messages
+        self.unread = unread
+        if persisted { save() }
+        onChange?(merged)
+    }
+
+    /// Bei Terminals ohne Claude folgt der Ordner dem `cd` der Shell.
+    private func applyShellCwd(_ merged: inout [Session], pids: [Int: String]) {
         for (pid, key) in pids {
-            if let i = merged.firstIndex(where: { $0.id == key && $0.isShell }), let dir = SessionRegistry.cwd(pid: pid_t(pid)) { merged[i].cwd = dir }
+            guard let i = merged.firstIndex(where: { $0.id == key && $0.isShell }), let dir = SessionRegistry.cwd(pid: pid_t(pid)) else { continue }
+            merged[i].cwd = dir
         }
+    }
+
+    private func fillFirstPrompts(_ merged: inout [Session]) async {
         let missing = merged.filter { $0.name.isEmpty && !$0.isShell && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
         if !missing.isEmpty {
             let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
@@ -86,22 +114,32 @@ final class SessionRegistry {
             firstPrompts.merge(found) { a, _ in a }
         }
         for i in merged.indices { merged[i].firstPrompt = firstPrompts[merged[i].sessionId] }
+    }
+
+    /// Liest nur gewachsene Transcripts neu und leitet daraus die Nachrichtenzeile (falls eingeschaltet)
+    /// sowie den Ungelesen-Status ab: gewachsen seit `lastSeenSize` vom letzten Fokus.
+    private func refreshTranscripts(_ merged: [Session]) async -> (messages: [String: String], unread: Set<String>) {
+        let ids = merged.map(\.sessionId), cache = transcripts
+        transcripts = await Task.detached { Transcript.refresh(ids, cache: cache) }.value
         var messages: [String: String] = [:]
         if Settings.showLastMessage {
-            let ids = merged.map(\.sessionId), cache = transcripts
-            transcripts = await Task.detached { Transcript.refresh(ids, cache: cache) }.value
             for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
         }
-        // Erster Poll meldet sich auch ohne Änderung: Registrierte hören darauf, um den Lade-Zustand zu verlassen.
-        let firstPoll = !polled
-        polled = true
-        if merged != sessions || messages != lastMessages || firstPoll {
-            let persisted = merged.map(\.stored) != sessions.map(\.stored)
-            sessions = merged
-            lastMessages = messages
-            if persisted { save() }
-            onChange?(merged)
-        }
+        let seen = lastSeenSize
+        let unread = Set(merged.compactMap { s -> String? in
+            guard let size = transcripts[s.sessionId]?.size, size > (seen[s.id] ?? 0) else { return nil }
+            return s.id
+        })
+        return (messages, unread)
+    }
+
+    /// Fokus auf eine Session: Ungelesen-Zustand für sie zurücksetzen.
+    func markSeen(_ id: String) {
+        guard let s = sessions.first(where: { $0.id == id }), let size = transcripts[s.sessionId]?.size else { return }
+        var seen = lastSeenSize
+        seen[id] = Int(size)
+        lastSeenSize = seen
+        unread.remove(id)
     }
 
     /// Live-Werte nur über die pid des eigenen Prozesses: eine fremde Session mit derselben sessionId

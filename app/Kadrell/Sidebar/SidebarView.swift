@@ -19,6 +19,8 @@ final class SidebarView: NSView {
     /// Eingeschaltet: jede Session-Zeile bekommt eine zweite Zeile mit `messages[id]`.
     var showMessages = false
     var messages: [String: String] = [:]
+    /// Sessions mit Antworten seit dem letzten Fokus: Titel fett plus Punkt.
+    var unread: Set<String> = []
     private var collapsed: Set<String> = []
     private var rows: [Row] = []
     private var hovered: Int?
@@ -246,7 +248,8 @@ final class SidebarView: NSView {
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,
-                                                message: showMessages ? messages[s.id] : nil, showAge: showAge), in: r)
+                                                message: showMessages ? messages[s.id] : nil, showAge: showAge,
+                                                unread: unread.contains(s.id)), in: r)
     }
 
     // MARK: Events
