@@ -137,6 +137,18 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "terminal.padding") }
     }
 
+    /// Bild hinter den Kacheln, nur in der Arbeitsfläche. "" = keins.
+    static var backgroundImage: String {
+        get { UserDefaults.standard.string(forKey: "workspace.backgroundImage") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "workspace.backgroundImage") }
+    }
+    static let opacities = stride(from: 0, through: 100, by: 5).map { Double($0) / 100 }
+    /// Deckkraft des Kachelkörpers samt Terminal-Hintergrund; Text bleibt voll sichtbar. 1 = undurchsichtig.
+    static var tileOpacity: Double {
+        get { double("tiles.opacity", 1) }
+        set { UserDefaults.standard.set(newValue, forKey: "tiles.opacity") }
+    }
+
     /// Abstand zwischen den Kacheln und zum Rand der Arbeitsfläche.
     static var tileGap: Double {
         get { double("tiles.gap", 6) }
@@ -218,6 +230,8 @@ final class SettingsModel {
     var lineSpacing = Settings.terminalLineSpacing
     var padding = Settings.terminalPadding
     var tileGap = Settings.tileGap
+    var backgroundImage = Settings.backgroundImage
+    var tileOpacity = Settings.tileOpacity
     var metal = Settings.terminalMetal
     var ask = Dictionary(uniqueKeysWithValues: Settings.Ask.allCases.map { ($0, $0.enabled) })
     @ObservationIgnored lazy var fonts: [(name: String, display: String)] = {
@@ -266,6 +280,8 @@ final class SettingsModel {
         Settings.terminalLineSpacing = lineSpacing
         Settings.terminalPadding = padding
         Settings.tileGap = tileGap
+        Settings.backgroundImage = backgroundImage.trimmingCharacters(in: .whitespacesAndNewlines)
+        Settings.tileOpacity = tileOpacity
         Settings.terminalMetal = metal
         for (a, on) in ask { a.enabled = on }
     }
@@ -376,6 +392,32 @@ struct SettingsView: View {
                 setting("Innenabstand der Kacheln") { menu($model.padding, Settings.paddings.map { ($0, "\(Int($0)) px") }) }
                 setting("Abstand zwischen Kacheln") { menu($model.tileGap, Settings.tileGaps.map { ($0, "\(Int($0)) px") }) }
                 setting("Terminal auf der GPU zeichnen (Metal)") { onOff($model.metal) }
+            }
+
+            heading("Anpassen", note: "Bild nur hinter den Kacheln")
+            table {
+                setting("Hintergrundbild") {
+                    HStack(spacing: 4) {
+                        PathField(text: Binding(get: { Theme.shortPath(model.backgroundImage) }, set: { model.backgroundImage = FolderIndex.normalize($0) }),
+                                  placeholder: "kein Bild · Datei hineinziehen", autofocus: false, onTab: {}, onSubmit: {}, onMove: { _ in })
+                            .frame(height: 18 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(Theme.bgColor)
+                            .dropDestination(for: URL.self) { urls, _ in
+                                guard let u = urls.first(where: { NSImage(contentsOf: $0) != nil }) else { return false }
+                                model.backgroundImage = u.path
+                                return true
+                            }
+                        Button { chooseFolder(start: model.backgroundImage.isEmpty ? "~/Pictures" : (model.backgroundImage as NSString).deletingLastPathComponent, images: true) { if let p = $0 { model.backgroundImage = p } } } label: {
+                            Image(systemName: "photo").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
+                        }
+                        .buttonStyle(.plain).help("Bild wählen")
+                        Button { model.backgroundImage = "" } label: {
+                            Image(systemName: "xmark").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
+                        }
+                        .buttonStyle(.plain).help("Kein Bild")
+                    }
+                }
+                setting("Deckkraft der Kacheln") { menu($model.tileOpacity, Settings.opacities.map { ($0, "\(Int(($0 * 100).rounded())) %") }) }
             }
 
             heading("Baum und Kacheln")

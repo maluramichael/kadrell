@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.32.0 (2026-09-16)
+
+- Feature: Neuer Bereich „Anpassen“ in den Einstellungen: Hintergrundbild für die Arbeitsfläche (wählen, hineinziehen oder Pfad eintippen) und Deckkraft der Kacheln von 0 bis 100 %. Unter 100 % scheint das Bild durch Kacheln und Terminals, der Text bleibt voll sichtbar.
+
 ## 1.31.0 (2026-09-16)
 
 - Feature: Neue Einstellung „Abstand zwischen Kacheln“, von 0 bis 64 px.

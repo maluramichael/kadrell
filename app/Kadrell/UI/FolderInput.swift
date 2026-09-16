@@ -1,12 +1,13 @@
 import SwiftUI
 import AppKit
 
-/// Nativer Ordnerdialog. Liefert den gewählten Pfad oder nil.
+/// Nativer Ordnerdialog. Liefert den gewählten Pfad oder nil. `images: true` wählt stattdessen eine Bilddatei.
 @MainActor
-func chooseFolder(start: String, completion: @escaping (String?) -> Void) {
+func chooseFolder(start: String, images: Bool = false, completion: @escaping (String?) -> Void) {
     let panel = NSOpenPanel()
-    panel.canChooseDirectories = true
-    panel.canChooseFiles = false
+    panel.canChooseDirectories = !images
+    panel.canChooseFiles = images
+    if images { panel.allowedContentTypes = [.image] }
     panel.canCreateDirectories = true
     panel.allowsMultipleSelection = false
     panel.directoryURL = URL(fileURLWithPath: FolderIndex.normalize(start))

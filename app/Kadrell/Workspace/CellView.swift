@@ -60,7 +60,8 @@ final class CellView: NSView {
     var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
     var statusColor: NSColor { attached ? Theme.color(for: session.status) : Theme.detached }
     /// Hintergrund der Kachel, leicht in Gruppenfarbe getönt, damit Gruppen auf einen Blick auseinanderfallen.
-    var bodyColor: NSColor { groupColor.mixed(0.05, into: Theme.bg) }
+    /// Mit Deckkraft unter 100 % scheint das Hintergrundbild der Arbeitsfläche durch, auch durchs Terminal.
+    var bodyColor: NSColor { groupColor.mixed(0.05, into: Theme.bg).withAlphaComponent(CGFloat(Settings.tileOpacity)) }
 
     override func draw(_ dirtyRect: NSRect) {
         bodyColor.setFill()

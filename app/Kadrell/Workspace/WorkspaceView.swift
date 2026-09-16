@@ -413,9 +413,38 @@ final class WorkspaceView: NSView {
         return .hint
     }
 
+    /// Hintergrundbild, einmal auf die Größe der Fläche gerechnet: Stack-Zeilen zeichnen oft neu, das Bild soll dabei nur kopiert werden.
+    private var background: (path: String, size: CGSize, image: CGImage?)?
+
+    private func drawBackground() {
+        let path = Settings.backgroundImage, px = convertToBacking(bounds).size
+        guard !path.isEmpty, px.width >= 1, px.height >= 1 else { return }
+        if background?.path != path || background?.size != px {
+            var scaled: CGImage?
+            if let src = NSImage(contentsOfFile: path)?.cgImage(forProposedRect: nil, context: nil, hints: nil),
+               let ctx = CGContext(data: nil, width: Int(px.width), height: Int(px.height), bitsPerComponent: 8, bytesPerRow: 0,
+                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) {
+                // Füllend wie „aspect fill“: die kürzere Seite passt, der Rest wird mittig abgeschnitten.
+                let s = max(px.width / CGFloat(src.width), px.height / CGFloat(src.height))
+                let w = CGFloat(src.width) * s, h = CGFloat(src.height) * s
+                ctx.interpolationQuality = .high
+                ctx.draw(src, in: CGRect(x: (px.width - w) / 2, y: (px.height - h) / 2, width: w, height: h))
+                scaled = ctx.makeImage()
+            }
+            background = (path, px, scaled)
+        }
+        guard let img = background?.image, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.saveGState()
+        ctx.translateBy(x: 0, y: bounds.height)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(img, in: bounds)
+        ctx.restoreGState()
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         Theme.bg.setFill()
         dirtyRect.fill()
+        drawBackground()
         if tiles.isEmpty {
             let a: NSAttributedString, b: NSAttributedString
             switch emptyReason {
