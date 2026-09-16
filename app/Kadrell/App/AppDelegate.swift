@@ -269,6 +269,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.selected = Set(workspace.selected)
         sidebar.focused = workspace.preview ?? workspace.focused
         sidebar.showMessages = Settings.showLastMessage
+        sidebar.showAge = Settings.sidebarShowAge
+        sidebar.renderer = Settings.sidebarStyle.renderer
         sidebar.messages = registry?.lastMessages ?? [:]
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions

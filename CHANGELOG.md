@@ -2,6 +2,13 @@
 
 Neueste Version oben.
 
+## 1.11.0 (2026-09-16)
+
+- Feature: Der Baum hat jetzt drei Designs zur Auswahl (Einstellungen, Baum und Kacheln): Klassisch, Getönte Gruppen und Kompakt.
+- Feature: Die Laufzeit der Sessions im Baum lässt sich ausblenden.
+- Änderung: Die Knöpfe im Baum erscheinen beim Überfahren als kleine schwebende Leiste. Laufzeit und Namen verrutschen nicht mehr, und der Knopf unter der Maus wird hervorgehoben.
+- Änderung: Gruppenköpfe zeigen die Anzahl ihrer Sessions.
+
 ## 1.10.1 (2026-09-16)
 
 - Fix: Der Trenner zwischen Baum und Arbeitsfläche lässt sich wieder zuverlässig greifen, auch nach einer Änderung der UI-Größe. Vorher reagierte er oft nur genau auf der Linie.

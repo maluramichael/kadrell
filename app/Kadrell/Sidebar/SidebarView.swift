@@ -4,8 +4,10 @@ import AppKit
 /// setzt seine Höhe selbst.
 @MainActor
 final class SidebarView: NSView {
-    static let groupRow: CGFloat = 38
-    static let sessionRow: CGFloat = 24
+    /// Aussehen der Zeilen, umschaltbar in den Einstellungen.
+    var renderer: any SidebarRenderer = SidebarStyle.tinted.renderer
+    /// Laufzeit („12m“) rechts in jeder Session-Zeile.
+    var showAge = true
 
     private(set) var groups: [Group] = []
     private(set) var sessions: [String: Session] = [:]
@@ -18,6 +20,8 @@ final class SidebarView: NSView {
     private var collapsed: Set<String> = []
     private var rows: [Row] = []
     private var hovered: Int?
+    /// Knopf der schwebenden Toolbar unter der Maus, Index von links.
+    private var hoveredButton: Int?
     /// Letzte einzeln angeklickte Session: Startpunkt für ⇧-Bereiche.
     private var anchor: String?
     private var pulseTask: Task<Void, Never>?
@@ -62,7 +66,7 @@ final class SidebarView: NSView {
                 if ticks % 750 == 0 { self.needsDisplay = true; continue }
                 for (i, row) in self.rows.enumerated() {
                     guard case .session(let s, _) = row, s.status == .running else { continue }
-                    self.setNeedsDisplay(self.dotRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
+                    self.setNeedsDisplay(self.renderer.dotRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
                 }
             }
         }
@@ -97,24 +101,20 @@ final class SidebarView: NSView {
             guard !collapsed.contains(g.id) else { continue }
             for s in g.sessionIds.compactMap({ self.sessions[$0] }) { rows.append(.session(s, g)) }
         }
-        let h = rows.reduce(CGFloat(12)) { $0 + rowHeight($1) } + CGFloat(groups.count) * 6
+        let h = rows.reduce(CGFloat(12)) { $0 + rowHeight($1) } + CGFloat(max(groups.count - 1, 0)) * renderer.groupGap
         let want = max((h * Theme.scale).rounded(.up), superview?.bounds.height ?? 0)
         if frame.height != want { setFrameSize(NSSize(width: frame.width, height: want)) }
         needsDisplay = true
     }
 
     private func rowHeight(_ r: Row) -> CGFloat {
-        if case .group = r { SidebarView.groupRow } else { SidebarView.sessionRow + (showMessages ? 14 : 0) }
+        if case .group = r { renderer.groupRow } else { renderer.sessionRow + (showMessages ? 14 : 0) }
     }
-    /// Obere Zeile einer Session: Punkt, Titel, Laufzeit und Icon sitzen hier, auch mit Nachrichtenzeile darunter.
-    private func headRect(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: r.minY, width: r.width, height: SidebarView.sessionRow) }
-    /// Statuspunkt links in der Kopfzeile einer Session.
-    private func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
 
     private func rowRect(_ i: Int) -> CGRect {
         var y: CGFloat = 6
         for (j, r) in rows.enumerated() {
-            if case .group = r, j > 0 { y += 6 }
+            if case .group = r, j > 0 { y += renderer.groupGap }
             let h = rowHeight(r)
             if j == i { return CGRect(x: 0, y: y, width: bounds.width / Theme.scale, height: h) }
             y += h
@@ -126,9 +126,60 @@ final class SidebarView: NSView {
     /// Sichtbare Sessions in Baumreihenfolge (Bereichsauswahl läuft über Gruppen hinweg).
     private var sessionIds: [String] { rows.compactMap { if case .session(let s, _) = $0 { s.id } else { nil } } }
     private func sessionIndex(_ id: String) -> Int? { sessionIds.firstIndex(of: id) }
-    /// Trefferflächen rechts in der Zeile, von rechts nach links: nur bei Hover sichtbar.
-    private func iconRects(_ r: CGRect, count: Int) -> [CGRect] {
-        (0..<count).map { CGRect(x: r.maxX - 8 - CGFloat($0 + 1) * 20, y: r.midY - 8, width: 16, height: 16) }
+
+    // MARK: Schwebende Toolbar
+
+    /// Gruppe: Favorit, neue Session, bearbeiten, schließen. Session: umbenennen, schließen.
+    private func buttonCount(_ row: Row) -> Int { if case .group = row { 4 } else { 2 } }
+
+    /// Liegt über dem rechten Ende der Kopfzeile, verdeckt Laufzeit und Zähler statt sie zu verschieben.
+    private func toolbarRect(_ i: Int) -> CGRect {
+        let r = rowRect(i)
+        let head = min(r.height, 24)
+        let w = CGFloat(buttonCount(rows[i])) * 20 + 4
+        return CGRect(x: r.maxX - 6 - w, y: r.minY + (head - 22) / 2, width: w, height: 22)
+    }
+
+    private func buttonRect(_ i: Int, _ k: Int) -> CGRect {
+        let t = toolbarRect(i)
+        return CGRect(x: t.minX + 2 + CGFloat(k) * 20, y: t.minY + 1, width: 20, height: 20)
+    }
+
+    private func button(at p: CGPoint, row i: Int) -> Int? {
+        (0..<buttonCount(rows[i])).first { buttonRect(i, $0).contains(p) }
+    }
+
+    private func drawToolbar(_ i: Int) {
+        let t = toolbarRect(i)
+        let path = NSBezierPath(roundedRect: t.insetBy(dx: 0.5, dy: 0.5), xRadius: 5, yRadius: 5)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+        shadow.shadowBlurRadius = 8
+        shadow.shadowOffset = NSSize(width: 0, height: -2)
+        shadow.set()
+        Theme.bg.setFill()
+        path.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        Theme.line.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+        let n = buttonCount(rows[i])
+        for k in 0..<n {
+            let b = buttonRect(i, k)
+            let hot = hoveredButton == k
+            if hot { Theme.line.setFill(); NSBezierPath(roundedRect: b, xRadius: 4, yRadius: 4).fill() }
+            let close = k == n - 1
+            let color = hot ? (close ? Theme.error : Theme.fg) : Theme.muted
+            let ic = b.insetBy(dx: 2, dy: 2)
+            switch (rows[i], k) {
+            case (.group(let g), 0):
+                Icons.heart(in: ic.insetBy(dx: 1, dy: 1), color: g.isFavorite ? NSColor(hexString: g.color) : color, filled: g.isFavorite)
+            case (.group, 1): Icons.plus(in: ic, color: color)
+            case (.group, 2), (.session, 0): Icons.pen(in: ic, color: color)
+            default: Icons.x(in: ic, color: color)
+            }
+        }
     }
 
     // MARK: Zeichnen
@@ -150,10 +201,11 @@ final class SidebarView: NSView {
             let r = rowRect(i)
             guard r.intersects(dirtyRect) else { continue }
             switch row {
-            case .group(let g): drawGroup(g, in: r, hover: hovered == i)
+            case .group(let g): drawGroup(g, in: r, first: i == 0, hover: hovered == i)
             case .session(let s, let g): drawSession(s, group: g, in: r, hover: hovered == i)
             }
         }
+        if let i = hovered, !dragging, i < rows.count, toolbarRect(i).intersects(dirtyRect) { drawToolbar(i) }
         if let y = dropLineY() { Theme.fg.setFill(); CGRect(x: 0, y: y - 1, width: bounds.width / Theme.scale, height: 2).fill() }
     }
 
@@ -166,64 +218,25 @@ final class SidebarView: NSView {
         return rowRect(end - 1).maxY
     }
 
-    private func drawGroup(_ g: Group, in r: CGRect, hover: Bool) {
-        let color = NSColor(hexString: g.color)
-        let any = g.sessionIds.contains { selected.contains($0) }
-        if hover { Theme.surface.setFill(); r.fill() }
-        if any { color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
-        Icons.chevron(in: CGRect(x: 6, y: r.minY + 4, width: 16, height: 16), open: !collapsed.contains(g.id), color: Theme.muted)
-        let head = headRect(r)
-        let name = NSAttributedString(string: "▪ " + g.name, attributes: Theme.attrs(12, color, bold: true))
-        let right = r.maxX - 8 - 4 * 20   // Platz für die Icons immer reservieren, sonst springt der Text beim Hover
-        name.draw(with: CGRect(x: 26, y: head.midY - 8, width: max(0, right - 26), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        let pa = Theme.attrs(10.5, Theme.muted)
-        let pw = max(0, r.maxX - 8 - 42)
-        NSAttributedString(string: Theme.fitPath(g.cwd, width: pw, attrs: pa), attributes: pa)
-            .draw(with: CGRect(x: 42, y: head.maxY - 4, width: pw, height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        let rects = iconRects(head, count: 4)
-        if hover {
-            Icons.x(in: rects[0], color: Theme.muted)
-            Icons.pen(in: rects[1], color: Theme.muted)
-            Icons.plus(in: rects[2], color: Theme.muted)
-        }
-        // Als Favorit markiert, bleibt das Herz auch ohne Hover stehen, sonst sieht man den Zustand nie.
-        if hover || g.isFavorite { Icons.heart(in: rects[3], color: g.isFavorite ? color : Theme.muted, filled: g.isFavorite) }
-    }
-
-    private func drawSession(_ s: Session, group g: Group, in row: CGRect, hover: Bool) {
-        let color = NSColor(hexString: g.color)
-        let sel = selected.contains(s.id), foc = focused == s.id
-        if foc { color.mixed(0.14, into: Theme.surface).setFill(); row.fill() }
-        if foc, window?.firstResponder === self { color.setStroke(); NSBezierPath(rect: row.insetBy(dx: 0.5, dy: 0.5)).stroke() }
-        else if sel || hover { Theme.surface.setFill(); row.fill() }
-        if sel { color.setFill(); CGRect(x: 0, y: row.minY, width: 3, height: row.height).fill() }
-        let r = headRect(row)
-        if showMessages, let m = messages[s.id] {
-            // Ende der Antwort: dort steht meist, worauf die Session wartet. Vorn abgeschnitten.
-            let style = NSMutableParagraphStyle()
-            style.lineBreakMode = .byTruncatingHead
-            var attrs = Theme.attrs(10.5, Theme.muted)
-            attrs[.paragraphStyle] = style
-            NSAttributedString(string: String(m.suffix(300)), attributes: attrs)
-                .draw(in: CGRect(x: 50, y: r.maxY - 4, width: max(0, row.maxX - 8 - 50), height: 14))
-        }
+    private func dotColor(_ s: Session) -> NSColor {
         let attached = attach?.isAttached(s.id) ?? false
         let c = attached ? Theme.color(for: s.status) : Theme.detached
+        guard s.status == .running, attached else { return c }
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
-        let pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
-        (s.status == .running && attached ? c.withAlphaComponent(pulse) : c).setFill()
-        NSBezierPath(ovalIn: dotRect(row)).fill()
-        if hover {
-            let icons = iconRects(r, count: 2)
-            Icons.x(in: icons[0], color: Theme.muted)
-            Icons.pen(in: icons[1], color: Theme.muted)
-        }
-        var right = r.maxX - 8 - 40   // Icon-Platz immer reserviert
-        let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
-        right -= age.size().width
-        age.draw(at: CGPoint(x: right, y: r.midY - 7))
-        let title = NSAttributedString(string: s.title, attributes: Theme.attrs(12, sel || hover ? Theme.fg : Theme.sub))
-        title.draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 8 - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        return c.withAlphaComponent(0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t)))
+    }
+
+    private func drawGroup(_ g: Group, in r: CGRect, first: Bool, hover: Bool) {
+        let dots = g.sessionIds.compactMap { sessions[$0] }.map { attach?.isAttached($0.id) ?? false ? Theme.color(for: $0.status) : Theme.detached }
+        renderer.drawGroup(SidebarGroupItem(group: g, color: NSColor(hexString: g.color), dots: dots, open: !collapsed.contains(g.id),
+                                            selected: g.sessionIds.contains { selected.contains($0) }, hover: hover, first: first), in: r)
+    }
+
+    private func drawSession(_ s: Session, group g: Group, in r: CGRect, hover: Bool) {
+        renderer.drawSession(SidebarSessionItem(session: s, color: NSColor(hexString: g.color), dot: dotColor(s),
+                                                selected: selected.contains(s.id), focused: focused == s.id,
+                                                keyFocus: window?.firstResponder === self, hover: hover,
+                                                message: showMessages ? messages[s.id] : nil, showAge: showAge), in: r)
     }
 
     // MARK: Events
@@ -268,13 +281,16 @@ final class SidebarView: NSView {
         let p = local(event)
         let i = rowIndex(at: p)
         (i == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
-        guard i != hovered else { return }
+        let k = i.flatMap { button(at: p, row: $0) }
+        guard i != hovered || k != hoveredButton else { return }
         hovered = i
+        hoveredButton = k
         needsDisplay = true
     }
 
     override func mouseExited(with event: NSEvent) {
         hovered = nil
+        hoveredButton = nil
         needsDisplay = true
     }
 
@@ -282,24 +298,28 @@ final class SidebarView: NSView {
         let p = local(event)
         pressed = nil
         guard let i = rowIndex(at: p) else { return }
-        let r = rowRect(i)
         let force = event.modifierFlags.contains(.command)
+        // Toolbar nur, wo sie sichtbar ist: ohne Hover (Fenster nicht aktiv) wählt der Klick die Zeile.
+        if hovered == i, toolbarRect(i).contains(p) {
+            switch (rows[i], button(at: p, row: i)) {
+            case (.group(let g), 0): onToggleFavorite?(g.id)
+            case (.group(let g), 1): onNewSession?(g.id)
+            case (.group(let g), 2): onEditGroup?(g.id)
+            case (.group(let g), 3): onCloseGroup?(g.id, force)
+            case (.session(let s, _), 0): onRenameSession?(s.id)
+            case (.session(let s, _), 1): onCloseSession?(s.id, force)
+            default: break
+            }
+            return
+        }
         switch rows[i] {
         case .group(let g):
-            let icons = iconRects(headRect(r), count: 4)
-            if icons[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseGroup?(g.id, force); return }
-            if icons[1].insetBy(dx: -3, dy: -3).contains(p) { onEditGroup?(g.id); return }
-            if icons[2].insetBy(dx: -3, dy: -3).contains(p) { onNewSession?(g.id); return }
-            if icons[3].insetBy(dx: -3, dy: -3).contains(p) { onToggleFavorite?(g.id); return }
             if p.x < 26 {
                 if collapsed.contains(g.id) { collapsed.remove(g.id) } else { collapsed.insert(g.id) }
                 reload(groups: groups, sessions: Array(sessions.values))
                 return
             }
-        case .session(let s, _):
-            let icons = iconRects(headRect(r), count: 2)
-            if icons[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseSession?(s.id, force); return }
-            if icons[1].insetBy(dx: -3, dy: -3).contains(p) { onRenameSession?(s.id); return }
+        case .session: break
         }
         pressed = (p, rows[i], event.modifierFlags)
     }

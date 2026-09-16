@@ -24,6 +24,18 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "showLastMessage") }
     }
 
+    /// Aussehen des Baums, Default getönte Gruppen.
+    static var sidebarStyle: SidebarStyle {
+        get { UserDefaults.standard.string(forKey: "sidebar.style").flatMap(SidebarStyle.init) ?? .tinted }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "sidebar.style") }
+    }
+
+    /// Laufzeit („12m“) in jeder Session-Zeile des Baums, Default an.
+    static var sidebarShowAge: Bool {
+        get { UserDefaults.standard.object(forKey: "sidebar.showAge") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "sidebar.showAge") }
+    }
+
     /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default an.
     static var stackShowPath: Bool {
         get { UserDefaults.standard.object(forKey: "stackShowPath") as? Bool ?? true }
@@ -146,6 +158,8 @@ final class SettingsModel {
     var editorCommand = Settings.editorCommand
     var showLastMessage = Settings.showLastMessage
     var stackShowPath = Settings.stackShowPath
+    var sidebarStyle = Settings.sidebarStyle
+    var sidebarShowAge = Settings.sidebarShowAge
     var closeTileOnExit = Settings.closeTileOnExit
     var claudeAllowBypass = Settings.claudeAllowBypass
     var claudeMode = Settings.claudeMode
@@ -175,6 +189,8 @@ final class SettingsModel {
         Settings.editorCommand = editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         Settings.showLastMessage = showLastMessage
         Settings.stackShowPath = stackShowPath
+        Settings.sidebarStyle = sidebarStyle
+        Settings.sidebarShowAge = sidebarShowAge
         Settings.closeTileOnExit = closeTileOnExit
         Settings.claudeAllowBypass = claudeAllowBypass
         Settings.claudeMode = claudeMode
@@ -309,6 +325,12 @@ struct SettingsView: View {
 
             heading("Baum und Kacheln")
             VStack(spacing: 6) {
+                setting("Design des Baums") {
+                    HStack(spacing: 2) {
+                        ForEach(SidebarStyle.allCases, id: \.self) { st in pill(st.title, on: model.sidebarStyle == st) { model.sidebarStyle = st } }
+                    }
+                }
+                setting("Laufzeit im Baum") { pill(model.sidebarShowAge ? "an" : "aus", on: model.sidebarShowAge) { model.sidebarShowAge.toggle() } }
                 setting("Pfad in Stack-Zeilen") { pill(model.stackShowPath ? "an" : "aus", on: model.stackShowPath) { model.stackShowPath.toggle() } }
                 setting("Letzte Antwort von Claude im Baum") { pill(model.showLastMessage ? "an" : "aus", on: model.showLastMessage) { model.showLastMessage.toggle() } }
             }
