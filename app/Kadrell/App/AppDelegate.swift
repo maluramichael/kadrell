@@ -515,14 +515,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuAbout() { showAbout() }
     @objc private func menuSettings() {
         let model = SettingsModel()
-        model.onDone = { [weak self] in
+        model.onApply = { [weak self] in
             guard let self else { return }
             buildMenu()
-            dismissSheet()
             applyAppearance()
             Task { await self.registry?.pollNow() }
         }
-        present(SettingsView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+        model.onClose = { [weak self, weak model] in model?.stopRecording(); self?.dismissSheet() }
+        present(SettingsView(model: model), onCancel: { model.onClose?() }, onPrimary: { model.onClose?() })
     }
     @objc private func menuFontBigger() { Settings.terminalFontSize += 1; applyAppearance() }
     @objc private func menuFontSmaller() { Settings.terminalFontSize -= 1; applyAppearance() }

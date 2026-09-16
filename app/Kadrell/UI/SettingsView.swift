@@ -71,6 +71,11 @@ enum Settings {
         get { UserDefaults.standard.object(forKey: "auto.waiting") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "auto.waiting") }
     }
+    /// Auto-Modus filtert alle Sessions des Baums statt nur der Auswahl. Default an.
+    static var autoAllSessions: Bool {
+        get { UserDefaults.standard.object(forKey: "auto.allSessions") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "auto.allSessions") }
+    }
     static var autoRunning: Bool {
         get { UserDefaults.standard.bool(forKey: "auto.running") }
         set { UserDefaults.standard.set(newValue, forKey: "auto.running") }
@@ -192,6 +197,7 @@ final class SettingsModel {
     var closeTileOnExit = Settings.closeTileOnExit
     var autoWaiting = Settings.autoWaiting
     var autoRunning = Settings.autoRunning
+    var autoAllSessions = Settings.autoAllSessions
     var claudeAllowBypass = Settings.claudeAllowBypass
     var claudeMode = Settings.claudeMode
     var claudeModel = Settings.claudeModel
@@ -211,11 +217,22 @@ final class SettingsModel {
     }()
     /// Aktion, deren Kürzel gerade aufgenommen wird.
     var recording: HotkeyAction?
-    var onDone: (() -> Void)?
+    /// Nach jeder Änderung: die App zieht Menü, Aussehen und Sessions nach.
+    @ObservationIgnored var onApply: (() -> Void)?
+    @ObservationIgnored var onClose: (() -> Void)?
     @ObservationIgnored private var monitor: Any?
 
-    func save() {
-        stopRecording()
+    init() { track(notify: false) }
+
+    /// Jede Änderung gilt sofort, ohne Speichern: `write` liest alle Werte, jede Änderung daran schreibt neu.
+    private func track(notify: Bool) {
+        withObservationTracking { write() } onChange: { [weak self] in
+            Task { @MainActor in self?.track(notify: true) }
+        }
+        if notify { onApply?() }
+    }
+
+    private func write() {
         let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         if !p.isEmpty { Settings.startFolder = p }
         Settings.editorCommand = editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -227,6 +244,7 @@ final class SettingsModel {
         Settings.closeTileOnExit = closeTileOnExit
         Settings.autoWaiting = autoWaiting
         Settings.autoRunning = autoRunning
+        Settings.autoAllSessions = autoAllSessions
         Settings.claudeAllowBypass = claudeAllowBypass
         Settings.claudeMode = claudeMode
         Settings.claudeModel = claudeModel
@@ -240,7 +258,6 @@ final class SettingsModel {
         Settings.terminalPadding = padding
         Settings.terminalMetal = metal
         for (a, on) in ask { a.enabled = on }
-        onDone?()
     }
 
     /// Nächster Tastendruck wird das Kürzel. Esc bricht ab, ⌫ entfernt es. Läuft vor OverlayPanel und Terminal.
@@ -357,7 +374,12 @@ struct SettingsView: View {
                 setting("Pfad in Stack-Zeilen") { onOff($model.stackShowPath) }
                 setting("Letzte Antwort von Claude im Baum") { onOff($model.showLastMessage) }
                 setting("Sounds") { menu($model.sounds, Feedback.Level.allCases.map { ($0, $0.title) }) }
-                setting("Auto-Modus zeigt") {
+            }
+
+            heading("Auto-Modus", note: "AUTO in der Leiste")
+            table {
+                setting("Gilt für") { menu($model.autoAllSessions, [(true, "alle Sessions"), (false, "nur die Auswahl im Baum")]) }
+                setting("Zeigt") {
                     menu(Binding(get: { AutoShow(waiting: model.autoWaiting, running: model.autoRunning) },
                                  set: { model.autoWaiting = $0.waiting; model.autoRunning = $0.running }),
                          [(AutoShow(waiting: true, running: false), "wartende"), (AutoShow(waiting: false, running: true), "arbeitende"),
@@ -379,7 +401,7 @@ struct SettingsView: View {
                 table { ForEach(actions, id: \.self) { a in row(a) } }
             }
             Color.clear.frame(height: 12)
-            DialogFoot(hint: "Esc abbrechen", button: "Speichern") { model.save() }
+            DialogFoot(hint: "Änderungen gelten sofort · Esc schließt", button: "Fertig") { model.stopRecording(); model.onClose?() }
         }
         .frame(width: 900 * Theme.scale, alignment: .leading)
         .background(Theme.panelColor)

@@ -84,7 +84,7 @@ final class WorkspaceView: NSView {
         selected.removeAll { self.sessions[$0] == nil }
         if let p = preview, self.sessions[p] == nil { preview = nil }
         sortSelected()
-        if let f = focused, !selected.contains(f) { focused = selected.first }
+        if let f = focused, !selected.contains(f), !(auto && autoPool.contains(f)) { focused = selected.first }
         // Entfernte Kacheln blenden kurz aus, neue ein. Beim allerersten Laden erscheint alles sofort.
         for (k, v) in cells where self.sessions[k] == nil {
             cells[k] = nil
@@ -131,7 +131,8 @@ final class WorkspaceView: NSView {
         }
         zen = false
         sortSelected()
-        for (k, v) in cells where !selected.contains(k) { v.removeFromSuperview(); cells[k] = nil }
+        let shown = tiles
+        for (k, v) in cells where !selected.contains(k) && !shown.contains(k) { v.removeFromSuperview(); cells[k] = nil }
         for id in selected where cells[id] == nil {
             let v = CellView(session: sessions[id]!)
             addSubview(v)
@@ -148,7 +149,7 @@ final class WorkspaceView: NSView {
     func addMissing(_ ids: [String]) { select(ids.filter { !selected.contains($0) }, add: true) }
 
     func setFocus(_ key: String, takeKeyboard: Bool = true) {
-        guard selected.contains(key) else { return }
+        guard selected.contains(key) || tiles.contains(key) else { return }
         focused = key
         relayout()
         if takeKeyboard { focusTerminal() }
@@ -188,7 +189,7 @@ final class WorkspaceView: NSView {
     func setPreview(_ key: String?) {
         let old = preview
         preview = key.flatMap { sessions[$0] == nil ? nil : $0 }
-        if let o = old, o != preview, !selected.contains(o) { cells[o]?.removeFromSuperview(); cells[o] = nil }
+        if let o = old, o != preview, !selected.contains(o), !tiles.contains(o) { cells[o]?.removeFromSuperview(); cells[o] = nil }
         if let p = preview, cells[p] == nil {
             let v = CellView(session: sessions[p]!)
             addSubview(v)
@@ -227,7 +228,10 @@ final class WorkspaceView: NSView {
     }
 
     /// Kacheln rechts: die Auswahl, im Auto-Modus gefiltert samt Nachlauf.
-    private var tiles: [String] { auto ? selected.filter { matchesAuto($0) || linger[$0] != nil } : selected }
+    private var tiles: [String] { auto ? autoPool.filter { matchesAuto($0) || linger[$0] != nil } : selected }
+
+    /// Woraus der Auto-Modus filtert: je nach Einstellung alle Sessions in Baumreihenfolge oder nur die Auswahl.
+    private var autoPool: [String] { Settings.autoAllSessions ? groups.flatMap(\.sessionIds).filter { sessions[$0] != nil } : selected }
 
     private func matchesAuto(_ key: String) -> Bool {
         switch sessions[key]?.status {
@@ -241,9 +245,10 @@ final class WorkspaceView: NSView {
     private func updateLinger() {
         guard auto else { return }
         let now = CACurrentMediaTime()
-        let matching = Set(selected.filter(matchesAuto))
+        let pool = autoPool
+        let matching = Set(pool.filter(matchesAuto))
         for id in lastMatching.subtracting(matching) where linger[id] == nil { linger[id] = now + 3 }
-        linger = linger.filter { $0.value > now && !matching.contains($0.key) && selected.contains($0.key) }
+        linger = linger.filter { $0.value > now && !matching.contains($0.key) && pool.contains($0.key) }
         lastMatching = matching
     }
 
@@ -289,6 +294,14 @@ final class WorkspaceView: NSView {
             refocus = true
         }
         lastTiles = tiles
+        // Auto-Modus über alle Sessions: auch nicht ausgewählte bekommen eine Kachel, sobald sie passen.
+        for id in tiles where cells[id] == nil {
+            guard let s = sessions[id] else { continue }
+            let v = CellView(session: s)
+            addSubview(v)
+            cells[id] = v
+            if loaded { v.alphaValue = 0; NSAnimationContext.runAnimationGroup { $0.duration = 0.18; v.animator().alphaValue = 1 } }
+        }
         let visible: [String]
         if let p = preview {
             visible = [p]
@@ -415,7 +428,7 @@ final class WorkspaceView: NSView {
                 a = NSAttributedString(string: "Noch keine Session", attributes: Theme.attrs(12, Theme.muted))
                 b = NSAttributedString(string: "⌘N startet eine", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
             case .hint:
-                let idle = auto && !selected.isEmpty
+                let idle = auto && !autoPool.isEmpty
                 a = NSAttributedString(string: idle ? "Gerade wartet keine Session" : "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
                 b = NSAttributedString(string: idle ? "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will" : "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
             }

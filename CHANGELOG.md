@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.30.0 (2026-09-16)
+
+- Feature: Einstellungen gelten sofort, ohne Speichern. Esc oder „Fertig“ schließt den Dialog.
+- Feature: Eigener Bereich „Auto-Modus“ in den Einstellungen: der Auto-Modus gilt jetzt standardmäßig für alle Sessions im Baum, nicht nur für die Auswahl. Umstellbar auf „nur die Auswahl im Baum“.
+
 ## 1.29.0 (2026-09-16)
 
 - Feature: Sounds: leiser Ton, wenn eine Session auf dich wartet oder fertig wird, die du gerade nicht siehst. Dazu kurze Töne beim Öffnen und Entfernen von Sessions und beim Umschalten von AUTO und SYNC. Einstellbar unter „Sounds“ (aus, nur wartet und fertig, alle).
