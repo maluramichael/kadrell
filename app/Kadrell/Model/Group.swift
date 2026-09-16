@@ -8,6 +8,8 @@ struct Group: Codable, Equatable, Identifiable, Sendable {
     var sessionIds: [String]
     /// Optional, damit eine groups.json ohne den Schlüssel weiter lädt.
     var favorite: Bool?
+    /// Remote-Gruppe: ssh-Host, alle Sessions darin hängen an dessen tmux. Optional wie `favorite`.
+    var host: String? = nil
 
     var isFavorite: Bool { favorite == true }
 }
@@ -39,7 +41,8 @@ final class GroupStore {
 
     func group(id: String) -> Group? { groups.first { $0.id == id } }
     func group(forSession sessionId: String) -> Group? { groups.first { $0.sessionIds.contains(sessionId) } }
-    func group(forCwd cwd: String) -> Group? { groups.first { $0.cwd == cwd } }
+    func group(forCwd cwd: String) -> Group? { groups.first { $0.cwd == cwd && $0.host == nil } }
+    func group(forHost host: String) -> Group? { groups.first { $0.host == host } }
 
     func nextColor() -> String {
         let used = groups.map(\.color)
@@ -47,7 +50,8 @@ final class GroupStore {
     }
 
     /// Name, den eine neu angelegte Gruppe für `cwd` ungefragt bekommt (auch zum Erkennen unveränderter Gruppen).
-    static func defaultName(cwd: String) -> String {
+    static func defaultName(cwd: String, host: String? = nil) -> String {
+        if let host { return host }
         let base = URL(fileURLWithPath: cwd).lastPathComponent
         return base.isEmpty ? cwd : base
     }
@@ -57,10 +61,15 @@ final class GroupStore {
               color: nextColor(), cwd: cwd, sessionIds: [])
     }
 
+    /// Gruppe für einen ssh-Host, heißt wie der Host; `cwd` ist nur Platzhalter für lokale Aktionen.
+    func makeGroup(host: String) -> Group {
+        Group(id: UUID().uuidString.lowercased(), name: host, color: nextColor(), cwd: NSHomeDirectory(), sessionIds: [], host: host)
+    }
+
     /// Gruppe hat weder umbenannten Namen noch eine von Hand gewählte Farbe, entspricht also noch
     /// dem, was `makeGroup` frisch vergeben hätte.
     private func isUnmodified(_ g: Group) -> Bool {
-        g.name == GroupStore.defaultName(cwd: g.cwd) && Theme.palette.contains(g.color)
+        g.name == GroupStore.defaultName(cwd: g.cwd, host: g.host) && Theme.palette.contains(g.color)
     }
 
     /// Ordnet Sessions ohne Gruppe der Gruppe mit gleichem `cwd` zu, legt sonst eine neue an,
@@ -74,10 +83,10 @@ final class GroupStore {
         let known = Set(sessions.map(\.id))
         for i in groups.indices { groups[i].sessionIds.removeAll { !known.contains($0) } }
         for s in sessions where group(forSession: s.id) == nil {
-            if let idx = groups.firstIndex(where: { $0.cwd == s.cwd }) {
+            if let idx = groups.firstIndex(where: { s.host != nil ? $0.host == s.host : $0.cwd == s.cwd && $0.host == nil }) {
                 groups[idx].sessionIds.append(s.id)
             } else {
-                var g = makeGroup(cwd: s.cwd)
+                var g = s.host.map { makeGroup(host: $0) } ?? makeGroup(cwd: s.cwd)
                 g.sessionIds = [s.id]
                 groups.append(g)
             }

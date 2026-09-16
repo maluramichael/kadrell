@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.28.0 (2026-09-16)
+
+- Feature: Remote-Sessions: ⌘⇧N oder „@“ in der Palette verbindet per ssh mit einem Host aus der ssh-Konfiguration (inklusive eingebundener Dateien) und hängt sich an dessen tmux. „@host:“ zeigt die tmux-Sessions des Hosts zur Auswahl oder legt eine neue an. Jeder Host bekommt eine eigene Gruppe mit Server-Symbol, mehrere Sessions pro Host sind möglich, nach einem Neustart wird neu verbunden.
+- Änderung: Das „+“ einer Host-Gruppe öffnet die Session-Auswahl des Hosts. Schließen einer Remote-Kachel trennt nur die Verbindung, die tmux-Session auf dem Host läuft weiter.
+
 ## 1.27.1 (2026-09-16)
 
 - Fix: Einstellungen ließen sich immer mit Esc schließen, auch wenn der Dialog nach einem Klick daneben oder einem Dropdown den Fokus verloren hatte. Vorher konnte die abgedunkelte Fläche liegen bleiben und alle Klicks blockieren.

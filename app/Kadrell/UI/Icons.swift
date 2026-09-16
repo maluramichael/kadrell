@@ -46,6 +46,21 @@ enum Icons {
         p.stroke()
     }
 
+    /// Server-Rack: zwei Einschübe mit Status-LED, für Remote-Sessions und Host-Gruppen.
+    @MainActor static func server(in r: CGRect, color: NSColor) {
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 16 * r.width, y: r.minY + y / 16 * r.height) }
+        let w = r.width * 12 / 16, h = r.height * 5 / 16
+        let p = NSBezierPath()
+        p.append(NSBezierPath(roundedRect: CGRect(origin: pt(2, 2), size: CGSize(width: w, height: h)), xRadius: 1, yRadius: 1))
+        p.append(NSBezierPath(roundedRect: CGRect(origin: pt(2, 9), size: CGSize(width: w, height: h)), xRadius: 1, yRadius: 1))
+        p.lineWidth = 1.3
+        color.setStroke()
+        p.stroke()
+        color.setFill()
+        NSBezierPath(ovalIn: CGRect(origin: pt(10.5, 3.5), size: CGSize(width: r.width / 8, height: r.height / 8))).fill()
+        NSBezierPath(ovalIn: CGRect(origin: pt(10.5, 10.5), size: CGSize(width: r.width / 8, height: r.height / 8))).fill()
+    }
+
     /// Herz für Favoriten: gefüllt, solange die Gruppe einer ist, sonst nur der Umriss.
     @MainActor static func heart(in r: CGRect, color: NSColor, filled: Bool) {
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 16 * r.width, y: r.minY + y / 16 * r.height) }

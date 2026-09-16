@@ -135,3 +135,26 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(tree.sessionId(after: nil, step: 1), "c")
     }
 }
+
+@MainActor
+final class GroupStoreRemoteTests: XCTestCase {
+    func testRemoteSessionsGroupByHostNotCwd() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-tests-\(UUID().uuidString)/groups.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = GroupStore(url: url)
+        let home = NSHomeDirectory()
+        var r1 = Session(id: "ssh-1", cwd: home, startedAt: 0, sessionId: "ssh-1", name: ""); r1.host = "examplehost"
+        var r2 = Session(id: "ssh-2", cwd: home, startedAt: 0, sessionId: "ssh-2", name: ""); r2.host = "examplehost"; r2.tmuxSession = "test"
+        let local = Session(id: "shell-1", cwd: home, startedAt: 0, sessionId: "shell-1", name: "")
+        store.assign([r1, local, r2])
+        XCTAssertEqual(store.groups.map(\.name), ["examplehost", URL(fileURLWithPath: home).lastPathComponent])
+        XCTAssertEqual(store.groups[0].sessionIds, ["ssh-1", "ssh-2"])
+        XCTAssertEqual(store.groups[0].host, "examplehost")
+        XCTAssertNil(store.groups[1].host)
+        XCTAssertEqual(r1.title, "examplehost")
+        XCTAssertEqual(r2.title, "test")
+        let data = try JSONEncoder().encode([r2])
+        XCTAssertEqual(try JSONDecoder().decode([Session].self, from: data).first?.tmuxSession, "test")
+        XCTAssertEqual(GroupStore(url: url).groups, store.groups)
+    }
+}

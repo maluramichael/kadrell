@@ -22,6 +22,10 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         var buffers: [(Session, group: Group?, lines: [String])] = []
         /// Session, Suchbegriff, wievielter Treffer in ihrem Verlauf (ab 0).
         var onFindInSession: (String, String, Int) -> Void = { _, _, _ in }
+        /// `@`: ssh-Hosts, zuletzt benutzte vorn. `@host:` listet dessen tmux-Sessions, geholt über `remoteSessions`.
+        var hosts: [String] = []
+        var onConnect: (String, String?) -> Void = { _, _ in }
+        var remoteSessions: (String, @escaping ([String]?) -> Void) -> Void = { _, done in done(nil) }
     }
 
     var source = Source()
@@ -32,6 +36,8 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
     private let foot = NSTextField(labelWithString: "↑↓ wählen · ⏎ öffnen · Esc schließen")
     private var items: [Item] = []
     private var selected = 0
+    /// tmux-Sessions je Host, einmal pro Öffnen geholt; nil = Abfrage läuft, leeres Ergebnis = kein tmux-Server.
+    private var remoteCache: [String: [String]?] = [:]
 
     init() {
         let s = Theme.scale, W = (640 * s).rounded(), H = (420 * s).rounded()
@@ -54,7 +60,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         field.focusRingType = .none
         field.font = Theme.font(15 * s)
         field.textColor = Theme.fg
-        field.placeholderAttributedString = NSAttributedString(string: "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals )", attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
+        field.placeholderAttributedString = NSAttributedString(string: "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, @ Remote )", attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
         field.delegate = self
         field.frame = NSRect(x: 16 * s, y: H - 44 * s, width: W - 32 * s, height: 24 * s)
         field.autoresizingMask = [.width, .minYMargin]
@@ -103,6 +109,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         let pf = parent.frame
         setFrameOrigin(NSPoint(x: pf.midX - frame.width / 2, y: pf.maxY - 0.12 * pf.height - frame.height))
         field.stringValue = prefix
+        remoteCache = [:]
         host = parent
         parent.addChildWindow(self, ordered: .above)
         makeKeyAndOrderFront(nil)
@@ -145,6 +152,9 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         } else if q.hasPrefix("/") {
             items = terminalMatches(String(q.dropFirst()))
             onHighlight?(Set(items.compactMap(\.sessionKey)))
+        } else if q.hasPrefix("@") {
+            items = remoteItems(String(q.dropFirst()))
+            onHighlight?(nil)
         } else {
             var list: [Item] = []
             if !q.isEmpty {
@@ -167,6 +177,49 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         table.reloadData()
         if !items.isEmpty { table.scrollRowToVisible(0) }
     }
+
+    /// `@text` filtert die Hosts, ⏎ hängt sich an deren laufende tmux. `@host:text` zeigt die tmux-Sessions des
+    /// Hosts (asynchron, bis dahin „lädt …“) und oben „Neu: text“, ⏎ legt sie an oder hängt sich an.
+    private func remoteItems(_ q: String) -> [Item] {
+        guard let colon = q.firstIndex(of: ":") else {
+            return source.hosts.filter { q.isEmpty || PaletteWindow.fuzzy(q, $0) }.map { h in
+                Item(label: h, sub: "ssh · ⏎ tmux attach · „\(h):“ wählt die Session", group: nil, status: nil, sessionKey: nil,
+                     run: { [source] in source.onConnect(h, nil) })
+            }
+        }
+        let host = String(q[..<colon]), text = q[q.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        var list: [Item] = []
+        if !text.isEmpty {
+            list.append(Item(label: "Neu: \(text)", sub: "tmux new -As auf \(host)", group: nil, status: nil, sessionKey: nil,
+                             run: { [source] in source.onConnect(host, text) }))
+        }
+        if remoteCache[host] == nil {
+            remoteCache[host] = .some(nil)
+            source.remoteSessions(host) { [weak self] found in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.remoteCache[host] = .some(found ?? [])
+                    self.remoteError[host] = found == nil
+                    if self.isVisible { self.refreshList() }
+                }
+            }
+        }
+        switch remoteCache[host] {
+        case .some(.some(let names)):
+            if names.isEmpty {
+                let msg = remoteError[host] == true ? "\(host) nicht erreichbar" : "kein tmux-Server auf \(host)"
+                list.append(Item(label: msg, sub: "„Neu: …“ versucht es trotzdem", group: nil, status: nil, sessionKey: nil, run: {}))
+            }
+            list += names.filter { text.isEmpty || PaletteWindow.fuzzy(text, $0) }.map { n in
+                Item(label: n, sub: "tmux-Session auf \(host)", group: nil, status: nil, sessionKey: nil,
+                     run: { [source] in source.onConnect(host, n) })
+            }
+        default:
+            list.append(Item(label: "lädt …", sub: "tmux ls auf \(host)", group: nil, status: nil, sessionKey: nil, run: {}))
+        }
+        return list
+    }
+    private var remoteError: [String: Bool] = [:]
 
     /// Treffer zeilenweise, ohne Groß-/Kleinschreibung wie die Suchleiste im Terminal. Die Nummer des Treffers
     /// in der Session springt dort per `findNext` an dieselbe Stelle.

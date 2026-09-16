@@ -123,6 +123,18 @@ final class AttachManager {
         env["KADRELL_SESSION_KEY"] = key
         env["KADRELL_SOCKET"] = ControlSocket.defaultPath
         env["KADRELL"] = Bundle.main.executablePath
+        if let host = session.host {
+            // Wie das tmux-Popup (M-h): an die laufende Remote-tmux hängen, ohne tmux dort eine Login-Shell.
+            // Endet ssh (Detach, Fehler), bleibt die Kachel mit den letzten Zeilen stehen, Klick verbindet neu.
+            let remote = session.tmuxSession.map { "tmux new -As '\($0)'" } ?? "tmux attach || tmux new -As main"
+            let cmd = "command -v tmux >/dev/null 2>&1 && { \(remote); } || { echo 'kein tmux auf diesem Host, normale Shell'; exec \"$SHELL\" -l; }"
+            AttachManager.log.info("ssh \(host, privacy: .public): \(remote, privacy: .public)")
+            t.startProcess(executable: "/usr/bin/ssh", args: ["-t", "-o", "ConnectTimeout=5", host, cmd],
+                           environment: env.map { "\($0.key)=\($0.value)" }, execName: "ssh", currentDirectory: session.cwd)
+            terminals[key] = t
+            onChange?()
+            return
+        }
         if session.isShell {
             // Login-Shell des Nutzers: argv[0] mit Bindestrich, wie Terminal.app sie startet.
             let shell = env["SHELL"] ?? "/bin/zsh"

@@ -195,6 +195,7 @@ final class SidebarView: NSView {
             switch (rows[i], k) {
             case (.group(let g), 0):
                 Icons.heart(in: ic.insetBy(dx: 1, dy: 1), color: g.isFavorite ? Theme.group(g.color) : color, filled: g.isFavorite)
+            case (.group(let g), 1) where g.host != nil: Icons.server(in: ic, color: color)
             case (.group, 1): cmdDown ? Icons.computer(in: ic, color: color) : Icons.plus(in: ic, color: color)
             case (.group, 2), (.session, 0): Icons.pen(in: ic, color: color)
             default: Icons.x(in: ic, color: color)

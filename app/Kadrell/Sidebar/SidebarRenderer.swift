@@ -92,7 +92,9 @@ extension SidebarRenderer {
         }
         s.dot.setFill()
         NSBezierPath(ovalIn: dotRect(row)).fill()
-        if s.session.isShell { Icons.computer(in: CGRect(x: 12, y: r.midY - 6, width: 12, height: 12), color: s.selected || s.hover ? Theme.fg : Theme.muted) }
+        let iconRect = CGRect(x: 12, y: r.midY - 6, width: 12, height: 12), iconColor = s.selected || s.hover ? Theme.fg : Theme.muted
+        if s.session.isRemote { Icons.server(in: iconRect, color: iconColor) }
+        else if s.session.isShell { Icons.computer(in: iconRect, color: iconColor) }
         var right = r.maxX - 10
         if s.showAge {
             let age = NSAttributedString(string: s.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
@@ -131,15 +133,22 @@ extension SidebarRenderer {
         return x - 8
     }
 
-    func drawName(_ text: String, color: NSColor, head: CGRect, right: CGFloat) {
+    func drawName(_ text: String, color: NSColor, head: CGRect, right: CGFloat, x: CGFloat = 26) {
         NSAttributedString(string: text, attributes: Theme.attrs(12, color, bold: true))
-            .draw(with: CGRect(x: 26, y: head.midY - 8, width: max(0, right - 26), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+            .draw(with: CGRect(x: x, y: head.midY - 8, width: max(0, right - x), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    /// Gruppenname; Host-Gruppen tragen statt `prefix` ein Server-Symbol vor dem Namen.
+    func drawGroupName(_ g: SidebarGroupItem, prefix: String = "", head: CGRect, right: CGFloat) {
+        guard g.group.host != nil else { drawName(prefix + g.group.name, color: g.color, head: head, right: right); return }
+        Icons.server(in: CGRect(x: 26, y: head.midY - 6, width: 12, height: 12), color: g.color)
+        drawName(g.group.name, color: g.color, head: head, right: right, x: 42)
     }
 
     func drawPath(_ g: SidebarGroupItem, below head: CGRect) {
         let pa = Theme.attrs(10.5, Theme.muted)
         let pw = max(0, head.maxX - 10 - 42)
-        NSAttributedString(string: Theme.fitPath(g.group.cwd, width: pw, attrs: pa), attributes: pa)
+        NSAttributedString(string: g.group.host != nil ? "ssh · tmux" : Theme.fitPath(g.group.cwd, width: pw, attrs: pa), attributes: pa)
             .draw(with: CGRect(x: 42, y: head.maxY - 4, width: pw, height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 

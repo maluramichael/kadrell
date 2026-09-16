@@ -407,6 +407,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
         file.addItem(withTitle: "Neue Session im selben Ordner", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
         file.addItem(withTitle: "Neues Terminal ohne Claude", action: #selector(menuNewShell), keyEquivalent: "t")
+        let remote = file.addItem(withTitle: "Remote verbinden …", action: #selector(menuRemote), keyEquivalent: "n")
+        remote.keyEquivalentModifierMask = [.command, .shift]
         file.addItem(.separator())
         file.addItem(withTitle: "Session schließen", action: #selector(menuCloseSession), keyEquivalent: "w")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
@@ -481,6 +483,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startSession(group: workspace.group(forSession: s.id), cwd: s.cwd)
     }
     /// ⌘T: Login-Shell im Ordner der fokussierten Session, sonst im Startordner.
+    /// ⌘⇧N: Palette im Remote-Modus, `@host` verbindet per ssh mit dessen tmux, `@host:` wählt die Session.
+    @objc private func menuRemote() { togglePalette(prefix: "@") }
+
+    /// Remote-Kachel: Gruppe je Host, der Schlüssel trägt das ssh-Präfix wie Shells das ihre.
+    private func startRemote(host: String, tmuxSession: String?) {
+        let g = store.group(forHost: host) ?? { let g = store.makeGroup(host: host); store.add(g); return g }()
+        let id = Session.remotePrefix + UUID().uuidString.lowercased()
+        store.attach(sessionId: id, to: g.id)
+        SSHConfig.recordUse(host)
+        var session = Session(id: id, cwd: g.cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
+        session.host = host
+        session.tmuxSession = tmuxSession
+        registry.add(session)
+        workspace.select([id], add: !workspace.selected.isEmpty)
+    }
+
     @objc private func menuNewShell() {
         let cwd = workspace.focused.flatMap { workspace.session($0) }?.cwd ?? Settings.startFolder
         startSession(group: nil, cwd: cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
@@ -674,6 +692,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             attach.terminal(for: s.id).map { (s, group: g, lines: String(decoding: $0.getBufferAsData(kind: .active), as: UTF8.self).components(separatedBy: "\n")) }
         }
         src.onFindInSession = { [weak self] key, term, index in self?.findInSession(key, term: term, index: index) }
+        src.hosts = SSHConfig.recent + SSHConfig.hosts().filter { !SSHConfig.recent.contains($0) }
+        src.onConnect = { [weak self] host, name in self?.startRemote(host: host, tmuxSession: name) }
+        src.remoteSessions = { [weak self] host, done in
+            guard let env = self?.attach.cli.environment else { done(nil); return }
+            Task { done(await SSHConfig.tmuxSessions(host: host, environment: env)) }
+        }
         src.onFocusSession = { [weak self] key in self?.workspace.select([key], add: false) }
         src.onFitGroup = { [weak self] gid in
             guard let self, let g = store.group(id: gid) else { return }
@@ -686,6 +710,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Zoom ein/aus (fokussierte)", { [weak self] in self?.workspace.toggleZen() }),
             ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
             ("Neues Terminal ohne Claude", { [weak self] in self?.menuNewShell() }),
+            ("Remote verbinden (ssh → tmux)", { [weak self] in self?.menuRemote() }),
             ("Session stoppen (fokussierte)", { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
             ("Session fortsetzen (fokussierte)", { [weak self] in if let s = focusedSession { self?.attach.attachNow(s); self?.workspace.select([s.id], add: false) } }),
             ("Session umbenennen (fokussierte)", { [weak self] in if let s = focusedSession { self?.renameSession(s.id) } }),
@@ -744,9 +769,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func closeSession(_ key: String, force: Bool = false) {
         guard let s = workspace.session(key) else { return }
-        let info = s.isShell ? "Die Shell und alles, was darin läuft, wird beendet."
+        let info = s.isRemote ? "Die Verbindung wird getrennt, die tmux-Session auf \(s.host ?? "") läuft weiter."
+            : s.isShell ? "Die Shell und alles, was darin läuft, wird beendet."
             : "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)"
-        confirm("„\(s.title)“ beenden und entfernen?", info, button: "Entfernen", skip: force, ask: .closeSession) { [weak self] in
+        confirm("„\(s.title)“ beenden und entfernen?", info, button: "Entfernen", skip: force || s.isRemote, ask: .closeSession) { [weak self] in
             guard let self else { return }
             attach.detach(key)
             store.removeSession(key)
@@ -811,11 +837,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ⌘ auf dem „+“ einer Gruppe: Terminal ohne Claude im Ordner der Gruppe, direkt in derselben Gruppe.
     private func openNewTerminal(groupId: String) {
         guard let g = store.group(id: groupId) else { return }
+        if let host = g.host { togglePalette(prefix: "@\(host):"); return }
         startSession(group: g, cwd: g.cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
     }
 
     private func openNewSession(groupId: String?) {
-        if let gid = groupId, let g = store.group(id: gid) { startSession(group: g, cwd: g.cwd); return }
+        if let gid = groupId, let g = store.group(id: gid) {
+            // Host-Gruppe: kein Claude dort, das „+“ öffnet die Auswahl der tmux-Sessions des Hosts.
+            if let host = g.host { togglePalette(prefix: "@\(host):"); return }
+            startSession(group: g, cwd: g.cwd); return
+        }
         let sessions = workspace.sessions
         let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
         // Repos unter dem Startordner und neben allen bekannten Projekten; bis der Scan steht, gilt der gespeicherte Stand.

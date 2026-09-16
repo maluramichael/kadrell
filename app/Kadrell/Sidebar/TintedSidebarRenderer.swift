@@ -14,7 +14,7 @@ struct TintedSidebarRenderer: SidebarRenderer {
         let head = headRect(r)
         drawChevron(g, head: head)
         let right = drawCount(g, head: head, right: drawWaitingBadge(g, head: head, right: drawFavorite(g, head: head)))
-        drawName(g.group.name, color: g.color, head: head, right: right)
+        drawGroupName(g, head: head, right: right)
         drawPath(g, below: head)
     }
 

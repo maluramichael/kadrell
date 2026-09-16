@@ -20,7 +20,7 @@ struct CompactSidebarRenderer: SidebarRenderer {
             NSBezierPath(ovalIn: CGRect(x: x, y: r.midY - 2.5, width: 5, height: 5)).fill()
             x -= 3
         }
-        drawName(g.group.name, color: g.color, head: r, right: x - 5)
+        drawGroupName(g, head: r, right: x - 5)
     }
 
     func drawSession(_ s: SidebarSessionItem, in r: CGRect) {

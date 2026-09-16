@@ -28,17 +28,25 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var branch: String? = nil
     /// Erste Nachricht aus dem Transcript, Ersatztitel solange Claude Code keinen vergeben hat (Haiku scheitert still).
     var firstPrompt: String? = nil
+    /// Remote-Session (⌘⇧N): ssh-Host aus `~/.ssh/config`, die Kachel hängt sich an dessen tmux.
+    var host: String? = nil
+    /// tmux-Session auf dem Host; nil hängt sich an die zuletzt benutzte (`tmux attach`).
+    var tmuxSession: String? = nil
 
-    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName }
+    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, host, tmuxSession }
 
     var title: String { customName ?? autoTitle }
     var autoTitle: String {
+        if let host { return tmuxSession ?? host }
         if isShell { return URL(fileURLWithPath: cwd).lastPathComponent }
         return name.isEmpty ? firstPrompt ?? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name
     }
     /// Terminal ohne Claude (⌘T): Login-Shell statt `claude`, erkennbar am Schlüssel.
     static let shellPrefix = "shell-"
     var isShell: Bool { id.hasPrefix(Session.shellPrefix) }
+    /// Remote-Session (⌘⇧N): ssh statt `claude`, erkennbar am Schlüssel wie bei Shells.
+    static let remotePrefix = "ssh-"
+    var isRemote: Bool { host != nil }
     var status: SessionStatus { Session.mapStatus(state: nil, status: rawStatus) }
     var startDate: Date { Date(timeIntervalSince1970: startedAt / 1000) }
 
