@@ -48,6 +48,8 @@ final class SidebarView: NSView {
     /// Ziehen: (gezogen, Ziel), Session innerhalb ihrer Gruppe bzw. Gruppe vor/hinter eine andere.
     var onMoveSession: ((String, String) -> Void)?
     var onMoveGroup: ((String, String) -> Void)?
+    /// Rechtsklick auf eine Session-Zeile: liefert das Kontextmenü, oder nil (Gruppenzeile, daneben).
+    var onContextMenu: ((String) -> NSMenu?)?
 
     private enum Row {
         case group(Group), session(Session, Group)
@@ -302,6 +304,12 @@ final class SidebarView: NSView {
         hovered = nil
         hoveredButton = nil
         needsDisplay = true
+    }
+
+    /// Rechtsklick (bzw. Ctrl-Klick): Kontextmenü der Session unter dem Zeiger, sonst keins.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let i = rowIndex(at: local(event)), case .session(let s, _) = rows[i] else { return nil }
+        return onContextMenu?(s.id)
     }
 
     override func mouseDown(with event: NSEvent) {
