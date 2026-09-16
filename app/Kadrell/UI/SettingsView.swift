@@ -115,6 +115,25 @@ enum Settings {
         return out
     }
 
+    /// Rückfragen, die ein Häkchen „Nicht mehr fragen“ abschalten kann. Abgeschaltet heißt: Aktion läuft sofort.
+    enum Ask: String, CaseIterable {
+        case closeSession, closeGroup, stopSession, quit, adoptBackground
+        var title: String {
+            switch self {
+            case .closeSession: "Session beenden und entfernen"
+            case .closeGroup: "Gruppe schließen"
+            case .stopSession: "Session stoppen"
+            case .quit: "Kadrell beenden, während Claude läuft"
+            case .adoptBackground: "Hintergrund-Sessions übernehmen"
+            }
+        }
+        var key: String { "ask.\(rawValue)" }
+        var enabled: Bool {
+            get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+            nonmutating set { UserDefaults.standard.set(newValue, forKey: key) }
+        }
+    }
+
     static var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
     }
@@ -139,6 +158,7 @@ final class SettingsModel {
     var lineSpacing = Settings.terminalLineSpacing
     var padding = Settings.terminalPadding
     var metal = Settings.terminalMetal
+    var ask = Dictionary(uniqueKeysWithValues: Settings.Ask.allCases.map { ($0, $0.enabled) })
     @ObservationIgnored lazy var fonts: [(name: String, display: String)] = {
         let list = Settings.monospaceFonts
         return list.contains { $0.name == fontName } ? list : [(fontName, fontName)] + list
@@ -167,6 +187,7 @@ final class SettingsModel {
         Settings.terminalLineSpacing = lineSpacing
         Settings.terminalPadding = padding
         Settings.terminalMetal = metal
+        for (a, on) in ask { a.enabled = on }
         onDone?()
     }
 
@@ -290,6 +311,15 @@ struct SettingsView: View {
             VStack(spacing: 6) {
                 setting("Pfad in Stack-Zeilen") { pill(model.stackShowPath ? "an" : "aus", on: model.stackShowPath) { model.stackShowPath.toggle() } }
                 setting("Letzte Antwort von Claude im Baum") { pill(model.showLastMessage ? "an" : "aus", on: model.showLastMessage) { model.showLastMessage.toggle() } }
+            }
+            .padding(.horizontal, 16)
+
+            heading("Rückfragen", note: "aus = ohne Nachfrage ausführen")
+            VStack(spacing: 6) {
+                ForEach(Settings.Ask.allCases, id: \.self) { a in
+                    let on = model.ask[a] ?? true
+                    setting(a.title) { pill(on ? "an" : "aus", on: on) { model.ask[a] = !on } }
+                }
             }
             .padding(.horizontal, 16)
 

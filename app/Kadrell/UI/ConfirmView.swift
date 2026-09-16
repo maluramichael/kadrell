@@ -6,8 +6,11 @@ struct ConfirmView: View {
     let info: String
     let button: String
     let destructive: Bool
+    /// Gesetzt: Häkchen „Nicht mehr fragen“. Schreibt sofort (⏎ läuft am Button vorbei), Abbrechen stellt zurück.
+    var ask: Settings.Ask? = nil
     let onConfirm: () -> Void
     let onCancel: () -> Void
+    @State private var dontAsk = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -18,6 +21,14 @@ struct ConfirmView: View {
                     .padding(.horizontal, 16).padding(.top, 8)
             }
             HStack(spacing: 8) {
+                if ask != nil {
+                    Button { dontAsk.toggle(); ask?.enabled = !dontAsk } label: {
+                        HStack(spacing: 6) {
+                            Text(dontAsk ? "☑" : "☐").font(Theme.ui(14))
+                            Text("Nicht mehr fragen").font(Theme.ui(12))
+                        }.foregroundStyle(dontAsk ? Theme.fgColor : Theme.mutedColor)
+                    }.buttonStyle(.plain).help("Wieder einschalten: Einstellungen (⌘,) › Rückfragen")
+                }
                 Spacer()
                 Button(action: onCancel) {
                     Text("Abbrechen").font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)

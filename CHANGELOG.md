@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.9.0 (2026-09-16)
+
+- Feature: Rückfragen wie „Session beenden und entfernen?“ haben ein Häkchen „Nicht mehr fragen“. In den Einstellungen unter „Rückfragen“ lässt sich jede einzeln wieder ein- und ausschalten.
+
 ## 1.8.1 (2026-09-16)
 
 - Fix: Ein Klick in das Terminal einer Kachel gibt ihr wieder die Tastatur, auch wenn mehrere Sessions offen sind. Vorher ging das nur über die Titelzeile.

@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let title = busy.isEmpty ? "Kadrell beenden?" : "Kadrell beenden? \(busy.count) Session(s) arbeiten gerade!"
             let info = "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. "
                 + "Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.\n\n\(list)"
-            confirm(title, info, button: "Beenden") { [weak self] in
+            confirm(title, info, button: "Beenden", ask: .quit) { [weak self] in
                 guard let self else { return }
                 Task {
                     await self.attach.shutdown()
@@ -244,7 +244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let bg = agents.filter { $0.isRunningBackground && !owned.contains($0.sessionId) }
         guard !bg.isEmpty else { return }
         let list = bg.map { "· \($0.name)\($0.status == "busy" ? " (arbeitet gerade)" : "")" }.joined(separator: "\n")
-        confirm("\(bg.count) Hintergrund-Session(s) übernehmen?", "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:\n\(list)", button: "Übernehmen", destructive: false) { [weak self] in
+        confirm("\(bg.count) Hintergrund-Session(s) übernehmen?", "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:\n\(list)", button: "Übernehmen", destructive: false, ask: .adoptBackground) { [weak self] in
             guard let self else { return }
             Task {
                 for a in bg {
@@ -522,12 +522,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Sessions
 
     /// Rückfrage im App-Design. ⏎ bestätigt, Esc bricht ab. `skip` (⌘+Klick) führt direkt aus.
-    private func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false, then action: @escaping () -> Void) {
-        if skip { action(); return }
+    /// `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
+    private func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false,
+                         ask: Settings.Ask? = nil, then action: @escaping () -> Void) {
+        if skip || ask?.enabled == false { action(); return }
         let run = { [weak self] in self?.dismissSheet(); action() }
-        present(ConfirmView(title: message, info: info, button: button, destructive: destructive,
-                            onConfirm: run, onCancel: { [weak self] in self?.dismissSheet() }),
-                plainReturn: true, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: run)
+        let cancel = { [weak self] in ask?.enabled = true; self?.dismissSheet() }
+        present(ConfirmView(title: message, info: info, button: button, destructive: destructive, ask: ask,
+                            onConfirm: run, onCancel: cancel),
+                plainReturn: true, onCancel: cancel, onPrimary: run)
     }
 
     private func report(_ error: Error) {
@@ -537,14 +540,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopSession(_ s: Session) {
         guard attach.isAttached(s.id) else { NSSound.beep(); return }
-        confirm("Session „\(s.title)“ stoppen?", "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort.", button: "Stoppen") { [weak self] in
+        confirm("Session „\(s.title)“ stoppen?", "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort.", button: "Stoppen", ask: .stopSession) { [weak self] in
             self?.attach.stop(s.id)
         }
     }
 
     private func closeSession(_ key: String, force: Bool = false) {
         guard let s = workspace.session(key) else { return }
-        confirm("Session „\(s.title)“ beenden und entfernen?", "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)", button: "Entfernen", skip: force) { [weak self] in
+        confirm("Session „\(s.title)“ beenden und entfernen?", "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)", button: "Entfernen", skip: force, ask: .closeSession) { [weak self] in
             guard let self else { return }
             attach.detach(key)
             store.removeSession(key)
@@ -569,7 +572,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         confirm("Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?",
-                "Claude wird in allen Sessions beendet und die Gruppe entfernt. Die Konversationen bleiben erhalten.", button: "Schließen", skip: force) { [weak self] in
+                "Claude wird in allen Sessions beendet und die Gruppe entfernt. Die Konversationen bleiben erhalten.", button: "Schließen", skip: force, ask: .closeGroup) { [weak self] in
             guard let self else { return }
             for s in members { attach.detach(s.id) }
             store.remove(id: gid)
