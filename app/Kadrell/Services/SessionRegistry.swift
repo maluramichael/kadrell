@@ -65,6 +65,9 @@ final class SessionRegistry {
         let pids = pids()
         let agents = Agent.local(pids: Array(pids.keys), configDir: cli.configDir)
         var merged = SessionRegistry.merge(sessions, agents: agents, pids: pids)
+        for (pid, key) in pids {
+            if let i = merged.firstIndex(where: { $0.id == key && $0.isShell }), let dir = SessionRegistry.cwd(pid: pid_t(pid)) { merged[i].cwd = dir }
+        }
         let missing = merged.filter { $0.name.isEmpty && !$0.isShell && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
         if !missing.isEmpty {
             let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
@@ -104,6 +107,15 @@ final class SessionRegistry {
             s.waitingFor = a.waitingFor
             return s
         }
+    }
+
+    /// Aktueller Ordner eines Prozesses, wie `lsof -d cwd`.
+    static func cwd(pid: pid_t) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        let path = withUnsafeBytes(of: &info.pvi_cdir.vip_path) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+        return path.isEmpty ? nil : path
     }
 
     private func save() {

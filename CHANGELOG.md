@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.23.3 (2026-09-16)
+
+- Fix: Terminals ohne Claude starten nach dem Beenden der App wieder in dem Ordner, in den zuletzt mit `cd` gewechselt wurde.
+
 ## 1.23.2 (2026-09-16)
 
 - Fix: Beim Beenden mit ⌘Q startet die zuletzt beendete Session nicht mehr kurz neu.

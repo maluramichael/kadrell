@@ -77,6 +77,18 @@ final class SessionParsingTests: XCTestCase {
 final class SessionRegistryTests: XCTestCase {
     func agents(_ json: String) throws -> [Agent] { try Agent.decodeList(Data(json.utf8)) }
 
+    /// Terminal ohne Claude merkt sich den Ordner der Shell über deren pid.
+    func testShellCwdOfProcess() throws {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        p.arguments = ["5"]
+        p.currentDirectoryURL = URL(fileURLWithPath: "/private/tmp")
+        try p.run()
+        defer { p.terminate() }
+        XCTAssertEqual(SessionRegistry.cwd(pid: p.processIdentifier), "/private/tmp")
+        XCTAssertNil(SessionRegistry.cwd(pid: 999_999))
+    }
+
     /// Live-Werte nur über die eigene pid: der gestoppte Hintergrund-Eintrag mit derselben sessionId zählt nicht,
     /// eine neue sessionId (nach `/clear`) wird übernommen, Auto-Namen überschreiben keinen Titel.
     func testMergeByOwnPid() throws {

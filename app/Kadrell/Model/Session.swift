@@ -12,7 +12,8 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Stabiler Schlüssel für Gruppen und Auswahl: bei neuen Sessions die erste sessionId,
     /// bei übernommenen Hintergrund-Sessions deren alte kurze Id.
     let id: String
-    let cwd: String
+    /// Bei Terminals ohne Claude folgt der Ordner dem `cd` der Shell, damit ein Neustart dort weitermacht.
+    var cwd: String
     let startedAt: Double
     /// Aktuelle Konversation. `/clear` oder `/resume` im Terminal wechselt sie, `--resume` braucht die neueste.
     var sessionId: String
