@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.17.1 (2026-09-16)
+
+- Fix: In schmalen Kacheln überlappen sich Titel und Branch nicht mehr. Wird es eng, verschwinden erst Projekt und Branch, der Titel bleibt stehen.
+
 ## 1.17.0 (2026-09-16)
 
 - Feature: ⌘F sucht im Terminal, ⌘G und ⌘⇧G springen zum nächsten und vorigen Treffer.

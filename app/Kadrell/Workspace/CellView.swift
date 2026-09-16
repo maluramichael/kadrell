@@ -92,11 +92,20 @@ final class CellView: NSView {
         let title = NSAttributedString(string: session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
         let group = NSAttributedString(string: groupName, attributes: Theme.attrs(10.5, groupColor))
         let branch = NSAttributedString(string: session.branch ?? "", attributes: Theme.attrs(10.5, Theme.muted))
+        // Der Titel hat Vorrang: Branch und Gruppe erscheinen nur, solange daneben noch Platz ist.
+        let avail = max(0, b.width - 24 - metaW - iconW - 16)
+        let titleW = min(title.size().width, avail)
+        if titleW > 0 { title.draw(with: CGRect(x: 24, y: 5, width: titleW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine]) }
+        var x = 24 + titleW + 8
+        var rest = avail - titleW - 8
         let branchW = branch.length == 0 ? 0 : branch.size().width + 8
-        let titleW = min(title.size().width, max(0, b.width - 24 - metaW - iconW - 16 - group.size().width - 8 - branchW))
-        title.draw(with: CGRect(x: 24, y: 5, width: titleW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        if branchW > 0 { branch.draw(at: CGPoint(x: 24 + titleW + 8, y: 6)) }
-        group.draw(with: CGRect(x: 24 + titleW + 8 + branchW, y: 6, width: max(0, b.width - 24 - titleW - 8 - branchW - metaW - iconW - 16), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        if branchW > 0 && rest >= branchW {
+            branch.draw(at: CGPoint(x: x, y: 6))
+            x += branchW; rest -= branchW
+        }
+        if rest >= min(group.size().width, 40) {
+            group.draw(with: CGRect(x: x, y: 6, width: rest, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        }
         meta.draw(at: CGPoint(x: b.width - (hovered ? 44 : 0) - 9 - metaW, y: 6))
         if hovered { Icons.x(in: xRectLogical, color: Theme.sub); Icons.pen(in: penRectLogical, color: Theme.sub) }
     }
