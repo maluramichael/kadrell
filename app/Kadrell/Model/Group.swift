@@ -46,16 +46,30 @@ final class GroupStore {
         return Theme.palette.first { !used.contains($0) } ?? Theme.palette[groups.count % Theme.palette.count]
     }
 
-    func makeGroup(cwd: String, name: String? = nil) -> Group {
+    /// Name, den eine neu angelegte Gruppe für `cwd` ungefragt bekommt (auch zum Erkennen unveränderter Gruppen).
+    static func defaultName(cwd: String) -> String {
         let base = URL(fileURLWithPath: cwd).lastPathComponent
-        return Group(id: UUID().uuidString.lowercased(), name: name ?? (base.isEmpty ? cwd : base),
-                     color: nextColor(), cwd: cwd, sessionIds: [])
+        return base.isEmpty ? cwd : base
+    }
+
+    func makeGroup(cwd: String, name: String? = nil) -> Group {
+        Group(id: UUID().uuidString.lowercased(), name: name ?? GroupStore.defaultName(cwd: cwd),
+              color: nextColor(), cwd: cwd, sessionIds: [])
+    }
+
+    /// Gruppe hat weder umbenannten Namen noch eine von Hand gewählte Farbe, entspricht also noch
+    /// dem, was `makeGroup` frisch vergeben hätte.
+    private func isUnmodified(_ g: Group) -> Bool {
+        g.name == GroupStore.defaultName(cwd: g.cwd) && Theme.palette.contains(g.color)
     }
 
     /// Ordnet Sessions ohne Gruppe der Gruppe mit gleichem `cwd` zu, legt sonst eine neue an,
-    /// entfernt Ids, die es nicht mehr gibt, und leere Gruppen. Gibt zurück, ob sich etwas geändert hat.
+    /// entfernt Ids, die es nicht mehr gibt, und unveränderte leere Gruppen. Gibt zurück, ob sich etwas geändert hat.
     @discardableResult
     func assign(_ sessions: [Session]) -> Bool {
+        // Eine leere Liste ist eher ein Aussetzer (CLI-Update, Daemon kurz weg, umbenanntes Feld) als
+        // "alle Sessions weg": nicht prunen, nichts speichern, sonst reißt ein einziger Fehlpoll alle Gruppen weg.
+        guard !sessions.isEmpty else { return false }
         let before = groups
         let known = Set(sessions.map(\.id))
         for i in groups.indices { groups[i].sessionIds.removeAll { !known.contains($0) } }
@@ -68,9 +82,11 @@ final class GroupStore {
                 groups.append(g)
             }
         }
-        // Leere Gruppen fliegen raus: ohne Sessions hat eine Gruppe keinen Zweck, und die Datei
-        // sammelt sonst Ordner von längst beendeten Sessions. Favoriten bleiben stehen.
-        groups.removeAll { $0.sessionIds.isEmpty && !$0.isFavorite }
+        // Leere Gruppen fliegen nur raus, wenn sie noch unverändert sind: ohne Sessions und ohne
+        // eigenen Namen/eigene Farbe hat eine Gruppe keinen Zweck, und die Datei sammelt sonst Ordner
+        // von längst beendeten Sessions. Favoriten und von Hand gepflegte Gruppen bleiben leer stehen,
+        // damit die nächste Session desselben cwd wieder dort landet.
+        groups.removeAll { $0.sessionIds.isEmpty && !$0.isFavorite && isUnmodified($0) }
         let changed = groups != before
         if changed { try? save() }
         return changed

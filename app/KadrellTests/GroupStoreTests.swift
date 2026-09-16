@@ -63,26 +63,56 @@ final class GroupStoreTests: XCTestCase {
 
     func testPrunesVanishedSessionsAndRemovesGroups() throws {
         let store = GroupStore(url: url)
-        store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a")])
-        XCTAssertTrue(store.assign([session("s2", cwd: "/p/a")]))
+        store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a"), session("t1", cwd: "/p/b")])
+        XCTAssertTrue(store.assign([session("s2", cwd: "/p/a"), session("t1", cwd: "/p/b")]))
         XCTAssertEqual(store.groups[0].sessionIds, ["s2"])
-        // ohne Sessions verschwindet die Gruppe
-        XCTAssertTrue(store.assign([]))
-        XCTAssertTrue(store.groups.isEmpty)
-        XCTAssertTrue(GroupStore(url: url).groups.isEmpty)
+        // letzte Session einer unveränderten Gruppe verschwindet: die Gruppe fliegt raus
+        XCTAssertTrue(store.assign([session("t1", cwd: "/p/b")]))
+        XCTAssertEqual(store.groups.map(\.cwd), ["/p/b"])
+        XCTAssertEqual(GroupStore(url: url).groups.map(\.cwd), ["/p/b"])
+    }
+
+    func testEmptyPollNeitherPrunesNorRemovesGroups() throws {
+        let store = GroupStore(url: url)
+        store.assign([session("s1", cwd: "/p/a")])
+        let before = store.groups
+        // Eine leere Sessions-Liste ist eher ein Aussetzer der CLI als "alle Sessions weg"
+        XCTAssertFalse(store.assign([]))
+        XCTAssertEqual(store.groups, before)
+        XCTAssertEqual(GroupStore(url: url).groups, before)
+    }
+
+    func testManuallyEditedEmptyGroupSurvivesPruning() throws {
+        let store = GroupStore(url: url)
+        store.assign([session("s1", cwd: "/p/a"), session("t1", cwd: "/p/b")])
+        var g = store.groups.first { $0.cwd == "/p/a" }!
+        g.name = "Mein Projekt"
+        store.update(g)
+        // letzte Session weg, Gruppe ist aber von Hand umbenannt: bleibt leer stehen statt zu verschwinden
+        XCTAssertTrue(store.assign([session("t1", cwd: "/p/b")]))
+        XCTAssertEqual(store.groups.map(\.cwd).sorted(), ["/p/a", "/p/b"])
+        let kept = store.groups.first { $0.cwd == "/p/a" }!
+        XCTAssertTrue(kept.sessionIds.isEmpty)
+        XCTAssertEqual(kept.name, "Mein Projekt")
+        // eine neue Session im selben cwd landet wieder in der alten Gruppe
+        XCTAssertTrue(store.assign([session("t1", cwd: "/p/b"), session("s2", cwd: "/p/a")]))
+        XCTAssertEqual(store.groups.first { $0.cwd == "/p/a" }!.sessionIds, ["s2"])
     }
 
     func testFavoriteSurvivesEmptyGroup() throws {
         let store = GroupStore(url: url)
         store.assign([session("s1", cwd: "/p/a"), session("t1", cwd: "/p/b")])
         store.toggleFavorite(id: store.groups[0].id)
-        XCTAssertTrue(store.assign([]))
-        XCTAssertEqual(store.groups.map(\.cwd), ["/p/a"])
-        XCTAssertTrue(GroupStore(url: url).groups[0].isFavorite)
-        // Wieder abgewählt, verschwindet die leere Gruppe beim nächsten Poll
-        store.toggleFavorite(id: store.groups[0].id)
-        XCTAssertTrue(store.assign([]))
-        XCTAssertTrue(store.groups.isEmpty)
+        // s1 und t1 sind weg, nur eine Session in /p/c kommt neu rein: die favorisierte /p/a-Gruppe
+        // bleibt trotzdem leer stehen, /p/b (nicht favorisiert, unverändert) fliegt raus
+        XCTAssertTrue(store.assign([session("x1", cwd: "/p/c")]))
+        XCTAssertEqual(store.groups.map(\.cwd).sorted(), ["/p/a", "/p/c"])
+        XCTAssertTrue(store.group(forCwd: "/p/a")!.sessionIds.isEmpty)
+        XCTAssertTrue(GroupStore(url: url).group(forCwd: "/p/a")!.isFavorite)
+        // Wieder abgewählt, verschwindet die leere Gruppe beim nächsten Poll mit Sessions
+        store.toggleFavorite(id: store.group(forCwd: "/p/a")!.id)
+        XCTAssertTrue(store.assign([session("x1", cwd: "/p/c")]))
+        XCTAssertEqual(store.groups.map(\.cwd), ["/p/c"])
     }
 
     func testSidebarSortAlphaAndStatusKeepHandOrderOnTies() {
