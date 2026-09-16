@@ -39,7 +39,7 @@ final class WorkspaceView: NSView {
     private var dropTarget: String?
 
     var onChange: (() -> Void)?
-    /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
+    /// Zweiter Parameter: ⌥ gehalten, dann ohne Rückfrage. Nicht ⌘: das kollidiert mit Auswahl im Baum.
     var onCloseSession: ((String, Bool) -> Void)?
     var onRenameSession: ((String) -> Void)?
     /// Ziehen: (gezogen, Ziel). Die Reihenfolge selbst gehört dem Baum, siehe `sortSelected`.
@@ -474,7 +474,7 @@ final class WorkspaceView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        let force = event.modifierFlags.contains(.command)
+        let force = event.modifierFlags.contains(.option)
         pressed = nil
         switch hit(at: p) {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
