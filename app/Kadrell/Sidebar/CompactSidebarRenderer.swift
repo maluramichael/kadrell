@@ -1,7 +1,7 @@
 import AppKit
 
-/// Dicht: kein Pfad, niedrigere Zeilen, Trennlinie zwischen Gruppen. Rechts im Kopf ein Punkt je Session,
-/// so bleibt der Status auch bei eingeklappter Gruppe sichtbar.
+/// Dicht: kein Pfad, niedrigere Zeilen, Trennlinie zwischen Gruppen. Eingeklappt steht rechts im Kopf ein Punkt
+/// je Session, so bleibt der Status sichtbar. Aufgeklappt zeigen ihn die Zeilen selbst.
 struct CompactSidebarRenderer: SidebarRenderer {
     let groupRow: CGFloat = 24
     let sessionRow: CGFloat = 22
@@ -14,7 +14,7 @@ struct CompactSidebarRenderer: SidebarRenderer {
         if g.selected { g.color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
         drawChevron(g, head: r)
         var x = drawWaitingBadge(g, head: r, right: drawFavorite(g, head: r))
-        for c in g.dots.reversed() {
+        for c in g.open ? [] : g.dots.reversed() {
             x -= 5
             c.setFill()
             NSBezierPath(ovalIn: CGRect(x: x, y: r.midY - 2.5, width: 5, height: 5)).fill()

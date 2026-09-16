@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.26.1 (2026-09-16)
+
+- Änderung: Im kompakten Baum stehen die Status-Punkte im Gruppenkopf nur noch bei eingeklappter Gruppe. Aufgeklappt zeigen die Zeilen den Status ja schon.
+
 ## 1.26.0 (2026-09-16)
 
 - Änderung: Die Einstellungen sind jetzt eine Tabelle: jede Auswahl ist ein gleich breites Dropdown statt einer Reihe von Knöpfen, auch an/aus.
