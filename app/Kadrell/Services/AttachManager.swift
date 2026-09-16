@@ -56,6 +56,8 @@ final class AttachManager {
     /// Von Kadrell selbst beendete Prozesse (SIGHUP), mit pid, bis ihr Ende gemeldet ist.
     private var closing: [String: pid_t] = [:]
     private var queueTask: Task<Void, Never>?
+    /// App wird beendet: nichts mehr starten, sonst setzt das Polling die eben beendeten Sessions fort.
+    private var shuttingDown = false
     private var snapshotTask: Task<Void, Never>?
     /// Erste Nachricht für neue Sessions (`kadrell new … <prompt>`), wird beim ersten Start verbraucht.
     var initialPrompts: [String: String] = [:]
@@ -97,7 +99,7 @@ final class AttachManager {
 
     /// Startet den Claude-Prozess der Session, auch wenn er vorher beendet war.
     func attachNow(_ session: Session) {
-        guard terminals[session.id] == nil else { return }
+        guard !shuttingDown, terminals[session.id] == nil else { return }
         queue.removeAll { $0.id == session.id }
         ended.remove(session.id)
         snapshots[session.id] = nil
@@ -180,6 +182,8 @@ final class AttachManager {
 
     /// Beenden der App: SIGHUP an alle, auf das gemeldete Ende warten, was nach `timeout` noch lebt, bekommt SIGKILL.
     func shutdown(timeout: TimeInterval = 5) async {
+        shuttingDown = true
+        queue.removeAll()
         detachAll()
         let deadline = Date().addingTimeInterval(timeout)
         while !closing.isEmpty, Date() < deadline { try? await Task.sleep(for: .milliseconds(100)) }

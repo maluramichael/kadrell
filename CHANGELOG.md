@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.23.2 (2026-09-16)
+
+- Fix: Beim Beenden mit ⌘Q startet die zuletzt beendete Session nicht mehr kurz neu.
+
 ## 1.23.1 (2026-09-16)
 
 - Fix: Die Vorschau (⌥J/⌥K) zeigt bei einer noch nicht gestarteten Session nicht mehr endlos „Startet …“, sondern dass ⏎ oder ein Klick sie startet.
