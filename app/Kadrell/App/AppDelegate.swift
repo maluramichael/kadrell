@@ -637,7 +637,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Sessions
 
     /// Rückfrage im App-Design. Nicht-destruktive bestätigt blankes ⏎, destruktive nur ⌘⏎. Esc bricht immer ab.
-    /// `skip` (⌘+Klick) führt direkt aus. `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
+    /// `skip` (⌥+Klick) führt direkt aus. `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
     func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false,
                          ask: Settings.Ask? = nil, then action: @escaping () -> Void) {
         if skip || ask?.enabled == false { action(); return }

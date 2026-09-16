@@ -14,7 +14,7 @@ struct AboutView: View {
                 + [("⌘P", "Suche, mit > Kommandos"), ("⌘F", "Im Terminal suchen, ⌘G weiter"), ("⌘⇧F", "In allen Terminals suchen")]),
             ("Kacheln verwalten", rows([.swapLeft, .swapRight, .swapUp, .swapDown, .zoom, .nextLayout, .syncInput, .closeFocused]) + [
                 ("Ziehen", "Session oder Gruppe umsortieren, Baum und Kacheln gleich"),
-                ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"), ("⌘⇧B", "Alle Gruppen auf- oder zuklappen"),
+                ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌥ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"), ("⌘⇧B", "Alle Gruppen auf- oder zuklappen"),
             ] + rows([.cycleSort])),
             ("Fenster und App", [
                 ("⌘M", "Im Dock ablegen"), ("⌘ Mausrad", "Terminal-Schrift aller Sessions größer/kleiner"),

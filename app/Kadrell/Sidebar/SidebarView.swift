@@ -41,7 +41,7 @@ final class SidebarView: NSView {
     var onEditGroup: ((String) -> Void)?
     /// Favorit an/aus: eine favorisierte Gruppe bleibt auch ohne Sessions in der Liste.
     var onToggleFavorite: ((String) -> Void)?
-    /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
+    /// Zweiter Parameter: ⌥ gehalten, dann ohne Rückfrage. Nicht ⌘: das bedeutet hier „zur Auswahl dazu“.
     var onCloseGroup: ((String, Bool) -> Void)?
     var onCloseSession: ((String, Bool) -> Void)?
     var onRenameSession: ((String) -> Void)?
@@ -308,7 +308,7 @@ final class SidebarView: NSView {
         let p = local(event)
         pressed = nil
         guard let i = rowIndex(at: p) else { return }
-        let force = event.modifierFlags.contains(.command)
+        let force = event.modifierFlags.contains(.option)
         // Toolbar nur, wo sie sichtbar ist: ohne Hover (Fenster nicht aktiv) wählt der Klick die Zeile.
         if hovered == i, toolbarRect(i).contains(p) {
             switch (rows[i], button(at: p, row: i)) {
