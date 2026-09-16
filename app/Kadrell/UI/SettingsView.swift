@@ -30,6 +30,12 @@ enum Settings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "sidebar.style") }
     }
 
+    /// Sortierung des Baums (Leiste), Default aus = Handreihenfolge.
+    static var sidebarSort: SidebarSort {
+        get { UserDefaults.standard.string(forKey: "sidebar.sort").flatMap(SidebarSort.init) ?? .off }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "sidebar.sort") }
+    }
+
     /// Laufzeit („12m“) in jeder Session-Zeile des Baums, Default an.
     static var sidebarShowAge: Bool {
         get { UserDefaults.standard.object(forKey: "sidebar.showAge") as? Bool ?? true }

@@ -114,3 +114,36 @@ final class GroupStore {
         try? save()
     }
 }
+
+/// Sortierung im Baum, umschaltbar in der Leiste. `off` zeigt die von Hand gezogene Reihenfolge.
+enum SidebarSort: String, CaseIterable {
+    case off, alpha, status
+
+    var next: SidebarSort { Self.allCases[(Self.allCases.firstIndex(of: self)! + 1) % Self.allCases.count] }
+
+    /// Wartet auf Antwort vor Fehler vor arbeitet vor fertig. Gleichstand behält die Handreihenfolge.
+    private static func rank(_ s: SessionStatus) -> Int {
+        switch s { case .waiting: 0; case .error: 1; case .running: 2; case .idle: 3 }
+    }
+
+    /// Sortiert Gruppen und die Sessions darin, ohne `groups.json` anzufassen.
+    func apply(_ groups: [Group], sessions: [String: Session]) -> [Group] {
+        guard self != .off else { return groups }
+        func stable<T>(_ items: [T], _ less: (T, T) -> Bool) -> [T] {
+            items.enumerated().sorted { less($0.1, $1.1) || (!less($1.1, $0.1) && $0.0 < $1.0) }.map(\.1)
+        }
+        let sorted = groups.map { g -> Group in
+            var g = g
+            g.sessionIds = stable(g.sessionIds) { a, b in
+                guard let x = sessions[a], let y = sessions[b] else { return false }
+                return self == .alpha ? x.title.localizedStandardCompare(y.title) == .orderedAscending
+                                      : Self.rank(x.status) < Self.rank(y.status)
+            }
+            return g
+        }
+        let groupRank = { (g: Group) in g.sessionIds.compactMap { sessions[$0] }.map { Self.rank($0.status) }.min() ?? 4 }
+        return stable(sorted) { a, b in
+            self == .alpha ? a.name.localizedStandardCompare(b.name) == .orderedAscending : groupRank(a) < groupRank(b)
+        }
+    }
+}

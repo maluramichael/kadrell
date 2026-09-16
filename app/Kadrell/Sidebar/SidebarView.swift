@@ -8,6 +8,8 @@ final class SidebarView: NSView {
     var renderer: any SidebarRenderer = SidebarStyle.tinted.renderer
     /// Laufzeit („12m“) rechts in jeder Session-Zeile.
     var showAge = true
+    /// Sortiert nur die Anzeige. Ziehen ist dann aus, weil die Handreihenfolge unsichtbar bliebe.
+    var sort: SidebarSort = .off
 
     private(set) var groups: [Group] = []
     private(set) var sessions: [String: Session] = [:]
@@ -93,7 +95,7 @@ final class SidebarView: NSView {
     }
 
     func reload(groups: [Group], sessions: [Session]) {
-        self.groups = groups
+        self.groups = sort.apply(groups, sessions: Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) }))
         self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
         rows = []
         for g in groups {
@@ -327,7 +329,7 @@ final class SidebarView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let press = pressed else { return }
+        guard let press = pressed, sort == .off else { return }
         let p = local(event)
         if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true; hovered = nil }
         guard dragging else { return }

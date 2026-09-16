@@ -173,6 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
         bar.onToggleAuto = { [weak self] in self?.workspace.toggleAuto() }
+        bar.onCycleSort = { [weak self] in Settings.sidebarSort = Settings.sidebarSort.next; self?.syncSidebar() }
 
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
@@ -274,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.focused = workspace.preview ?? workspace.focused
         sidebar.showMessages = Settings.showLastMessage
         sidebar.showAge = Settings.sidebarShowAge
+        sidebar.sort = Settings.sidebarSort
         sidebar.renderer = Settings.sidebarStyle.renderer
         sidebar.messages = registry?.lastMessages ?? [:]
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
@@ -291,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.layoutMode = workspace.mode
         bar.zoomed = workspace.zen
         bar.auto = workspace.auto
+        bar.sort = sidebar.sort
         bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
         bar.needsDisplay = true
     }

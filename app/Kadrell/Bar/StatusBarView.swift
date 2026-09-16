@@ -15,6 +15,9 @@ final class StatusBarView: NSView {
     /// Auto-Modus: nur Sessions, die etwas wollen. An = gefülltes Badge.
     var auto = false
     var onToggleAuto: (() -> Void)?
+    /// Sortierung des Baums: Klick schaltet aus → A–Z → Status weiter. Aktiv = gefülltes Badge.
+    var sort: SidebarSort = .off
+    var onCycleSort: (() -> Void)?
     /// Zoom aktiv: Badge „ZOOM“ links neben dem Breadcrumb, Klick hebt den Zoom auf.
     var zoomed = false
     var onToggleZoom: (() -> Void)?
@@ -60,7 +63,14 @@ final class StatusBarView: NSView {
         at.draw(at: CGPoint(x: autoRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: autoRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((autoRect, { [weak self] in self?.onToggleAuto?() }))
-        var leftEnd = autoRect.maxX + 8
+        let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
+        let st = NSAttributedString(string: sortLabel, attributes: Theme.attrs(10, sort == .off ? Theme.muted : Theme.bg, bold: true))
+        let sortRect = CGRect(x: autoRect.maxX + 1, y: 0, width: st.size().width + 20, height: b.height - 1)
+        if sort != .off { Theme.sub.setFill(); sortRect.insetBy(dx: 5, dy: 6).fill() }
+        st.draw(at: CGPoint(x: sortRect.minX + 10, y: midY - 7))
+        Theme.line.setFill(); CGRect(x: sortRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
+        hitRects.append((sortRect, { [weak self] in self?.onCycleSort?() }))
+        var leftEnd = sortRect.maxX + 8
         if zoomed {
             let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.bg, bold: true))
             let z = CGRect(x: leftEnd, y: midY - 9, width: zt.size().width + 12, height: 18)

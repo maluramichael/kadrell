@@ -84,4 +84,19 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertTrue(store.assign([]))
         XCTAssertTrue(store.groups.isEmpty)
     }
+
+    func testSidebarSortAlphaAndStatusKeepHandOrderOnTies() {
+        var s = ["b": session("b", cwd: "/x"), "a": session("a", cwd: "/x"), "c": session("c", cwd: "/y"), "d": session("d", cwd: "/y")]
+        s["a"]!.rawStatus = "idle"; s["b"]!.rawStatus = "busy"; s["c"]!.rawStatus = "idle"; s["d"]!.rawStatus = "idle"
+        let groups = [Group(id: "1", name: "zeta", color: "", cwd: "/x", sessionIds: ["b", "a"]),
+                      Group(id: "2", name: "Alpha", color: "", cwd: "/y", sessionIds: ["d", "c"])]
+        XCTAssertEqual(SidebarSort.off.apply(groups, sessions: s), groups)
+        let alpha = SidebarSort.alpha.apply(groups, sessions: s)
+        XCTAssertEqual(alpha.map(\.id), ["2", "1"])
+        XCTAssertEqual(alpha.map(\.sessionIds), [["c", "d"], ["a", "b"]])
+        s["c"]!.rawStatus = "waiting"
+        let status = SidebarSort.status.apply(groups, sessions: s)
+        XCTAssertEqual(status.map(\.id), ["2", "1"])
+        XCTAssertEqual(status.map(\.sessionIds), [["c", "d"], ["b", "a"]])
+    }
 }

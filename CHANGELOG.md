@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.16.0 (2026-09-16)
+
+- Feature: Neuer Sortier-Schalter oben in der Leiste: aus (eigene Reihenfolge), A–Z oder nach Status (wartet, arbeitet, fertig). Sortiert Gruppen und die Sessions darin.
+
 ## 1.15.0 (2026-09-16)
 
 - Feature: `kadrell move` verschiebt eine Session in eine andere Gruppe, ohne sie zu beenden.
