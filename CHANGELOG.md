@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.25.1 (2026-09-16)
+
+- Änderung: Ungelesene Sessions sind nur noch am fetten Titel erkennbar, der kleine Punkt direkt vor dem Titel ist weg.
+- Fix: Nach dem Update auf 1.25.0 waren fast alle Sessions als ungelesen markiert. Jetzt zählt nur, was seit dem ersten Start neu dazukommt.
+
 ## 1.25.0 (2026-09-16)
 
 - Feature: Terminal ohne Claude direkt aus einer Gruppe: ⌘ gedrückt halten und auf den +-Knopf einer Gruppe klicken öffnet statt einer Claude-Session ein Terminal, das Icon wechselt dabei zum Terminal-Symbol.

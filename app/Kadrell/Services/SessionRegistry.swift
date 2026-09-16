@@ -125,9 +125,13 @@ final class SessionRegistry {
         if Settings.showLastMessage {
             for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
         }
-        let seen = lastSeenSize
+        // Session ohne gespeicherten Stand (neu oder erster Start nach dem Update): was schon da ist, gilt als gelesen.
+        var seen = lastSeenSize
+        let unknown = merged.filter { seen[$0.id] == nil && transcripts[$0.sessionId] != nil }
+        for s in unknown { seen[s.id] = Int(transcripts[s.sessionId]!.size) }
+        if !unknown.isEmpty { lastSeenSize = seen }
         let unread = Set(merged.compactMap { s -> String? in
-            guard let size = transcripts[s.sessionId]?.size, size > (seen[s.id] ?? 0) else { return nil }
+            guard let size = transcripts[s.sessionId]?.size, let last = seen[s.id], size > last else { return nil }
             return s.id
         })
         return (messages, unread)
