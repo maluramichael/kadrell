@@ -30,8 +30,6 @@ final class ClaudeCLI: Sendable {
         self.environment = env
     }
 
-    /// `KEY=VALUE`-Liste für SwiftTerms `startProcess(environment:)`.
-    var environmentList: [String] { environment.map { "\($0.key)=\($0.value)" } }
     /// Datenordner von Claude Code (`~/.claude`, per `CLAUDE_CONFIG_DIR` verlegbar).
     var configDir: String { environment["CLAUDE_CONFIG_DIR"] ?? NSHomeDirectory() + "/.claude" }
 

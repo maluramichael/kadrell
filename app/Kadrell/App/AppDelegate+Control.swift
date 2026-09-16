@@ -1,0 +1,185 @@
+import AppKit
+
+/// Führt `kadrell <befehl>` aus (siehe `ControlCommand.usage`). Alles läuft über dieselben Wege wie die Bedienung
+/// per Maus und Tastatur, nur ohne Rückfragen.
+extension AppDelegate {
+    func startControlServer() {
+        let server = ControlServer { [weak self] req in
+            self?.handleControl(req) ?? .fail("Kadrell beendet sich")
+        }
+        do {
+            try server.start()
+            controlServer = server
+        } catch {
+            AppDelegate.log.error("Steuer-Socket: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    func handleControl(_ req: ControlRequest) -> ControlResponse {
+        guard registry != nil, attach != nil else { return .fail("Kadrell startet noch") }
+        do {
+            return try runControl(ControlCommand.parse(req.argv), req)
+        } catch let e as ControlError {
+            return .fail(e.message)
+        } catch {
+            return .fail(String(describing: error))
+        }
+    }
+
+    private func runControl(_ cmd: ControlCommand, _ req: ControlRequest) throws -> ControlResponse {
+        switch cmd {
+        case .help: return .ok(ControlCommand.usage)
+        case .list(let json): return .ok(try listOutput(json: json))
+        case let .newGroup(dir, name, color): return .ok(try controlNewGroup(dir: dir, name: name, color: color, req))
+        case let .newSession(t, dir, name, detached, prompt):
+            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, req))
+        case let .select(t, add):
+            switch try ControlTarget.sessionOrGroup(t, groups: store.groups, sessions: registry.sessions, caller: req.caller, focused: workspace.focused) {
+            case .session(let s): workspace.select([s.id], add: add)
+            case .group(let g): workspace.select(g.sessionIds, add: add)
+            }
+        case .layout(let m): workspace.setMode(m)
+        case .zoom(let t): try controlZoom(target: t, req)
+        case let .rename(t, name): registry.rename(try session(t, req).id, to: name)
+        case let .setGroup(t, name, color, favorite): try controlSetGroup(target: t, name: name, color: color, favorite: favorite, req)
+        case .stop(let t):
+            let s = try session(t, req)
+            guard attach.isAttached(s.id) else { throw ControlError("„\(s.title)“ läuft nicht") }
+            attach.stop(s.id)
+        case .resume(let t): attach.attachNow(try session(t, req))
+        case .killSession(let t): closeSession(try session(t, req).id, force: true)
+        case .killGroup(let t): closeGroup(try group(t, req).id, force: true)
+        case let .send(t, text, enter, keys): try controlSend(target: t, text: text, enter: enter, keys: keys, req)
+        case let .capture(t, all): return .ok(try controlCapture(target: t, all: all, req))
+        }
+        return .ok()
+    }
+
+    private func session(_ t: String?, _ req: ControlRequest) throws -> Session {
+        try ControlTarget.session(t, sessions: registry.sessions, caller: req.caller, focused: workspace.focused)
+    }
+
+    private func group(_ t: String?, _ req: ControlRequest) throws -> Group {
+        try ControlTarget.group(t, groups: store.groups, sessions: registry.sessions, caller: req.caller, focused: workspace.focused)
+    }
+
+    private func existingDir(_ p: String, _ req: ControlRequest) throws -> String {
+        let path = ControlTarget.path(p, cwd: req.cwd)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { throw ControlError("kein Ordner: \(path)") }
+        return path
+    }
+
+    /// Favorit, sonst räumt `GroupStore.assign` die leere Gruppe beim nächsten Abgleich wieder weg.
+    private func controlNewGroup(dir: String, name: String?, color: String?, _ req: ControlRequest) throws -> String {
+        var g = store.makeGroup(cwd: try existingDir(dir, req), name: name)
+        if let color { g.color = color }
+        g.favorite = true
+        store.add(g)
+        reloadViews()
+        return g.id
+    }
+
+    /// Ohne -t und -c landet die Session bei der aufrufenden: gleiche Gruppe, gleicher Ordner (wie tmux new-window).
+    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, _ req: ControlRequest) throws -> String {
+        var g = try target.map { try group($0, req) }
+        let caller = req.caller.flatMap { c in registry.sessions.first { $0.id == c } }
+        if target == nil, dir == nil, let caller { g = store.group(forSession: caller.id) }
+        let cwd = try dir.map { try existingDir($0, req) } ?? (target == nil ? caller?.cwd : nil) ?? g?.cwd ?? existingDir(req.cwd, req)
+        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt)
+        if let name { registry.rename(key, to: name) }
+        return key
+    }
+
+    private func controlSetGroup(target: String?, name: String?, color: String?, favorite: Bool?, _ req: ControlRequest) throws {
+        var g = try group(target, req)
+        g.name = name ?? g.name
+        g.color = color ?? g.color
+        if let favorite { g.favorite = favorite ? true : nil }
+        store.update(g)
+        reloadViews()
+    }
+
+    private func controlZoom(target: String?, _ req: ControlRequest) throws {
+        if target != nil {
+            let s = try session(target, req)
+            if !workspace.selected.contains(s.id) { workspace.select([s.id], add: true) }
+            workspace.setFocus(s.id)
+        }
+        guard workspace.focused != nil else { throw ControlError("keine Kachel fokussiert") }
+        workspace.toggleZen()
+    }
+
+    /// Text geht als Einfügen (bracketed paste), wenn Claude das eingeschaltet hat; ⏎ kommt getrennt hinterher,
+    /// sonst hält die Eingabe es für einen Zeilenumbruch im eingefügten Text.
+    private func controlSend(target: String?, text: String, enter: Bool, keys: Bool, _ req: ControlRequest) throws {
+        let s = try session(target, req)
+        guard let term = attach.terminal(for: s.id) else { throw ControlError("„\(s.title)“ läuft nicht, erst kadrell resume -t \(s.id.prefix(8))") }
+        if keys {
+            term.send(txt: text.split(separator: " ").compactMap { ControlCommand.keyNames[$0.lowercased()] }.joined())
+            return
+        }
+        let clean = text.replacingOccurrences(of: "\u{1b}[201~", with: "")
+        term.send(txt: term.terminalStateSnapshot().bracketedPasteMode ? "\u{1b}[200~" + clean + "\u{1b}[201~" : clean)
+        guard enter else { return }
+        Task { [weak term] in
+            try? await Task.sleep(for: .milliseconds(150))
+            term?.send(txt: "\r")
+        }
+    }
+
+    private func controlCapture(target: String?, all: Bool, _ req: ControlRequest) throws -> String {
+        let s = try session(target, req)
+        guard let term = attach.terminal(for: s.id) else { return attach.lines(for: s.id).joined(separator: "\n") }
+        if all { return String(decoding: term.getBufferAsData(kind: .active), as: UTF8.self) }
+        var rows = term.terminalStateSnapshot().visibleRows.map { $0.text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
+        while rows.last?.isEmpty == true { rows.removeLast() }
+        return rows.joined(separator: "\n")
+    }
+
+    private func listOutput(json: Bool) throws -> String {
+        struct S: Encodable { let key, sessionId, title, cwd, status: String; let branch: String?; let running, shown, focused: Bool }
+        struct G: Encodable { let id, name, color, cwd: String; let favorite: Bool; let sessions: [S] }
+        struct Out: Encodable { let layout: String; let focused: String?; let groups: [G] }
+        let byKey = Dictionary(registry.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let groups = store.groups.map { g in
+            G(id: g.id, name: g.name, color: g.color, cwd: g.cwd, favorite: g.isFavorite, sessions: g.sessionIds.compactMap { byKey[$0] }.map { s in
+                let running = attach.isAttached(s.id)
+                return S(key: s.id, sessionId: s.sessionId, title: s.title, cwd: s.cwd,
+                         status: running ? s.status.rawValue : attach.isEnded(s.id) ? "ended" : "stopped",
+                         branch: s.branch, running: running, shown: workspace.selected.contains(s.id), focused: workspace.focused == s.id)
+            })
+        }
+        if json {
+            let enc = JSONEncoder()
+            enc.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            return String(decoding: try enc.encode(Out(layout: workspace.mode.rawValue, focused: workspace.focused, groups: groups)), as: UTF8.self)
+        }
+        return groups.map { g in
+            (["\(g.id.prefix(8))  \(g.name)\(g.favorite ? " ★" : "")  \(g.cwd)"] + g.sessions.map { s in
+                let mark = s.focused ? "*" : s.shown ? "+" : " "
+                return "  \(mark) \(s.key.prefix(8))  \(s.status.padding(toLength: 8, withPad: " ", startingAt: 0))  \(s.title)"
+            }).joined(separator: "\n")
+        }.joined(separator: "\n")
+    }
+
+    /// Symlink `~/.local/bin/kadrell` auf das Binary dieser App. Ein fremdes Programm unter dem Namen bleibt unangetastet.
+    @objc func menuInstallCLI() {
+        let link = NSHomeDirectory() + "/.local/bin/kadrell"
+        let fm = FileManager.default
+        do {
+            guard let target = Bundle.main.executablePath else { throw ControlError("Pfad der App unbekannt") }
+            try fm.createDirectory(atPath: (link as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            if let existing = try? fm.destinationOfSymbolicLink(atPath: link) {
+                if existing != target { try fm.removeItem(atPath: link) }
+            } else if fm.fileExists(atPath: link) {
+                throw ControlError("\(link) existiert schon und ist kein Symlink")
+            }
+            if (try? fm.destinationOfSymbolicLink(atPath: link)) == nil { try fm.createSymbolicLink(atPath: link, withDestinationPath: target) }
+            confirm("Kommandozeilen-Tool installiert", "\(link) zeigt auf diese App. `kadrell help` listet die Befehle. "
+                    + "In Sessions dieser App steht der Pfad zusätzlich in $KADRELL.", button: "OK", destructive: false) {}
+        } catch {
+            confirm("Installation fehlgeschlagen", (error as? ControlError)?.message ?? String(describing: error), button: "OK", destructive: false) {}
+        }
+    }
+}

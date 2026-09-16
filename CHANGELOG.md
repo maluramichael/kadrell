@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.12.0 (2026-09-16)
+
+- Feature: Kadrell lässt sich wie tmux von außen steuern: `kadrell ls`, `kadrell new-group`, `kadrell new`, `kadrell send`, `kadrell capture` und weitere Befehle, auch aus einer Claude-Session heraus. `kadrell help` zeigt alle.
+- Feature: Neuer Menüpunkt „Kommandozeilen-Tool installieren“ legt das Kommando `kadrell` an.
+
 ## 1.11.0 (2026-09-16)
 
 - Feature: Der Baum hat jetzt drei Designs zur Auswahl (Einstellungen, Baum und Kacheln): Klassisch, Getönte Gruppen und Kompakt.

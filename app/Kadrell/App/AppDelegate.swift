@@ -10,11 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let split = ThinSplitView(frame: .zero)
     private let sidebarScroll = NSScrollView(frame: .zero)
     private let sidebar = SidebarView(frame: .zero)
-    private let workspace = WorkspaceView(frame: .zero)
-    private let store = GroupStore()
+    let workspace = WorkspaceView(frame: .zero)
+    let store = GroupStore()
     private var cli: ClaudeCLI!
-    private var registry: SessionRegistry!
-    private var attach: AttachManager!
+    var registry: SessionRegistry!
+    var attach: AttachManager!
     private let usage = UsageService()
     private var palette: PaletteWindow!
     private var overlay: OverlayPanel?
@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fontScrollAccum: CGFloat = 0
     /// Session, für die zuletzt `session-focus` gefeuert hat.
     private var hookFocus: String?
+    var controlServer: ControlServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
@@ -61,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Nur noch Reste (z. B. Abmelden ohne Prozesse): SIGHUP, beim nächsten Start setzt `--resume` fort.
         attach?.detachAll()
+        controlServer?.stop()
     }
 
     private var quitConfirmed = false
@@ -225,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await offerAdopt()
             registry.start()
         }
+        startControlServer()
         usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true }
         usage.start()
     }
@@ -259,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func reloadViews() {
+    func reloadViews() {
         workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
         syncSidebar()
     }
@@ -298,6 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "Über Kadrell", action: #selector(menuAbout), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Einstellungen …", action: #selector(menuSettings), keyEquivalent: ",")
+        appMenu.addItem(withTitle: "Kommandozeilen-Tool installieren …", action: #selector(menuInstallCLI), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Kadrell ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
@@ -531,7 +535,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Rückfrage im App-Design. ⏎ bestätigt, Esc bricht ab. `skip` (⌘+Klick) führt direkt aus.
     /// `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
-    private func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false,
+    func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false,
                          ask: Settings.Ask? = nil, then action: @escaping () -> Void) {
         if skip || ask?.enabled == false { action(); return }
         let run = { [weak self] in self?.dismissSheet(); action() }
@@ -553,7 +557,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func closeSession(_ key: String, force: Bool = false) {
+    func closeSession(_ key: String, force: Bool = false) {
         guard let s = workspace.session(key) else { return }
         confirm("Session „\(s.title)“ beenden und entfernen?", "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)", button: "Entfernen", skip: force, ask: .closeSession) { [weak self] in
             guard let self else { return }
@@ -571,7 +575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         reloadViews()
     }
 
-    private func closeGroup(_ gid: String, force: Bool = false) {
+    func closeGroup(_ gid: String, force: Bool = false) {
         guard let g = store.group(id: gid) else { return }
         let members = g.sessionIds.compactMap { workspace.session($0) }
         if members.isEmpty {
@@ -622,7 +626,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Kadrell vergibt die sessionId selbst (`claude --session-id`): die Kachel steht sofort, kein Warten auf `claude agents`.
-    private func startSession(group: Group?, cwd: String) {
+    /// `show: false` startet Claude im Hintergrund, die Auswahl bleibt. `prompt` ist die erste Nachricht.
+    @discardableResult
+    func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil) -> String {
         let id = UUID().uuidString.lowercased()
         var target = group ?? store.group(forCwd: cwd)
         if target == nil {
@@ -631,8 +637,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             target = g
         }
         store.attach(sessionId: id, to: target!.id)
-        registry.add(Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: ""))
-        workspace.select([id], add: !workspace.selected.isEmpty)
+        let session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
+        if let prompt { attach.initialPrompts[id] = prompt }
+        registry.add(session)
+        if show { workspace.select([id], add: !workspace.selected.isEmpty) } else { attach.attachNow(session) }
+        return id
     }
 
     /// Unverändert bestätigt bleibt der Name automatisch, sonst hält ein Enter Claudes Titel für immer fest.

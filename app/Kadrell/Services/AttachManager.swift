@@ -45,6 +45,8 @@ final class AttachManager {
     private var closing: [String: pid_t] = [:]
     private var queueTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
+    /// Erste Nachricht für neue Sessions (`kadrell new … <prompt>`), wird beim ersten Start verbraucht.
+    var initialPrompts: [String: String] = [:]
     var onChange: (() -> Void)?
     /// Claude hat sich selbst beendet (`/exit`, zweimal ⌃C, Absturz), nicht von Kadrell gestoppt.
     var onEnded: ((String) -> Void)?
@@ -103,10 +105,17 @@ final class AttachManager {
             self.detach(key, signal: false)
             if self.ended.contains(key) { self.onEnded?(key) }
         }
-        let args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: Transcript.path(sessionId: session.sessionId) != nil)
+        let hasTranscript = Transcript.path(sessionId: session.sessionId) != nil
+        var args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
             + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
         AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .public) in \(session.cwd, privacy: .public)")
-        t.startProcess(executable: cli.binary, args: args, environment: cli.environmentList,
+        if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { args.append(prompt) }
+        // Wie $TMUX_PANE: `kadrell` in dieser Session weiß, wo es läuft, und findet den Socket.
+        var env = cli.environment
+        env["KADRELL_SESSION_KEY"] = key
+        env["KADRELL_SOCKET"] = ControlSocket.defaultPath
+        env["KADRELL"] = Bundle.main.executablePath
+        t.startProcess(executable: cli.binary, args: args, environment: env.map { "\($0.key)=\($0.value)" },
                        execName: "claude", currentDirectory: session.cwd)
         terminals[key] = t
         onChange?()
