@@ -9,7 +9,11 @@ final class WorkspaceView: NSView {
     /// Geordnete Session-Ids, die rechts zu sehen sind.
     private(set) var selected: [String] = []
     private(set) var focused: String? {
-        didSet { if oldValue != focused, let o = oldValue { lastFocused = o } }
+        didSet {
+            guard oldValue != focused else { return }
+            if let o = oldValue { lastFocused = o }
+            if let f = focused { onFocusChange?(f) }
+        }
     }
     /// Für „zuletzt fokussierte Kachel“ (tmux M-Tab).
     private var lastFocused: String?
@@ -39,11 +43,21 @@ final class WorkspaceView: NSView {
     private var dropTarget: String?
 
     var onChange: (() -> Void)?
-    /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
+    /// Eine neue Kachel bekommt den Fokus (Klick, Pfeiltasten, ⌘-Zahlen, …).
+    var onFocusChange: ((String) -> Void)?
+    /// Zweiter Parameter: ⌥ gehalten, dann ohne Rückfrage. Nicht ⌘: das kollidiert mit Auswahl im Baum.
     var onCloseSession: ((String, Bool) -> Void)?
     var onRenameSession: ((String) -> Void)?
     /// Ziehen: (gezogen, Ziel). Die Reihenfolge selbst gehört dem Baum, siehe `sortSelected`.
     var onMoveSession: ((String, String) -> Void)?
+    /// Baum ist leer: Klick auf den Hinweis startet eine neue Session, wie ⌘N.
+    var onEmptyClick: (() -> Void)?
+    /// Binary nicht gefunden oder `claude agents` schlägt fehl. AppDelegate hält es aktuell (`SessionRegistry.lastError`).
+    var lastError: String?
+    /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
+    var polled = false
+    /// Rechtsklick auf Kachel-Header oder Stack-Zeile: liefert das Kontextmenü der Session.
+    var onContextMenu: ((String) -> NSMenu?)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -366,13 +380,36 @@ final class WorkspaceView: NSView {
 
     // MARK: Zeichnen
 
+    /// Warum die Fläche leer ist und was als Nächstes zu tun ist.
+    private enum EmptyReason { case error(String), loading, noSessions, hint }
+
+    private var emptyReason: EmptyReason {
+        if let lastError { return .error(lastError) }
+        if !polled { return .loading }
+        if sessions.isEmpty { return .noSessions }
+        return .hint
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         Theme.bg.setFill()
         dirtyRect.fill()
         if tiles.isEmpty {
-            let idle = auto && !selected.isEmpty
-            let a = NSAttributedString(string: idle ? "Gerade wartet keine Session" : "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
-            let b = NSAttributedString(string: idle ? "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will" : "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+            let a: NSAttributedString, b: NSAttributedString
+            switch emptyReason {
+            case .error(let message):
+                a = NSAttributedString(string: "Sessions können nicht geladen werden", attributes: Theme.attrs(12, Theme.error))
+                b = NSAttributedString(string: message, attributes: Theme.attrs(11, Theme.error.withAlphaComponent(0.7)))
+            case .loading:
+                a = NSAttributedString(string: "Lade Sessions …", attributes: Theme.attrs(12, Theme.muted))
+                b = NSAttributedString(string: "", attributes: Theme.attrs(11, Theme.muted))
+            case .noSessions:
+                a = NSAttributedString(string: "Noch keine Session", attributes: Theme.attrs(12, Theme.muted))
+                b = NSAttributedString(string: "⌘N startet eine", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+            case .hint:
+                let idle = auto && !selected.isEmpty
+                a = NSAttributedString(string: idle ? "Gerade wartet keine Session" : "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
+                b = NSAttributedString(string: idle ? "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will" : "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+            }
             Theme.scaled(bounds) { r in
                 a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
                 b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
@@ -472,9 +509,18 @@ final class WorkspaceView: NSView {
         needsDisplay = true
     }
 
+    /// Rechtsklick (bzw. Ctrl-Klick): Kontextmenü der Session unter Kachel-Header oder Stack-Zeile.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        switch hit(at: convert(event.locationInWindow, from: nil)) {
+        case .cell(let k), .cellClose(let k), .cellRename(let k), .row(let k), .rowClose(let k), .rowRename(let k):
+            return onContextMenu?(k)
+        case .none: return nil
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        let force = event.modifierFlags.contains(.command)
+        let force = event.modifierFlags.contains(.option)
         pressed = nil
         switch hit(at: p) {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
@@ -484,7 +530,9 @@ final class WorkspaceView: NSView {
             // Beendete Session: Klick setzt sie fort.
             if attach?.isAttached(k) == false, let s = sessions[k] { attach?.attachNow(s) }
             setFocus(k)
-        case .none: window?.makeFirstResponder(self)
+        case .none:
+            if case .noSessions = emptyReason { onEmptyClick?() }
+            window?.makeFirstResponder(self)
         }
     }
 

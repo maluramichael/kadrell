@@ -144,9 +144,15 @@ final class AttachManager {
     }
 
     /// Beendet den Claude-Prozess per `SIGHUP`. Die Konversation liegt im Transcript und lässt sich fortsetzen.
+    /// `closing` merkt sich den Schlüssel schon vor der Prüfung auf `running`: ist der Prozess in diesem Moment
+    /// schon beendet, aber `onExit` noch nicht zugestellt, gilt der spätere Aufruf trotzdem als erwartet, nicht
+    /// als unbeaufsichtigtes Sessionende (das würde sonst fälschlich `ended`/`onEnded` auslösen).
     func detach(_ key: String, signal: Bool = true) {
         guard let t = terminals.removeValue(forKey: key) else { return }
-        if signal, t.process.running { closing[key] = t.process.shellPid; kill(t.process.shellPid, SIGHUP) }
+        if signal {
+            closing[key] = t.process.shellPid
+            if t.process.running { kill(t.process.shellPid, SIGHUP) }
+        }
         t.removeFromSuperview()
         if !ended.contains(key) { snapshots[key] = nil }
         onChange?()

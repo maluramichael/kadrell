@@ -152,9 +152,12 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
                     Item(label: g.name, sub: "Gruppe · " + g.cwd, group: nil, status: nil, sessionKey: nil, run: { [source] in source.onFitGroup(g.id) })
                 }
             }
-            list += source.sessions.filter { s, _, lines in
+            var matches = source.sessions.filter { s, _, lines in
                 q.isEmpty || PaletteWindow.fuzzy(q, s.title + " " + s.cwd + " " + lines.suffix(3).joined(separator: " "))
-            }.map { s, g, lines in
+            }
+            // Ohne Suchbegriff: wer auf dich wartet, steht zuerst, sonst bleibt die Reihenfolge der Gruppen.
+            if q.isEmpty { matches.sort { ($0.0.status == .waiting ? 0 : 1) < ($1.0.status == .waiting ? 0 : 1) } }
+            list += matches.map { s, g, lines in
                 Item(label: s.title, sub: String((lines.last ?? Theme.shortPath(s.cwd)).prefix(70)), group: g?.name, status: s.status,
                      sessionKey: s.id, run: { [source] in source.onFocusSession(s.id) })
             }

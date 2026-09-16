@@ -19,6 +19,8 @@ final class SidebarView: NSView {
     /// Eingeschaltet: jede Session-Zeile bekommt eine zweite Zeile mit `messages[id]`.
     var showMessages = false
     var messages: [String: String] = [:]
+    /// Sessions mit Antworten seit dem letzten Fokus: Titel fett plus Punkt.
+    var unread: Set<String> = []
     private var collapsed: Set<String> = []
     private var rows: [Row] = []
     private var hovered: Int?
@@ -32,22 +34,29 @@ final class SidebarView: NSView {
     private var pressed: (point: CGPoint, row: Row, flags: NSEvent.ModifierFlags)?
     private var dragging = false
     private var dropTarget: Row?
+    /// ⌘ gehalten: der „+“-Knopf einer Gruppe zeigt ein Terminal-Icon und öffnet ein Terminal ohne Claude.
+    private var cmdDown = false
+    private var flagsMonitor: Any?
 
     enum SelectMode { case replace, toggle, add, cursor }
     /// Klick = nur diese, ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu,
     /// ↑↓ (cursor) = nur diese, die Tastatur bleibt im Baum.
     var onSelect: (([String], SelectMode) -> Void)?
     var onNewSession: ((String) -> Void)?
+    /// ⌘ über der Gruppen-Toolbar: der „+“-Knopf öffnet ein Terminal ohne Claude statt einer Claude-Session.
+    var onNewTerminal: ((String) -> Void)?
     var onEditGroup: ((String) -> Void)?
     /// Favorit an/aus: eine favorisierte Gruppe bleibt auch ohne Sessions in der Liste.
     var onToggleFavorite: ((String) -> Void)?
-    /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
+    /// Zweiter Parameter: ⌥ gehalten, dann ohne Rückfrage. Nicht ⌘: das bedeutet hier „zur Auswahl dazu“.
     var onCloseGroup: ((String, Bool) -> Void)?
     var onCloseSession: ((String, Bool) -> Void)?
     var onRenameSession: ((String) -> Void)?
     /// Ziehen: (gezogen, Ziel), Session innerhalb ihrer Gruppe bzw. Gruppe vor/hinter eine andere.
     var onMoveSession: ((String, String) -> Void)?
     var onMoveGroup: ((String, String) -> Void)?
+    /// Rechtsklick auf eine Session-Zeile: liefert das Kontextmenü, oder nil (Gruppenzeile, daneben).
+    var onContextMenu: ((String) -> NSMenu?)?
 
     private enum Row {
         case group(Group), session(Session, Group)
@@ -183,7 +192,7 @@ final class SidebarView: NSView {
             switch (rows[i], k) {
             case (.group(let g), 0):
                 Icons.heart(in: ic.insetBy(dx: 1, dy: 1), color: g.isFavorite ? Theme.group(g.color) : color, filled: g.isFavorite)
-            case (.group, 1): Icons.plus(in: ic, color: color)
+            case (.group, 1): cmdDown ? Icons.computer(in: ic, color: color) : Icons.plus(in: ic, color: color)
             case (.group, 2), (.session, 0): Icons.pen(in: ic, color: color)
             default: Icons.x(in: ic, color: color)
             }
@@ -235,16 +244,20 @@ final class SidebarView: NSView {
     }
 
     private func drawGroup(_ g: Group, in r: CGRect, first: Bool, hover: Bool) {
-        let dots = g.sessionIds.compactMap { sessions[$0] }.map { attach?.isAttached($0.id) ?? false ? Theme.color(for: $0.status) : Theme.detached }
+        let members = g.sessionIds.compactMap { sessions[$0] }
+        let dots = members.map { attach?.isAttached($0.id) ?? false ? Theme.color(for: $0.status) : Theme.detached }
+        let waiting = members.filter { $0.status == .waiting && (attach?.isAttached($0.id) ?? false) }.count
         renderer.drawGroup(SidebarGroupItem(group: g, color: Theme.group(g.color), dots: dots, open: !collapsed.contains(g.id),
-                                            selected: g.sessionIds.contains { selected.contains($0) }, hover: hover, first: first), in: r)
+                                            selected: g.sessionIds.contains { selected.contains($0) }, hover: hover, first: first,
+                                            waitingCount: waiting), in: r)
     }
 
     private func drawSession(_ s: Session, group g: Group, in r: CGRect, hover: Bool) {
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,
-                                                message: showMessages ? messages[s.id] : nil, showAge: showAge), in: r)
+                                                message: showMessages ? messages[s.id] : nil, showAge: showAge,
+                                                unread: unread.contains(s.id)), in: r)
     }
 
     // MARK: Events
@@ -286,8 +299,28 @@ final class SidebarView: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            if let m = flagsMonitor { NSEvent.removeMonitor(m); flagsMonitor = nil }
+        } else if flagsMonitor == nil {
+            // ⌘ drücken/loslassen erreicht die Sidebar nicht als First Responder (das Terminal hat die Tastatur),
+            // daher ein lokaler Monitor, damit der „+“-Knopf beim Hovern sofort das Icon wechselt.
+            flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
+                self?.setCmdDown(e.modifierFlags.contains(.command)); return e
+            }
+        }
+    }
+
+    private func setCmdDown(_ down: Bool) {
+        guard down != cmdDown else { return }
+        cmdDown = down
+        if let i = hovered, case .group = rows[i] { needsDisplay = true }
+    }
+
     override func mouseMoved(with event: NSEvent) {
         guard convert(event.locationInWindow, from: nil).x < bounds.width - ThinSplitView.grabWidth / 2 else { return }   // Griffzone des Trenners
+        setCmdDown(event.modifierFlags.contains(.command))
         let p = local(event)
         let i = rowIndex(at: p)
         (i == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
@@ -304,16 +337,22 @@ final class SidebarView: NSView {
         needsDisplay = true
     }
 
+    /// Rechtsklick (bzw. Ctrl-Klick): Kontextmenü der Session unter dem Zeiger, sonst keins.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let i = rowIndex(at: local(event)), case .session(let s, _) = rows[i] else { return nil }
+        return onContextMenu?(s.id)
+    }
+
     override func mouseDown(with event: NSEvent) {
         let p = local(event)
         pressed = nil
         guard let i = rowIndex(at: p) else { return }
-        let force = event.modifierFlags.contains(.command)
+        let force = event.modifierFlags.contains(.option)
         // Toolbar nur, wo sie sichtbar ist: ohne Hover (Fenster nicht aktiv) wählt der Klick die Zeile.
         if hovered == i, toolbarRect(i).contains(p) {
             switch (rows[i], button(at: p, row: i)) {
             case (.group(let g), 0): onToggleFavorite?(g.id)
-            case (.group(let g), 1): onNewSession?(g.id)
+            case (.group(let g), 1): event.modifierFlags.contains(.command) ? onNewTerminal?(g.id) : onNewSession?(g.id)
             case (.group(let g), 2): onEditGroup?(g.id)
             case (.group(let g), 3): onCloseGroup?(g.id, force)
             case (.session(let s, _), 0): onRenameSession?(s.id)

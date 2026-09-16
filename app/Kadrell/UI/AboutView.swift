@@ -8,15 +8,17 @@ struct AboutView: View {
                 ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
                 ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "ganze Gruppen der Auswahl, nochmal: zurück"), ("⌘⇧A", "alle Sessions, nochmal: zurück"),
                 ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘T", "Terminal ohne Claude im Ordner der fokussierten"),
+                ("+ an Gruppe", "neue Session in der Gruppe · mit ⌘: Terminal ohne Claude"),
             ] + rows([.openEditor, .renameSession]) + [("Stift", "an Kachel und Baum-Zeile: umbenennen")]),
-            ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev]
+            ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
                                 + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace])
                 + [("⌘P", "Suche, mit > Kommandos"), ("⌘F", "Im Terminal suchen, ⌘G weiter"), ("⌘⇧F", "In allen Terminals suchen")]),
             ("Kacheln verwalten", rows([.swapLeft, .swapRight, .swapUp, .swapDown, .zoom, .nextLayout, .syncInput, .closeFocused]) + [
                 ("Ziehen", "Session oder Gruppe umsortieren, Baum und Kacheln gleich"),
-                ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"), ("⌘⇧B", "Alle Gruppen auf- oder zuklappen"),
+                ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌥ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"), ("⌘⇧B", "Alle Gruppen auf- oder zuklappen"),
             ] + rows([.cycleSort])),
             ("Fenster und App", [
+                ("Rundes X", "Fenster nur verstecken, Sessions laufen weiter"), ("Menüleisten-Icon / Dock", "Fenster zurückholen"),
                 ("⌘M", "Im Dock ablegen"), ("⌘ Mausrad", "Terminal-Schrift aller Sessions größer/kleiner"),
                 ("⌘,", "Einstellungen: Startordner, Darstellung, Tastenkürzel"), ("F1", "diese Hilfe"),
             ]),

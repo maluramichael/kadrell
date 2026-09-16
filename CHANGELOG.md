@@ -2,6 +2,19 @@
 
 Neueste Version oben.
 
+## 1.25.0 (2026-09-16)
+
+- Feature: Terminal ohne Claude direkt aus einer Gruppe: ⌘ gedrückt halten und auf den +-Knopf einer Gruppe klicken öffnet statt einer Claude-Session ein Terminal, das Icon wechselt dabei zum Terminal-Symbol.
+- Feature: Wartende Sessions sind jetzt überall sichtbar: Zahl im Dock-Icon, „N warten“ in der Leiste (klickbar wählt alle aus), Anzeige auch an eingeklappten Gruppen, in der Suche zuoberst, und das Dock meldet sich bei einer neu wartenden Session. Neues Kürzel springt zur nächsten wartenden Session.
+- Feature: Menüleisten-Icon mit Kurzstatus. ⌘W und der rote Knopf schließen nur noch das Fenster, Kadrell läuft im Hintergrund weiter, ein Klick aufs Dock- oder Menüleisten-Icon holt es zurück.
+- Feature: Ungelesen-Markierung: Sessions mit neuer Antwort seit dem letzten Blick zeigen ihren Titel fett mit Punkt, wie in Mail.
+- Feature: Rechtsklick-Kontextmenü für Sessions an Baum-Zeile, Kachel und Stack-Zeile, das Menü Session bekommt Tastenkürzel.
+- Änderung: Destruktive Rückfragen (Stoppen, Entfernen, Beenden) bestätigt man jetzt mit ⌘⏎ statt mit blankem ⏎, das verhindert versehentliches Löschen.
+- Änderung: Schließen ohne Rückfrage läuft jetzt über ⌥ statt ⌘, damit ein ⌘-Klick zur Auswahl nicht mehr aus Versehen eine Session löscht.
+- Fix: Die leere Arbeitsfläche zeigt jetzt den passenden Zustand: Laden, „noch keine Session“ mit Hinweis auf ⌘N, oder eine Fehlermeldung, wenn claude nicht gefunden wird.
+- Fix: Gruppen mit eigenem Namen oder eigener Farbe verschwinden nicht mehr, wenn ihre letzte Session endet oder die Sessionliste kurz leer ist.
+- Fix: Ein unerwartetes Ende des Terminal-Prozesses löscht keine Session mehr ungewollt.
+
 ## 1.24.0 (2026-09-16)
 
 - Feature: Farbschemata für die ganze Oberfläche und die Terminals, dunkel und hell: Catppuccin Mocha und Latte, Monokai, Dracula, Nord, Gruvbox, One Dark, Solarized Dark und Light, GitHub Light. Auswahl in den Einstellungen unter Darstellung.

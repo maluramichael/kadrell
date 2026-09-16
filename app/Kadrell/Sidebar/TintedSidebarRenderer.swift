@@ -13,7 +13,7 @@ struct TintedSidebarRenderer: SidebarRenderer {
         if g.selected { g.color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
         let head = headRect(r)
         drawChevron(g, head: head)
-        let right = drawCount(g, head: head, right: drawFavorite(g, head: head))
+        let right = drawCount(g, head: head, right: drawWaitingBadge(g, head: head, right: drawFavorite(g, head: head)))
         drawName(g.group.name, color: g.color, head: head, right: right)
         drawPath(g, below: head)
     }

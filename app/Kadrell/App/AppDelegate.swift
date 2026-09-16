@@ -21,8 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
     private var fontScrollAccum: CGFloat = 0
+    private var statusItem: NSStatusItem?
     /// Session, für die zuletzt `session-focus` gefeuert hat.
     private var hookFocus: String?
+    /// Wartende Sessions beim letzten Abgleich: neu dazugekommene lösen `requestUserAttention` aus.
+    private var lastWaitingIds: Set<String> = []
     /// ⌘A/⌘⇧A: Auswahl davor und danach, damit ein zweiter Druck zurückschaltet.
     private var selectAllUndo: (shift: Bool, before: [String], focus: String?, after: Set<String>)?
     var controlServer: ControlServer?
@@ -49,9 +52,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set(true, forKey: "helpShown")
             showAbout()
         }
+        buildStatusItem()
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    /// Menüleisten-Icon mit Kurzstatus, holt das Fenster zurück. Bleibt sichtbar, solange Kadrell läuft,
+    /// auch wenn das Fenster versteckt ist.
+    private func buildStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "Kadrell")
+        item.button?.image?.isTemplate = true
+        item.button?.action = #selector(statusItemClicked)
+        item.button?.target = self
+        statusItem = item
+    }
+
+    @objc private func statusItemClicked() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
+    /// "3 warten · 5 arbeiten" im Menüleisten-Icon, leer ohne beschäftigte Sessions.
+    private func updateStatusItem(_ sessions: [Session]) {
+        let waiting = sessions.filter { $0.status == .waiting }.count
+        let running = sessions.filter { $0.status == .running }.count
+        statusItem?.button?.title = waiting == 0 && running == 0 ? "" : "  \(waiting) warten · \(running) arbeiten"
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Dock-Klick, während das Fenster versteckt ist: zurückholen statt neu zu starten.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        return true
+    }
 
     /// Laufen Claude-Prozesse, erst nachfragen (⌘Q, Menü, Dock, Abmelden, SIGTERM). Abbrechen und Rückfrage
     /// statt `.terminateLater`: der Dialog ist ein eigenes Overlay und braucht die normale Run-Loop.
@@ -152,7 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         palette = PaletteWindow()
 
         workspace.onChange = { [weak self] in self?.syncSidebar() }
+        workspace.onFocusChange = { [weak self] key in self?.registry?.markSeen(key) }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
+        workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
         sidebar.onSelect = { [weak self] ids, mode in
             guard let self else { return }
             switch mode {
@@ -163,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
+        sidebar.onNewTerminal = { [weak self] gid in self?.openNewTerminal(groupId: gid) }
         sidebar.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
         sidebar.onToggleFavorite = { [weak self] gid in self?.store.toggleFavorite(id: gid); self?.reloadViews() }
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
@@ -172,11 +209,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         sidebar.onMoveGroup = { [weak self] gid, target in self?.store.moveGroup(gid, to: target); self?.reloadViews() }
         workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
+        sidebar.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
+        workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
         bar.onToggleAuto = { [weak self] in self?.workspace.toggleAuto() }
         bar.onToggleSync = { [weak self] in self?.workspace.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
+        bar.onSelectWaiting = { [weak self] in guard let self else { return }; workspace.select(waitingIds(), add: false) }
 
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
@@ -236,6 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registry = SessionRegistry(cli: cli)
         registry.pids = { [weak attach] in attach?.pids ?? [:] }
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
+        if !FileManager.default.isExecutableFile(atPath: cli.binary) { registry.fail("\(cli.binary): claude nicht gefunden") }
         // Leer nicht abgleichen: das würde Gruppen alter Hintergrund-Sessions verwerfen, bevor sie übernommen sind.
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
@@ -261,7 +302,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func offerAdopt() async {
         let owned = Set(registry.sessions.map(\.sessionId))
         let agents: [Agent]
-        do { agents = try await cli.agents() } catch { AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)"); return }
+        do { agents = try await cli.agents() } catch {
+            AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)")
+            registry.fail("\(cli.binary): \(Self.firstLine(of: error))")
+            return
+        }
         let bg = agents.filter { $0.isRunningBackground && !owned.contains($0.sessionId) }
         guard !bg.isEmpty else { return }
         let list = bg.map { "· \($0.name)\($0.status == "busy" ? " (arbeitet gerade)" : "")" }.joined(separator: "\n")
@@ -278,7 +323,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Erste Zeile einer CLI-Fehlermeldung: `CLIError` liefert die Prozessausgabe, sonst die Fehlerbeschreibung.
+    private static func firstLine(of error: Error) -> String {
+        let text = ((error as? CLIError)?.output ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.split(separator: "\n").first.map(String.init) ?? text
+    }
+
     func reloadViews() {
+        workspace.lastError = registry?.lastError
+        workspace.polled = registry?.polled ?? false
         workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
         syncSidebar()
     }
@@ -292,6 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.sort = Settings.sidebarSort
         sidebar.renderer = Settings.sidebarStyle.renderer
         sidebar.messages = registry?.lastMessages ?? [:]
+        sidebar.unread = registry?.unread ?? []
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
         let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
@@ -302,6 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Hooks.fire(.sessionFocus, s, environment: cli.environment)
         }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
+        bar.errorText = registry?.lastError
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
@@ -310,7 +365,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.sync = workspace.sync
         bar.sort = sidebar.sort
         bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
+        let waiting = waitingIds()
+        NSApp.dockTile.badgeLabel = waiting.isEmpty ? nil : "\(waiting.count)"
+        let waitingSet = Set(waiting)
+        // Neu dazugekommene wartende Session, Fenster nicht im Vordergrund: kurz im Dock hüpfen, ohne Notification-Rechte.
+        if !waitingSet.subtracting(lastWaitingIds).isEmpty, window?.isKeyWindow == false { NSApp.requestUserAttention(.informationalRequest) }
+        lastWaitingIds = waitingSet
+        bar.waitingCount = waiting.count
         bar.needsDisplay = true
+        updateStatusItem(Array(sessions.values))
+    }
+
+    /// Wartende Sessions in Baumreihenfolge, unabhängig von eingeklappten Gruppen: `waitingFor` kommt nur bei
+    /// laufendem eigenen Prozess (siehe `SessionRegistry.merge`), `isAttached` ist die zusätzliche Absicherung.
+    private func waitingIds() -> [String] {
+        let sessions = workspace.sessions
+        return store.groups.flatMap(\.sessionIds).filter { sessions[$0]?.status == .waiting && (attach?.isAttached($0) ?? false) }
     }
 
     // MARK: Menü
@@ -386,7 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Ansicht", action: nil, keyEquivalent: "").submenu = view
 
         let session = NSMenu(title: "Session")
-        session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "")
+        for item in sessionMenuItems(for: nil, shortcuts: true) { session.addItem(item) }
         main.addItem(withTitle: "Session", action: nil, keyEquivalent: "").submenu = session
 
         let windows = NSMenu(title: "Fenster")
@@ -500,6 +570,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .lastSession: workspace.focusLast()
         case .previewNext: stepPreview(1)
         case .previewPrev: stepPreview(-1)
+        case .nextWaiting: focusNextWaiting()
         case .zoom: workspace.toggleZen()
         case .nextLayout: workspace.setMode(workspace.mode.other)
         case .focusSidebar: focusSidebar()
@@ -513,6 +584,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func cycleSort() { Settings.sidebarSort = Settings.sidebarSort.next; syncSidebar() }
+
+    /// Springt zur nächsten Session, die wartet, egal ob ihre Gruppe eingeklappt oder ihre Kachel schon offen ist.
+    private func focusNextWaiting() {
+        let ids = waitingIds()
+        guard !ids.isEmpty else { NSSound.beep(); return }
+        let next = workspace.focused.flatMap { ids.firstIndex(of: $0) }.map { ids[($0 + 1) % ids.count] } ?? ids[0]
+        workspace.addMissing([next])
+        workspace.setFocus(next)
+        sidebar.reveal(next)
+    }
 
     /// Tastatur-Besitzer vor der Vorschau: Esc gibt sie ihm zurück.
     private weak var previewResponder: NSResponder?
@@ -570,10 +651,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuCloseSession() {
         guard NSApp.keyWindow === window, let key = workspace.focused else { NSSound.beep(); return }
         closeSession(key)
-    }
-    @objc private func menuStop() {
-        guard let key = workspace.focused, let s = workspace.session(key) else { NSSound.beep(); return }
-        stopSession(s)
     }
 
     // MARK: Palette
@@ -636,8 +713,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Sessions
 
-    /// Rückfrage im App-Design. ⏎ bestätigt, Esc bricht ab. `skip` (⌘+Klick) führt direkt aus.
-    /// `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
+    /// Rückfrage im App-Design. Nicht-destruktive bestätigt blankes ⏎, destruktive nur ⌘⏎. Esc bricht immer ab.
+    /// `skip` (⌥+Klick) führt direkt aus. `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
     func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false,
                          ask: Settings.Ask? = nil, then action: @escaping () -> Void) {
         if skip || ask?.enabled == false { action(); return }
@@ -645,7 +722,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cancel = { [weak self] in ask?.enabled = true; self?.dismissSheet() }
         present(ConfirmView(title: message, info: info, button: button, destructive: destructive, ask: ask,
                             onConfirm: run, onCancel: cancel),
-                plainReturn: true, onCancel: cancel, onPrimary: run)
+                plainReturn: !destructive, onCancel: cancel, onPrimary: run)
     }
 
     private func report(_ error: Error) {
@@ -653,7 +730,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         confirm("Claude CLI meldet einen Fehler", String(describing: error), button: "OK", destructive: false) {}
     }
 
-    private func stopSession(_ s: Session) {
+    func stopSession(_ s: Session) {
         guard attach.isAttached(s.id) else { NSSound.beep(); return }
         confirm("Session „\(s.title)“ stoppen?", "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort.", button: "Stoppen", ask: .stopSession) { [weak self] in
             self?.attach.stop(s.id)
@@ -699,7 +776,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Sheets
 
+    /// Offene Hilfe (F1) nicht stillschweigend verdrängen: wer gerade ⏎ drückt, um sie zu schließen, soll nicht
+    /// aus Versehen einen anderen Dialog bestätigen. Der neue Dialog kommt erst dran, wenn die Hilfe zu ist.
+    private var pendingPresent: (() -> Void)?
+
     private func present<V: View>(_ view: V, plainReturn: Bool = false, onCancel: @escaping () -> Void, onPrimary: @escaping () -> Void) {
+        if overlayIsAbout {
+            pendingPresent = { [weak self] in self?.present(view, plainReturn: plainReturn, onCancel: onCancel, onPrimary: onPrimary) }
+            return
+        }
         dismissSheet()
         if palette.isVisible { palette.dismiss() }
         let p = OverlayPanel(rootView: view)
@@ -715,6 +800,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay = nil
         overlayIsAbout = false
         window.makeFirstResponder(workspace)
+        if let pending = pendingPresent { pendingPresent = nil; pending() }
+    }
+
+    /// ⌘ auf dem „+“ einer Gruppe: Terminal ohne Claude im Ordner der Gruppe, direkt in derselben Gruppe.
+    private func openNewTerminal(groupId: String) {
+        guard let g = store.group(id: groupId) else { return }
+        startSession(group: g, cwd: g.cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
     }
 
     private func openNewSession(groupId: String?) {
@@ -775,10 +867,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Fenster schließen (roter Knopf) heißt Kadrell beenden: über die Rückfrage, das Fenster bleibt bis dahin offen.
+/// Fenster schließen (roter Knopf) versteckt nur das Fenster, Kadrell läuft mit allen Sessions im Hintergrund
+/// weiter. Menüleisten-Icon oder Dock-Klick holen es zurück, ohne dass Sessions neu anhängen müssen.
 extension AppDelegate: NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        NSApp.terminate(nil)
+        sender.orderOut(nil)
         return false
     }
 }

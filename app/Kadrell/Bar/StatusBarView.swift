@@ -6,9 +6,14 @@ import AppKit
 final class StatusBarView: NSView {
     var crumb: (group: String, session: String)?
     var crumbGroupAttrs: [NSAttributedString.Key: Any]?
+    /// Sessions können nicht geladen werden: steht statt der Session-Zahl in der Mitte, rot.
+    var errorText: String?
     var sessionCount = 0
     var openCount = 0
     var attachText = "läuft 0/0"
+    /// Sessions, die gerade auf dich warten (Status waiting, angehängt). Modul „N warten“ nur bei > 0.
+    var waitingCount = 0
+    var onSelectWaiting: (() -> Void)?
     var usage = Usage.empty
     var layoutMode: LayoutMode = .grid
     var onToggleLayout: (() -> Void)?
@@ -104,6 +109,16 @@ final class StatusBarView: NSView {
         }
         let df = DateFormatter(); df.dateFormat = "HH:mm"
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
+        if waitingCount > 0 {
+            let wt = NSAttributedString(string: "\(waitingCount) warten", attributes: Theme.attrs(11, Theme.bg, bold: true))
+            let ww = wt.size().width + 20
+            rx -= ww
+            Theme.line.setFill(); CGRect(x: rx, y: 0, width: 1, height: b.height - 1).fill()
+            let wr = CGRect(x: rx + 4, y: midY - 9, width: ww - 8, height: 18)
+            Theme.waiting.setFill(); wr.fill()
+            wt.draw(at: CGPoint(x: wr.minX + 10, y: midY - 8))
+            hitRects.append((wr, { [weak self] in self?.onSelectWaiting?() }))
+        }
         module([NSAttributedString(string: attachText, attributes: f)])
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
         func pctString(_ v: Int?) -> NSAttributedString {
@@ -122,6 +137,8 @@ final class StatusBarView: NSView {
             m.append(NSAttributedString(string: c.session, attributes: fFg))
             if openCount > 1 { m.append(NSAttributedString(string: " · \(openCount) offen", attributes: fMuted)) }
             mid = m
+        } else if let e = errorText {
+            mid = NSAttributedString(string: "kadrell · \(e)", attributes: Theme.attrs(11.5, Theme.error))
         } else {
             mid = NSAttributedString(string: "kadrell · \(sessionCount) sessions", attributes: fMuted)
         }

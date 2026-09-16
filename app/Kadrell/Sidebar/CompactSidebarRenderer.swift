@@ -13,7 +13,7 @@ struct CompactSidebarRenderer: SidebarRenderer {
         if !g.first { Theme.line.setFill(); CGRect(x: 0, y: r.minY, width: r.width, height: 1).fill() }
         if g.selected { g.color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
         drawChevron(g, head: r)
-        var x = drawFavorite(g, head: r)
+        var x = drawWaitingBadge(g, head: r, right: drawFavorite(g, head: r))
         for c in g.dots.reversed() {
             x -= 5
             c.setFill()

@@ -7,6 +7,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case swapLeft, swapRight, swapUp, swapDown
     case nextSession, prevSession, lastSession
     case previewNext, previewPrev
+    case nextWaiting
     case focus1, focus2, focus3, focus4, focus5, focus6, focus7, focus8, focus9
     case zoom, nextLayout, closeFocused, openEditor, renameSession, syncInput
     case focusSidebar, focusWorkspace, cycleSort
@@ -30,6 +31,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .lastSession: return "Zuletzt fokussierte Kachel"
         case .previewNext: return "Vorschau: nächste Session im Baum"
         case .previewPrev: return "Vorschau: vorige Session im Baum"
+        case .nextWaiting: return "Nächste wartende Session"
         case .zoom: return "Zoom: Fokus-Kachel allein"
         case .nextLayout: return "Grid ↔ Stack"
         case .focusSidebar: return "Baum: Tastatur hierher, ↑↓ wählt Session"
@@ -50,6 +52,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .swapLeft, .swapRight, .swapUp, .swapDown: return "Fokus-Kachel mit Nachbar tauschen"
         case .nextSession, .prevSession: return "Nächste / vorige Kachel"
         case .previewNext, .previewPrev: return "Baum als Vorschau durchblättern, Auswahl bleibt · ⏎ übernimmt, Esc zurück"
+        case .nextWaiting: return "Springt zur nächsten Session, die auf dich wartet"
         case .closeFocused: return "Fokus-Kachel schließen (Esc selbst geht an Claude)"
         case .openEditor: return "Ordner der Fokus-Session im Editor aus den Einstellungen öffnen"
         case .renameSession: return "Fokus-Session umbenennen, auch im Baum · Claude überschreibt den Namen danach nicht mehr"
@@ -74,6 +77,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .lastSession: return Hotkey(.option, "⇥")
         case .previewNext: return Hotkey(.option, "j")
         case .previewPrev: return Hotkey(.option, "k")
+        case .nextWaiting: return Hotkey(.option, "w")
         case .zoom: return Hotkey(.option, "z")
         case .nextLayout: return Hotkey(.command, "l")
         case .focusSidebar: return Hotkey(.command, "1")
