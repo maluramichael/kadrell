@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.23.1 (2026-09-16)
+
+- Fix: Die Vorschau (⌥J/⌥K) zeigt bei einer noch nicht gestarteten Session nicht mehr endlos „Startet …“, sondern dass ⏎ oder ein Klick sie startet.
+
 ## 1.23.0 (2026-09-16)
 
 - Feature: Klick auf die Farbe im Dialog „Gruppe bearbeiten“ klappt sieben Farbpaletten auf (Catppuccin, Tailwind, Nord, Dracula, Gruvbox, Rosé Pine, Okabe-Ito), ein Klick auf ein Kästchen übernimmt die Farbe.

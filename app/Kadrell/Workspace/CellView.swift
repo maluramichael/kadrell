@@ -17,6 +17,8 @@ final class CellView: NSView {
     var attached = false
     /// Claude hat sich beendet oder wurde gestoppt; ohne das Flag startet der Prozess gerade.
     var ended = false
+    /// Vorschau (⌥J/⌥K) startet keinen Prozess: ohne Terminal kein „STARTET …“.
+    var previewing = false
     var lines: [String] = []
     var pulse: CGFloat = 1
     /// Stack: die Titelzeile zeichnet die Arbeitsfläche als Stack-Zeile, die Kachel nur den Körper.
@@ -116,6 +118,8 @@ final class CellView: NSView {
             drawHatch(in: body)
             if !lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
             drawLabel("BEENDET · KLICK SETZT FORT", in: body)
+        } else if !attached, previewing {
+            drawLabel("VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET", in: body)
         } else if !attached {
             Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
             drawLabel("STARTET …", in: body)

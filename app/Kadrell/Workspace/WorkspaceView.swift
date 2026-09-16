@@ -302,6 +302,7 @@ final class WorkspaceView: NSView {
             v.hovered = hoveredCell == key
             v.attached = attach?.isAttached(key) ?? false
             v.ended = attach?.isEnded(key) ?? false
+            v.previewing = preview == key
             v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
             v.lines = attach?.lines(for: key) ?? []
             v.pulse = pulse
