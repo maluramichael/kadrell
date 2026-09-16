@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
     private var fontScrollAccum: CGFloat = 0
+    private var statusItem: NSStatusItem?
     /// Session, für die zuletzt `session-focus` gefeuert hat.
     private var hookFocus: String?
     /// ⌘A/⌘⇧A: Auswahl davor und danach, damit ein zweiter Druck zurückschaltet.
@@ -49,9 +50,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set(true, forKey: "helpShown")
             showAbout()
         }
+        buildStatusItem()
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    /// Menüleisten-Icon mit Kurzstatus, holt das Fenster zurück. Bleibt sichtbar, solange Kadrell läuft,
+    /// auch wenn das Fenster versteckt ist.
+    private func buildStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "Kadrell")
+        item.button?.image?.isTemplate = true
+        item.button?.action = #selector(statusItemClicked)
+        item.button?.target = self
+        statusItem = item
+    }
+
+    @objc private func statusItemClicked() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
+    /// "3 warten · 5 arbeiten" im Menüleisten-Icon, leer ohne beschäftigte Sessions.
+    private func updateStatusItem(_ sessions: [Session]) {
+        let waiting = sessions.filter { $0.status == .waiting }.count
+        let running = sessions.filter { $0.status == .running }.count
+        statusItem?.button?.title = waiting == 0 && running == 0 ? "" : "  \(waiting) warten · \(running) arbeiten"
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Dock-Klick, während das Fenster versteckt ist: zurückholen statt neu zu starten.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        return true
+    }
 
     /// Laufen Claude-Prozesse, erst nachfragen (⌘Q, Menü, Dock, Abmelden, SIGTERM). Abbrechen und Rückfrage
     /// statt `.terminateLater`: der Dialog ist ein eigenes Overlay und braucht die normale Run-Loop.
@@ -311,6 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.sort = sidebar.sort
         bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
         bar.needsDisplay = true
+        updateStatusItem(Array(sessions.values))
     }
 
     // MARK: Menü
@@ -784,10 +817,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Fenster schließen (roter Knopf) heißt Kadrell beenden: über die Rückfrage, das Fenster bleibt bis dahin offen.
+/// Fenster schließen (roter Knopf) versteckt nur das Fenster, Kadrell läuft mit allen Sessions im Hintergrund
+/// weiter. Menüleisten-Icon oder Dock-Klick holen es zurück, ohne dass Sessions neu anhängen müssen.
 extension AppDelegate: NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        NSApp.terminate(nil)
+        sender.orderOut(nil)
         return false
     }
 }

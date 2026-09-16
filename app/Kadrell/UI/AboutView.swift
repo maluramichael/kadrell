@@ -17,6 +17,7 @@ struct AboutView: View {
                 ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌥ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"), ("⌘⇧B", "Alle Gruppen auf- oder zuklappen"),
             ] + rows([.cycleSort])),
             ("Fenster und App", [
+                ("Rundes X", "Fenster nur verstecken, Sessions laufen weiter"), ("Menüleisten-Icon / Dock", "Fenster zurückholen"),
                 ("⌘M", "Im Dock ablegen"), ("⌘ Mausrad", "Terminal-Schrift aller Sessions größer/kleiner"),
                 ("⌘,", "Einstellungen: Startordner, Darstellung, Tastenkürzel"), ("F1", "diese Hilfe"),
             ]),
