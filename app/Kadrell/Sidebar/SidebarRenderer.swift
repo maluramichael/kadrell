@@ -138,11 +138,9 @@ extension SidebarRenderer {
             .draw(with: CGRect(x: x, y: head.midY - 8, width: max(0, right - x), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
-    /// Gruppenname; Host-Gruppen tragen statt `prefix` ein Server-Symbol vor dem Namen.
+    /// Gruppenname; das Server-Symbol tragen nur die Sessions einer Host-Gruppe.
     func drawGroupName(_ g: SidebarGroupItem, prefix: String = "", head: CGRect, right: CGFloat) {
-        guard g.group.host != nil else { drawName(prefix + g.group.name, color: g.color, head: head, right: right); return }
-        Icons.server(in: CGRect(x: 26, y: head.midY - 6, width: 12, height: 12), color: g.color)
-        drawName(g.group.name, color: g.color, head: head, right: right, x: 42)
+        drawName(prefix + g.group.name, color: g.color, head: head, right: right)
     }
 
     func drawPath(_ g: SidebarGroupItem, below head: CGRect) {

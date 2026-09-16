@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.32.1 (2026-09-16)
+
+- Änderung: Zahlenwerte in den Einstellungen (Schriftgröße, Zeilenabstand, UI-Größe, Abstände, Deckkraft) haben Schieberegler statt langer Dropdowns, der Wert steht daneben.
+- Änderung: Host-Gruppen im Baum tragen kein Server-Symbol mehr, nur ihre Sessions.
+
 ## 1.32.0 (2026-09-16)
 
 - Feature: Neuer Bereich „Anpassen“ in den Einstellungen: Hintergrundbild für die Arbeitsfläche (wählen, hineinziehen oder Pfad eintippen) und Deckkraft der Kacheln von 0 bis 100 %. Unter 100 % scheint das Bild durch Kacheln und Terminals, der Text bleibt voll sichtbar.

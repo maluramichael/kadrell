@@ -102,11 +102,10 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "claude.effort") }
     }
 
-    /// Prozentwerte in 5er-Schritten als Faktor, Pixelwerte in 2er-Schritten: ganze Zahlen im Menü, lange Listen bleiben bedienbar.
-    static let uiScales = stride(from: 50, through: 200, by: 5).map { Double($0) / 100 }
-    static let lineSpacings = stride(from: 50, through: 300, by: 5).map { Double($0) / 100 }
-    static let paddings = stride(from: 0, through: 64, by: 2).map(Double.init)
-    static let tileGaps = stride(from: 0, through: 64, by: 2).map(Double.init)
+    /// Bereiche der Schieberegler, Prozentwerte in Prozent (gespeichert als Faktor).
+    static let uiScalePercent = 50.0...200.0
+    static let lineSpacingPercent = 50.0...300.0
+    static let pixelRange = 0.0...64.0
     static let fontSizes = 6.0...72.0
     static let defaultFontSize = 12.0
     static let defaultFontName = "JetBrainsMonoNF-Regular"
@@ -142,7 +141,6 @@ enum Settings {
         get { UserDefaults.standard.string(forKey: "workspace.backgroundImage") ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: "workspace.backgroundImage") }
     }
-    static let opacities = stride(from: 0, through: 100, by: 5).map { Double($0) / 100 }
     /// Deckkraft des Kachelkörpers samt Terminal-Hintergrund; Text bleibt voll sichtbar. 1 = undurchsichtig.
     static var tileOpacity: Double {
         get { double("tiles.opacity", 1) }
@@ -382,15 +380,12 @@ struct SettingsView: View {
             heading("Darstellung")
             table {
                 setting("Farbschema") { menu($model.colorTheme, ColorTheme.all.map { ($0.id, $0.name) }) }
-                setting("UI-Größe") { menu($model.uiScale, Settings.uiScales.map { ($0, "\(Int(($0 * 100).rounded())) %") }) }
+                setting("UI-Größe") { slider($model.uiScale, Settings.uiScalePercent, step: 5, factor: 100, unit: "%") }
                 setting("Terminal-Schrift") { menu($model.fontName, model.fonts.map { ($0.name, $0.display) }) }
-                setting("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad") {
-                    menu(Binding(get: { model.fontSize.rounded() }, set: { model.fontSize = $0 }),
-                         stride(from: Settings.fontSizes.lowerBound, through: Settings.fontSizes.upperBound, by: 1).map { ($0, "\(Int($0)) pt") })
-                }
-                setting("Zeilenabstand") { menu($model.lineSpacing, Settings.lineSpacings.map { ($0, "\(Int(($0 * 100).rounded())) %") }) }
-                setting("Innenabstand der Kacheln") { menu($model.padding, Settings.paddings.map { ($0, "\(Int($0)) px") }) }
-                setting("Abstand zwischen Kacheln") { menu($model.tileGap, Settings.tileGaps.map { ($0, "\(Int($0)) px") }) }
+                setting("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad") { slider($model.fontSize, Settings.fontSizes, step: 1, unit: "pt") }
+                setting("Zeilenabstand") { slider($model.lineSpacing, Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
+                setting("Innenabstand der Kacheln") { slider($model.padding, Settings.pixelRange, step: 1, unit: "px") }
+                setting("Abstand zwischen Kacheln") { slider($model.tileGap, Settings.pixelRange, step: 1, unit: "px") }
                 setting("Terminal auf der GPU zeichnen (Metal)") { onOff($model.metal) }
             }
 
@@ -417,7 +412,7 @@ struct SettingsView: View {
                         .buttonStyle(.plain).help("Kein Bild")
                     }
                 }
-                setting("Deckkraft der Kacheln") { menu($model.tileOpacity, Settings.opacities.map { ($0, "\(Int(($0 * 100).rounded())) %") }) }
+                setting("Deckkraft der Kacheln") { slider($model.tileOpacity, 0...100, step: 1, factor: 100, unit: "%") }
             }
 
             heading("Baum und Kacheln")
@@ -506,6 +501,16 @@ struct SettingsView: View {
         }
         .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
         .frame(width: controlWidth)
+    }
+
+    /// Ganzzahliger Schieberegler mit Wert rechts daneben. `factor` rechnet gespeicherte Faktoren in Prozent um.
+    private func slider(_ value: Binding<Double>, _ range: ClosedRange<Double>, step: Double, factor: Double = 1, unit: String) -> some View {
+        let shown = Binding(get: { (value.wrappedValue * factor).rounded() }, set: { value.wrappedValue = ($0 / step).rounded() * step / factor })
+        return HStack(spacing: 10) {
+            Slider(value: shown, in: range, step: step).controlSize(.small).tint(Theme.runningColor)
+            Text("\(Int(shown.wrappedValue)) \(unit)").monospacedDigit().foregroundStyle(Theme.fgColor)
+                .frame(width: 60 * Theme.scale, alignment: .trailing)
+        }
     }
 
     private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, "an"), (false, "aus")]) }
