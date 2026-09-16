@@ -172,6 +172,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         sidebar.onMoveGroup = { [weak self] gid, target in self?.store.moveGroup(gid, to: target); self?.reloadViews() }
         workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
+        sidebar.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
+        workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
         bar.onToggleAuto = { [weak self] in self?.workspace.toggleAuto() }
@@ -386,7 +388,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Ansicht", action: nil, keyEquivalent: "").submenu = view
 
         let session = NSMenu(title: "Session")
-        session.addItem(withTitle: "Stoppen", action: #selector(menuStop), keyEquivalent: "")
+        for item in sessionMenuItems(for: nil, shortcuts: true) { session.addItem(item) }
         main.addItem(withTitle: "Session", action: nil, keyEquivalent: "").submenu = session
 
         let windows = NSMenu(title: "Fenster")
@@ -571,10 +573,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard NSApp.keyWindow === window, let key = workspace.focused else { NSSound.beep(); return }
         closeSession(key)
     }
-    @objc private func menuStop() {
-        guard let key = workspace.focused, let s = workspace.session(key) else { NSSound.beep(); return }
-        stopSession(s)
-    }
 
     // MARK: Palette
 
@@ -653,7 +651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         confirm("Claude CLI meldet einen Fehler", String(describing: error), button: "OK", destructive: false) {}
     }
 
-    private func stopSession(_ s: Session) {
+    func stopSession(_ s: Session) {
         guard attach.isAttached(s.id) else { NSSound.beep(); return }
         confirm("Session „\(s.title)“ stoppen?", "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort.", button: "Stoppen", ask: .stopSession) { [weak self] in
             self?.attach.stop(s.id)

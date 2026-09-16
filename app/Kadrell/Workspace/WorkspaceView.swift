@@ -44,6 +44,8 @@ final class WorkspaceView: NSView {
     var onRenameSession: ((String) -> Void)?
     /// Ziehen: (gezogen, Ziel). Die Reihenfolge selbst gehört dem Baum, siehe `sortSelected`.
     var onMoveSession: ((String, String) -> Void)?
+    /// Rechtsklick auf Kachel-Header oder Stack-Zeile: liefert das Kontextmenü der Session.
+    var onContextMenu: ((String) -> NSMenu?)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -470,6 +472,15 @@ final class WorkspaceView: NSView {
         if let c = hoveredCell { cells[c]?.hovered = false; cells[c]?.needsDisplay = true }
         hoveredCell = nil; hoveredRow = nil
         needsDisplay = true
+    }
+
+    /// Rechtsklick (bzw. Ctrl-Klick): Kontextmenü der Session unter Kachel-Header oder Stack-Zeile.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        switch hit(at: convert(event.locationInWindow, from: nil)) {
+        case .cell(let k), .cellClose(let k), .cellRename(let k), .row(let k), .rowClose(let k), .rowRename(let k):
+            return onContextMenu?(k)
+        case .none: return nil
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
