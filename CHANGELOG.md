@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.22.1 (2026-09-16)
+
+- Fix: Bei eingeschaltetem Sync sind alle Kacheln, die die Eingabe bekommen, sichtbar ausgewählt.
+
 ## 1.22.0 (2026-09-16)
 
 - Feature: ⌘T öffnet ein Terminal ohne Claude im Ordner der fokussierten Session. `exit` schließt die Kachel wieder.
