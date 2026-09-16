@@ -148,13 +148,13 @@ extension Theme {
         .custom(bold ? "JetBrainsMonoNF-Bold" : "JetBrainsMonoNF-Regular", size: size * scale)
     }
 
-    static let bgColor = Color(nsColor: bg)
-    static let panelColor = Color(nsColor: panel)
-    static let surfaceColor = Color(nsColor: surface)
-    static let lineColor = Color(nsColor: line)
-    static let fgColor = Color(nsColor: fg)
-    static let mutedColor = Color(nsColor: muted)
-    static let runningColor = Color(nsColor: running)
+    static var bgColor: Color { Color(nsColor: bg) }
+    static var panelColor: Color { Color(nsColor: panel) }
+    static var surfaceColor: Color { Color(nsColor: surface) }
+    static var lineColor: Color { Color(nsColor: line) }
+    static var fgColor: Color { Color(nsColor: fg) }
+    static var mutedColor: Color { Color(nsColor: muted) }
+    static var runningColor: Color { Color(nsColor: running) }
 }
 
 

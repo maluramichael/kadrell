@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.24.0 (2026-09-16)
+
+- Feature: Farbschemata für die ganze Oberfläche und die Terminals, dunkel und hell: Catppuccin Mocha und Latte, Monokai, Dracula, Nord, Gruvbox, One Dark, Solarized Dark und Light, GitHub Light. Auswahl in den Einstellungen unter Darstellung.
+
 ## 1.23.4 (2026-09-16)
 
 - Fix: Im kompakten Baum sitzt die Trennlinie direkt unter der letzten Session einer Gruppe, ohne Lücke.

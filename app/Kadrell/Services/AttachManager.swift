@@ -106,8 +106,7 @@ final class AttachManager {
         let t = KadrellTerminalView(frame: NSRect(x: 0, y: 0, width: 960, height: 600), font: Settings.terminalFont, options: .default)
         t.lineSpacing = CGFloat(Settings.terminalLineSpacing)
         t.nativeBackgroundColor = Theme.bg
-        t.nativeForegroundColor = Theme.fg
-        t.caretColor = Theme.fg
+        applyColors(t)
         let key = session.id
         t.onExit = { [weak self] in
             guard let self else { return }
@@ -170,10 +169,26 @@ final class AttachManager {
     /// Schrift und Zeilenabstand aus den Einstellungen auf alle offenen Terminals; SwiftTerm passt Spalten und Zeilen selbst an.
     func applyTerminalSettings() {
         let font = Settings.terminalFont, spacing = CGFloat(Settings.terminalLineSpacing)
+        let recolor = themeId != Theme.current.id
+        themeId = Theme.current.id
         for t in terminals.values {
             if t.font != font { t.font = font }
             if t.lineSpacing != spacing { t.lineSpacing = spacing }
+            if recolor { applyColors(t) }
         }
+    }
+
+    private var themeId = Theme.current.id
+
+    /// Schrift, Cursor und ANSI-Farben aus dem Farbschema; den Hintergrund setzt die Kachel.
+    private func applyColors(_ t: KadrellTerminalView) {
+        t.nativeForegroundColor = Theme.fg
+        t.caretColor = Theme.fg
+        let ansi = Theme.current.ansi.map { c -> SwiftTerm.Color in
+            let s = c.usingColorSpace(.sRGB) ?? c
+            return SwiftTerm.Color(red: UInt16(s.redComponent * 65535), green: UInt16(s.greenComponent * 65535), blue: UInt16(s.blueComponent * 65535))
+        }
+        t.installColors(ansi + ansi)
     }
 
     func detachAll() {

@@ -41,7 +41,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        appearance = NSAppearance(named: .darkAqua)
+        appearance = Theme.appearance
         let root = NSView(frame: contentRect(forFrameRect: frame))
         root.wantsLayer = true
         root.layer?.backgroundColor = Theme.panel.cgColor

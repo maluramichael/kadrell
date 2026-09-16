@@ -24,6 +24,12 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "showLastMessage") }
     }
 
+    /// Farbschema der Oberfläche und Terminals, Default Catppuccin Mocha.
+    static var colorTheme: String {
+        get { UserDefaults.standard.string(forKey: "colorTheme") ?? ColorTheme.all[0].id }
+        set { UserDefaults.standard.set(newValue, forKey: "colorTheme") }
+    }
+
     /// Aussehen des Baums, Default getönte Gruppen.
     static var sidebarStyle: SidebarStyle {
         get { UserDefaults.standard.string(forKey: "sidebar.style").flatMap(SidebarStyle.init) ?? .tinted }
@@ -185,6 +191,7 @@ final class SettingsModel {
     var claudeEffort = Settings.claudeEffort
     var hotkeys = Hotkeys.current
     var uiScale = Settings.uiScale
+    var colorTheme = Settings.colorTheme
     var fontName = Settings.terminalFontName
     var fontSize = Settings.terminalFontSize
     var lineSpacing = Settings.terminalLineSpacing
@@ -218,6 +225,7 @@ final class SettingsModel {
         Settings.claudeEffort = claudeEffort
         Hotkeys.current = hotkeys
         Settings.uiScale = uiScale
+        Settings.colorTheme = colorTheme
         Settings.terminalFontName = fontName
         Settings.terminalFontSize = fontSize
         Settings.terminalLineSpacing = lineSpacing
@@ -323,6 +331,12 @@ struct SettingsView: View {
 
             heading("Darstellung")
             VStack(spacing: 6) {
+                setting("Farbschema") {
+                    Picker("", selection: $model.colorTheme) {
+                        ForEach(ColorTheme.all, id: \.id) { Text($0.name).tag($0.id) }
+                    }
+                    .labelsHidden().pickerStyle(.menu).frame(width: 260 * Theme.scale)
+                }
                 setting("UI-Größe") { choice(Settings.uiScales, $model.uiScale) { "\(Int(($0 * 100).rounded())) %" } }
                 setting("Terminal-Schrift") {
                     Picker("", selection: $model.fontName) {

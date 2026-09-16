@@ -182,7 +182,7 @@ final class SidebarView: NSView {
             let ic = b.insetBy(dx: 2, dy: 2)
             switch (rows[i], k) {
             case (.group(let g), 0):
-                Icons.heart(in: ic.insetBy(dx: 1, dy: 1), color: g.isFavorite ? NSColor(hexString: g.color) : color, filled: g.isFavorite)
+                Icons.heart(in: ic.insetBy(dx: 1, dy: 1), color: g.isFavorite ? Theme.group(g.color) : color, filled: g.isFavorite)
             case (.group, 1): Icons.plus(in: ic, color: color)
             case (.group, 2), (.session, 0): Icons.pen(in: ic, color: color)
             default: Icons.x(in: ic, color: color)
@@ -236,12 +236,12 @@ final class SidebarView: NSView {
 
     private func drawGroup(_ g: Group, in r: CGRect, first: Bool, hover: Bool) {
         let dots = g.sessionIds.compactMap { sessions[$0] }.map { attach?.isAttached($0.id) ?? false ? Theme.color(for: $0.status) : Theme.detached }
-        renderer.drawGroup(SidebarGroupItem(group: g, color: NSColor(hexString: g.color), dots: dots, open: !collapsed.contains(g.id),
+        renderer.drawGroup(SidebarGroupItem(group: g, color: Theme.group(g.color), dots: dots, open: !collapsed.contains(g.id),
                                             selected: g.sessionIds.contains { selected.contains($0) }, hover: hover, first: first), in: r)
     }
 
     private func drawSession(_ s: Session, group g: Group, in r: CGRect, hover: Bool) {
-        renderer.drawSession(SidebarSessionItem(session: s, color: NSColor(hexString: g.color), dot: dotColor(s),
+        renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,
                                                 message: showMessages ? messages[s.id] : nil, showAge: showAge), in: r)

@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1400, height: 900),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Kadrell"
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = Theme.appearance
         window.backgroundColor = Theme.bg
         window.minSize = NSSize(width: 800, height: 500)
         window.setFrameAutosaveName("KadrellMain")
@@ -301,7 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hookFocus = key
             Hooks.fire(.sessionFocus, s, environment: cli.environment)
         }
-        bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, NSColor(hexString: $0.color)) }
+        bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
@@ -428,7 +428,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Darstellung aus den Einstellungen übernehmen, ohne Neustart: Leiste, Baum, Kacheln, Terminals, Palette.
     private func applyAppearance() {
-        if Theme.scale != CGFloat(Settings.uiScale) {
+        let themeChanged = Theme.current.id != Settings.colorTheme
+        if themeChanged {
+            Theme.current = ColorTheme.named(Settings.colorTheme)
+            window.appearance = Theme.appearance
+            window.backgroundColor = Theme.bg
+            sidebarScroll.backgroundColor = Theme.panel
+            split.needsDisplay = true
+        }
+        if themeChanged || Theme.scale != CGFloat(Settings.uiScale) {
             Theme.scale = CGFloat(Settings.uiScale)
             if palette.isVisible { palette.dismiss() }
             palette = PaletteWindow()

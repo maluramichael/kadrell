@@ -24,7 +24,7 @@ final class OverlayPanel: NSPanel {
         isOpaque = true
         backgroundColor = Theme.panel
         hasShadow = true
-        appearance = NSAppearance(named: .darkAqua)
+        appearance = Theme.appearance
         contentViewController = host
         host.view.wantsLayer = true
         host.view.layer?.borderColor = Theme.line.cgColor

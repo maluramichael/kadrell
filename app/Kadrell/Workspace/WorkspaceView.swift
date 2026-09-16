@@ -294,7 +294,7 @@ final class WorkspaceView: NSView {
             if v.frame != f { v.frame = f }
             let g = group(forSession: key)
             v.groupName = g?.name ?? ""
-            v.groupColor = NSColor(hexString: g?.color ?? "#6c7086")
+            v.groupColor = Theme.group(g?.color ?? "#6c7086")
             // Sync: alle Kacheln bekommen Eingaben, also sehen auch alle ausgewählt aus.
             v.focused = (focused == key || sync) && visible.count > 1
             v.zoomed = zen && tiles.count > 1
@@ -390,7 +390,7 @@ final class WorkspaceView: NSView {
     private func drawStackRow(_ r: CGRect, key: String) {
         guard let s = sessions[key] else { return }
         let g = group(forSession: key)
-        let color = NSColor(hexString: g?.color ?? "#6c7086")
+        let color = Theme.group(g?.color ?? "#6c7086")
         let on = focused == key || sync, hover = hoveredRow == key
         color.mixed(on ? 0.22 : 0.1, into: on ? Theme.surface : Theme.panel).setFill()
         r.fill()
