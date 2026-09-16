@@ -6,6 +6,8 @@ import AppKit
 final class StatusBarView: NSView {
     var crumb: (group: String, session: String)?
     var crumbGroupAttrs: [NSAttributedString.Key: Any]?
+    /// Sessions können nicht geladen werden: steht statt der Session-Zahl in der Mitte, rot.
+    var errorText: String?
     var sessionCount = 0
     var openCount = 0
     var attachText = "läuft 0/0"
@@ -122,6 +124,8 @@ final class StatusBarView: NSView {
             m.append(NSAttributedString(string: c.session, attributes: fFg))
             if openCount > 1 { m.append(NSAttributedString(string: " · \(openCount) offen", attributes: fMuted)) }
             mid = m
+        } else if let e = errorText {
+            mid = NSAttributedString(string: "kadrell · \(e)", attributes: Theme.attrs(11.5, Theme.error))
         } else {
             mid = NSAttributedString(string: "kadrell · \(sessionCount) sessions", attributes: fMuted)
         }

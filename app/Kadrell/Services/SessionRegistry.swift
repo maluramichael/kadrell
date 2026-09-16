@@ -9,6 +9,10 @@ final class SessionRegistry {
     private(set) var sessions: [Session] = []
     /// Letzte Textantwort von Claude je Session (`Session.id`), nur wenn in den Einstellungen eingeschaltet.
     private(set) var lastMessages: [String: String] = [:]
+    /// Binary nicht gefunden oder `claude agents` schlägt fehl. Von außen über `fail(_:)` gesetzt, kein Poll räumt es wieder ab.
+    private(set) var lastError: String?
+    /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
+    private(set) var polled = false
     private var transcripts: [String: Transcript.Entry] = [:]
     /// Ersatztitel je sessionId. Die erste Nachricht ändert sich nicht, einmal gefunden wird nie wieder gelesen.
     private var firstPrompts: [String: String] = [:]
@@ -61,6 +65,12 @@ final class SessionRegistry {
         onChange?(sessions)
     }
 
+    /// Binary fehlt oder `claude agents` schlägt fehl: vom Aufrufer gesetzt, kein Poll räumt es automatisch wieder ab.
+    func fail(_ message: String) {
+        lastError = message
+        onChange?(sessions)
+    }
+
     func pollNow() async {
         let pids = pids()
         let agents = Agent.local(pids: Array(pids.keys), configDir: cli.configDir)
@@ -82,7 +92,10 @@ final class SessionRegistry {
             transcripts = await Task.detached { Transcript.refresh(ids, cache: cache) }.value
             for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
         }
-        if merged != sessions || messages != lastMessages {
+        // Erster Poll meldet sich auch ohne Änderung: Registrierte hören darauf, um den Lade-Zustand zu verlassen.
+        let firstPoll = !polled
+        polled = true
+        if merged != sessions || messages != lastMessages || firstPoll {
             let persisted = merged.map(\.stored) != sessions.map(\.stored)
             sessions = merged
             lastMessages = messages
