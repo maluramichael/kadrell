@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.18.0 (2026-09-16)
+
+- Änderung: ⌘A wählt alle Sessions der Gruppen aus, in denen schon etwas ausgewählt ist. Nochmal ⌘A stellt die Auswahl davor wieder her.
+- Feature: ⌘⇧A wählt alle Sessions über alle Gruppen aus, nochmal ⌘⇧A geht zurück zur Auswahl davor.
+
 ## 1.17.1 (2026-09-16)
 
 - Fix: In schmalen Kacheln überlappen sich Titel und Branch nicht mehr. Wird es eng, verschwinden erst Projekt und Branch, der Titel bleibt stehen.

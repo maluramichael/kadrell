@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fontScrollAccum: CGFloat = 0
     /// Session, für die zuletzt `session-focus` gefeuert hat.
     private var hookFocus: String?
+    /// ⌘A/⌘⇧A: Auswahl davor und danach, damit ein zweiter Druck zurückschaltet.
+    private var selectAllUndo: (shift: Bool, before: [String], focus: String?, after: Set<String>)?
     var controlServer: ControlServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -324,7 +326,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         edit.addItem(withTitle: "Ausschneiden", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         edit.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Einsetzen", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Alles auswählen", action: #selector(menuSelectAll), keyEquivalent: "a")
+        edit.addItem(withTitle: "Ganze Gruppen auswählen", action: #selector(menuSelectAll), keyEquivalent: "a")
+        let selectEverything = NSMenuItem(title: "Alle Sessions auswählen", action: #selector(menuSelectEverything), keyEquivalent: "a")
+        selectEverything.keyEquivalentModifierMask = [.command, .shift]
+        edit.addItem(selectEverything)
         edit.addItem(.separator())
         // Suchleiste von SwiftTerm im Terminal mit der Tastatur, über die Responder-Kette.
         for (title, key, shift, action) in [("Im Terminal suchen …", "f", false, NSTextFinder.Action.showFindInterface),
@@ -414,10 +419,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attach?.applyTerminalSettings()
         reloadViews()
     }
-    /// ⌘A: in einem Textfeld die übliche Textauswahl, sonst alle Sessions rechts öffnen.
+    /// ⌘A: in einem Textfeld die übliche Textauswahl, sonst alle Sessions der Gruppen, in denen schon etwas ausgewählt ist.
     @objc private func menuSelectAll() {
         if let t = NSApp.keyWindow?.firstResponder as? NSText { t.selectAll(nil); return }
-        workspace.select(store.groups.flatMap(\.sessionIds), add: false)
+        let chosen = Set(workspace.selected)
+        toggleSelection(store.groups.filter { !chosen.isDisjoint(with: $0.sessionIds) }.flatMap(\.sessionIds), shift: false)
+    }
+    /// ⌘⇧A: alle Sessions aller Gruppen.
+    @objc private func menuSelectEverything() { toggleSelection(store.groups.flatMap(\.sessionIds), shift: true) }
+
+    /// Nochmal dasselbe Kürzel, solange die Auswahl unverändert ist: zurück zur Auswahl davor.
+    private func toggleSelection(_ ids: [String], shift: Bool) {
+        if let u = selectAllUndo, u.shift == shift, u.after == Set(workspace.selected) {
+            selectAllUndo = nil
+            workspace.select(u.before, add: false)
+            if let f = u.focus { workspace.setFocus(f) }
+            return
+        }
+        guard !ids.isEmpty else { NSSound.beep(); return }
+        let before = workspace.selected, focus = workspace.focused
+        workspace.select(ids, add: false)
+        selectAllUndo = (shift, before, focus, Set(workspace.selected))
     }
     @objc private func menuGrid() { workspace.setMode(.grid) }
     @objc private func menuStack() { workspace.setMode(.stack) }

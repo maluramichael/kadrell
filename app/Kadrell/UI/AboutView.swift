@@ -6,7 +6,7 @@ struct AboutView: View {
         [
             ("Sessions öffnen", [
                 ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
-                ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "alle Sessions öffnen"),
+                ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "ganze Gruppen der Auswahl, nochmal: zurück"), ("⌘⇧A", "alle Sessions, nochmal: zurück"),
                 ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"),
             ] + rows([.openEditor, .renameSession]) + [("Stift", "an Kachel und Baum-Zeile: umbenennen")]),
             ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev]
