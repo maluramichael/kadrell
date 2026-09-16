@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sidebar-Varianten</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #11111b; --panel: #181825; --surface: #1e1e2e; --line: #313244;
+  --fg: #cdd6f4; --sub: #a6adc8; --muted: #6c7086; --faint: #45475a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; }
+header.page { padding: 28px 24px 8px; max-width: 1500px; margin: 0 auto; }
+h1 { margin: 0 0 6px; font-size: 22px; }
+.lead { color: var(--sub); margin: 0 0 18px; max-width: 900px; }
+.fixes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.fix { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--sub); }
+.fix b { color: var(--fg); display: block; margin-bottom: 2px; }
+.controls { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; color: var(--sub); font-size: 13px; padding: 10px 0; position: sticky; top: 0; background: var(--bg); z-index: 5; border-bottom: 1px solid var(--line); }
+.controls input[type=range] { width: 160px; }
+main { max-width: 1500px; margin: 0 auto; padding: 16px 24px 60px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 700px), 1fr)); gap: 18px; }
+.variant { background: #141420; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.variant h2 { margin: 0; font-size: 16px; display: flex; gap: 8px; align-items: baseline; }
+.variant h2 .no { color: var(--muted); font-weight: 400; font-size: 13px; }
+.variant h2 .tag { font-size: 11px; font-weight: 600; color: #11111b; background: #a6e3a1; border-radius: 99px; padding: 1px 8px; }
+.variant .desc { color: var(--sub); font-size: 13px; margin: 4px 0 12px; }
+.variant .src { color: var(--muted); font-size: 12px; margin: -8px 0 12px; }
+.pair { display: flex; gap: 14px; flex-wrap: wrap; }
+.pair figure { margin: 0; }
+.pair figcaption { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .06em; }
+
+/* ---------- Basis: gilt für alle Varianten ---------- */
+.sb { --w: 320px; width: min(var(--w), calc(100vw - 80px)); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 0; font: 12px/1.2 'JetBrains Mono', ui-monospace, monospace; color: var(--sub); overflow: hidden; }
+.grp { position: relative; }
+.grp + .grp { margin-top: 6px; }
+.gh { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-rows: 20px 14px; column-gap: 6px;
+  align-items: center; padding: 5px 8px 5px 8px; position: relative; cursor: default; }
+.gh:hover, .gh.hov { background: var(--surface); }
+.chev { color: var(--muted); display: grid; place-items: center; }
+.chev svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gname { color: var(--c); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gpath { grid-column: 2 / 4; grid-row: 2; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gmeta, .meta { display: grid; align-items: center; justify-items: end; }
+.gmeta > *, .meta > * { grid-area: 1 / 1; }
+.gmeta { min-width: 88px; }
+.meta { min-width: 44px; flex: none; }
+.rest { display: flex; gap: 6px; align-items: center; transition: opacity .12s; }
+.acts { display: flex; gap: 2px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.gh:hover .acts, .gh.hov .acts, .row:hover .acts, .row.hov .acts { opacity: 1; pointer-events: auto; }
+.gh:hover .rest, .gh.hov .rest, .row:hover .rest, .row.hov .rest { opacity: 0; }
+.ic { width: 20px; height: 20px; display: grid; place-items: center; border: 0; background: none; border-radius: 4px; color: var(--muted); padding: 0; cursor: pointer; }
+.ic:hover { background: var(--line); color: var(--fg); }
+.ic.danger:hover { color: #f38ba8; }
+.ic svg, .fav svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.fav { color: var(--c); display: grid; place-items: center; }
+.fav svg { width: 12px; height: 12px; fill: currentColor; }
+.cnt { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sum { display: flex; gap: 3px; }
+.sum i { width: 5px; height: 5px; border-radius: 50%; background: var(--s); display: block; }
+
+.row { display: flex; align-items: center; gap: 10px; height: 26px; padding: 0 8px 0 32px; position: relative; }
+.row:hover, .row.hov { background: var(--surface); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--s); flex: none; }
+.title { flex: 1; min-width: 0; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.title small { display: none; }
+.row:hover .title, .row.hov .title, .row.focus .title { color: var(--fg); }
+.age { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.row.focus { background: color-mix(in srgb, var(--c) 14%, var(--surface)); }
+.row.focus::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+.guide { display: none; }
+.running .dot { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+
+/* ---------- 1 Empfehlung: Schiene + Tönung + Haarlinie ---------- */
+.v-best .grp + .grp { margin-top: 0; border-top: 1px solid var(--line); }
+.v-best .grp { padding: 4px 0; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 7%, transparent), transparent 75%); }
+.v-best .rows { margin-left: 16px; border-left: 1px solid color-mix(in srgb, var(--c) 35%, transparent); }
+.v-best .row { padding-left: 14px; }
+.v-best .row.focus::before { left: -1px; width: 2px; }
+.v-best .row.focus { background: color-mix(in srgb, var(--c) 12%, transparent); }
+.v-best .row:hover:not(.focus), .v-best .row.hov:not(.focus) { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.v-best .gh:hover, .v-best .gh.hov { background: color-mix(in srgb, var(--fg) 4%, transparent); }
+
+/* ---------- 2 Nur die Fixes ---------- */
+/* Basis reicht */
+
+/* ---------- 3 Haarlinien ---------- */
+.v-lines .grp + .grp { margin-top: 0; border-top: 1px solid var(--line); }
+.v-lines .grp { padding: 4px 0; }
+.v-lines .row + .row { border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent); }
+
+/* ---------- 4 Zebra ---------- */
+.v-zebra .rows .row:nth-child(even):not(.focus):not(:hover):not(.hov) { background: #1c1c2b; }
+.v-zebra .grp + .grp { margin-top: 10px; }
+
+/* ---------- 5 Getönte Gruppen ---------- */
+.v-tint { padding: 0; }
+.v-tint .grp + .grp { margin-top: 0; }
+.v-tint .grp { background: color-mix(in srgb, var(--c) 5%, var(--panel)); padding-bottom: 4px; }
+.v-tint .gh { background: color-mix(in srgb, var(--c) 11%, var(--panel)); }
+.v-tint .gh:hover, .v-tint .gh.hov { background: color-mix(in srgb, var(--c) 16%, var(--panel)); }
+.v-tint .row:hover:not(.focus), .v-tint .row.hov:not(.focus) { background: color-mix(in srgb, var(--c) 10%, var(--panel)); }
+
+/* ---------- 6 Karten ---------- */
+.v-cards { padding: 8px; }
+.v-cards .grp { border: 1px solid color-mix(in srgb, var(--c) 22%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--c) 3%, var(--panel)); overflow: hidden; padding-bottom: 4px; }
+.v-cards .grp + .grp { margin-top: 8px; }
+.v-cards .gh { border-bottom: 1px solid color-mix(in srgb, var(--c) 14%, var(--line)); margin-bottom: 4px; }
+.v-cards .row { padding-left: 26px; }
+
+/* ---------- 7 Farbschiene ---------- */
+.v-rail .grp::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c); opacity: .55; }
+.v-rail .grp + .grp { margin-top: 10px; }
+.v-rail .row.focus::before { width: 3px; opacity: 1; box-shadow: 0 0 10px var(--c); }
+.v-rail .row { padding-left: 30px; }
+
+/* ---------- 8 Baumlinien (neo-tree) ---------- */
+.v-tree .guide { display: block; color: color-mix(in srgb, var(--c) 45%, var(--line)); width: 22px; margin-right: -6px; flex: none; white-space: pre; }
+.v-tree .row { padding-left: 14px; }
+.v-tree .grp + .grp { margin-top: 8px; }
+
+/* ---------- 9 Powerline (tmux) ---------- */
+.v-power .gh { grid-template-rows: 22px 14px; }
+.v-power .gname { font-weight: 700; }
+.v-power .pl { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; background: var(--c); color: #11111b; height: 20px; line-height: 20px; padding: 0 6px 0 8px; border-radius: 4px 0 0 4px; position: relative; }
+.v-power .plw { position: relative; display: inline-flex; padding-right: 10px; max-width: 100%; vertical-align: middle; }
+.v-power .plw::after { content: ''; position: absolute; right: 0; top: 0; border-left: 10px solid var(--c); border-top: 10px solid transparent; border-bottom: 10px solid transparent; }
+.v-power .cnt { background: var(--surface); color: var(--c); border-radius: 99px; padding: 1px 7px; }
+.v-power .gpath { padding-left: 2px; }
+.v-power .grp + .grp { margin-top: 10px; }
+
+/* ---------- 10 Waybar-Pills ---------- */
+.v-pills .age { background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 1px 7px; min-width: 38px; text-align: center; }
+.v-pills .dot { width: 6px; height: 6px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--s) 22%, transparent); }
+.v-pills .cnt { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); border-radius: 99px; padding: 1px 8px; font-weight: 700; }
+.v-pills .gname { background: color-mix(in srgb, var(--c) 14%, transparent); border-radius: 99px; padding: 2px 10px; justify-self: start; max-width: 100%; }
+.v-pills .gpath { padding-left: 10px; }
+.v-pills .grp + .grp { margin-top: 10px; }
+.v-pills .row { margin: 1px 6px; border-radius: 99px; padding-left: 24px; }
+.v-pills .row.focus::before { display: none; }
+.v-pills .row.focus { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent); }
+
+/* ---------- 11 btop-Box ---------- */
+.v-box { padding: 12px 8px 8px; }
+.v-box .grp { border: 1px solid color-mix(in srgb, var(--c) 40%, var(--line)); border-radius: 6px; padding: 8px 0 4px; }
+.v-box .grp + .grp { margin-top: 16px; }
+.v-box .gh { grid-template-rows: 16px; padding-top: 0; }
+.v-box .gh:hover, .v-box .gh.hov { background: none; }
+.v-box .gname { position: absolute; top: -18px; left: 8px; background: var(--panel); padding: 0 6px; max-width: calc(100% - 90px); }
+.v-box .gname::before { content: '┤ '; color: color-mix(in srgb, var(--c) 40%, var(--line)); font-weight: 400; }
+.v-box .gname::after { content: ' ├'; color: color-mix(in srgb, var(--c) 40%, var(--line)); font-weight: 400; }
+.v-box .gpath { grid-column: 2; grid-row: 1; }
+.v-box .gh .rest { position: absolute; top: -17px; right: 10px; background: var(--panel); padding: 0 6px; opacity: 1 !important; }
+.v-box .row { padding-left: 30px; }
+
+/* ---------- 12 Verlauf ---------- */
+.v-grad .gh { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 22%, transparent), transparent 80%); border-left: 2px solid var(--c); }
+.v-grad .gh:hover, .v-grad .gh.hov { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 30%, transparent), transparent 90%); }
+.v-grad .gname { color: var(--fg); }
+.v-grad .grp + .grp { margin-top: 10px; }
+
+/* ---------- 13 Kompakt mit Statuszusammenfassung ---------- */
+.v-compact .gh { grid-template-rows: 20px; padding: 4px 8px; }
+.v-compact .gpath { display: none; }
+.v-compact .gh:hover .gpath, .v-compact .gh.hov .gpath { display: block; grid-row: 2; }
+.v-compact .gh:hover, .v-compact .gh.hov { grid-template-rows: 20px 14px; }
+.v-compact .row { height: 22px; padding-left: 30px; }
+.v-compact .grp + .grp { margin-top: 2px; border-top: 1px dashed var(--line); padding-top: 2px; }
+
+/* ---------- 14 Zweizeilig ---------- */
+.v-two .row { height: auto; padding-top: 6px; padding-bottom: 6px; align-items: flex-start; }
+.v-two .dot { margin-top: 3px; }
+.v-two .meta { margin-top: -2px; }
+.v-two .title small { display: block; color: var(--muted); font-size: 10.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; }
+.v-two .rows .row + .row { border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.v-two .grp + .grp { margin-top: 10px; }
+
+/* ---------- 15 Statusbalken ---------- */
+.v-bar .dot { width: 3px; height: 14px; border-radius: 2px; }
+.v-bar .row { gap: 9px; }
+.v-bar .waiting .title { color: #f9e2af; }
+.v-bar .detached .title { color: var(--muted); font-style: italic; }
+.v-bar .grp + .grp { margin-top: 10px; }
+
+/* ---------- 16 Floating-Toolbar ---------- */
+.v-float .acts { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 1px; box-shadow: 0 4px 14px #0008; }
+.v-float .gh .acts { top: 15px; }
+.v-float .rest { opacity: 1 !important; }
+.v-float .grp + .grp { margin-top: 0; border-top: 1px solid var(--line); padding-top: 4px; }
+.v-float .grp { padding-bottom: 4px; }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Kadrell Sidebar: Varianten</h1>
+  <p class="lead">Jede Variante zweimal: links im Ruhezustand, rechts mit Hover auf „bodo-big-data“ und „Release“. Mit der Maus funktioniert der Hover überall auch live. Alle Varianten enthalten die Grund-Fixes unten.</p>
+  <div class="fixes">
+    <div class="fix"><b>Zeit klebt rechts</b>Zeit und Aktionen liegen im selben rechten Slot fester Breite. Hover blendet die Zeit aus und die Icons an derselben Stelle ein. Nichts rutscht mehr.</div>
+    <div class="fix"><b>Icons in der Flucht</b>Alle Icons 14 px im 20 px Klickfeld, eine Strichstärke, vertikal auf Textmitte zentriert. 2 px Abstand zwischen Icons.</div>
+    <div class="fix"><b>Einheitliche Texte</b>Titel 12 px, Pfad, Zeit und Zähler 10,5 bis 11 px mit Tabellenziffern, damit 8m und 50m bündig stehen.</div>
+    <div class="fix"><b>Rote Hover-Farbe nur fürs X</b>Schließen färbt sich beim Hover rot, die anderen Icons werden hell. Ein Fehlklick wird unwahrscheinlicher.</div>
+  </div>
+  <div class="controls">
+    <label>Sidebar-Breite <input id="w" type="range" min="220" max="440" value="320"> <span id="wv">320 px</span></label>
+    <label><input id="msg" type="checkbox"> Letzte Nachricht überall anzeigen</label>
+  </div>
+</header>
+<main id="out"></main>
+
+<script>
+const P = {
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+  plus: '<path d="M5 12h14M12 5v14"/>',
+  pen: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+};
+const svg = n => `<svg viewBox="0 0 24 24">${P[n]}</svg>`;
+const btn = (n, t, cls = '') => `<button class="ic ${cls}" title="${t}">${svg(n)}</button>`;
+const ST = { running: '#89b4fa', waiting: '#f9e2af', idle: '#a6e3a1', error: '#f38ba8', detached: '#45475a' };
+
+const groups = [
+  { name: 'bodo-big-data', c: '#cba6f7', path: '~/d/acme/customer/bodo/bodo-big-data', s: [
+    { t: 'Release', st: 'waiting', age: '11h', msg: 'Soll ich den Release-Branch jetzt taggen?' },
+    { t: 'BODOEAV-824', st: 'idle', age: '9m', msg: 'Tests laufen grün, PR ist offen.' },
+    { t: 'BODOEAV-759', st: 'idle', age: '8m', msg: 'Migration angepasst und verifiziert.' } ] },
+  { name: 'kiesel', c: '#89b4fa', path: '~/development/acme/customer/kiesel', s: [
+    { t: 'Lies und verstehe das Ticket manuell', st: 'idle', age: '1h', msg: 'Zusammenfassung des Tickets steht.' } ] },
+  { name: 'claude-agent-overview', c: '#fab387', path: '~/development/projects/claude-agent-overview', s: [
+    { t: 'Ideas', st: 'running', age: '50m', msg: 'Sammle Ideen für die nächste Version …' },
+    { t: 'Dialoge', st: 'idle', age: '6m', msg: 'Rückfragen-Dialog gebaut.' },
+    { t: 'Hooks', st: 'detached', age: '4m', msg: 'Hooks für neue Sessions fertig.' },
+    { t: 'design', st: 'idle', age: '0m', msg: 'Varianten als HTML abgelegt.', focus: true } ] },
+  { name: 'osx-configs', c: '#f5c2e7', path: '~/development/projects/osx-configs', fav: true, s: [
+    { t: 'zeige doch in der statusleiste die Akkulaufzeit', st: 'idle', age: '10h', msg: 'SketchyBar-Item ergänzt.' } ] },
+];
+
+const variants = [
+  { id: 'best', name: 'Schiene + Tönung + Haarlinie', tag: 'Empfehlung', desc: 'Gruppen durch feine Linie getrennt, dezenter Verlauf in Gruppenfarbe, dünne Einrückungslinie verbindet die Sessions mit ihrem Kopf. Ruhig, aber klar gegliedert.', src: 'Mischung aus neo-tree-Indent-Guides und getönten Workspace-Blöcken.' },
+  { id: 'plain', name: 'Nur die Fixes', desc: 'Aktueller Look, nur mit festem Zeit-Slot, sauberen Icons und einheitlicher Typo. Zum Vergleich, was die Fixes allein bringen.' },
+  { id: 'lines', name: 'Haarlinien', desc: '1 px Linie zwischen Gruppen, noch feinere Linie zwischen Sessions. Liest sich wie eine Tabelle.' },
+  { id: 'zebra', name: 'Zebra-Zeilen', desc: 'Jede zweite Session minimal heller. Hilft bei vielen Sessions, das Auge in der Zeile zu halten.' },
+  { id: 'tint', name: 'Getönte Gruppen', desc: 'Ganze Gruppe 5 % in Gruppenfarbe, Kopf 11 %. Gruppen stoßen direkt aneinander, die Farbwechsel trennen sie.', src: 'Wie farbige Workspace-Blöcke in Waybar/Hyprland-Rices.' },
+  { id: 'cards', name: 'Karten', desc: 'Jede Gruppe als abgerundete Karte mit Rand in Gruppenfarbe. Viel Struktur, kostet etwas Platz.', src: 'eww-/AGS-Widget-Stil.' },
+  { id: 'rail', name: 'Farbschiene', desc: 'Durchgehender Balken in Gruppenfarbe links über die ganze Gruppe. Die fokussierte Session leuchtet.' },
+  { id: 'tree', name: 'Baumlinien', desc: '├─ und └─ in Gruppenfarbe. Sehr terminalig, passt zur Monospace-Schrift.', src: 'neo-tree / nvim-tree, lsd --tree.' },
+  { id: 'power', name: 'Powerline-Kopf', desc: 'Gruppenname als gefülltes Segment mit Pfeil, Zähler als Pill daneben.', src: 'tmux-catppuccin-Statusleiste.' },
+  { id: 'pills', name: 'Pills', desc: 'Name, Zähler und Zeit als Pills, Sessions als abgerundete Zeilen, Status-Punkt mit Halo.', src: 'Waybar / SketchyBar mit Catppuccin-Pills.' },
+  { id: 'box', name: 'btop-Rahmen', desc: 'Jede Gruppe in einem Rahmen, Name sitzt im Rahmen oben links, Zähler oben rechts.', src: 'btop / lazygit-Panels.' },
+  { id: 'grad', name: 'Verlaufskopf', desc: 'Kräftiger Verlauf nur im Gruppenkopf, Name in Weiß, Farbe kommt aus Kante und Verlauf.' },
+  { id: 'compact', name: 'Kompakt + Statuspunkte', desc: 'Pfad nur beim Hover. Im Kopf rechts Mini-Punkte für den Status aller Sessions, auch bei eingeklappter Gruppe nützlich.' },
+  { id: 'two', name: 'Zweizeilig', desc: 'Letzte Nachricht unter dem Titel, feine Trenner. Mehr Info, halbe Dichte.' },
+  { id: 'bar', name: 'Statusbalken', desc: 'Senkrechter Balken statt Punkt. Wartende Sessions färben den Titel gelb, abgekoppelte kursiv und blass.' },
+  { id: 'float', name: 'Schwebende Toolbar', desc: 'Aktionen erscheinen als kleine Toolbar mit Schatten über der Zeile, die Zeit bleibt darunter stehen.', src: 'VS Code / Zed Explorer-Hover.' },
+];
+
+function render(v, hov, msg) {
+  const two = v.id === 'two' || msg;
+  return `<div class="sb v-${v.id}${two && v.id !== 'two' ? ' v-two' : ''}">` + groups.map((g, gi) => {
+    const n = g.s.length;
+    const nameInner = v.id === 'power' ? `<span class="plw"><span class="pl">${g.name}</span></span>` : g.name;
+    const rest = (v.id === 'compact'
+      ? `<span class="sum">${g.s.map(s => `<i style="--s:${ST[s.st]}"></i>`).join('')}</span>`
+      : `<span class="cnt">${n}</span>`) + (g.fav ? `<span class="fav">${svg('heart')}</span>` : '');
+    const head = `<div class="gh${hov && gi === 0 ? ' hov' : ''}">
+      <span class="chev">${svg('chev')}</span>
+      <span class="gname">${nameInner}</span>
+      <span class="gmeta"><span class="rest">${rest}</span><span class="acts">${btn('heart', 'Favorit')}${btn('plus', 'Neue Session')}${btn('pen', 'Bearbeiten')}${btn('x', 'Schließen', 'danger')}</span></span>
+      <span class="gpath">${g.path}</span></div>`;
+    const rows = g.s.map((s, si) => `<div class="row ${s.st}${s.focus ? ' focus' : ''}${hov && gi === 0 && si === 0 ? ' hov' : ''}" style="--s:${ST[s.st]}">
+      <span class="guide">${si === n - 1 ? '└─' : '├─'}</span>
+      <span class="dot"></span>
+      <span class="title">${s.t}<small>${s.msg}</small></span>
+      <span class="meta"><span class="rest"><span class="age">${s.age}</span></span><span class="acts">${btn('pen', 'Umbenennen')}${btn('x', 'Schließen', 'danger')}</span></span>
+    </div>`).join('');
+    return `<div class="grp" style="--c:${g.c}">${head}<div class="rows">${rows}</div></div>`;
+  }).join('') + `</div>`;
+}
+
+function draw() {
+  const msg = document.getElementById('msg').checked;
+  document.getElementById('out').innerHTML = variants.map((v, i) => `
+    <section class="variant">
+      <h2><span class="no">${String(i + 1).padStart(2, '0')}</span>${v.name}${v.tag ? `<span class="tag">${v.tag}</span>` : ''}</h2>
+      <p class="desc">${v.desc}</p>
+      ${v.src ? `<p class="src">Vorbild: ${v.src}</p>` : ''}
+      <div class="pair">
+        <figure><figcaption>Ruhe</figcaption>${render(v, false, msg)}</figure>
+        <figure><figcaption>Hover</figcaption>${render(v, true, msg)}</figure>
+      </div>
+    </section>`).join('');
+  setWidth();
+}
+function setWidth() {
+  const w = document.getElementById('w').value;
+  document.getElementById('wv').textContent = w + ' px';
+  document.querySelectorAll('.sb').forEach(e => e.style.setProperty('--w', w + 'px'));
+}
+document.getElementById('w').addEventListener('input', setWidth);
+document.getElementById('msg').addEventListener('change', draw);
+draw();
+</script>
+</body>
+</html>
