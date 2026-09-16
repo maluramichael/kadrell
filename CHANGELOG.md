@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.14.0 (2026-09-16)
+
+- Feature: `kadrell new --resume` übernimmt eine bestehende Claude-Konversation, zum Beispiel aus tmux, sobald sie dort beendet ist.
+
 ## 1.13.2 (2026-09-16)
 
 - Fix: Dialoge, die höher als das Fenster sind (etwa die Einstellungen), lassen sich jetzt scrollen.
