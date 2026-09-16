@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Rückfrage im App-Design (statt NSAlert). ⏎ bestätigt, Esc bricht ab.
+/// Rückfrage im App-Design (statt NSAlert). Nicht-destruktive bestätigt blankes ⏎, destruktive nur ⌘⏎. Esc bricht ab.
 struct ConfirmView: View {
     let title: String
     let info: String
@@ -35,7 +35,7 @@ struct ConfirmView: View {
                         .padding(.horizontal, 12).padding(.vertical, 6).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
                 }.buttonStyle(.plain)
                 Button(action: onConfirm) {
-                    Text(button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
+                    Text(destructive ? "\(button)  ⌘⏎" : button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.runningColor)
                 }.buttonStyle(.plain)
             }
