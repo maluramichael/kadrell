@@ -636,8 +636,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Sessions
 
-    /// Rückfrage im App-Design. ⏎ bestätigt, Esc bricht ab. `skip` (⌘+Klick) führt direkt aus.
-    /// `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
+    /// Rückfrage im App-Design. Nicht-destruktive bestätigt blankes ⏎, destruktive nur ⌘⏎. Esc bricht immer ab.
+    /// `skip` (⌘+Klick) führt direkt aus. `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
     func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false,
                          ask: Settings.Ask? = nil, then action: @escaping () -> Void) {
         if skip || ask?.enabled == false { action(); return }
@@ -645,7 +645,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cancel = { [weak self] in ask?.enabled = true; self?.dismissSheet() }
         present(ConfirmView(title: message, info: info, button: button, destructive: destructive, ask: ask,
                             onConfirm: run, onCancel: cancel),
-                plainReturn: true, onCancel: cancel, onPrimary: run)
+                plainReturn: !destructive, onCancel: cancel, onPrimary: run)
     }
 
     private func report(_ error: Error) {
@@ -699,7 +699,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Sheets
 
+    /// Offene Hilfe (F1) nicht stillschweigend verdrängen: wer gerade ⏎ drückt, um sie zu schließen, soll nicht
+    /// aus Versehen einen anderen Dialog bestätigen. Der neue Dialog kommt erst dran, wenn die Hilfe zu ist.
+    private var pendingPresent: (() -> Void)?
+
     private func present<V: View>(_ view: V, plainReturn: Bool = false, onCancel: @escaping () -> Void, onPrimary: @escaping () -> Void) {
+        if overlayIsAbout {
+            pendingPresent = { [weak self] in self?.present(view, plainReturn: plainReturn, onCancel: onCancel, onPrimary: onPrimary) }
+            return
+        }
         dismissSheet()
         if palette.isVisible { palette.dismiss() }
         let p = OverlayPanel(rootView: view)
@@ -715,6 +723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay = nil
         overlayIsAbout = false
         window.makeFirstResponder(workspace)
+        if let pending = pendingPresent { pendingPresent = nil; pending() }
     }
 
     private func openNewSession(groupId: String?) {
