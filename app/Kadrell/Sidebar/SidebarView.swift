@@ -109,6 +109,12 @@ final class SidebarView: NSView {
         needsDisplay = true
     }
 
+    /// Ist irgendeine Gruppe offen, gehen alle zu, sonst alle auf.
+    func toggleAllGroups() {
+        collapsed = groups.contains { !collapsed.contains($0.id) } ? Set(groups.map(\.id)) : []
+        reload(groups: groups, sessions: Array(sessions.values))
+    }
+
     private func rowHeight(_ r: Row) -> CGFloat {
         if case .group = r { renderer.groupRow } else { renderer.sessionRow + (showMessages ? 14 : 0) }
     }

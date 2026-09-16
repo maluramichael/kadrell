@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.19.0 (2026-09-16)
+
+- Feature: ⌘⇧B klappt alle Gruppen im Baum auf einmal zu, nochmal ⌘⇧B klappt alle wieder auf. Auch im Menü Ansicht.
+
 ## 1.18.0 (2026-09-16)
 
 - Änderung: ⌘A wählt alle Sessions der Gruppen aus, in denen schon etwas ausgewählt ist. Nochmal ⌘A stellt die Auswahl davor wieder her.

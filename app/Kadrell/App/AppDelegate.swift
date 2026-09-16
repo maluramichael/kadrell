@@ -349,6 +349,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "")
         view.addItem(withTitle: "Auto-Modus ein/aus", action: #selector(menuAuto), keyEquivalent: "")
         view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
+        let toggleGroups = NSMenuItem(title: "Alle Gruppen auf-/zuklappen", action: #selector(menuToggleGroups), keyEquivalent: "b")
+        toggleGroups.keyEquivalentModifierMask = [.command, .shift]
+        view.addItem(toggleGroups)
         view.addItem(.separator())
         view.addItem(withTitle: "Terminal-Schrift größer", action: #selector(menuFontBigger), keyEquivalent: "+")
         view.addItem(withTitle: "Terminal-Schrift kleiner", action: #selector(menuFontSmaller), keyEquivalent: "-")
@@ -448,6 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebarScroll.isHidden.toggle()
         split.adjustSubviews()
     }
+    @objc private func menuToggleGroups() { sidebar.toggleAllGroups() }
     @objc private func menuHotkey(_ sender: NSMenuItem) {
         if let raw = sender.representedObject as? String, let a = HotkeyAction(rawValue: raw) { perform(a) }
     }
