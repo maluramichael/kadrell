@@ -673,9 +673,17 @@ extension AppDelegate: NSSplitViewDelegate {
         min(proposedMaximumPosition, splitView.bounds.width / 2)
     }
 
+    /// Ziehen startet nur im effektiven Rechteck, ohne das hier ist es die 1-px-Linie: so breit wie die Griffzone.
+    func splitView(_ splitView: NSSplitView, effectiveRect proposedEffectiveRect: NSRect, forDrawnRect drawnRect: NSRect, ofDividerAt dividerIndex: Int) -> NSRect {
+        drawnRect.insetBy(dx: -ThinSplitView.grabWidth / 2, dy: 0)
+    }
+
     func splitViewDidResizeSubviews(_ notification: Notification) {
         let half = split.bounds.width / 2
         if !sidebarScroll.isHidden, sidebarScroll.frame.width > half + 1 { split.setPosition(half, ofDividerAt: 0) }
+        // Der Trenner ist gewandert (Ziehen, UI-Größe, Baum ein/aus): Griffzone für Cursor und Mausbewegung nachziehen.
+        split.updateTrackingAreas()
+        window.invalidateCursorRects(for: split)
     }
 }
 

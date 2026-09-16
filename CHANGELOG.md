@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.10.1 (2026-09-16)
+
+- Fix: Der Trenner zwischen Baum und Arbeitsfläche lässt sich wieder zuverlässig greifen, auch nach einer Änderung der UI-Größe. Vorher reagierte er oft nur genau auf der Linie.
+
 ## 1.10.0 (2026-09-16)
 
 - Feature: Hooks wie bei tmux. Eigene Skripte laufen, wenn eine Session angelegt, fokussiert oder entfernt wird, und bekommen Ordner, Session-Id und Titel mit. Damit lässt sich z. B. ein Zeiterfassungs-Ticket beim Wechseln der Session umschalten.
