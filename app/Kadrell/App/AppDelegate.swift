@@ -632,8 +632,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kadrell vergibt die sessionId selbst (`claude --session-id`): die Kachel steht sofort, kein Warten auf `claude agents`.
     /// `show: false` startet Claude im Hintergrund, die Auswahl bleibt. `prompt` ist die erste Nachricht.
     @discardableResult
-    func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil) -> String {
-        let id = UUID().uuidString.lowercased()
+    func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil, sessionId: String? = nil) -> String {
+        let id = sessionId ?? UUID().uuidString.lowercased()
         var target = group ?? store.group(forCwd: cwd)
         if target == nil {
             let g = store.makeGroup(cwd: cwd)

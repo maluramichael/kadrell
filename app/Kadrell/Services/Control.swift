@@ -29,7 +29,7 @@ enum ControlCommand: Equatable {
     case help
     case list(json: Bool)
     case newGroup(dir: String, name: String?, color: String?)
-    case newSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?)
+    case newSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String? = nil)
     case select(target: String?, add: Bool)
     case layout(LayoutMode)
     case zoom(target: String?)
@@ -51,9 +51,11 @@ enum ControlCommand: Equatable {
       kadrell ls [--json]                                  Gruppen und Sessions auflisten
       kadrell new-group <ordner> [--name N] [--color #rrggbb]
                                                            Gruppe anlegen (als Favorit, bleibt auch leer stehen)
-      kadrell new [-t gruppe] [-c ordner] [--name N] [-d] [prompt …]
+      kadrell new [-t gruppe] [-c ordner] [--name N] [-d] [--resume sessionId] [prompt …]
                                                            Session starten, optional mit erster Nachricht;
-                                                           -d: im Hintergrund, Auswahl bleibt
+                                                           -d: im Hintergrund, Auswahl bleibt;
+                                                           --resume: bestehende Konversation übernehmen
+                                                           (Claude darf dort nicht mehr laufen, -c = ihr Ordner)
       kadrell select [-t session|gruppe] [-a]              zeigen (-a: zur Auswahl dazu/weg)
       kadrell layout grid|stack                            Layout
       kadrell zoom [-t session]                            Zoom ein/aus
@@ -92,9 +94,10 @@ enum ControlCommand: Equatable {
             guard a.positional.count == 1 else { throw ControlError("new-group braucht genau einen Ordner") }
             return .newGroup(dir: a.positional[0], name: a["--name"], color: try color(a["--color"]))
         case "new", "new-session":
-            let a = try Args(rest, values: ["-t", "-c", "--name"], bools: ["-d"])
+            let a = try Args(rest, values: ["-t", "-c", "--name", "--resume"], bools: ["-d"])
             let prompt = a.positional.joined(separator: " ")
-            return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt)
+            if a["--resume"] != nil, !prompt.isEmpty { throw ControlError("--resume und prompt schließen sich aus") }
+            return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt, resume: a["--resume"])
         case "select":
             let a = try Args(rest, values: ["-t"], bools: ["-a"])
             try a.noPositional()

@@ -31,8 +31,8 @@ extension AppDelegate {
         case .help: return .ok(ControlCommand.usage)
         case .list(let json): return .ok(try listOutput(json: json))
         case let .newGroup(dir, name, color): return .ok(try controlNewGroup(dir: dir, name: name, color: color, req))
-        case let .newSession(t, dir, name, detached, prompt):
-            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, req))
+        case let .newSession(t, dir, name, detached, prompt, resume):
+            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, req))
         case let .select(t, add):
             switch try ControlTarget.sessionOrGroup(t, groups: store.groups, sessions: registry.sessions, caller: req.caller, focused: workspace.focused) {
             case .session(let s): workspace.select([s.id], add: add)
@@ -81,14 +81,27 @@ extension AppDelegate {
     }
 
     /// Ohne -t und -c landet die Session bei der aufrufenden: gleiche Gruppe, gleicher Ordner (wie tmux new-window).
-    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, _ req: ControlRequest) throws -> String {
+    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String?, _ req: ControlRequest) throws -> String {
+        if let resume { try checkResumable(resume) }
         var g = try target.map { try group($0, req) }
         let caller = req.caller.flatMap { c in registry.sessions.first { $0.id == c } }
         if target == nil, dir == nil, let caller { g = store.group(forSession: caller.id) }
         let cwd = try dir.map { try existingDir($0, req) } ?? (target == nil ? caller?.cwd : nil) ?? g?.cwd ?? existingDir(req.cwd, req)
-        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt)
+        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt, sessionId: resume)
         if let name { registry.rename(key, to: name) }
         return key
+    }
+
+    /// Dieselbe Konversation in zwei Prozessen schreibt durcheinander ins Transcript: nur übernehmen, was nirgends mehr läuft.
+    private func checkResumable(_ sessionId: String) throws {
+        guard !registry.sessions.contains(where: { $0.sessionId == sessionId || $0.id == sessionId }) else { throw ControlError("\(sessionId) ist schon in Kadrell") }
+        guard Transcript.path(sessionId: sessionId) != nil else { throw ControlError("kein Transcript für \(sessionId)") }
+        let dir = registry.cli.configDir + "/sessions"
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+        let pids = files.compactMap { Int($0.replacingOccurrences(of: ".json", with: "")) }.filter { kill(pid_t($0), 0) == 0 }
+        if let live = Agent.local(pids: pids, configDir: registry.cli.configDir).first(where: { $0.sessionId == sessionId }) {
+            throw ControlError("\(sessionId) läuft noch (pid \(live.pid ?? 0)), erst dort beenden")
+        }
     }
 
     private func controlSetGroup(target: String?, name: String?, color: String?, favorite: Bool?, _ req: ControlRequest) throws {

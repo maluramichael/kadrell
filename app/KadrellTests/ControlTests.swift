@@ -12,6 +12,9 @@ final class ControlTests: XCTestCase {
                        .newSession(target: "api", dir: nil, name: nil, detached: true, prompt: "fix the tests"))
         XCTAssertEqual(try ControlCommand.parse(["new", "--", "-x"]),
                        .newSession(target: nil, dir: nil, name: nil, detached: false, prompt: "-x"))
+        XCTAssertEqual(try ControlCommand.parse(["new", "-c", "/p", "--resume", "abc"]),
+                       .newSession(target: nil, dir: "/p", name: nil, detached: false, prompt: nil, resume: "abc"))
+        XCTAssertThrowsError(try ControlCommand.parse(["new", "--resume", "abc", "hallo"]))
         XCTAssertEqual(try ControlCommand.parse(["set-group", "--favorite", "off"]), .setGroup(target: nil, name: nil, color: nil, favorite: false))
         XCTAssertEqual(try ControlCommand.parse(["send", "-t", "ab", "hallo", "welt"]), .send(target: "ab", text: "hallo welt", enter: true, keys: false))
         XCTAssertEqual(try ControlCommand.parse(["send-keys", "-k", "C-c", "Enter"]), .send(target: nil, text: "C-c Enter", enter: false, keys: true))
