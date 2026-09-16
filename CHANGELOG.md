@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.23.4 (2026-09-16)
+
+- Fix: Im kompakten Baum sitzt die Trennlinie direkt unter der letzten Session einer Gruppe, ohne Lücke.
+
 ## 1.23.3 (2026-09-16)
 
 - Fix: Terminals ohne Claude starten nach dem Beenden der App wieder in dem Ordner, in den zuletzt mit `cd` gewechselt wurde.

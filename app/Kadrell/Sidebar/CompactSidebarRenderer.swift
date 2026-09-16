@@ -5,7 +5,7 @@ import AppKit
 struct CompactSidebarRenderer: SidebarRenderer {
     let groupRow: CGFloat = 24
     let sessionRow: CGFloat = 22
-    let groupGap: CGFloat = 3
+    let groupGap: CGFloat = 0
     let topInset: CGFloat = 4
 
     func drawGroup(_ g: SidebarGroupItem, in r: CGRect) {
