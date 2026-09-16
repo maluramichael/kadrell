@@ -93,7 +93,7 @@ struct FolderInput: View {
 }
 
 
-/// Fußleiste der Dialoge: Hinweis links, Aktion rechts als Button (⌘⏎ löst dieselbe Aktion aus).
+/// Fußleiste der Dialoge: Hinweis links, Aktion rechts als Button (⏎ löst dieselbe Aktion aus).
 /// Zeichnet sich nicht an Ort und Stelle, sondern meldet sich an `OverlayScroll`: dort steht sie fest unter
 /// dem scrollenden Inhalt, der Button bleibt also auch in langen Dialogen sichtbar.
 struct DialogFoot: View {
@@ -128,7 +128,7 @@ struct DialogFootBar: View {
                 Text(foot.hint).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 Spacer()
                 Button(action: foot.action) {
-                    Text("\(foot.button)  ⌘⏎").font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
+                    Text("\(foot.button)  ⏎").font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.runningColor)
                 }.buttonStyle(.plain)
             }

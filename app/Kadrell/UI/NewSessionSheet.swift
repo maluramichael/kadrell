@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Zustand von ⌘N. Esc und ⌘⏎ kommen vom OverlayPanel, deshalb liegt `start()` am Modell.
+/// Zustand von ⌘N. Esc und ⏎ kommen vom OverlayPanel, deshalb liegt `start()` am Modell.
 @Observable
 @MainActor
 final class NewSessionModel {

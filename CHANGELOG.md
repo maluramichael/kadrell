@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.26.2 (2026-09-16)
+
+- Änderung: Dialoge (Einstellungen, neue Session, Gruppe bearbeiten, umbenennen) bestätigt jetzt ⏎ statt ⌘⏎. Rückfragen, die löschen oder beenden, brauchen weiter ⌘⏎.
+
 ## 1.26.1 (2026-09-16)
 
 - Änderung: Im kompakten Baum stehen die Status-Punkte im Gruppenkopf nur noch bei eingeklappter Gruppe. Aufgeklappt zeigen die Zeilen den Status ja schon.

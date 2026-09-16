@@ -259,7 +259,7 @@ final class SettingsModel {
     }
 }
 
-/// ⌘, Einstellungen. ⌘⏎ speichert, Esc bricht ab.
+/// ⌘, Einstellungen. ⏎ speichert, Esc bricht ab.
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 

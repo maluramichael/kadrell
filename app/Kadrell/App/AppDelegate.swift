@@ -780,7 +780,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// aus Versehen einen anderen Dialog bestätigen. Der neue Dialog kommt erst dran, wenn die Hilfe zu ist.
     private var pendingPresent: (() -> Void)?
 
-    private func present<V: View>(_ view: V, plainReturn: Bool = false, onCancel: @escaping () -> Void, onPrimary: @escaping () -> Void) {
+    private func present<V: View>(_ view: V, plainReturn: Bool = true, onCancel: @escaping () -> Void, onPrimary: @escaping () -> Void) {
         if overlayIsAbout {
             pendingPresent = { [weak self] in self?.present(view, plainReturn: plainReturn, onCancel: onCancel, onPrimary: onPrimary) }
             return

@@ -2,13 +2,13 @@ import AppKit
 import SwiftUI
 
 /// Rahmenloses Overlay über dem Hauptfenster für die SwiftUI-Dialoge: 1 px Linie, keine Rundung.
-/// Esc und ⌘⏎ werden hier abgefangen, bevor SwiftUI sie sieht.
+/// Esc und ⏎ werden hier abgefangen, bevor SwiftUI sie sieht.
 @MainActor
 final class OverlayPanel: NSPanel {
     var onCancel: (() -> Void)?
     var onPrimary: (() -> Void)?
-    /// Rückfragen: auch plain ⏎ bestätigt. Dialoge mit Textfeldern brauchen ⏎ selbst und nehmen nur ⌘⏎.
-    var primaryOnPlainReturn = false
+    /// ⏎ bestätigt, ⌘⏎ immer. Aus nur bei destruktiven Rückfragen: dort zählt allein ⌘⏎.
+    var primaryOnPlainReturn = true
 
     private var anchor = CGPoint.zero   // Mitte des Hauptfensters: Dialog wächst nach oben und unten gleich
     private var resizeObserver: NSObjectProtocol?
