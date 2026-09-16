@@ -17,3 +17,12 @@ Mac-App, Aufbau und Build: `app/README.md`.
    `## Unreleased` die Versionsüberschrift. Die drei Dateien mit committen.
 
 Die Version steht in der App unter Einstellungen (⌘,) und im About (F1).
+
+## Release (kein App Store)
+
+Vertrieb per Developer ID und Notarisierung, Download über https://kadrell.malura.de. Der Mac App Store
+verlangt die App Sandbox, und die würde `claude` als Kindprozess den Zugriff auf `~/.claude`, Projektordner
+und Schlüsselbund nehmen. `tools/release.sh` archiviert (Release, Hardened Runtime, Mikrofon-Entitlement),
+exportiert mit Developer ID, baut das DMG, notarisiert, stapelt und lädt nach `/var/www/kadrell/download/`.
+Einmalige Vorbereitung (Zertifikat, `notarytool store-credentials kadrell`) steht im Kopf des Skripts.
+Landingpage: `../kadrell.malura.de`.
