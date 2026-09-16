@@ -153,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         workspace.onChange = { [weak self] in self?.syncSidebar() }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
+        workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
         sidebar.onSelect = { [weak self] ids, mode in
             guard let self else { return }
             switch mode {
@@ -236,6 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registry = SessionRegistry(cli: cli)
         registry.pids = { [weak attach] in attach?.pids ?? [:] }
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
+        if !FileManager.default.isExecutableFile(atPath: cli.binary) { registry.fail("\(cli.binary): claude nicht gefunden") }
         // Leer nicht abgleichen: das würde Gruppen alter Hintergrund-Sessions verwerfen, bevor sie übernommen sind.
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
@@ -261,7 +263,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func offerAdopt() async {
         let owned = Set(registry.sessions.map(\.sessionId))
         let agents: [Agent]
-        do { agents = try await cli.agents() } catch { AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)"); return }
+        do { agents = try await cli.agents() } catch {
+            AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)")
+            registry.fail("\(cli.binary): \(Self.firstLine(of: error))")
+            return
+        }
         let bg = agents.filter { $0.isRunningBackground && !owned.contains($0.sessionId) }
         guard !bg.isEmpty else { return }
         let list = bg.map { "· \($0.name)\($0.status == "busy" ? " (arbeitet gerade)" : "")" }.joined(separator: "\n")
@@ -278,7 +284,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Erste Zeile einer CLI-Fehlermeldung: `CLIError` liefert die Prozessausgabe, sonst die Fehlerbeschreibung.
+    private static func firstLine(of error: Error) -> String {
+        let text = ((error as? CLIError)?.output ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.split(separator: "\n").first.map(String.init) ?? text
+    }
+
     func reloadViews() {
+        workspace.lastError = registry?.lastError
+        workspace.polled = registry?.polled ?? false
         workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
         syncSidebar()
     }
@@ -302,6 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Hooks.fire(.sessionFocus, s, environment: cli.environment)
         }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
+        bar.errorText = registry?.lastError
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
