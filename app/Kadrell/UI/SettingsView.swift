@@ -274,7 +274,7 @@ struct SettingsView: View {
 
     /// Kürzel nach denselben Bereichen wie die F1-Hilfe; die zweite Gruppe nimmt den Rest, damit keine Aktion verschwindet.
     private var hotkeyGroups: [(String, [HotkeyAction])] {
-        let nav: [HotkeyAction] = [.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev]
+        let nav: [HotkeyAction] = [.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
             + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace]
         return [("Navigation", nav), ("Kacheln verwalten", HotkeyAction.allCases.filter { !nav.contains($0) })]
     }

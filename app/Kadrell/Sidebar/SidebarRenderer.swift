@@ -24,6 +24,8 @@ struct SidebarGroupItem {
     let selected: Bool
     let hover: Bool
     let first: Bool
+    /// Sessions dieser Gruppe, die auf dich warten, auch bei eingeklappter Gruppe.
+    let waitingCount: Int
 }
 
 struct SidebarSessionItem {
@@ -121,6 +123,15 @@ extension SidebarRenderer {
         let n = NSAttributedString(string: "\(g.dots.count)", attributes: Theme.attrs(10.5, Theme.muted))
         let x = right - n.size().width
         n.draw(at: CGPoint(x: x, y: head.midY - 7))
+        return x - 8
+    }
+
+    /// „2 ⏳“ links vom Zähler, nur wenn etwas in der Gruppe wartet, auch bei eingeklappter Gruppe.
+    func drawWaitingBadge(_ g: SidebarGroupItem, head: CGRect, right: CGFloat) -> CGFloat {
+        guard g.waitingCount > 0 else { return right }
+        let t = NSAttributedString(string: "\(g.waitingCount) ⏳", attributes: Theme.attrs(10.5, Theme.waiting, bold: true))
+        let x = right - t.size().width
+        t.draw(at: CGPoint(x: x, y: head.midY - 7))
         return x - 8
     }
 
