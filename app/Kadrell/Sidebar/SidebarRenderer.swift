@@ -9,6 +9,8 @@ protocol SidebarRenderer {
     var sessionRow: CGFloat { get }
     /// Abstand vor jeder Gruppe außer der ersten.
     var groupGap: CGFloat { get }
+    /// Abstand über der ersten Gruppe.
+    var topInset: CGFloat { get }
     func drawGroup(_ g: SidebarGroupItem, in r: CGRect)
     func drawSession(_ s: SidebarSessionItem, in r: CGRect)
 }

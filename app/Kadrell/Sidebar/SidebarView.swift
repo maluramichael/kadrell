@@ -101,7 +101,7 @@ final class SidebarView: NSView {
             guard !collapsed.contains(g.id) else { continue }
             for s in g.sessionIds.compactMap({ self.sessions[$0] }) { rows.append(.session(s, g)) }
         }
-        let h = rows.reduce(CGFloat(12)) { $0 + rowHeight($1) } + CGFloat(max(groups.count - 1, 0)) * renderer.groupGap
+        let h = rows.reduce(renderer.topInset + 6) { $0 + rowHeight($1) } + CGFloat(max(groups.count - 1, 0)) * renderer.groupGap
         let want = max((h * Theme.scale).rounded(.up), superview?.bounds.height ?? 0)
         if frame.height != want { setFrameSize(NSSize(width: frame.width, height: want)) }
         needsDisplay = true
@@ -112,7 +112,7 @@ final class SidebarView: NSView {
     }
 
     private func rowRect(_ i: Int) -> CGRect {
-        var y: CGFloat = 6
+        var y = renderer.topInset
         for (j, r) in rows.enumerated() {
             if case .group = r, j > 0 { y += renderer.groupGap }
             let h = rowHeight(r)

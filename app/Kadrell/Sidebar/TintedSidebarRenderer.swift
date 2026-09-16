@@ -5,6 +5,7 @@ struct TintedSidebarRenderer: SidebarRenderer {
     let groupRow: CGFloat = 38
     let sessionRow: CGFloat = 24
     let groupGap: CGFloat = 0
+    let topInset: CGFloat = 0
 
     func drawGroup(_ g: SidebarGroupItem, in r: CGRect) {
         g.color.mixed(g.hover ? 0.16 : 0.11, into: Theme.panel).setFill()

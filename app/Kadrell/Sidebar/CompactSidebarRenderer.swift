@@ -6,6 +6,7 @@ struct CompactSidebarRenderer: SidebarRenderer {
     let groupRow: CGFloat = 24
     let sessionRow: CGFloat = 22
     let groupGap: CGFloat = 3
+    let topInset: CGFloat = 4
 
     func drawGroup(_ g: SidebarGroupItem, in r: CGRect) {
         if g.hover { Theme.surface.setFill(); r.fill() }

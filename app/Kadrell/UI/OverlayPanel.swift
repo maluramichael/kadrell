@@ -13,8 +13,10 @@ final class OverlayPanel: NSPanel {
     private var anchor = CGPoint.zero   // Mitte oben: bleibt beim Wachsen und Schrumpfen fest
     private var resizeObserver: NSObjectProtocol?
 
+    private let limit = OverlayLimit()
+
     init<V: View>(rootView: V) {
-        let host = NSHostingController(rootView: rootView)
+        let host = NSHostingController(rootView: OverlayScroll(limit: limit, content: rootView))
         host.sizingOptions = [.preferredContentSize]   // Fenster folgt der Inhaltsgröße, kein Zentrieren
         super.init(contentRect: NSRect(x: 0, y: 0, width: 640, height: 200), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isFloatingPanel = true
@@ -43,6 +45,7 @@ final class OverlayPanel: NSPanel {
     func open(over parent: NSWindow) {
         let pf = parent.frame
         anchor = CGPoint(x: pf.midX, y: pf.maxY - 0.12 * pf.height)
+        limit.maxHeight = anchor.y - pf.minY - 24
         reanchor()
         host = parent
         parent.addChildWindow(self, ordered: .above)
@@ -67,6 +70,27 @@ final class OverlayPanel: NSPanel {
     }
 
     override func cancelOperation(_ sender: Any?) { onCancel?() }
+}
+
+@Observable
+@MainActor
+final class OverlayLimit {
+    var maxHeight = CGFloat.infinity
+}
+
+/// Höher als bis 24 pt über den Fensterrand wird ein Dialog nicht, der Rest scrollt.
+struct OverlayScroll<Content: View>: View {
+    let limit: OverlayLimit
+    let content: Content
+    @State private var height: CGFloat = 0
+
+    var body: some View {
+        ScrollView(.vertical) {
+            content.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: height > 0 ? min(height, limit.maxHeight) : nil)
+    }
 }
 
 /// Graut und blurrt das Hauptfenster, solange ein Overlay (Dialog oder ⌘P) als Kindfenster offen ist.

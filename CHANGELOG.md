@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.13.2 (2026-09-16)
+
+- Fix: Dialoge, die höher als das Fenster sind (etwa die Einstellungen), lassen sich jetzt scrollen.
+- Fix: Beim Design „Getönte Gruppen“ gibt es über der ersten Gruppe keinen leeren Streifen mehr.
+
 ## 1.13.1 (2026-09-16)
 
 - Fix: Beim Anklicken einer Session im Baum blitzt die vorher gewählte Zeile nicht mehr kurz mit einem Rahmen auf.
