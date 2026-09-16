@@ -35,6 +35,8 @@ verifiziert und committet ist, `tools/release.sh` laufen lassen, sobald
   Änderung im Verhalten. Reine Interna, Doku, Tests: kein Release.
 Nicht mitten in einer Arbeitsreihe nach jedem Commit releasen, sondern einmal am Schluss. Notarisierung
 dauert 1 bis 5 Minuten, das Skript wartet. Danach die Version und den Link im Abschlussbericht nennen.
+Nach dem Release in `../kadrell.malura.de/index.html` die Versionsnummer im Hero-Pill („Version x.y.z“) nachziehen
+und dort pushen (deployt automatisch).
 Das kann nur auf dem Mac laufen (Xcode, Schlüsselbund), nicht per Hook auf examplehost.
 Alle Versionen bleiben unter https://kadrell.malura.de/download/ liegen (Caddy-Listing), `Kadrell.dmg`
 ist immer die neueste. App-Größe: rund 7 MB, DMG rund 3,5 MB.
