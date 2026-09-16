@@ -2,12 +2,20 @@
 
 Neueste Version oben.
 
-## Unreleased
+## 1.8.0 (2026-09-16)
 
+- Fix: Sessions, denen Claude Code keinen Titel gibt, heißen jetzt nach ihrer ersten Nachricht statt nach Ordner und Id.
+- Feature: ⌥J und ⌥K blättern durch alle Sessions im Baum und zeigen die jeweilige Session groß als Vorschau. ⏎ öffnet sie, Esc bringt die vorherigen Kacheln unverändert zurück.
+- Feature: ⌘ + Mausrad ändert die Schriftgröße aller Terminals auf einmal.
+- Feature: Sessions lassen sich umbenennen, per F2 (auch im Baum) oder über den Stift neben dem X an Kachel und Baum-Zeile. Ein selbst vergebener Name bleibt, auch wenn Claude Code später einen eigenen Titel setzt. Leer speichern gibt den Namen wieder an Claude zurück.
 - Änderung: Terminals werden auf der GPU gezeichnet (Metal). Das senkt die CPU-Last bei laufender Ausgabe deutlich; abschaltbar in den Einstellungen unter Darstellung.
 - Änderung: Der Status der Sessions kommt direkt aus den Session-Dateien von Claude Code, statt alle zwei Sekunden einen Claude-Prozess zu starten.
 - Fix: Der Baum zeichnet beim Pulsieren nur noch die Statuspunkte laufender Sessions neu, nicht mehr alle Zeilen.
 - Fix: Textänderungen in sichtbaren Terminals lösen kein Neuzeichnen aller Kacheln und des Baums mehr aus.
+
+## 1.7.0 (2026-09-16)
+
+- Feature: Neuer Hotkey ⌥E öffnet den Ordner der fokussierten Session im externen Editor. Das Editor-Kommando (z. B. `code`) steht in den Einstellungen unter Sessions.
 
 ## 1.6.0 (2026-09-16)
 

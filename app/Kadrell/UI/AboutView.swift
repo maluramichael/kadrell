@@ -8,8 +8,8 @@ struct AboutView: View {
                 ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
                 ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "alle Sessions öffnen"),
                 ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"),
-            ]),
-            ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession]
+            ] + rows([.openEditor, .renameSession]) + [("Stift", "an Kachel und Baum-Zeile: umbenennen")]),
+            ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev]
                                 + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace])
                 + [("⌘P", "Suche, mit > Kommandos")]),
             ("Kacheln verwalten", rows([.swapLeft, .swapRight, .swapUp, .swapDown, .zoom, .nextLayout, .closeFocused]) + [
@@ -17,7 +17,7 @@ struct AboutView: View {
                 ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌘ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"),
             ]),
             ("Fenster und App", [
-                ("⌘M", "Im Dock ablegen"),
+                ("⌘M", "Im Dock ablegen"), ("⌘ Mausrad", "Terminal-Schrift aller Sessions größer/kleiner"),
                 ("⌘,", "Einstellungen: Startordner, Darstellung, Tastenkürzel"), ("F1", "diese Hilfe"),
             ]),
         ]

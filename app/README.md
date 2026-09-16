@@ -23,8 +23,10 @@ einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf e
 (`>` Kommandos), ⌘W schließt das Fenster wie der rote Knopf, Sessions laufen weiter. F1 zeigt die Hilfe, beim ersten Start automatisch.
 
 Belegbare Kürzel (⌘, Einstellungen, Defaults wie in der tmux-Config): ⌥-Pfeile Fokus, ⌥⇧-Pfeile Kachel
-tauschen, ⌥1…⌥9 Kachel direkt, ⌥N/⌥P nächste/vorige, ⌥⇥ zuletzt fokussierte, ⌥Z Zoom (Fokus-Kachel allein,
-Badge „ZOOM“ in der Leiste und „Z“ in der Titelzeile), ⌘L Grid ↔ Stack, ⌘Esc Kachel schließen
+tauschen, ⌥1…⌥9 Kachel direkt, ⌥N/⌥P nächste/vorige, ⌥J/⌥K Vorschau: blättert durch den Baum und zeigt die Session allein, ohne die Auswahl anzufassen (⏎ übernimmt, Esc zurück), ⌥⇥ zuletzt fokussierte, ⌥Z Zoom (Fokus-Kachel allein,
+Badge „ZOOM“ in der Leiste und „Z“ in der Titelzeile), ⌥E Ordner der Fokus-Session im externen Editor (Kommando in den Einstellungen, z. B. `code`),
+F2 oder Stift an Kachel/Baum-Zeile benennt die Session um (eigener Name geht immer vor dem Titel von Claude Code, leer = zurück),
+⌘L Grid ↔ Stack, ⌘Esc Kachel schließen
 (Esc selbst geht an Claude Code). ⌘1 gibt dem Baum die Tastatur, ↑↓ zeigt dann die nächste Session rechts, ohne
 dass Claude die Tasten bekommt; ⌘2 gibt die Tastatur an die fokussierte Kachel zurück (ohne offene Kachel: erste Session).
 

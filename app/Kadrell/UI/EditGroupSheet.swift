@@ -56,3 +56,43 @@ struct EditGroupView: View {
         .onAppear { focused = true }
     }
 }
+
+@Observable
+@MainActor
+final class RenameSessionModel {
+    let session: Session
+    var name: String
+    var onSave: ((String) -> Void)?
+
+    init(session: Session) {
+        self.session = session
+        name = session.title
+    }
+
+    func save() { onSave?(name) }
+}
+
+/// F2 oder Stift an der Session: eigener Name. Leer lassen = wieder der Titel von Claude Code.
+struct RenameSessionView: View {
+    @Bindable var model: RenameSessionModel
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("SESSION UMBENENNEN").font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
+            TextField(model.session.autoTitle, text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
+                .focused($focused)
+                .onSubmit { model.save() }
+                .padding(14)
+            Text("Leer lassen: wieder der Titel von Claude Code (\(model.session.autoTitle))").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
+            DialogFoot(hint: "Esc abbrechen", button: "Speichern") { model.save() }
+        }
+        .font(Theme.ui(12))
+        .foregroundStyle(Theme.fgColor)
+        .frame(width: 640 * Theme.scale)
+        .background(Theme.panelColor)
+        .onAppear { focused = true }
+    }
+}

@@ -98,6 +98,15 @@ final class SessionRegistryTests: XCTestCase {
 
         let titled = SessionRegistry.merge(stored, agents: try agents(#"[{"pid":11,"cwd":"/p/proj","kind":"interactive","startedAt":5,"sessionId":"new","name":"Neuer Titel","status":"idle"}]"#), pids: [11: "a7adb9af"])
         XCTAssertEqual(titled[0].name, "Neuer Titel")
+
+        // Von Hand vergebener Name (F2) bleibt Titel, auch wenn Claude Code später umbenennt; alte JSON ohne Feld lädt.
+        var manual = stored
+        manual[0].customName = "Meins"
+        let kept = SessionRegistry.merge(manual, agents: try agents(#"[{"pid":11,"cwd":"/p/proj","kind":"interactive","startedAt":5,"sessionId":"new","name":"Neuer Titel","status":"idle"}]"#), pids: [11: "a7adb9af"])
+        XCTAssertEqual(kept[0].title, "Meins")
+        let roundtrip = try JSONDecoder().decode([Session].self, from: JSONEncoder().encode(kept))
+        XCTAssertEqual(roundtrip[0].title, "Meins")
+        XCTAssertNil(try JSONDecoder().decode(Session.self, from: Data(#"{"id":"a","cwd":"/p","startedAt":1,"sessionId":"a","name":"x"}"#.utf8)).customName)
     }
 
     func testPersistsAddAndRemove() throws {
@@ -153,5 +162,22 @@ final class TranscriptTests: XCTestCase {
         """
         XCTAssertEqual(Transcript.lastText(jsonl: Data(jsonl.utf8)), "Fix ist drin. Soll ich pushen?")
         XCTAssertNil(Transcript.lastText(jsonl: Data("{\"type\":\"user\"}".utf8)))
+    }
+
+    /// Ersatztitel: Meta-Zeilen, Slash-Commands und Bild-Platzhalter fallen raus, lange Texte werden gekürzt.
+    func testFirstPrompt() throws {
+        let jsonl = """
+        {"type":"user","isMeta":true,"message":{"content":"<local-command-caveat>x</local-command-caveat>"}}
+        {"type":"user","message":{"content":"<command-name>/model</command-name>"}}
+        {"type":"user","message":{"content":[{"type":"text","text":"[Image #1]  Umbenennen\\ngeht nicht immer, bitte prüfen und dann reparieren"},{"type":"image"}]}}
+        {"type":"user","message":{"content":"zweite"}}
+        """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        try Data(jsonl.utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        XCTAssertEqual(Transcript.firstPrompt(path: url.path, limit: 29), "Umbenennen geht nicht immer,…")
+        XCTAssertEqual(Transcript.firstPrompt(path: url.path), "Umbenennen geht nicht immer, bitte prüfen und dann…")
+        XCTAssertEqual(Session(id: "a", cwd: "/p/proj", startedAt: 1, sessionId: "a", name: "", firstPrompt: "Hallo").title, "Hallo")
+        XCTAssertNil(Transcript.firstPrompt(path: "/gibt/es/nicht.jsonl"))
     }
 }

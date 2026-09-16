@@ -6,8 +6,9 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case focusLeft, focusRight, focusUp, focusDown
     case swapLeft, swapRight, swapUp, swapDown
     case nextSession, prevSession, lastSession
+    case previewNext, previewPrev
     case focus1, focus2, focus3, focus4, focus5, focus6, focus7, focus8, focus9
-    case zoom, nextLayout, closeFocused
+    case zoom, nextLayout, closeFocused, openEditor, renameSession
     case focusSidebar, focusWorkspace
 
     /// 0-basiert für focus1…focus9.
@@ -27,10 +28,14 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .nextSession: return "Nächste Kachel"
         case .prevSession: return "Vorige Kachel"
         case .lastSession: return "Zuletzt fokussierte Kachel"
+        case .previewNext: return "Vorschau: nächste Session im Baum"
+        case .previewPrev: return "Vorschau: vorige Session im Baum"
         case .zoom: return "Zoom: Fokus-Kachel allein"
         case .nextLayout: return "Grid ↔ Stack"
         case .focusSidebar: return "Baum: Tastatur hierher, ↑↓ wählt Session"
         case .focusWorkspace: return "Arbeitsfläche: Tastatur an Claude"
+        case .openEditor: return "Ordner im externen Editor öffnen"
+        case .renameSession: return "Session umbenennen"
         default: return "Fokus-Kachel schließen"
         }
     }
@@ -42,7 +47,10 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .focusLeft, .focusRight, .focusUp, .focusDown: return "Fokus bewegen · im Stack auf- und zuklappen"
         case .swapLeft, .swapRight, .swapUp, .swapDown: return "Fokus-Kachel mit Nachbar tauschen"
         case .nextSession, .prevSession: return "Nächste / vorige Kachel"
+        case .previewNext, .previewPrev: return "Baum als Vorschau durchblättern, Auswahl bleibt · ⏎ übernimmt, Esc zurück"
         case .closeFocused: return "Fokus-Kachel schließen (Esc selbst geht an Claude)"
+        case .openEditor: return "Ordner der Fokus-Session im Editor aus den Einstellungen öffnen"
+        case .renameSession: return "Fokus-Session umbenennen, auch im Baum · Claude überschreibt den Namen danach nicht mehr"
         default: return title
         }
     }
@@ -61,10 +69,14 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .nextSession: return Hotkey(.option, "n")
         case .prevSession: return Hotkey(.option, "p")
         case .lastSession: return Hotkey(.option, "⇥")
+        case .previewNext: return Hotkey(.option, "j")
+        case .previewPrev: return Hotkey(.option, "k")
         case .zoom: return Hotkey(.option, "z")
         case .nextLayout: return Hotkey(.command, "l")
         case .focusSidebar: return Hotkey(.command, "1")
         case .focusWorkspace: return Hotkey(.command, "2")
+        case .openEditor: return Hotkey(.option, "e")
+        case .renameSession: return Hotkey([], "F2")
         default: return Hotkey(.command, "Esc")
         }
     }

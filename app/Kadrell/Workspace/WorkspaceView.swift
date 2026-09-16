@@ -16,6 +16,8 @@ final class WorkspaceView: NSView {
     private(set) var mode: LayoutMode = LayoutMode(rawValue: UserDefaults.standard.string(forKey: "workspace.mode") ?? "") ?? .grid
     /// Zoom: nur die Fokus-Kachel, bildschirmfüllend, die Auswahl bleibt.
     private(set) var zen = false
+    /// ⌥J/⌥K: eine Session aus dem Baum vorübergehend allein zeigen. Auswahl und Fokus bleiben unangetastet.
+    private(set) var preview: String?
     var attach: AttachManager?
 
     private var cells: [String: CellView] = [:]
@@ -33,6 +35,7 @@ final class WorkspaceView: NSView {
     var onChange: (() -> Void)?
     /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
     var onCloseSession: ((String, Bool) -> Void)?
+    var onRenameSession: ((String) -> Void)?
     /// Ziehen: (gezogen, Ziel). Die Reihenfolge selbst gehört dem Baum, siehe `sortSelected`.
     var onMoveSession: ((String, String) -> Void)?
 
@@ -58,6 +61,7 @@ final class WorkspaceView: NSView {
         self.groups = groups
         self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
         selected.removeAll { self.sessions[$0] == nil }
+        if let p = preview, self.sessions[p] == nil { preview = nil }
         sortSelected()
         if let f = focused, !selected.contains(f) { focused = selected.first }
         for (k, v) in cells where self.sessions[k] == nil { v.removeFromSuperview(); cells[k] = nil }
@@ -81,6 +85,7 @@ final class WorkspaceView: NSView {
     /// Ersetzt die Auswahl (Klick) oder toggelt jede Id (⌘-Klick). `takeKeyboard: false`: Pfeiltasten im Baum.
     func select(_ ids: [String], add: Bool, takeKeyboard: Bool = true) {
         let ids = ids.filter { sessions[$0] != nil }
+        preview = nil
         if add {
             for id in ids {
                 if let i = selected.firstIndex(of: id) {
@@ -147,6 +152,19 @@ final class WorkspaceView: NSView {
         setFocus(selected[((i + step) % n + n) % n])
     }
 
+    /// Vorschau ohne Tastatur und ohne Prozessstart: eine beendete Session zeigt ihre letzten Zeilen.
+    func setPreview(_ key: String?) {
+        let old = preview
+        preview = key.flatMap { sessions[$0] == nil ? nil : $0 }
+        if let o = old, o != preview, !selected.contains(o) { cells[o]?.removeFromSuperview(); cells[o] = nil }
+        if let p = preview, cells[p] == nil {
+            let v = CellView(session: sessions[p]!)
+            addSubview(v)
+            cells[p] = v
+        }
+        relayout()
+    }
+
     func focusLast() { if let l = lastFocused { setFocus(l) } }
 
     func focusTile(_ i: Int) { if selected.indices.contains(i) { setFocus(selected[i]) } }
@@ -185,7 +203,10 @@ final class WorkspaceView: NSView {
         var frames: [String: CGRect] = [:]
         stackRows = []
         let visible: [String]
-        if zen, let f = focused {
+        if let p = preview {
+            visible = [p]
+            frames[p] = inset
+        } else if zen, let f = focused {
             visible = [f]
             frames[f] = inset
         } else if mode == .grid {
@@ -205,7 +226,7 @@ final class WorkspaceView: NSView {
                 continue
             }
             v.isHidden = false
-            v.headerHidden = mode == .stack && !zen
+            v.headerHidden = mode == .stack && !zen && preview == nil
             if v.frame != f { v.frame = f }
             let g = group(forSession: key)
             v.groupName = g?.name ?? ""
@@ -288,7 +309,7 @@ final class WorkspaceView: NSView {
             }
             return
         }
-        guard !stackRows.isEmpty, !zen else { return }
+        guard !stackRows.isEmpty, !zen, preview == nil else { return }
         for (r, key) in stackRows { Theme.scaled(r) { drawStackRow($0, key: key) } }
         if dragging, let t = dropTarget, let (r, _) = stackRows.first(where: { $0.1 == t }) {
             Theme.fg.setFill()
@@ -314,7 +335,11 @@ final class WorkspaceView: NSView {
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let grp = NSAttributedString(string: g?.name ?? "", attributes: Theme.attrs(10.5, color))
         var rx = r.maxX - 10
-        if hover { Icons.x(in: CGRect(x: rx - 16, y: r.midY - 8, width: 16, height: 16), color: Theme.sub); rx -= 24 }
+        if hover {
+            Icons.x(in: CGRect(x: rx - 16, y: r.midY - 8, width: 16, height: 16), color: Theme.sub)
+            Icons.pen(in: CGRect(x: rx - 36, y: r.midY - 8, width: 16, height: 16), color: Theme.sub)
+            rx -= 44
+        }
         rx -= age.size().width; age.draw(at: CGPoint(x: rx, y: r.midY - 7))
         rx -= 8 + grp.size().width; grp.draw(at: CGPoint(x: rx, y: r.midY - 7))
         if Settings.stackShowPath {
@@ -331,15 +356,17 @@ final class WorkspaceView: NSView {
 
     // MARK: Events
 
-    private enum Hit { case cell(String), cellClose(String), row(String), rowClose(String), none }
+    private enum Hit { case cell(String), cellClose(String), cellRename(String), row(String), rowClose(String), rowRename(String), none }
 
     private func hit(at p: CGPoint) -> Hit {
         for (r, key) in stackRows where r.contains(p) {
-            return CGRect(x: r.maxX - 30 * Theme.scale, y: r.minY, width: 30 * Theme.scale, height: r.height).contains(p) ? .rowClose(key) : .row(key)
+            let fromRight = (r.maxX - p.x) / Theme.scale
+            return fromRight < 30 ? .rowClose(key) : fromRight < 50 ? .rowRename(key) : .row(key)
         }
         for (key, v) in cells where !v.isHidden && v.frame.contains(p) {
             let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
             if !v.headerHidden, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .cellClose(key) }
+            if !v.headerHidden, v.penRect.insetBy(dx: -2, dy: -4).contains(local) { return .cellRename(key) }
             return .cell(key)
         }
         return .none
@@ -357,9 +384,9 @@ final class WorkspaceView: NSView {
         var cell: String?, row: String?
         switch hit(at: p) {
         case .cell(let k): cell = k; NSCursor.arrow.set()
-        case .cellClose(let k): cell = k; NSCursor.pointingHand.set()
+        case .cellClose(let k), .cellRename(let k): cell = k; NSCursor.pointingHand.set()
         case .row(let k): row = k; NSCursor.pointingHand.set()
-        case .rowClose(let k): row = k; NSCursor.pointingHand.set()
+        case .rowClose(let k), .rowRename(let k): row = k; NSCursor.pointingHand.set()
         case .none: NSCursor.arrow.set()
         }
         guard cell != hoveredCell || row != hoveredRow else { return }
@@ -381,6 +408,7 @@ final class WorkspaceView: NSView {
         pressed = nil
         switch hit(at: p) {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
+        case .cellRename(let k), .rowRename(let k): onRenameSession?(k)
         case .cell(let k), .row(let k):
             pressed = (p, k)
             // Beendete Session: Klick setzt sie fort.
@@ -398,7 +426,7 @@ final class WorkspaceView: NSView {
         NSCursor.closedHand.set()
         var t: String?
         switch hit(at: p) {
-        case .cell(let k), .cellClose(let k), .row(let k), .rowClose(let k): t = k == press.key ? nil : k
+        case .cell(let k), .cellClose(let k), .cellRename(let k), .row(let k), .rowClose(let k), .rowRename(let k): t = k == press.key ? nil : k
         case .none: t = nil
         }
         guard t != dropTarget else { return }

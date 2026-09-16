@@ -18,15 +18,20 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var sessionId: String
     /// Leer, bis Claude Code einen echten Titel vergibt.
     var name: String
+    /// Von Hand vergeben (F2, Stift). Geht immer vor `name`, Titel von Claude Code ändern daran nichts.
+    var customName: String? = nil
     var rawStatus: String? = nil
     var pid: Int? = nil
     var waitingFor: String? = nil
     /// Git-Branch des Projektordners, wird bei jedem Refresh aus `.git/HEAD` gelesen.
     var branch: String? = nil
+    /// Erste Nachricht aus dem Transcript, Ersatztitel solange Claude Code keinen vergeben hat (Haiku scheitert still).
+    var firstPrompt: String? = nil
 
-    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name }
+    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName }
 
-    var title: String { name.isEmpty ? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name }
+    var title: String { customName ?? autoTitle }
+    var autoTitle: String { name.isEmpty ? firstPrompt ?? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name }
     var status: SessionStatus { Session.mapStatus(state: nil, status: rawStatus) }
     var startDate: Date { Date(timeIntervalSince1970: startedAt / 1000) }
 

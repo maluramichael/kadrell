@@ -52,7 +52,9 @@ final class CellView: NSView {
     /// Logische Punkte der Titelzeile (vor `Theme.scale`).
     private var xRectLogical: CGRect { CGRect(x: bounds.width / Theme.scale - 24, y: 5, width: 16, height: 16) }
     private let dotRectLogical = CGRect(x: 9, y: 9, width: 8, height: 8)
+    private var penRectLogical: CGRect { xRectLogical.offsetBy(dx: -20, dy: 0) }
     var xRect: CGRect { xRectLogical.scaled(Theme.scale) }
+    var penRect: CGRect { penRectLogical.scaled(Theme.scale) }
     var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
     var statusColor: NSColor { attached ? Theme.color(for: session.status) : Theme.detached }
     /// Hintergrund der Kachel, leicht in Gruppenfarbe getönt, damit Gruppen auf einen Blick auseinanderfallen.
@@ -79,7 +81,7 @@ final class CellView: NSView {
         NSBezierPath(ovalIn: dotRectLogical).fill()
         let meta = NSAttributedString(string: session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
-        var iconW: CGFloat = hovered ? 24 : 0
+        var iconW: CGFloat = hovered ? 44 : 0
         if zoomed {
             let z = CGRect(x: b.width - iconW - 9 - metaW - 8 - 16, y: 5, width: 16, height: 16)
             Theme.waiting.setFill(); z.fill()
@@ -95,8 +97,8 @@ final class CellView: NSView {
         title.draw(with: CGRect(x: 24, y: 5, width: titleW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         if branchW > 0 { branch.draw(at: CGPoint(x: 24 + titleW + 8, y: 6)) }
         group.draw(with: CGRect(x: 24 + titleW + 8 + branchW, y: 6, width: max(0, b.width - 24 - titleW - 8 - branchW - metaW - iconW - 16), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        meta.draw(at: CGPoint(x: b.width - (hovered ? 24 : 0) - 9 - metaW, y: 6))
-        if hovered { Icons.x(in: xRectLogical, color: Theme.sub) }
+        meta.draw(at: CGPoint(x: b.width - (hovered ? 44 : 0) - 9 - metaW, y: 6))
+        if hovered { Icons.x(in: xRectLogical, color: Theme.sub); Icons.pen(in: penRectLogical, color: Theme.sub) }
     }
 
     private func drawBody(_ body: CGRect) {

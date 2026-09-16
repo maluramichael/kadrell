@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var palette: PaletteWindow!
     private var overlay: OverlayPanel?
     private var keyMonitor: Any?
+    private var scrollMonitor: Any?
+    private var fontScrollAccum: CGFloat = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
@@ -159,6 +161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.onToggleFavorite = { [weak self] gid in self?.store.toggleFavorite(id: gid); self?.reloadViews() }
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
         sidebar.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
+        sidebar.onRenameSession = { [weak self] key in self?.renameSession(key) }
+        workspace.onRenameSession = { [weak self] key in self?.renameSession(key) }
         sidebar.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         sidebar.onMoveGroup = { [weak self] gid, target in self?.store.moveGroup(gid, to: target); self?.reloadViews() }
         workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
@@ -172,11 +176,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Offene Hilfe hat selbst die Tastatur: F1 schließt sie wieder.
             if event.keyCode == 122, overlayIsAbout, event.window === overlay { dismissSheet(); return nil }
             guard event.window === self.window else { return event }
+            // Vorschau offen: ⏎ übernimmt die Session als Auswahl, Esc zeigt wieder die alte.
+            if workspace.preview != nil, event.modifierFlags.intersection(Hotkey.modMask).isEmpty, [36, 76, 53].contains(event.keyCode) {
+                endPreview(commit: event.keyCode != 53)
+                return nil
+            }
             if let action = Hotkeys.action(for: event) { self.perform(action); return nil }
             // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
             if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
             if event.keyCode == 122 { self.showAbout(); return nil }   // F1
             return event
+        }
+        // ⌘ + Mausrad: Schriftgröße aller Terminals wie ⌘+/⌘-. Trackpad-Deltas sammeln, sonst springt es pro Wisch zweistellig.
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self, event.window === self.window,
+                  event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command else { return event }
+            fontScrollAccum += event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 20 : event.scrollingDeltaY
+            let steps = Int(fontScrollAccum)
+            guard steps != 0 else { return nil }
+            fontScrollAccum -= CGFloat(steps)
+            Settings.terminalFontSize += Double(steps)
+            applyAppearance()
+            return nil
         }
     }
 
@@ -244,12 +265,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Baum und Leiste folgen der Arbeitsfläche (Auswahl, Fokus, Layout).
     private func syncSidebar() {
         sidebar.selected = Set(workspace.selected)
-        sidebar.focused = workspace.focused
+        sidebar.focused = workspace.preview ?? workspace.focused
         sidebar.showMessages = Settings.showLastMessage
         sidebar.messages = registry?.lastMessages ?? [:]
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
-        let focused = workspace.focused.flatMap { sessions[$0] }
+        let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
         let fg = focused.flatMap { workspace.group(forSession: $0.id) }
         bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, NSColor(hexString: $0.color)) }
@@ -379,6 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func perform(_ action: HotkeyAction) {
+        if action != .previewNext, action != .previewPrev { endPreview(commit: false) }
         if let i = action.tileIndex { workspace.focusTile(i); return }
         switch action {
         case .focusLeft: workspace.moveFocus(.left)
@@ -392,12 +414,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .nextSession: workspace.cycleFocus(1)
         case .prevSession: workspace.cycleFocus(-1)
         case .lastSession: workspace.focusLast()
+        case .previewNext: stepPreview(1)
+        case .previewPrev: stepPreview(-1)
         case .zoom: workspace.toggleZen()
         case .nextLayout: workspace.setMode(workspace.mode.other)
         case .focusSidebar: focusSidebar()
         case .focusWorkspace: focusWorkspace()
+        case .openEditor: openEditor()
+        case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
         default: workspace.removeFocused()
         }
+    }
+
+    /// Tastatur-Besitzer vor der Vorschau: Esc gibt sie ihm zurück.
+    private weak var previewResponder: NSResponder?
+
+    private func stepPreview(_ step: Int) {
+        if workspace.preview == nil { previewResponder = window.firstResponder }
+        guard let key = sidebar.sessionId(after: workspace.preview ?? workspace.focused, step: step) else { NSSound.beep(); return }
+        workspace.setPreview(key)
+        sidebar.reveal(key)
+    }
+
+    private func endPreview(commit: Bool) {
+        guard let key = workspace.preview else { return }
+        if commit { workspace.select([key], add: false); return }
+        workspace.setPreview(nil)
+        if let r = previewResponder as? NSView, r.window === window { window.makeFirstResponder(r) }
+        else if let f = workspace.focused { workspace.setFocus(f) }
+    }
+
+    /// Ordner der Fokus-Session im eingestellten Editor öffnen. Über die Login-Shell, damit `code` und Co. im PATH liegen.
+    private func openEditor() {
+        let cmd = Settings.editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cwd = workspace.focused.flatMap { workspace.session($0) }?.cwd ?? ""
+        guard !cmd.isEmpty, !cwd.isEmpty else { NSSound.beep(); return }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        p.arguments = ["-lc", cmd + " ."]
+        p.currentDirectoryURL = URL(fileURLWithPath: cwd)
+        p.environment = cli?.environment
+        p.standardInput = FileHandle.nullDevice
+        do { try p.run() } catch { report(error) }
     }
 
     private func focusSidebar() {
@@ -451,6 +509,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
             ("Session stoppen (fokussierte)", { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
             ("Session fortsetzen (fokussierte)", { [weak self] in if let s = focusedSession { self?.attach.attachNow(s); self?.workspace.select([s.id], add: false) } }),
+            ("Session umbenennen (fokussierte)", { [weak self] in if let s = focusedSession { self?.renameSession(s.id) } }),
             ("Session schließen (fokussierte)", { [weak self] in if let s = focusedSession { self?.closeSession(s.id) } }),
             ("Gruppe bearbeiten (der fokussierten Session)", { [weak self] in
                 if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
@@ -563,6 +622,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.attach(sessionId: id, to: target!.id)
         registry.add(Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: ""))
         workspace.select([id], add: !workspace.selected.isEmpty)
+    }
+
+    /// Unverändert bestätigt bleibt der Name automatisch, sonst hält ein Enter Claudes Titel für immer fest.
+    private func renameSession(_ key: String) {
+        guard let s = workspace.session(key) else { return }
+        let model = RenameSessionModel(session: s)
+        model.onSave = { [weak self] name in
+            guard let self else { return }
+            dismissSheet()
+            if s.customName == nil, name == s.title { return }
+            registry.rename(key, to: name)
+        }
+        present(RenameSessionView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
     }
 
     private func openEditGroup(_ gid: String) {

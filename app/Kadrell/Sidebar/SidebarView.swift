@@ -38,6 +38,7 @@ final class SidebarView: NSView {
     /// Zweiter Parameter: ⌘ gehalten, dann ohne Rückfrage.
     var onCloseGroup: ((String, Bool) -> Void)?
     var onCloseSession: ((String, Bool) -> Void)?
+    var onRenameSession: ((String) -> Void)?
     /// Ziehen: (gezogen, Ziel), Session innerhalb ihrer Gruppe bzw. Gruppe vor/hinter eine andere.
     var onMoveSession: ((String, String) -> Void)?
     var onMoveGroup: ((String, String) -> Void)?
@@ -212,8 +213,12 @@ final class SidebarView: NSView {
         let pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
         (s.status == .running && attached ? c.withAlphaComponent(pulse) : c).setFill()
         NSBezierPath(ovalIn: dotRect(row)).fill()
-        if hover { Icons.x(in: iconRects(r, count: 1)[0], color: Theme.muted) }
-        var right = r.maxX - 8 - 20   // Icon-Platz immer reserviert
+        if hover {
+            let icons = iconRects(r, count: 2)
+            Icons.x(in: icons[0], color: Theme.muted)
+            Icons.pen(in: icons[1], color: Theme.muted)
+        }
+        var right = r.maxX - 8 - 40   // Icon-Platz immer reserviert
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         right -= age.size().width
         age.draw(at: CGPoint(x: right, y: r.midY - 7))
@@ -235,12 +240,21 @@ final class SidebarView: NSView {
         case 126: step = -1
         default: super.keyDown(with: event); return
         }
+        guard let id = sessionId(after: focused, step: step) else { return }
+        anchor = id
+        onSelect?([id], .cursor)
+        reveal(id)
+    }
+
+    /// Nachbar in Baumreihenfolge über die sichtbaren Sessions, am Rand bleibt es stehen. Ohne Start die erste.
+    func sessionId(after id: String?, step: Int) -> String? {
         let ids = sessionIds
-        guard !ids.isEmpty else { return }
-        let i = focused.flatMap { ids.firstIndex(of: $0) }.map { min(max($0 + step, 0), ids.count - 1) } ?? 0
-        anchor = ids[i]
-        onSelect?([ids[i]], .cursor)
-        if let r = rows.firstIndex(where: { $0.key == "s:" + ids[i] }) { scrollToVisible(rowRect(r).scaled(Theme.scale)) }
+        guard !ids.isEmpty else { return nil }
+        return ids[id.flatMap { ids.firstIndex(of: $0) }.map { min(max($0 + step, 0), ids.count - 1) } ?? 0]
+    }
+
+    func reveal(_ id: String) {
+        if let r = rows.firstIndex(where: { $0.key == "s:" + id }) { scrollToVisible(rowRect(r).scaled(Theme.scale)) }
     }
 
     override func updateTrackingAreas() {
@@ -283,7 +297,9 @@ final class SidebarView: NSView {
                 return
             }
         case .session(let s, _):
-            if iconRects(headRect(r), count: 1)[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseSession?(s.id, force); return }
+            let icons = iconRects(headRect(r), count: 2)
+            if icons[0].insetBy(dx: -3, dy: -3).contains(p) { onCloseSession?(s.id, force); return }
+            if icons[1].insetBy(dx: -3, dy: -3).contains(p) { onRenameSession?(s.id); return }
         }
         pressed = (p, rows[i], event.modifierFlags)
     }

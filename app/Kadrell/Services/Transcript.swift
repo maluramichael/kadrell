@@ -29,6 +29,26 @@ enum Transcript {
         return out
     }
 
+    /// Erste echte Eingabe des Nutzers, gekürzt. Slash-Commands und ihre Ausgabe (`<command-name>` …) zählen nicht.
+    static func firstPrompt(path: String, head: Int = 1 << 18, limit: Int = 50) -> String? {
+        guard let h = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? h.close() }
+        guard let data = try? h.read(upToCount: head) else { return nil }
+        for line in data.split(separator: UInt8(ascii: "\n")) {
+            guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+                  obj["type"] as? String == "user", obj["isMeta"] as? Bool != true, obj["isSidechain"] as? Bool != true,
+                  let content = (obj["message"] as? [String: Any])?["content"] else { continue }
+            let text = (content as? String)
+                ?? (content as? [[String: Any]])?.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: " ")
+                ?? ""
+            let flat = text.replacingOccurrences(of: "\\[Image #\\d+\\]", with: "", options: .regularExpression)
+                .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            if flat.isEmpty || flat.hasPrefix("<") { continue }
+            return flat.count > limit ? flat.prefix(limit).trimmingCharacters(in: .whitespaces) + "…" : flat
+        }
+        return nil
+    }
+
     /// ponytail: nur das letzte MB, reicht solange keine Tool-Ausgabe allein größer ist; sonst ganze Datei lesen.
     static func lastText(path: String, tail: UInt64 = 1 << 20) -> String? {
         guard let h = FileHandle(forReadingAtPath: path) else { return nil }

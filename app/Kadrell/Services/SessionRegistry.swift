@@ -10,6 +10,8 @@ final class SessionRegistry {
     /// Letzte Textantwort von Claude je Session (`Session.id`), nur wenn in den Einstellungen eingeschaltet.
     private(set) var lastMessages: [String: String] = [:]
     private var transcripts: [String: Transcript.Entry] = [:]
+    /// Ersatztitel je sessionId. Die erste Nachricht ändert sich nicht, einmal gefunden wird nie wieder gelesen.
+    private var firstPrompts: [String: String] = [:]
     /// Schlüssel der Session je pid des eigenen Claude-Prozesses, liefert der AttachManager.
     var pids: () -> [Int: String] = { [:] }
     var onChange: (([Session]) -> Void)?
@@ -42,6 +44,15 @@ final class SessionRegistry {
         onChange?(sessions)
     }
 
+    /// Leer = wieder der Titel von Claude Code.
+    func rename(_ id: String, to name: String) {
+        guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        sessions[i].customName = n.isEmpty ? nil : n
+        save()
+        onChange?(sessions)
+    }
+
     func remove(_ ids: Set<String>) {
         sessions.removeAll { ids.contains($0.id) }
         save()
@@ -51,7 +62,15 @@ final class SessionRegistry {
     func pollNow() async {
         let pids = pids()
         let agents = Agent.local(pids: Array(pids.keys), configDir: cli.configDir)
-        let merged = SessionRegistry.merge(sessions, agents: agents, pids: pids)
+        var merged = SessionRegistry.merge(sessions, agents: agents, pids: pids)
+        let missing = merged.filter { $0.name.isEmpty && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
+        if !missing.isEmpty {
+            let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
+                if let p = Transcript.path(sessionId: id), let t = Transcript.firstPrompt(path: p) { r[id] = t }
+            } }.value
+            firstPrompts.merge(found) { a, _ in a }
+        }
+        for i in merged.indices { merged[i].firstPrompt = firstPrompts[merged[i].sessionId] }
         var messages: [String: String] = [:]
         if Settings.showLastMessage {
             let ids = merged.map(\.sessionId), cache = transcripts
@@ -94,5 +113,5 @@ final class SessionRegistry {
 }
 
 private extension Session {
-    var stored: [String] { [id, cwd, String(startedAt), sessionId, name] }
+    var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? ""] }
 }

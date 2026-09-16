@@ -12,6 +12,12 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: startFolderKey) }
     }
 
+    /// Kommando des externen Editors, so wie im Terminal getippt (`code`, `subl`, `zed`). "" = Hotkey tut nichts.
+    static var editorCommand: String {
+        get { UserDefaults.standard.string(forKey: "editorCommand") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "editorCommand") }
+    }
+
     /// Letzte Antwort von Claude als zweite Zeile unter jeder Session im Baum.
     static var showLastMessage: Bool {
         get { UserDefaults.standard.bool(forKey: "showLastMessage") }
@@ -118,6 +124,7 @@ enum Settings {
 @MainActor
 final class SettingsModel {
     var startFolder = Settings.startFolder
+    var editorCommand = Settings.editorCommand
     var showLastMessage = Settings.showLastMessage
     var stackShowPath = Settings.stackShowPath
     var closeTileOnExit = Settings.closeTileOnExit
@@ -145,6 +152,7 @@ final class SettingsModel {
         stopRecording()
         let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         if !p.isEmpty { Settings.startFolder = p }
+        Settings.editorCommand = editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         Settings.showLastMessage = showLastMessage
         Settings.stackShowPath = stackShowPath
         Settings.closeTileOnExit = closeTileOnExit
@@ -201,7 +209,7 @@ struct SettingsView: View {
 
     /// Kürzel nach denselben Bereichen wie die F1-Hilfe; die zweite Gruppe nimmt den Rest, damit keine Aktion verschwindet.
     private var hotkeyGroups: [(String, [HotkeyAction])] {
-        let nav: [HotkeyAction] = [.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession]
+        let nav: [HotkeyAction] = [.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev]
             + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace]
         return [("Navigation", nav), ("Kacheln verwalten", HotkeyAction.allCases.filter { !nav.contains($0) })]
     }
@@ -229,6 +237,12 @@ struct SettingsView: View {
                         .buttonStyle(.plain).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                         .padding(.horizontal, 10).padding(.vertical, 4).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
                     }
+                }
+                setting("Externer Editor (Kommando wie im Terminal)") {
+                    TextField("z. B. code", text: $model.editorCommand)
+                        .textFieldStyle(.plain).font(Theme.ui(12)).foregroundStyle(Theme.fgColor)
+                        .frame(width: 260 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Theme.bgColor)
                 }
                 setting("Wenn Claude endet (zweimal ⌃C, /exit)") {
                     HStack(spacing: 2) {
@@ -259,7 +273,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden().pickerStyle(.menu).frame(width: 260 * Theme.scale)
                 }
-                setting("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0") {
+                setting("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad") {
                     HStack(spacing: 2) {
                         pill("−", on: false) { model.fontSize = max(Settings.fontSizes.lowerBound, model.fontSize - 1) }
                         Text("\(Int(model.fontSize)) pt").font(Theme.ui(12, bold: true)).frame(width: 60 * Theme.scale)
