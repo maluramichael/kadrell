@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import os
 
 /// Unix-Socket der laufenden App, wie der tmux-Server: eine Zeile JSON (`ControlRequest`) hin, eine zurück.
@@ -149,9 +149,15 @@ enum ControlClient {
     }
 
     static func run(_ argv: [String]) -> Int32 {
-        if (try? ControlCommand.parse(argv)) == .help {
-            print(ControlCommand.usage)
-            return 0
+        // Vor dem Verbinden prüfen: ein Tippfehler soll die App nicht starten.
+        do {
+            if try ControlCommand.parse(argv) == .help {
+                print(ControlCommand.usage)
+                return 0
+            }
+        } catch {
+            FileHandle.standardError.write(Data("kadrell: \((error as? ControlError)?.message ?? String(describing: error))\n".utf8))
+            return 1
         }
         let env = ProcessInfo.processInfo.environment
         let path = env["KADRELL_SOCKET"] ?? ControlSocket.defaultPath
@@ -159,6 +165,10 @@ enum ControlClient {
         do {
             var resp = try send(req, path: path)
             if resp == nil {
+                // Läuft Kadrell ohne Socket (Version vor der Fernsteuerung), würde `open` sie nur nach vorn holen.
+                guard NSRunningApplication.runningApplications(withBundleIdentifier: "de.malura.kadrell").isEmpty else {
+                    throw ControlError("Kadrell läuft, lauscht aber nicht auf \(path). Alte Version? Kadrell neu starten.")
+                }
                 launchApp()
                 // Die App braucht fürs Einlesen der Login-Shell-Umgebung ein paar Sekunden, erst danach lauscht sie.
                 let deadline = Date().addingTimeInterval(30)
