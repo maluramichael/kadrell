@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.15.0 (2026-09-16)
+
+- Feature: `kadrell move` verschiebt eine Session in eine andere Gruppe, ohne sie zu beenden.
+
 ## 1.14.0 (2026-09-16)
 
 - Feature: `kadrell new --resume` übernimmt eine bestehende Claude-Konversation, zum Beispiel aus tmux, sobald sie dort beendet ist.

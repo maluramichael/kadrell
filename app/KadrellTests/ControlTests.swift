@@ -19,6 +19,8 @@ final class ControlTests: XCTestCase {
         XCTAssertEqual(try ControlCommand.parse(["send", "-t", "ab", "hallo", "welt"]), .send(target: "ab", text: "hallo welt", enter: true, keys: false))
         XCTAssertEqual(try ControlCommand.parse(["send-keys", "-k", "C-c", "Enter"]), .send(target: nil, text: "C-c Enter", enter: false, keys: true))
         XCTAssertEqual(try ControlCommand.parse(["kill"]), .killSession(target: nil))
+        XCTAssertEqual(try ControlCommand.parse(["move", "-t", "44a3", "acme skills"]), .move(target: "44a3", group: "acme skills"))
+        XCTAssertThrowsError(try ControlCommand.parse(["move", "-t", "44a3"]))
         XCTAssertEqual(try ControlCommand.parse(["layout", "stack"]), .layout(.stack))
     }
 

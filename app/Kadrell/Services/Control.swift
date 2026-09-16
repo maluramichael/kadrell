@@ -34,6 +34,7 @@ enum ControlCommand: Equatable {
     case layout(LayoutMode)
     case zoom(target: String?)
     case rename(target: String?, name: String)
+    case move(target: String?, group: String)
     case setGroup(target: String?, name: String?, color: String?, favorite: Bool?)
     case stop(target: String?)
     case resume(target: String?)
@@ -60,6 +61,7 @@ enum ControlCommand: Equatable {
       kadrell layout grid|stack                            Layout
       kadrell zoom [-t session]                            Zoom ein/aus
       kadrell rename [-t session] <name>                   umbenennen (leer = Titel von Claude Code)
+      kadrell move [-t session] <gruppe>                   Session in eine andere Gruppe verschieben, läuft weiter
       kadrell set-group [-t gruppe] [--name N] [--color #rrggbb] [--favorite on|off]
       kadrell stop [-t session]                            Claude beenden, Kachel bleibt
       kadrell resume [-t session]                          Claude wieder starten
@@ -112,6 +114,10 @@ enum ControlCommand: Equatable {
         case "rename":
             let a = try Args(rest, values: ["-t"])
             return .rename(target: a["-t"], name: a.positional.joined(separator: " "))
+        case "move":
+            let a = try Args(rest, values: ["-t"])
+            guard a.positional.count == 1 else { throw ControlError("move braucht genau eine Zielgruppe") }
+            return .move(target: a["-t"], group: a.positional[0])
         case "set-group":
             return try parseSetGroup(rest)
         case "stop", "resume", "kill", "kill-session", "kill-group":
