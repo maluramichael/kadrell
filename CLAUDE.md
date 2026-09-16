@@ -26,3 +26,15 @@ und Schlüsselbund nehmen. `tools/release.sh` archiviert (Release, Hardened Runt
 exportiert mit Developer ID, baut das DMG, notarisiert, stapelt und lädt nach `/var/www/kadrell/download/`.
 Einmalige Vorbereitung (Zertifikat, `notarytool store-credentials kadrell`) steht im Kopf des Skripts.
 Landingpage: `../kadrell.malura.de`.
+
+**Wann releasen (Claude entscheidet, ohne Rückfrage):** Am Ende eines Auftrags, wenn die Änderung gebaut,
+verifiziert und committet ist, `tools/release.sh` laufen lassen, sobald
+- die Version seit dem letzten DMG auf dem Server gestiegen ist (das Skript prüft das selbst und tut
+  sonst nichts) und
+- die Änderung für Nutzer spürbar ist: neues Feature, ein Fix, den man beim Arbeiten merkt, oder eine
+  Änderung im Verhalten. Reine Interna, Doku, Tests: kein Release.
+Nicht mitten in einer Arbeitsreihe nach jedem Commit releasen, sondern einmal am Schluss. Notarisierung
+dauert 1 bis 5 Minuten, das Skript wartet. Danach die Version und den Link im Abschlussbericht nennen.
+Das kann nur auf dem Mac laufen (Xcode, Schlüsselbund), nicht per Hook auf examplehost.
+Alle Versionen bleiben unter https://kadrell.malura.de/download/ liegen (Caddy-Listing), `Kadrell.dmg`
+ist immer die neueste. App-Größe: rund 7 MB, DMG rund 3,5 MB.
