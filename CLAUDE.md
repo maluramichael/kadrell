@@ -27,14 +27,13 @@ exportiert mit Developer ID, baut das DMG, notarisiert, stapelt und lädt nach `
 Einmalige Vorbereitung (Zertifikat, `notarytool store-credentials kadrell`) steht im Kopf des Skripts.
 Landingpage: `../kadrell.malura.de`.
 
-**Wann releasen (Claude entscheidet, ohne Rückfrage):** Am Ende eines Auftrags, wenn die Änderung gebaut,
-verifiziert und committet ist, `tools/release.sh` laufen lassen, sobald
-- die Version seit dem letzten DMG auf dem Server gestiegen ist (das Skript prüft das selbst und tut
-  sonst nichts) und
-- die Änderung für Nutzer spürbar ist: neues Feature, ein Fix, den man beim Arbeiten merkt, oder eine
-  Änderung im Verhalten. Reine Interna, Doku, Tests: kein Release.
-Nicht mitten in einer Arbeitsreihe nach jedem Commit releasen, sondern einmal am Schluss. Notarisierung
-dauert 1 bis 5 Minuten, das Skript wartet. Danach die Version und den Link im Abschlussbericht nennen.
+**Wann releasen: nur nach Rückfrage, und selten.** Jedes Release geht zur Notarisierung an Apple, das soll
+nicht nach jedem Fix passieren. Änderungen sammeln, mehrere Features und Fixes kommen gemeinsam in ein Release.
+Nach einem Auftrag normal den Debug-Build bauen (`app/README.md`), committen und pushen: Michael testet lokal.
+`tools/release.sh` erst laufen lassen, wenn Michael es ausdrücklich will. Wenn sich seit dem letzten DMG
+(Version auf dem Server) spürbar viel angesammelt hat, darf Claude im Abschlussbericht in einer Zeile fragen,
+ob released werden soll, aber nicht selbst starten. Reine Interna, Doku, Tests: nie Anlass für ein Release.
+Notarisierung dauert 1 bis 5 Minuten, das Skript wartet. Danach die Version und den Link im Abschlussbericht nennen.
 Nach dem Release in `../kadrell.malura.de/index.html` die Versionsnummer im Hero-Pill („Version x.y.z“) nachziehen
 und dort pushen (deployt automatisch).
 Danach die frisch gebaute Release-App lokal installieren, damit Michael sie per ⌘Space startet:
