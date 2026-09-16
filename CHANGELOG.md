@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.8.1 (2026-09-16)
+
+- Fix: Ein Klick in das Terminal einer Kachel gibt ihr wieder die Tastatur, auch wenn mehrere Sessions offen sind. Vorher ging das nur über die Titelzeile.
+
 ## 1.8.0 (2026-09-16)
 
 - Fix: Sessions, denen Claude Code keinen Titel gibt, heißen jetzt nach ihrer ersten Nachricht statt nach Ordner und Id.

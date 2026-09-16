@@ -16,6 +16,14 @@ final class KadrellTerminalView: LocalProcessTerminalView {
         return super.performKeyEquivalent(with: event)
     }
 
+    /// Mit Metal liegt eine Zeichenfläche als Unteransicht über dem Terminal. Trifft der Klick sie, macht das Fenster
+    /// nichts zum First Responder und die Kachel bekommt keine Tastatur. Deshalb nimmt das Terminal den Klick selbst,
+    /// nur echte Bedienelemente (Scroller, Suchleiste) behalten ihn.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let v = super.hitTest(point) else { return nil }
+        return v is NSControl || v.acceptsFirstResponder ? v : self
+    }
+
     override func processTerminated(_ source: LocalProcess, exitCode: Int32?) {
         super.processTerminated(source, exitCode: exitCode)
         onExit?()
