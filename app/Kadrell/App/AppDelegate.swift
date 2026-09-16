@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fontScrollAccum: CGFloat = 0
     /// Session, für die zuletzt `session-focus` gefeuert hat.
     private var hookFocus: String?
+    /// Wartende Sessions beim letzten Abgleich: neu dazugekommene lösen `requestUserAttention` aus.
+    private var lastWaitingIds: Set<String> = []
     /// ⌘A/⌘⇧A: Auswahl davor und danach, damit ein zweiter Druck zurückschaltet.
     private var selectAllUndo: (shift: Bool, before: [String], focus: String?, after: Set<String>)?
     var controlServer: ControlServer?
@@ -177,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleAuto = { [weak self] in self?.workspace.toggleAuto() }
         bar.onToggleSync = { [weak self] in self?.workspace.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
+        bar.onSelectWaiting = { [weak self] in guard let self else { return }; workspace.select(waitingIds(), add: false) }
 
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
@@ -310,7 +313,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.sync = workspace.sync
         bar.sort = sidebar.sort
         bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
+        let waiting = waitingIds()
+        NSApp.dockTile.badgeLabel = waiting.isEmpty ? nil : "\(waiting.count)"
+        let waitingSet = Set(waiting)
+        // Neu dazugekommene wartende Session, Fenster nicht im Vordergrund: kurz im Dock hüpfen, ohne Notification-Rechte.
+        if !waitingSet.subtracting(lastWaitingIds).isEmpty, window?.isKeyWindow == false { NSApp.requestUserAttention(.informationalRequest) }
+        lastWaitingIds = waitingSet
+        bar.waitingCount = waiting.count
         bar.needsDisplay = true
+    }
+
+    /// Wartende Sessions in Baumreihenfolge, unabhängig von eingeklappten Gruppen: `waitingFor` kommt nur bei
+    /// laufendem eigenen Prozess (siehe `SessionRegistry.merge`), `isAttached` ist die zusätzliche Absicherung.
+    private func waitingIds() -> [String] {
+        let sessions = workspace.sessions
+        return store.groups.flatMap(\.sessionIds).filter { sessions[$0]?.status == .waiting && (attach?.isAttached($0) ?? false) }
     }
 
     // MARK: Menü
@@ -500,6 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .lastSession: workspace.focusLast()
         case .previewNext: stepPreview(1)
         case .previewPrev: stepPreview(-1)
+        case .nextWaiting: focusNextWaiting()
         case .zoom: workspace.toggleZen()
         case .nextLayout: workspace.setMode(workspace.mode.other)
         case .focusSidebar: focusSidebar()
@@ -513,6 +531,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func cycleSort() { Settings.sidebarSort = Settings.sidebarSort.next; syncSidebar() }
+
+    /// Springt zur nächsten Session, die wartet, egal ob ihre Gruppe eingeklappt oder ihre Kachel schon offen ist.
+    private func focusNextWaiting() {
+        let ids = waitingIds()
+        guard !ids.isEmpty else { NSSound.beep(); return }
+        let next = workspace.focused.flatMap { ids.firstIndex(of: $0) }.map { ids[($0 + 1) % ids.count] } ?? ids[0]
+        workspace.addMissing([next])
+        workspace.setFocus(next)
+        sidebar.reveal(next)
+    }
 
     /// Tastatur-Besitzer vor der Vorschau: Esc gibt sie ihm zurück.
     private weak var previewResponder: NSResponder?

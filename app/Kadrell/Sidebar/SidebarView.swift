@@ -235,9 +235,12 @@ final class SidebarView: NSView {
     }
 
     private func drawGroup(_ g: Group, in r: CGRect, first: Bool, hover: Bool) {
-        let dots = g.sessionIds.compactMap { sessions[$0] }.map { attach?.isAttached($0.id) ?? false ? Theme.color(for: $0.status) : Theme.detached }
+        let members = g.sessionIds.compactMap { sessions[$0] }
+        let dots = members.map { attach?.isAttached($0.id) ?? false ? Theme.color(for: $0.status) : Theme.detached }
+        let waiting = members.filter { $0.status == .waiting && (attach?.isAttached($0.id) ?? false) }.count
         renderer.drawGroup(SidebarGroupItem(group: g, color: Theme.group(g.color), dots: dots, open: !collapsed.contains(g.id),
-                                            selected: g.sessionIds.contains { selected.contains($0) }, hover: hover, first: first), in: r)
+                                            selected: g.sessionIds.contains { selected.contains($0) }, hover: hover, first: first,
+                                            waitingCount: waiting), in: r)
     }
 
     private func drawSession(_ s: Session, group g: Group, in r: CGRect, hover: Bool) {

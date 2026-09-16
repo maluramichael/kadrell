@@ -9,7 +9,7 @@ struct AboutView: View {
                 ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "ganze Gruppen der Auswahl, nochmal: zurück"), ("⌘⇧A", "alle Sessions, nochmal: zurück"),
                 ("⌘N", "Neue Session"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘T", "Terminal ohne Claude im Ordner der fokussierten"),
             ] + rows([.openEditor, .renameSession]) + [("Stift", "an Kachel und Baum-Zeile: umbenennen")]),
-            ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev]
+            ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
                                 + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace])
                 + [("⌘P", "Suche, mit > Kommandos"), ("⌘F", "Im Terminal suchen, ⌘G weiter"), ("⌘⇧F", "In allen Terminals suchen")]),
             ("Kacheln verwalten", rows([.swapLeft, .swapRight, .swapUp, .swapDown, .zoom, .nextLayout, .syncInput, .closeFocused]) + [
