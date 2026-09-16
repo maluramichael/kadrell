@@ -12,6 +12,9 @@ final class StatusBarView: NSView {
     var usage = Usage.empty
     var layoutMode: LayoutMode = .grid
     var onToggleLayout: (() -> Void)?
+    /// Auto-Modus: nur Sessions, die etwas wollen. An = gefülltes Badge.
+    var auto = false
+    var onToggleAuto: (() -> Void)?
     /// Zoom aktiv: Badge „ZOOM“ links neben dem Breadcrumb, Klick hebt den Zoom auf.
     var zoomed = false
     var onToggleZoom: (() -> Void)?
@@ -51,7 +54,13 @@ final class StatusBarView: NSView {
         Icons.layout(layoutMode, in: CGRect(x: 11, y: midY - 7, width: 14, height: 14), color: Theme.sub)
         Theme.line.setFill(); CGRect(x: toggle.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((toggle, { [weak self] in self?.onToggleLayout?() }))
-        var leftEnd = toggle.maxX + 8
+        let at = NSAttributedString(string: "AUTO", attributes: Theme.attrs(10, auto ? Theme.bg : Theme.muted, bold: true))
+        let autoRect = CGRect(x: toggle.maxX + 1, y: 0, width: at.size().width + 20, height: b.height - 1)
+        if auto { Theme.waiting.setFill(); autoRect.insetBy(dx: 5, dy: 6).fill() }
+        at.draw(at: CGPoint(x: autoRect.minX + 10, y: midY - 7))
+        Theme.line.setFill(); CGRect(x: autoRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
+        hitRects.append((autoRect, { [weak self] in self?.onToggleAuto?() }))
+        var leftEnd = autoRect.maxX + 8
         if zoomed {
             let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.bg, bold: true))
             let z = CGRect(x: leftEnd, y: midY - 9, width: zt.size().width + 12, height: 18)

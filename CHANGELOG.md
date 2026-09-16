@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.13.0 (2026-09-16)
+
+- Feature: Auto-Modus (Schalter „AUTO“ oben links): von den ausgewählten Sessions erscheinen nur die, die gerade auf deine Antwort warten. Nach der Antwort verschwindet die Kachel nach drei Sekunden wieder. In den Einstellungen lassen sich auch arbeitende Sessions dazunehmen.
+
 ## 1.12.0 (2026-09-16)
 
 - Feature: Kadrell lässt sich wie tmux von außen steuern: `kadrell ls`, `kadrell new-group`, `kadrell new`, `kadrell send`, `kadrell capture` und weitere Befehle, auch aus einer Claude-Session heraus. `kadrell help` zeigt alle.

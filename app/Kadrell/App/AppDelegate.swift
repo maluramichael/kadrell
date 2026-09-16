@@ -172,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
+        bar.onToggleAuto = { [weak self] in self?.workspace.toggleAuto() }
 
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
@@ -289,6 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
         bar.zoomed = workspace.zen
+        bar.auto = workspace.auto
         bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
         bar.needsDisplay = true
     }
@@ -325,6 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let view = NSMenu(title: "Ansicht")
         view.addItem(withTitle: "Grid", action: #selector(menuGrid), keyEquivalent: "")
         view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "")
+        view.addItem(withTitle: "Auto-Modus ein/aus", action: #selector(menuAuto), keyEquivalent: "")
         view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
         view.addItem(.separator())
         view.addItem(withTitle: "Terminal-Schrift größer", action: #selector(menuFontBigger), keyEquivalent: "+")
@@ -403,6 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func menuGrid() { workspace.setMode(.grid) }
     @objc private func menuStack() { workspace.setMode(.stack) }
+    @objc private func menuAuto() { workspace.toggleAuto() }
     @objc private func menuSidebar() {
         sidebarScroll.isHidden.toggle()
         split.adjustSubviews()

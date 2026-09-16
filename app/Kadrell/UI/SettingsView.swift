@@ -48,6 +48,16 @@ enum Settings {
         set { UserDefaults.standard.set(newValue, forKey: "closeTileOnExit") }
     }
 
+    /// Auto-Modus zeigt aus der Auswahl nur Sessions in diesen Zuständen. Default: nur wartende.
+    static var autoWaiting: Bool {
+        get { UserDefaults.standard.object(forKey: "auto.waiting") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "auto.waiting") }
+    }
+    static var autoRunning: Bool {
+        get { UserDefaults.standard.bool(forKey: "auto.running") }
+        set { UserDefaults.standard.set(newValue, forKey: "auto.running") }
+    }
+
     /// Start-Flags für Claude, gelten ab dem nächsten Start eines Claude-Prozesses. "" = Claude-Default.
     static let claudeModes = ["", "acceptEdits", "auto", "plan", "dontAsk", "bypassPermissions"]
     static let claudeModels = ["", "fable", "opus", "sonnet"]
@@ -161,6 +171,8 @@ final class SettingsModel {
     var sidebarStyle = Settings.sidebarStyle
     var sidebarShowAge = Settings.sidebarShowAge
     var closeTileOnExit = Settings.closeTileOnExit
+    var autoWaiting = Settings.autoWaiting
+    var autoRunning = Settings.autoRunning
     var claudeAllowBypass = Settings.claudeAllowBypass
     var claudeMode = Settings.claudeMode
     var claudeModel = Settings.claudeModel
@@ -192,6 +204,8 @@ final class SettingsModel {
         Settings.sidebarStyle = sidebarStyle
         Settings.sidebarShowAge = sidebarShowAge
         Settings.closeTileOnExit = closeTileOnExit
+        Settings.autoWaiting = autoWaiting
+        Settings.autoRunning = autoRunning
         Settings.claudeAllowBypass = claudeAllowBypass
         Settings.claudeMode = claudeMode
         Settings.claudeModel = claudeModel
@@ -333,6 +347,12 @@ struct SettingsView: View {
                 setting("Laufzeit im Baum") { pill(model.sidebarShowAge ? "an" : "aus", on: model.sidebarShowAge) { model.sidebarShowAge.toggle() } }
                 setting("Pfad in Stack-Zeilen") { pill(model.stackShowPath ? "an" : "aus", on: model.stackShowPath) { model.stackShowPath.toggle() } }
                 setting("Letzte Antwort von Claude im Baum") { pill(model.showLastMessage ? "an" : "aus", on: model.showLastMessage) { model.showLastMessage.toggle() } }
+                setting("Auto-Modus zeigt") {
+                    HStack(spacing: 2) {
+                        pill("wartende", on: model.autoWaiting) { model.autoWaiting.toggle() }
+                        pill("arbeitende", on: model.autoRunning) { model.autoRunning.toggle() }
+                    }
+                }
             }
             .padding(.horizontal, 16)
 

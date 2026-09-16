@@ -19,6 +19,12 @@ final class WorkspaceView: NSView {
     /// ⌥J/⌥K: eine Session aus dem Baum vorübergehend allein zeigen. Auswahl und Fokus bleiben unangetastet.
     private(set) var preview: String?
     var attach: AttachManager?
+    /// Auto-Modus: aus der Auswahl nur wartende bzw. arbeitende Sessions zeigen (Einstellungen).
+    private(set) var auto = UserDefaults.standard.bool(forKey: "workspace.auto")
+    /// Passt eine Session nicht mehr, bleibt ihre Kachel bis zu diesem Zeitpunkt stehen.
+    private var linger: [String: CFTimeInterval] = [:]
+    private var lastMatching: Set<String> = []
+    private var lastTiles: [String] = []
 
     private var cells: [String: CellView] = [:]
     private var stackRows: [(CGRect, String)] = []
@@ -133,23 +139,26 @@ final class WorkspaceView: NSView {
     }
 
     func moveFocus(_ d: Tiling.Direction) {
-        guard let f = focused, let i = selected.firstIndex(of: f),
-              let j = Tiling.neighbor(of: i, count: selected.count, mode: zen ? .stack : mode, d) else { return }
-        setFocus(selected[j])
+        let tiles = tiles
+        guard let f = focused, let i = tiles.firstIndex(of: f),
+              let j = Tiling.neighbor(of: i, count: tiles.count, mode: zen ? .stack : mode, d) else { return }
+        setFocus(tiles[j])
     }
 
     /// Fokus-Kachel mit ihrem Nachbarn in Richtung `d` tauschen, wie Ziehen: die Reihenfolge gehört dem Baum.
     func swapFocused(_ d: Tiling.Direction) {
-        guard let f = focused, let i = selected.firstIndex(of: f),
-              let j = Tiling.neighbor(of: i, count: selected.count, mode: mode, d) else { return }
-        onMoveSession?(f, selected[j])
+        let tiles = tiles
+        guard let f = focused, let i = tiles.firstIndex(of: f),
+              let j = Tiling.neighbor(of: i, count: tiles.count, mode: mode, d) else { return }
+        onMoveSession?(f, tiles[j])
     }
 
     /// Nächste (+1) oder vorige (-1) Kachel, am Ende wieder vorn.
     func cycleFocus(_ step: Int) {
-        guard let f = focused, let i = selected.firstIndex(of: f) else { return }
-        let n = selected.count
-        setFocus(selected[((i + step) % n + n) % n])
+        let tiles = tiles
+        guard let f = focused, let i = tiles.firstIndex(of: f) else { return }
+        let n = tiles.count
+        setFocus(tiles[((i + step) % n + n) % n])
     }
 
     /// Vorschau ohne Tastatur und ohne Prozessstart: eine beendete Session zeigt ihre letzten Zeilen.
@@ -167,7 +176,38 @@ final class WorkspaceView: NSView {
 
     func focusLast() { if let l = lastFocused { setFocus(l) } }
 
-    func focusTile(_ i: Int) { if selected.indices.contains(i) { setFocus(selected[i]) } }
+    func focusTile(_ i: Int) { let t = tiles; if t.indices.contains(i) { setFocus(t[i]) } }
+
+    func toggleAuto() {
+        auto.toggle()
+        UserDefaults.standard.set(auto, forKey: "workspace.auto")
+        linger = [:]
+        lastMatching = []
+        zen = false
+        relayout()
+        focusTerminal()
+    }
+
+    /// Kacheln rechts: die Auswahl, im Auto-Modus gefiltert samt Nachlauf.
+    private var tiles: [String] { auto ? selected.filter { matchesAuto($0) || linger[$0] != nil } : selected }
+
+    private func matchesAuto(_ key: String) -> Bool {
+        switch sessions[key]?.status {
+        case .waiting: Settings.autoWaiting
+        case .running: Settings.autoRunning
+        default: false
+        }
+    }
+
+    /// Wer eben noch passte und jetzt nicht mehr, läuft 3 s nach.
+    private func updateLinger() {
+        guard auto else { return }
+        let now = CACurrentMediaTime()
+        let matching = Set(selected.filter(matchesAuto))
+        for id in lastMatching.subtracting(matching) where linger[id] == nil { linger[id] = now + 3 }
+        linger = linger.filter { $0.value > now && !matching.contains($0.key) && selected.contains($0.key) }
+        lastMatching = matching
+    }
 
     func setMode(_ m: LayoutMode) {
         mode = m
@@ -202,22 +242,31 @@ final class WorkspaceView: NSView {
         let inset = bounds.insetBy(dx: 6, dy: 6)
         var frames: [String: CGRect] = [:]
         stackRows = []
+        updateLinger()
+        let tiles = tiles
+        // Auto-Modus: ist die Fokus-Kachel weg, bekommt eine neu aufgetauchte (sonst die erste) den Fokus.
+        var refocus = false
+        if auto, preview == nil, let first = tiles.first, !(focused.map(tiles.contains) ?? false) {
+            focused = tiles.first { !lastTiles.contains($0) } ?? first
+            refocus = true
+        }
+        lastTiles = tiles
         let visible: [String]
         if let p = preview {
             visible = [p]
             frames[p] = inset
-        } else if zen, let f = focused {
+        } else if zen, let f = focused, tiles.contains(f) {
             visible = [f]
             frames[f] = inset
         } else if mode == .grid {
-            visible = selected
-            for (id, r) in zip(selected, Tiling.grid(count: selected.count, in: inset)) { frames[id] = r }
+            visible = tiles
+            for (id, r) in zip(tiles, Tiling.grid(count: tiles.count, in: inset)) { frames[id] = r }
         } else {
-            let active = focused.flatMap { selected.firstIndex(of: $0) } ?? 0
-            let (rows, body) = Tiling.stack(count: selected.count, active: active, in: inset, rowHeight: (Tiling.rowHeight * Theme.scale).rounded())
-            stackRows = Array(zip(rows, selected))
-            visible = selected.isEmpty ? [] : [selected[active]]
-            if !selected.isEmpty { frames[selected[active]] = body }
+            let active = focused.flatMap { tiles.firstIndex(of: $0) } ?? 0
+            let (rows, body) = Tiling.stack(count: tiles.count, active: active, in: inset, rowHeight: (Tiling.rowHeight * Theme.scale).rounded())
+            stackRows = Array(zip(rows, tiles))
+            visible = tiles.isEmpty ? [] : [tiles[active]]
+            if !tiles.isEmpty { frames[tiles[active]] = body }
         }
         for (key, v) in cells {
             guard let f = frames[key], let s = sessions[key] else {
@@ -232,7 +281,7 @@ final class WorkspaceView: NSView {
             v.groupName = g?.name ?? ""
             v.groupColor = NSColor(hexString: g?.color ?? "#6c7086")
             v.focused = focused == key && visible.count > 1
-            v.zoomed = zen && selected.count > 1
+            v.zoomed = zen && tiles.count > 1
             v.dropTarget = dragging && dropTarget == key
             v.hovered = hoveredCell == key
             v.attached = attach?.isAttached(key) ?? false
@@ -247,6 +296,7 @@ final class WorkspaceView: NSView {
         for (key, t) in attach?.terminals ?? [:] where frames[key] == nil && t.superview != nil { unmountTerminal(for: key) }
         if let w = window, w.firstResponder === w { w.makeFirstResponder(self) }
         needsDisplay = true
+        if refocus { focusTerminal() }
         onChange?()
     }
 
@@ -293,6 +343,8 @@ final class WorkspaceView: NSView {
             if !v.headerHidden { v.setNeedsDisplay(v.dotRect) }
         }
         if !stackRows.isEmpty { needsDisplay = true }
+        let now = CACurrentMediaTime()
+        if linger.values.contains(where: { $0 <= now }) { relayout() }
     }
 
     // MARK: Zeichnen
@@ -300,9 +352,10 @@ final class WorkspaceView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         Theme.bg.setFill()
         dirtyRect.fill()
-        if selected.isEmpty {
-            let a = NSAttributedString(string: "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
-            let b = NSAttributedString(string: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+        if tiles.isEmpty {
+            let idle = auto && !selected.isEmpty
+            let a = NSAttributedString(string: idle ? "Gerade wartet keine Session" : "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
+            let b = NSAttributedString(string: idle ? "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will" : "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
             Theme.scaled(bounds) { r in
                 a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
                 b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
@@ -419,7 +472,7 @@ final class WorkspaceView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let press = pressed, selected.count > 1, !zen else { return }
+        guard let press = pressed, tiles.count > 1, !zen else { return }
         let p = convert(event.locationInWindow, from: nil)
         if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true }
         guard dragging else { return }
