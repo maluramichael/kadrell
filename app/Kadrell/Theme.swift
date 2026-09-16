@@ -13,8 +13,21 @@ enum Theme {
     static let idle = NSColor(hex: 0xa6e3a1)
     static let error = NSColor(hex: 0xf38ba8)
     static let detached = NSColor(hex: 0x45475a)
-    static let palette = ["#fab387", "#cba6f7", "#f5c2e7", "#89b4fa", "#a6e3a1",
-                          "#94e2d5", "#f9e2af", "#eba0ac", "#b4befe", "#74c7ec"]
+    /// Neue Gruppen bekommen reihum eine noch freie Farbe von hier.
+    static let palette = palettes[0].colors
+    /// Auswahl im Dialog „Gruppe bearbeiten“. Werte aus den offiziellen Paletten übernommen.
+    static let palettes: [(name: String, colors: [String])] = [
+        ("Catppuccin", ["#fab387", "#cba6f7", "#f5c2e7", "#89b4fa", "#a6e3a1", "#94e2d5", "#f9e2af",
+                        "#eba0ac", "#b4befe", "#74c7ec", "#89dceb", "#f38ba8", "#f2cdcd", "#f5e0dc"]),
+        ("Tailwind", ["#f87171", "#fb923c", "#fbbf24", "#facc15", "#a3e635", "#4ade80", "#34d399", "#2dd4bf", "#22d3ee",
+                      "#38bdf8", "#60a5fa", "#818cf8", "#a78bfa", "#c084fc", "#e879f9", "#f472b6", "#fb7185"]),
+        ("Nord", ["#8fbcbb", "#88c0d0", "#81a1c1", "#5e81ac", "#bf616a", "#d08770", "#ebcb8b", "#a3be8c", "#b48ead"]),
+        ("Dracula", ["#8be9fd", "#50fa7b", "#ffb86c", "#ff79c6", "#bd93f9", "#ff5555", "#f1fa8c"]),
+        ("Gruvbox", ["#fb4934", "#b8bb26", "#fabd2f", "#83a598", "#d3869b", "#8ec07c", "#fe8019",
+                     "#cc241d", "#98971a", "#d79921", "#458588", "#b16286", "#689d6a", "#d65d0e"]),
+        ("Rosé Pine", ["#eb6f92", "#f6c177", "#ebbcba", "#31748f", "#9ccfd8", "#c4a7e7"]),
+        ("Okabe-Ito", ["#e69f00", "#56b4e9", "#009e73", "#f0e442", "#0072b2", "#d55e00", "#cc79a7"]),
+    ]
     /// UI-Größe aus den Einstellungen. Gezeichnete Views skalieren per `scaled`, SwiftUI per `ui`, Terminals nicht.
     nonisolated(unsafe) static var scale = CGFloat(Settings.uiScale)
     static var barHeight: CGFloat { (30 * scale).rounded() }

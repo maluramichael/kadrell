@@ -23,10 +23,11 @@ final class EditGroupModel {
     }
 }
 
-/// Stift am Gruppen-Header: Name und Farbe (nativer Picker plus Palette). Der Ordner bleibt fest.
+/// Stift am Gruppen-Header: Name und Farbe. Klick auf die Farbe klappt die Paletten auf. Der Ordner bleibt fest.
 struct EditGroupView: View {
     @Bindable var model: EditGroupModel
     @FocusState private var focused: Bool
+    @State private var showPalettes = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,15 +37,14 @@ struct EditGroupView: View {
                 TextField("Name", text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                     .focused($focused)
                     .onSubmit { model.save() }
-                ColorPicker("", selection: $model.color, supportsOpacity: false).labelsHidden()
-                HStack(spacing: 4) {
-                    ForEach(Theme.palette, id: \.self) { hex in
-                        Rectangle().fill(Color(nsColor: NSColor(hexString: hex))).frame(width: 14, height: 14)
-                            .onTapGesture { model.color = Color(nsColor: NSColor(hexString: hex)) }
-                    }
-                }
+                Capsule().fill(model.color).frame(width: 44 * Theme.scale, height: 20 * Theme.scale)
+                    .overlay(Capsule().stroke(Theme.mutedColor, lineWidth: showPalettes ? 1.5 : 0))
+                    .contentShape(Capsule())
+                    .onTapGesture { showPalettes.toggle() }
+                    .help("Farbe aus einer Palette wählen")
             }
             .padding(14)
+            if showPalettes { palettes }
             Text(Theme.shortPath(model.group.cwd)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
             DialogFoot(hint: "Esc abbrechen", button: "Speichern") { model.save() }
@@ -54,6 +54,30 @@ struct EditGroupView: View {
         .frame(width: 640 * Theme.scale)
         .background(Theme.panelColor)
         .onAppear { focused = true }
+    }
+
+    private var palettes: some View {
+        let current = NSColor(model.color).hexString
+        let size = 18 * Theme.scale
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(Theme.palettes, id: \.name) { p in
+                HStack(spacing: 4) {
+                    Text(p.name).foregroundStyle(Color(nsColor: Theme.sub)).frame(width: 110 * Theme.scale, alignment: .leading)
+                    ForEach(p.colors, id: \.self) { hex in
+                        Rectangle().fill(Color(nsColor: NSColor(hexString: hex))).frame(width: size, height: size)
+                            .overlay(Rectangle().stroke(Theme.fgColor, lineWidth: hex == current ? 2 : 0))
+                            .contentShape(Rectangle())
+                            .onTapGesture { model.color = Color(nsColor: NSColor(hexString: hex)); showPalettes = false }
+                    }
+                }
+            }
+            HStack(spacing: 4) {
+                Text("Eigene").foregroundStyle(Color(nsColor: Theme.sub)).frame(width: 110 * Theme.scale, alignment: .leading)
+                ColorPicker("", selection: $model.color, supportsOpacity: false).labelsHidden()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16).padding(.bottom, 12)
     }
 }
 

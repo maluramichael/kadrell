@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.23.0 (2026-09-16)
+
+- Feature: Klick auf die Farbe im Dialog „Gruppe bearbeiten“ klappt sieben Farbpaletten auf (Catppuccin, Tailwind, Nord, Dracula, Gruvbox, Rosé Pine, Okabe-Ito), ein Klick auf ein Kästchen übernimmt die Farbe.
+- Änderung: Neue Gruppen bekommen reihum 14 statt 10 Farben.
+
 ## 1.22.2 (2026-09-16)
 
 - Änderung: Terminals ohne Claude tragen im Baum ein kleines Monitor-Symbol vor dem Statuspunkt statt „Terminal ·“ im Namen.
