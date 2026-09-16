@@ -35,6 +35,17 @@ enum Icons {
         p.stroke()
     }
 
+    /// Monitor mit Fuß: Terminal ohne Claude (⌘T).
+    @MainActor static func computer(in r: CGRect, color: NSColor) {
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 16 * r.width, y: r.minY + y / 16 * r.height) }
+        let p = NSBezierPath(roundedRect: CGRect(origin: pt(1.5, 2), size: CGSize(width: r.width * 13 / 16, height: r.height * 9 / 16)), xRadius: 1.5, yRadius: 1.5)
+        p.move(to: pt(8, 11)); p.line(to: pt(8, 14))
+        p.move(to: pt(4.5, 14)); p.line(to: pt(11.5, 14))
+        p.lineWidth = 1.3
+        color.setStroke()
+        p.stroke()
+    }
+
     /// Herz für Favoriten: gefüllt, solange die Gruppe einer ist, sonst nur der Umriss.
     @MainActor static func heart(in r: CGRect, color: NSColor, filled: Bool) {
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 16 * r.width, y: r.minY + y / 16 * r.height) }

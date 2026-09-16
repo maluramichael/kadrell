@@ -88,6 +88,7 @@ extension SidebarRenderer {
         }
         s.dot.setFill()
         NSBezierPath(ovalIn: dotRect(row)).fill()
+        if s.session.isShell { Icons.computer(in: CGRect(x: 12, y: r.midY - 6, width: 12, height: 12), color: s.selected || s.hover ? Theme.fg : Theme.muted) }
         var right = r.maxX - 10
         if s.showAge {
             let age = NSAttributedString(string: s.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))

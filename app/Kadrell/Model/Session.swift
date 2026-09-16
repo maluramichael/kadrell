@@ -32,7 +32,7 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
 
     var title: String { customName ?? autoTitle }
     var autoTitle: String {
-        if isShell { return "Terminal · " + URL(fileURLWithPath: cwd).lastPathComponent }
+        if isShell { return URL(fileURLWithPath: cwd).lastPathComponent }
         return name.isEmpty ? firstPrompt ?? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name
     }
     /// Terminal ohne Claude (⌘T): Login-Shell statt `claude`, erkennbar am Schlüssel.

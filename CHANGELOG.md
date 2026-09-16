@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.22.2 (2026-09-16)
+
+- Änderung: Terminals ohne Claude tragen im Baum ein kleines Monitor-Symbol vor dem Statuspunkt statt „Terminal ·“ im Namen.
+
 ## 1.22.1 (2026-09-16)
 
 - Fix: Bei eingeschaltetem Sync sind alle Kacheln, die die Eingabe bekommen, sichtbar ausgewählt.
