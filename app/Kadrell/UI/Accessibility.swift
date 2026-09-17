@@ -72,12 +72,12 @@ extension Array where Element == HitRegion {
 extension SessionStatus {
     /// Vorgelesener Status.
     var spoken: String {
-        switch self { case .running: String(localized: "arbeitet"); case .waiting: String(localized: "wartet"); case .idle: String(localized: "fertig"); case .error: String(localized: "Fehler") }
+        switch self { case .running: String(localized: "arbeitet", bundle: Bundle.app); case .waiting: String(localized: "wartet", bundle: Bundle.app); case .idle: String(localized: "fertig", bundle: Bundle.app); case .error: String(localized: "Fehler", bundle: Bundle.app) }
     }
 
     /// Vorgelesener Status einer Session: ohne laufenden Prozess „beendet“ (`ended`) oder „nicht gestartet“.
     func spoken(attached: Bool, ended: Bool = false) -> String {
-        attached ? spoken : ended ? String(localized: "beendet") : String(localized: "nicht gestartet")
+        attached ? spoken : ended ? String(localized: "beendet", bundle: Bundle.app) : String(localized: "nicht gestartet", bundle: Bundle.app)
     }
 }
 

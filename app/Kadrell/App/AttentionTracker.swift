@@ -75,11 +75,11 @@ final class AttentionTracker {
                                    statuses: [String: SessionStatus], notLooking: (String) -> Bool) {
         // Einmaliger Tipp bei der allerersten wartenden Session überhaupt (Kanboard #14): sonst bleibt Gelb unerklärt.
         if !changed.waiting.isEmpty {
-            showTipOnce("tip.waiting.shown", String(localized: "Gelb heißt: Claude wartet auf dich. ⌥N springt zur nächsten wartenden Session."))
+            showTipOnce("tip.waiting.shown", String(localized: "Gelb heißt: Claude wartet auf dich. ⌥N springt zur nächsten wartenden Session.", bundle: Bundle.app))
         }
         // VoiceOver bekommt sonst nichts vom Kernnutzen der App mit: welche Session gerade auf einen wartet oder fertig ist.
-        for id in changed.waiting { announce(String(localized: "\(sessions[id]?.title ?? "") wartet")) }
-        for id in changed.done { announce(String(localized: "\(sessions[id]?.title ?? "") fertig")) }
+        for id in changed.waiting { announce(String(localized: "\(sessions[id]?.title ?? "") wartet", bundle: Bundle.app)) }
+        for id in changed.done { announce(String(localized: "\(sessions[id]?.title ?? "") fertig", bundle: Bundle.app)) }
         if changed.waiting.contains(where: notLooking) { play(.waiting) } else if changed.done.contains(where: notLooking) { play(.done) }
         for (ids, waiting) in [(changed.waiting, true), (changed.done, false)] {
             for key in ids.filter(notLooking) { if let s = sessions[key] { notify(key, s, waiting) } }

@@ -215,18 +215,18 @@ final class SidebarView: NSView {
         case .group(let g):
             let cmd = cmdDown
             items = [
-                (g.isFavorite ? String(localized: "Kein Favorit") : String(localized: "Favorit"),
+                (g.isFavorite ? String(localized: "Kein Favorit", bundle: Bundle.app) : String(localized: "Favorit", bundle: Bundle.app),
                  { Icons.heart(in: $0.insetBy(dx: 1, dy: 1), color: g.isFavorite ? Theme.group(g.color) : $1, filled: g.isFavorite) },
                  { [weak self] in self?.onToggleFavorite?(g.id) }),
-                (String(localized: "Neue Session"),
+                (String(localized: "Neue Session", bundle: Bundle.app),
                  { g.host != nil ? Icons.server(in: $0, color: $1) : cmd ? Icons.computer(in: $0, color: $1) : Icons.plus(in: $0, color: $1) },
                  { [weak self] in flags.contains(.command) ? self?.onNewTerminal?(g.id) : self?.onNewSession?(g.id) }),
-                (String(localized: "Bearbeiten"), { Icons.pen(in: $0, color: $1) }, { [weak self] in self?.onEditGroup?(g.id) }),
-                (String(localized: "Schließen"), { Icons.x(in: $0, color: $1) }, { [weak self] in self?.onCloseGroup?(g.id, force) }),
+                (String(localized: "Bearbeiten", bundle: Bundle.app), { Icons.pen(in: $0, color: $1) }, { [weak self] in self?.onEditGroup?(g.id) }),
+                (String(localized: "Schließen", bundle: Bundle.app), { Icons.x(in: $0, color: $1) }, { [weak self] in self?.onCloseGroup?(g.id, force) }),
             ]
         case .session(let s, _):
-            items = [(String(localized: "Umbenennen"), { Icons.pen(in: $0, color: $1) }, { [weak self] in self?.onRenameSession?(s.id) }),
-                     (String(localized: "Schließen"), { Icons.x(in: $0, color: $1) }, { [weak self] in self?.onCloseSession?(s.id, force) })]
+            items = [(String(localized: "Umbenennen", bundle: Bundle.app), { Icons.pen(in: $0, color: $1) }, { [weak self] in self?.onRenameSession?(s.id) }),
+                     (String(localized: "Schließen", bundle: Bundle.app), { Icons.x(in: $0, color: $1) }, { [weak self] in self?.onCloseSession?(s.id, force) })]
         }
         let r = rowRect(i), head = min(r.height, 24), w = CGFloat(items.count) * 20 + 4
         let t = CGRect(x: r.maxX - 6 - w, y: r.minY + (head - 22) / 2, width: w, height: 22)
@@ -336,7 +336,7 @@ final class SidebarView: NSView {
     private var a11y: [A11yElement] = []
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .outline }
-    override func accessibilityLabel() -> String? { String(localized: "Sessions") }
+    override func accessibilityLabel() -> String? { String(localized: "Sessions", bundle: Bundle.app) }
 
     /// Zeilen der ausgewählten Sessions, für VO-Pfeile in einer echten Outline.
     override func accessibilitySelectedRows() -> [Any]? {
@@ -351,20 +351,20 @@ final class SidebarView: NSView {
             switch row {
             case .group(let g):
                 let n = g.sessionIds.count(where: { sessions[$0] != nil })
-                let label = n == 1 ? String(localized: "Gruppe \(g.name), 1 Session") : String(localized: "Gruppe \(g.name), \(n) Sessions")
+                let label = n == 1 ? String(localized: "Gruppe \(g.name), 1 Session", bundle: Bundle.app) : String(localized: "Gruppe \(g.name), \(n) Sessions", bundle: Bundle.app)
                 e.update(parent: self, role: .row, label: label, frame: frame,
                         press: { [weak self] in self?.onSelect?(g.sessionIds, .replace) },
                         // Reihenfolge im VoiceOver-Menü wie bisher: Neue Session vor Favorit.
-                        actions: [a11yAction(collapsed.contains(g.id) ? String(localized: "Ausklappen") : String(localized: "Einklappen")) { [weak self] in self?.toggleCollapsed(g.id) },
+                        actions: [a11yAction(collapsed.contains(g.id) ? String(localized: "Ausklappen", bundle: Bundle.app) : String(localized: "Einklappen", bundle: Bundle.app)) { [weak self] in self?.toggleCollapsed(g.id) },
                                   tools[1], tools[0], tools[2], tools[3]])
                 e.setAccessibilityDisclosureLevel(0)
                 e.setAccessibilityExpanded(!collapsed.contains(g.id))
                 return e
             case .session(let s, _):
                 let status = s.status.spoken(attached: isAttached(s.id))
-                let extra = [unread.contains(s.id) ? String(localized: "neu") : nil, selected.contains(s.id) ? String(localized: "ausgewählt") : nil].compactMap { $0 }
+                let extra = [unread.contains(s.id) ? String(localized: "neu", bundle: Bundle.app) : nil, selected.contains(s.id) ? String(localized: "ausgewählt", bundle: Bundle.app) : nil].compactMap { $0 }
                 let value = ([status] + extra).joined(separator: ", ")
-                e.update(parent: self, role: .row, label: String(localized: "Session \(s.title)"), value: value, frame: frame,
+                e.update(parent: self, role: .row, label: String(localized: "Session \(s.title)", bundle: Bundle.app), value: value, frame: frame,
                         press: { [weak self] in self?.anchor = s.id; self?.onSelect?([s.id], .replace) },
                         actions: tools)
                 e.setAccessibilityDisclosureLevel(1)

@@ -31,7 +31,7 @@ final class NewSessionModel {
         self.groups = groups
         self.counts = counts
         self.index = index
-        if let c = FolderIndex.clipboardFolder() { context.append((c, String(localized: "Zwischenablage"))) }
+        if let c = FolderIndex.clipboardFolder() { context.append((c, String(localized: "Zwischenablage", bundle: Bundle.app))) }
         update()
         guard askFinder else { return }
         Task { [weak self] in
@@ -145,20 +145,20 @@ struct NewSessionView: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("NEUE SESSION").dialogTitle()
-            PathField(text: $model.query, placeholder: String(localized: "Projekt suchen oder Pfad tippen (~/d/p/kad)"),
+            PathField(text: $model.query, placeholder: String(localized: "Projekt suchen oder Pfad tippen (~/d/p/kad)", bundle: Bundle.app),
                       onTab: model.tab, onSubmit: model.start, onMove: model.move)
                 .frame(height: 22 * Theme.scale).padding(14)
             Divider().overlay(Theme.lineColor)
             list
             Divider().overlay(Theme.lineColor)
             HStack(spacing: 6) {
-                Text(String(localized: "Startet mit: \(Settings.claudeSummary)")).font(Theme.ui(10.5)).foregroundStyle(Theme.mutedColor).lineLimit(1)
+                Text(String(localized: "Startet mit: \(Settings.claudeSummary)", bundle: Bundle.app)).font(Theme.ui(10.5)).foregroundStyle(Theme.mutedColor).lineLimit(1)
                 Spacer()
                 if let onOpenSettings {
-                    Button(String(localized: "ändern")) { onOpenSettings() }.buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.runningColor)
+                    Button(String(localized: "ändern", bundle: Bundle.app)) { onOpenSettings() }.buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.runningColor)
                 }
             }.padding(.horizontal, 16).padding(.vertical, 6)
-            DialogFoot(hint: String(localized: "⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen"), button: String(localized: "Starten")) { model.start() }
+            DialogFoot(hint: String(localized: "⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen", bundle: Bundle.app), button: String(localized: "Starten", bundle: Bundle.app)) { model.start() }
         }
         .dialogFrame()
         .overlay { if dropping { Rectangle().stroke(Theme.runningColor, lineWidth: 2) } }
@@ -177,7 +177,7 @@ struct NewSessionView: View {
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 8)
                     }
                     if items.isEmpty, let bad = model.notFoundPath {
-                        Text(String(localized: "\(Theme.shortPath(bad)) existiert nicht · ⌘⏎ anlegen und starten"))
+                        Text(String(localized: "\(Theme.shortPath(bad)) existiert nicht · ⌘⏎ anlegen und starten", bundle: Bundle.app))
                             .foregroundStyle(Theme.errorColor)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                     } else if items.isEmpty {
@@ -201,7 +201,7 @@ struct NewSessionView: View {
                 Text(Theme.shortPath(c.path)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).lineLimit(1).truncationMode(.head)
             }
             Spacer()
-            Text(c.group.map { String(localized: "\(model.counts[$0.id] ?? 0) Sessions") } ?? c.tag).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+            Text(c.group.map { String(localized: "\(model.counts[$0.id] ?? 0) Sessions", bundle: Bundle.app) } ?? c.tag).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
         }
         .padding(.vertical, 8).padding(.horizontal, 16)
         .frame(height: 46 * Theme.scale)

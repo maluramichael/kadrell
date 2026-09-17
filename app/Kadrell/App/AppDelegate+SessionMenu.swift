@@ -19,16 +19,16 @@ extension AppDelegate {
             return i
         }
         return [
-            item(String(localized: "Fortsetzen"), #selector(menuContextResume(_:)), key: "r"),
-            item(String(localized: "Stoppen"), #selector(menuContextStop(_:)), key: "."),
-            item(String(localized: "Entfernen …"), #selector(menuContextClose(_:))),
+            item(String(localized: "Fortsetzen", bundle: Bundle.app), #selector(menuContextResume(_:)), key: "r"),
+            item(String(localized: "Stoppen", bundle: Bundle.app), #selector(menuContextStop(_:)), key: "."),
+            item(String(localized: "Entfernen …", bundle: Bundle.app), #selector(menuContextClose(_:))),
             .separator(),
-            item(String(localized: "Nur diese zeigen"), #selector(menuContextIsolate(_:))),
-            item(String(localized: "Aus Ansicht nehmen"), #selector(menuContextRemoveFromView(_:))),
-            item(String(localized: "Neue Session hier"), #selector(menuContextNewHere(_:))),
+            item(String(localized: "Nur diese zeigen", bundle: Bundle.app), #selector(menuContextIsolate(_:))),
+            item(String(localized: "Aus Ansicht nehmen", bundle: Bundle.app), #selector(menuContextRemoveFromView(_:))),
+            item(String(localized: "Neue Session hier", bundle: Bundle.app), #selector(menuContextNewHere(_:))),
             .separator(),
-            item(String(localized: "Pfad kopieren"), #selector(menuContextCopyPath(_:))),
-            item(String(localized: "Im Finder zeigen"), #selector(menuContextShowInFinder(_:))),
+            item(String(localized: "Pfad kopieren", bundle: Bundle.app), #selector(menuContextCopyPath(_:))),
+            item(String(localized: "Im Finder zeigen", bundle: Bundle.app), #selector(menuContextShowInFinder(_:))),
         ]
     }
 

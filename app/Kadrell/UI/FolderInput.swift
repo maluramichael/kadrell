@@ -12,7 +12,7 @@ func chooseFolder(start: String, images: Bool = false, completion: @escaping (St
     panel.canCreateDirectories = true
     panel.allowsMultipleSelection = false
     panel.directoryURL = URL(fileURLWithPath: FolderIndex.normalize(start))
-    panel.prompt = String(localized: "Wählen")
+    panel.prompt = String(localized: "Wählen", bundle: Bundle.app)
     panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)   // über dem Dialog-Overlay
     panel.begin { resp in
         completion(resp == .OK ? panel.url.map { $0.path } : nil)
@@ -34,8 +34,8 @@ enum AppBinary {
 @MainActor
 private func warnReplaced() {
     let alert = NSAlert()
-    alert.messageText = String(localized: "Kadrell wurde seit dem Start ersetzt")
-    alert.informativeText = String(localized: "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen.")
+    alert.messageText = String(localized: "Kadrell wurde seit dem Start ersetzt", bundle: Bundle.app)
+    alert.informativeText = String(localized: "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen.", bundle: Bundle.app)
     alert.runModal()
 }
 

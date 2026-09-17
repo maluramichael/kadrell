@@ -15,7 +15,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     var onDismissTip: (() -> Void)?
     var sessionCount = 0
     var openCount = 0
-    var attachText = String(localized: "läuft \(0)/\(0)")
+    var attachText = String(localized: "läuft \(0)/\(0)", bundle: Bundle.app)
     /// Sessions, die gerade auf dich warten (Status waiting, angehängt). Modul „N warten“ nur bei > 0.
     var waitingCount = 0
     var onSelectWaiting: (() -> Void)?
@@ -153,15 +153,15 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let toggle = CGRect(x: 0, y: 0, width: 36, height: b.height - 1)
         Icons.layout(layoutMode, in: CGRect(x: 11, y: b.midY - 7, width: 14, height: 14), color: Theme.sub)
         divider(toggle.maxX, b)
-        hitRects.append(HitRegion(rect: toggle, label: String(localized: "Layout"), value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) })
+        hitRects.append(HitRegion(rect: toggle, label: String(localized: "Layout", bundle: Bundle.app), value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) })
         var x = toggle.maxX + 1
         if layoutMode == .grid { drawGridColumns(b, &x) }
         if layoutMode == .custom { drawSplit(b, &x) }
-        let onOff = { (on: Bool) in on ? String(localized: "an") : String(localized: "aus") }
-        segment(b, &x, "AUTO", fill: auto ? Theme.waiting : nil, key: "auto", String(localized: "Auto-Modus"), onOff(auto)) { [weak self] in self?.onToggleAuto?() }
+        let onOff = { (on: Bool) in on ? String(localized: "an", bundle: Bundle.app) : String(localized: "aus", bundle: Bundle.app) }
+        segment(b, &x, "AUTO", fill: auto ? Theme.waiting : nil, key: "auto", String(localized: "Auto-Modus", bundle: Bundle.app), onOff(auto)) { [weak self] in self?.onToggleAuto?() }
         segment(b, &x, "SYNC", fill: sync ? Theme.error : nil, key: "sync", "Sync", onOff(sync)) { [weak self] in self?.onToggleSync?() }
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
-        segment(b, &x, sortLabel, fill: sort == .off ? nil : Theme.sub, key: "sort", String(localized: "Sortierung"), sort == .off ? String(localized: "aus") : sortLabel) { [weak self] in self?.onCycleSort?() }
+        segment(b, &x, sortLabel, fill: sort == .off ? nil : Theme.sub, key: "sort", String(localized: "Sortierung", bundle: Bundle.app), sort == .off ? String(localized: "aus", bundle: Bundle.app) : sortLabel) { [weak self] in self?.onCycleSort?() }
         return drawZoom(b, x: x + 7)   // 8 pt hinter der letzten Trennlinie
     }
 
@@ -180,7 +180,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl, unter 1 wird es wieder automatisch.
     private func drawGridColumns(_ b: CGRect, _ x: inout CGFloat) {
         let cols = gridColumns, midY = b.midY
-        let value = NSAttributedString(string: cols == 0 ? String(localized: "AUTO SP") : String(localized: "\(cols) SP"), attributes: Theme.attrs(10, cols == 0 ? Theme.muted : Theme.fg, bold: true))
+        let value = NSAttributedString(string: cols == 0 ? String(localized: "AUTO SP", bundle: Bundle.app) : String(localized: "\(cols) SP", bundle: Bundle.app), attributes: Theme.attrs(10, cols == 0 ? Theme.muted : Theme.fg, bold: true))
         let less = NSAttributedString(string: "‹", attributes: Theme.attrs(12, Theme.sub, bold: true))
         let more = NSAttributedString(string: "›", attributes: Theme.attrs(12, Theme.sub, bold: true))
         let lessRect = CGRect(x: x, y: 0, width: less.size().width + 14, height: b.height - 1)
@@ -188,9 +188,9 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         value.draw(at: CGPoint(x: lessRect.maxX, y: midY - 7))
         let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
         more.draw(at: CGPoint(x: moreRect.minX + 7, y: midY - 9))
-        let spoken = cols == 0 ? String(localized: "automatisch") : "\(cols)"
-        hitRects.append(HitRegion(rect: lessRect, label: String(localized: "Weniger Spalten"), value: spoken) { [weak self] in self?.onGridColumns?(max(0, cols - 1)) })
-        hitRects.append(HitRegion(rect: moreRect, label: String(localized: "Mehr Spalten"), value: spoken) { [weak self] in self?.onGridColumns?(min(12, cols + 1)) })
+        let spoken = cols == 0 ? String(localized: "automatisch", bundle: Bundle.app) : "\(cols)"
+        hitRects.append(HitRegion(rect: lessRect, label: String(localized: "Weniger Spalten", bundle: Bundle.app), value: spoken) { [weak self] in self?.onGridColumns?(max(0, cols - 1)) })
+        hitRects.append(HitRegion(rect: moreRect, label: String(localized: "Mehr Spalten", bundle: Bundle.app), value: spoken) { [weak self] in self?.onGridColumns?(min(12, cols + 1)) })
         divider(moreRect.maxX, b)
         x = moreRect.maxX + 1
     }
@@ -199,11 +199,11 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private func drawSplit(_ b: CGRect, _ x: inout CGFloat) {
         let next: Character = split == "a" ? "r" : split == "r" ? "d" : "a"
         let (text, spoken) = switch split {
-        case "r": (String(localized: "TEILT →"), String(localized: "rechts"))
-        case "d": (String(localized: "TEILT ↓"), String(localized: "unten"))
-        default: (String(localized: "TEILT AUTO"), String(localized: "automatisch"))
+        case "r": (String(localized: "TEILT →", bundle: Bundle.app), String(localized: "rechts", bundle: Bundle.app))
+        case "d": (String(localized: "TEILT ↓", bundle: Bundle.app), String(localized: "unten", bundle: Bundle.app))
+        default: (String(localized: "TEILT AUTO", bundle: Bundle.app), String(localized: "automatisch", bundle: Bundle.app))
         }
-        segment(b, &x, text, color: split == "a" ? Theme.muted : Theme.fg, String(localized: "Nächste Kachel teilt"), spoken) { [weak self] in self?.onSplit?(next) }
+        segment(b, &x, text, color: split == "a" ? Theme.muted : Theme.fg, String(localized: "Nächste Kachel teilt", bundle: Bundle.app), spoken) { [weak self] in self?.onSplit?(next) }
     }
 
     private func drawZoom(_ b: CGRect, x: CGFloat) -> CGFloat {
@@ -212,7 +212,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let z = CGRect(x: x, y: b.midY - 9, width: zt.size().width + 12, height: 18)
         Theme.waiting.setFill(); z.fill()
         zt.draw(at: CGPoint(x: z.minX + 6, y: b.midY - 8))
-        hitRects.append(HitRegion(rect: z, label: String(localized: "Zoom aufheben")) { [weak self] in self?.onToggleZoom?() })
+        hitRects.append(HitRegion(rect: z, label: String(localized: "Zoom aufheben", bundle: Bundle.app)) { [weak self] in self?.onToggleZoom?() })
         return z.maxX + 8
     }
 
@@ -237,21 +237,21 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private func drawNotices(_ b: CGRect, _ rx: inout CGFloat) {
         if let update = updateAvailable {
             // Dezent statt der waiting-Farbe: kein Alarm, nur ein Hinweis.
-            module(b, &rx, [NSAttributedString(string: String(localized: "\(update.version) verfügbar"), attributes: Theme.attrs(11, Theme.fg))], pill: Theme.surface,
-                   String(localized: "Update verfügbar"), value: update.version) { [weak self] in self?.onShowUpdate?() }
+            module(b, &rx, [NSAttributedString(string: String(localized: "\(update.version) verfügbar", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.fg))], pill: Theme.surface,
+                   String(localized: "Update verfügbar", bundle: Bundle.app), value: update.version) { [weak self] in self?.onShowUpdate?() }
         }
         if waitingCount > 0 {
-            module(b, &rx, [NSAttributedString(string: String(localized: "\(waitingCount) warten"), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))], pill: Theme.waiting,
-                   String(localized: "Wartende Sessions"), value: "\(waitingCount)") { [weak self] in self?.onSelectWaiting?() }
+            module(b, &rx, [NSAttributedString(string: String(localized: "\(waitingCount) warten", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))], pill: Theme.waiting,
+                   String(localized: "Wartende Sessions", bundle: Bundle.app), value: "\(waitingCount)") { [weak self] in self?.onSelectWaiting?() }
         }
-        module(b, &rx, [NSAttributedString(string: attachText, attributes: Theme.attrs(11.5, Theme.sub))], tip: String(localized: "Laufende Claude-Prozesse / Sessions"))
+        module(b, &rx, [NSAttributedString(string: attachText, attributes: Theme.attrs(11.5, Theme.sub))], tip: String(localized: "Laufende Claude-Prozesse / Sessions", bundle: Bundle.app))
         if let tip {
             module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))], textY: -7,
-                   String(localized: "Tipp"), value: tip) { [weak self] in self?.onDismissTip?() }
+                   String(localized: "Tipp", bundle: Bundle.app), value: tip) { [weak self] in self?.onDismissTip?() }
         }
         if versionWarning != nil {
-            module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update"), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))], textY: -7,
-                   String(localized: "Ältere claude-Version"), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
+            module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update", bundle: Bundle.app), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))], textY: -7,
+                   String(localized: "Ältere claude-Version", bundle: Bundle.app), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
         }
     }
 
@@ -268,13 +268,13 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         }
         /// Tooltip: Bezeichnung plus Prozentwert, oder Hinweis, wenn er fehlt.
         func usageTip(_ label: String, _ pct: Int?) -> String {
-            guard let pct else { return String(localized: "\(label): Nutzung nicht abrufbar") }
-            return String(localized: "\(label): \(pct) % verbraucht")
+            guard let pct else { return String(localized: "\(label): Nutzung nicht abrufbar", bundle: Bundle.app) }
+            return String(localized: "\(label): \(pct) % verbraucht", bundle: Bundle.app)
         }
         let rows: [(String, Int?, Int?, String)] = [
-            ("fable", usage.fable, usageFrom.fable, String(localized: "Fable-Kontingent")),
-            ("7d", usage.weekly, usageFrom.weekly, String(localized: "Claude-Nutzung der letzten 7 Tage")),
-            ("5h", usage.session, usageFrom.session, String(localized: "Claude-Nutzung der letzten 5 Stunden")),
+            ("fable", usage.fable, usageFrom.fable, String(localized: "Fable-Kontingent", bundle: Bundle.app)),
+            ("7d", usage.weekly, usageFrom.weekly, String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app)),
+            ("5h", usage.session, usageFrom.session, String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app)),
         ]
         for (name, pct, from, label) in rows {
             module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), pctString(pct, from: from)], tip: usageTip(label, pct))
@@ -290,12 +290,12 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         if let c = crumb {
             let m = NSMutableAttributedString(string: c.group + " › ", attributes: crumbGroupAttrs ?? fMuted)
             m.append(NSAttributedString(string: c.session, attributes: Theme.attrs(11.5, Theme.fg, bold: true)))
-            if openCount > 1 { m.append(NSAttributedString(string: String(localized: " · \(openCount) offen"), attributes: fMuted)) }
+            if openCount > 1 { m.append(NSAttributedString(string: String(localized: " · \(openCount) offen", bundle: Bundle.app), attributes: fMuted)) }
             mid = m
         } else if let e = errorText {
-            mid = NSAttributedString(string: String(localized: "kadrell · \(e)"), attributes: Theme.attrs(11.5, Theme.error))
+            mid = NSAttributedString(string: String(localized: "kadrell · \(e)", bundle: Bundle.app), attributes: Theme.attrs(11.5, Theme.error))
         } else {
-            mid = NSAttributedString(string: String(localized: "kadrell · \(sessionCount) sessions"), attributes: fMuted)
+            mid = NSAttributedString(string: String(localized: "kadrell · \(sessionCount) sessions", bundle: Bundle.app), attributes: fMuted)
         }
         let avail = rx - leftEnd - 16
         let mw = min(mid.size().width, max(0, avail))
@@ -321,7 +321,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .toolbar }
-    override func accessibilityLabel() -> String? { String(localized: "Statusleiste") }
+    override func accessibilityLabel() -> String? { String(localized: "Statusleiste", bundle: Bundle.app) }
 
     /// Knöpfe aus den Trefferflächen des letzten Zeichnens.
     override func accessibilityChildren() -> [Any]? {

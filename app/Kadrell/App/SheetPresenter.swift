@@ -76,11 +76,11 @@ final class SheetPresenter {
 
     /// Mitteilung ohne echte Alternative: nur „OK“, kein Abbrechen, das dasselbe täte (siehe Kanboard #73).
     func inform(_ title: String, _ detail: String) {
-        confirm(title, detail, button: String(localized: "OK"), destructive: false, infoOnly: true) {}
+        confirm(title, detail, button: String(localized: "OK", bundle: Bundle.app), destructive: false, infoOnly: true) {}
     }
 
     /// Fehlermeldung, zusätzlich im Log. `detail` ist die erste Zeile der CLI-Ausgabe, nicht der ganze Prozess-Output.
-    func report(_ detail: String, title: String = String(localized: "Claude CLI meldet einen Fehler")) {
+    func report(_ detail: String, title: String = String(localized: "Claude CLI meldet einen Fehler", bundle: Bundle.app)) {
         AppDelegate.log.error("\(detail, privacy: .private)")
         inform(title, detail)
     }

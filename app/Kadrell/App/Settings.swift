@@ -7,6 +7,14 @@ enum Settings {
     }
     private static func store(_ key: String, _ value: Any?) { Profile.defaults.set(value, forKey: key) }
 
+    static let languageKey = "language"
+    /// Sprache der Oberfläche. Ohne Wahl gilt die Sprache des Systems; der Leerzustand bietet dann die Flaggen an.
+    static var language: Localization.Language {
+        get { enumValue(languageKey, .system) }
+        set { store(languageKey, newValue.rawValue); Localization.apply(newValue) }
+    }
+    static var languageChosen: Bool { Profile.defaults.string(forKey: languageKey) != nil }
+
     static let startFolderKey = "startFolder"
     /// Startordner für ⌘N. Immer mit abschließendem Slash.
     static var startFolder: String {
@@ -69,10 +77,10 @@ enum Settings {
     static var controlOtherSessions: Bool { get { value("control.otherSessions", true) } set { store("control.otherSessions", newValue) } }
     /// Kompakte Zeile für den ⌘N-Dialog: mit welchen Start-Flags eine neue Session gleich läuft (Kanboard #75).
     static var claudeSummary: String {
-        var parts = [claudeModel.isEmpty ? String(localized: "Standardmodell") : claudeModel,
-                     claudeMode.isEmpty ? String(localized: "fragt nach Rechten") : claudeMode]
+        var parts = [claudeModel.isEmpty ? String(localized: "Standardmodell", bundle: Bundle.app) : claudeModel,
+                     claudeMode.isEmpty ? String(localized: "fragt nach Rechten", bundle: Bundle.app) : claudeMode]
         if !claudeEffort.isEmpty { parts.append(claudeEffort) }
-        if claudeAllowBypass { parts.append(String(localized: "Bypass")) }
+        if claudeAllowBypass { parts.append(String(localized: "Bypass", bundle: Bundle.app)) }
         return parts.joined(separator: " · ")
     }
 
@@ -146,11 +154,11 @@ enum Settings {
         case closeSession, closeGroup, stopSession, quit, adoptBackground
         var title: String {
             switch self {
-            case .closeSession: String(localized: "Session beenden und entfernen")
-            case .closeGroup: String(localized: "Gruppe schließen")
-            case .stopSession: String(localized: "Session stoppen")
-            case .quit: String(localized: "Kadrell beenden, während Claude läuft")
-            case .adoptBackground: String(localized: "Hintergrund-Sessions übernehmen")
+            case .closeSession: String(localized: "Session beenden und entfernen", bundle: Bundle.app)
+            case .closeGroup: String(localized: "Gruppe schließen", bundle: Bundle.app)
+            case .stopSession: String(localized: "Session stoppen", bundle: Bundle.app)
+            case .quit: String(localized: "Kadrell beenden, während Claude läuft", bundle: Bundle.app)
+            case .adoptBackground: String(localized: "Hintergrund-Sessions übernehmen", bundle: Bundle.app)
             }
         }
         var key: String { "ask.\(rawValue)" }

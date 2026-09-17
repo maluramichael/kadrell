@@ -41,14 +41,14 @@ struct EditGroupView: View {
                         .overlay(Capsule().stroke(Theme.mutedColor, lineWidth: showPalettes ? 1.5 : 0))
                 }
                 .buttonStyle(.plain).kbdFocusRing()
-                .accessibilityLabel(String(localized: "Farbe wählen"))
+                .accessibilityLabel(String(localized: "Farbe wählen", bundle: Bundle.app))
                 .help("Farbe aus einer Palette wählen")
             }
             .padding(14)
             if showPalettes { palettes }
             Text(Theme.shortPath(model.group.cwd)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
-            DialogFoot(hint: String(localized: "Esc abbrechen"), button: String(localized: "Speichern")) { model.save() }
+            DialogFoot(hint: String(localized: "Esc abbrechen", bundle: Bundle.app), button: String(localized: "Speichern", bundle: Bundle.app)) { model.save() }
         }
         .dialogFrame()
         .onAppear { focused = true }
@@ -74,7 +74,7 @@ struct EditGroupView: View {
             }
             HStack(spacing: 4) {
                 Text("Eigene").foregroundStyle(Color(nsColor: Theme.sub)).frame(width: 110 * Theme.scale, alignment: .leading)
-                ColorPicker(String(localized: "Eigene Farbe"), selection: $model.color, supportsOpacity: false).labelsHidden()
+                ColorPicker(String(localized: "Eigene Farbe", bundle: Bundle.app), selection: $model.color, supportsOpacity: false).labelsHidden()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -111,7 +111,7 @@ struct RenameSessionView: View {
                 .padding(14)
             Text("Leer lassen: wieder der Titel von Claude Code (\(model.session.autoTitle))").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
-            DialogFoot(hint: String(localized: "Esc abbrechen"), button: String(localized: "Speichern")) { model.save() }
+            DialogFoot(hint: String(localized: "Esc abbrechen", bundle: Bundle.app), button: String(localized: "Speichern", bundle: Bundle.app)) { model.save() }
         }
         .dialogFrame()
         .onAppear { focused = true }

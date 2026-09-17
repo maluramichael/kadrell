@@ -8,9 +8,9 @@ enum Notifications {
         case off, waiting, all
         var title: String {
             switch self {
-            case .off: String(localized: "aus")
-            case .waiting: String(localized: "nur wartet")
-            case .all: String(localized: "wartet und fertig")
+            case .off: String(localized: "aus", bundle: Bundle.app)
+            case .waiting: String(localized: "nur wartet", bundle: Bundle.app)
+            case .all: String(localized: "wartet und fertig", bundle: Bundle.app)
             }
         }
     }
@@ -34,7 +34,7 @@ enum Notifications {
             }
             let content = UNMutableNotificationContent()
             content.title = "\(group) › \(title)"
-            content.body = message ?? (waiting ? String(localized: "wartet auf dich") : String(localized: "ist fertig"))
+            content.body = message ?? (waiting ? String(localized: "wartet auf dich", bundle: Bundle.app) : String(localized: "ist fertig", bundle: Bundle.app))
             content.threadIdentifier = group
             content.userInfo = ["sessionKey": sessionKey]
             try? await center.add(UNNotificationRequest(identifier: sessionKey, content: content, trigger: nil))

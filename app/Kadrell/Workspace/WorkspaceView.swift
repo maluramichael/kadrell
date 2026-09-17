@@ -46,7 +46,7 @@ final class WorkspaceView: NSView {
     private var hoveredCell: String?
     private var hoveredRow: String?
     /// Klickflächen der Knöpfe im Leerzustand (Fehler-/Erststart-Karte), in echten View-Koordinaten, neu bei jedem `draw`.
-    private var emptyHitRects: [(rect: CGRect, action: () -> Void)] = []
+    private(set) var emptyHitRects: [(rect: CGRect, action: () -> Void)] = []
     private var pulse: CGFloat = 1
     private var pulseTask: Task<Void, Never>?
     private weak var lastFirstResponder: NSResponder?
@@ -79,6 +79,8 @@ final class WorkspaceView: NSView {
     var otherInteractiveCount = 0 { didSet { if otherInteractiveCount != oldValue { needsDisplay = true } } }
     /// Rechtsklick auf Kachel-Header oder Stack-Zeile: liefert das Kontextmenü der Session.
     var onContextMenu: ((String) -> NSMenu?)?
+    /// Flagge im Leerzustand beim ersten Start angeklickt.
+    var onPickLanguage: ((Localization.Language) -> Void)?
     /// Ein Terminal wurde hier ausgehängt: ein anderes Fenster, das es gerade nur als Hinweis zeigt, kann es einhängen.
     var onReleaseTerminal: (() -> Void)?
     private var released = false
@@ -626,28 +628,37 @@ final class WorkspaceView: NSView {
     /// ganz unten der Hinweis auf anderswo laufende Sessions. Deutliche Abstände, nichts berührt sich (Feedback
     /// zum ersten Entwurf: alles klebte aneinander).
     private func drawEmptyOnboarding(in r: CGRect, collected: inout [(CGRect, () -> Void)]) {
-        let title = NSAttributedString(string: String(localized: "Erste Session starten"), attributes: Theme.attrs(13, Theme.fg, bold: true))
+        let title = NSAttributedString(string: String(localized: "Erste Session starten", bundle: Bundle.app), attributes: Theme.attrs(13, Theme.fg, bold: true))
         let shortcuts: [(String, String)] = [
-            ("⌘N", String(localized: "sucht Projekt oder Ordner")),
-            ("⌘⏎", String(localized: "zweite Session im selben Ordner")),
-            ("F1", String(localized: "alle Kürzel")),
+            ("⌘N", String(localized: "sucht Projekt oder Ordner", bundle: Bundle.app)),
+            ("⌘⏎", String(localized: "zweite Session im selben Ordner", bundle: Bundle.app)),
+            ("F1", String(localized: "alle Kürzel", bundle: Bundle.app)),
         ]
         let hint: NSAttributedString? = otherInteractiveCount > 0 ? NSAttributedString(
-            string: otherInteractiveCount == 1 ? String(localized: "1 Claude-Session läuft interaktiv in anderen Terminals")
-                : String(localized: "\(otherInteractiveCount) Claude-Sessions laufen interaktiv in anderen Terminals"),
+            string: otherInteractiveCount == 1 ? String(localized: "1 Claude-Session läuft interaktiv in anderen Terminals", bundle: Bundle.app)
+                : String(localized: "\(otherInteractiveCount) Claude-Sessions laufen interaktiv in anderen Terminals", bundle: Bundle.app),
             attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.55))) : nil
 
         let titleButtonGap: CGFloat = 16, buttonHeight: CGFloat = 32, buttonShortcutsGap: CGFloat = 28
         let shortcutLineHeight: CGFloat = 20, shortcutsHintGap: CGFloat = 32
+        // Erster Start, noch keine Sprache gewählt: Flaggen über dem Titel.
+        let languages: [Localization.Language] = Settings.languageChosen ? [] : [.de, .en]
+        let languageGap: CGFloat = languages.isEmpty ? 0 : buttonHeight + 24
 
         var total = title.size().height + titleButtonGap + buttonHeight + buttonShortcutsGap + CGFloat(shortcuts.count) * shortcutLineHeight
         if let hint { total += (shortcutsHintGap - shortcutLineHeight) + hint.size().height }
+        total += languageGap
 
         var y = r.midY - total / 2
+        if !languages.isEmpty {
+            drawEmptyButtons(languages.map { l in ("\(l.flag)  \(l.title)", false, { [weak self] in self?.onPickLanguage?(l) }) },
+                             midX: r.midX, y: y, collected: &collected)
+            y += languageGap
+        }
         title.draw(at: CGPoint(x: r.midX - title.size().width / 2, y: y))
         y += title.size().height + titleButtonGap
 
-        drawEmptyButtons([(String(localized: "Neue Session starten  ⌘N"), true, { [weak self] in self?.onEmptyClick?() })], midX: r.midX, y: y, collected: &collected)
+        drawEmptyButtons([(String(localized: "Neue Session starten  ⌘N", bundle: Bundle.app), true, { [weak self] in self?.onEmptyClick?() })], midX: r.midX, y: y, collected: &collected)
         y += buttonHeight + buttonShortcutsGap
 
         for (key, text) in shortcuts {
@@ -672,27 +683,27 @@ final class WorkspaceView: NSView {
             case .noSessions:
                 Theme.scaled(bounds) { r in drawEmptyOnboarding(in: r, collected: &collected) }
             case .error(let message):
-                let a = NSAttributedString(string: String(localized: "Sessions können nicht geladen werden"), attributes: Theme.attrs(12, Theme.error))
+                let a = NSAttributedString(string: String(localized: "Sessions können nicht geladen werden", bundle: Bundle.app), attributes: Theme.attrs(12, Theme.error))
                 let b = NSAttributedString(string: message, attributes: Theme.attrs(11, Theme.error.withAlphaComponent(0.7), truncate: false))
-                var buttons: [(title: String, primary: Bool, action: () -> Void)] = [(String(localized: "Erneut prüfen"), true, { [weak self] in self?.onRecheckCLI?() })]
+                var buttons: [(title: String, primary: Bool, action: () -> Void)] = [(String(localized: "Erneut prüfen", bundle: Bundle.app), true, { [weak self] in self?.onRecheckCLI?() })]
                 if lastErrorIsMissingBinary {
-                    buttons.append((String(localized: "Installationsbefehl kopieren"), false, {
+                    buttons.append((String(localized: "Installationsbefehl kopieren", bundle: Bundle.app), false, {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(ClaudeCLI.installCommand, forType: .string)
                     }))
-                    buttons.append((String(localized: "Doku öffnen"), false, { NSWorkspace.shared.open(ClaudeCLI.installDocsURL) }))
+                    buttons.append((String(localized: "Doku öffnen", bundle: Bundle.app), false, { NSWorkspace.shared.open(ClaudeCLI.installDocsURL) }))
                 }
                 Theme.scaled(bounds) { r in
                     drawCentered(a, b, in: r)
                     drawEmptyButtons(buttons, midX: r.midX, y: r.midY + 26, collected: &collected)
                 }
             case .loading:
-                let a = NSAttributedString(string: String(localized: "Lade Sessions …"), attributes: Theme.attrs(12, Theme.muted))
+                let a = NSAttributedString(string: String(localized: "Lade Sessions …", bundle: Bundle.app), attributes: Theme.attrs(12, Theme.muted))
                 Theme.scaled(bounds) { drawCentered(a, in: $0) }
             case .hint:
                 let idle = auto && !autoPool.isEmpty
-                let a = NSAttributedString(string: idle ? String(localized: "Gerade wartet keine Session") : String(localized: "Session im Baum wählen"), attributes: Theme.attrs(12, Theme.muted))
-                let b = NSAttributedString(string: idle ? String(localized: "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will") : String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe"), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+                let a = NSAttributedString(string: idle ? String(localized: "Gerade wartet keine Session", bundle: Bundle.app) : String(localized: "Session im Baum wählen", bundle: Bundle.app), attributes: Theme.attrs(12, Theme.muted))
+                let b = NSAttributedString(string: idle ? String(localized: "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will", bundle: Bundle.app) : String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
                 Theme.scaled(bounds) { drawCentered(a, b, in: $0) }
             }
             emptyHitRects = collected
@@ -755,7 +766,7 @@ final class WorkspaceView: NSView {
     private var a11y: [A11yElement] = []
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
-    override func accessibilityLabel() -> String? { String(localized: "Arbeitsfläche") }
+    override func accessibilityLabel() -> String? { String(localized: "Arbeitsfläche", bundle: Bundle.app) }
 
     /// Kacheln (eigene Views) plus die gezeichneten Stack-Zeilen.
     override func accessibilityChildren() -> [Any]? {
@@ -764,8 +775,8 @@ final class WorkspaceView: NSView {
             let label = [s.title, s.status.spoken(attached: attach?.isAttached(key) ?? false), group(forSession: key)?.name]
             return a11y.reuse(key).update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: r,
                                           press: { [weak self] in self?.activate(key) },
-                                          actions: [a11yAction(String(localized: "Umbenennen")) { [weak self] in self?.onRenameSession?(key) },
-                                                    a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseSession?(key, false) }])
+                                          actions: [a11yAction(String(localized: "Umbenennen", bundle: Bundle.app)) { [weak self] in self?.onRenameSession?(key) },
+                                                    a11yAction(String(localized: "Schließen", bundle: Bundle.app)) { [weak self] in self?.onCloseSession?(key, false) }])
         }
         return (super.accessibilityChildren() ?? []) + a11y
     }
@@ -845,8 +856,8 @@ final class WorkspaceView: NSView {
 
     private static func textMenu(for terminal: KadrellTerminalView) -> NSMenu {
         let menu = NSMenu()
-        for (title, action, key) in [(String(localized: "Kopieren"), #selector(NSText.copy(_:)), "c"),
-                                     (String(localized: "Einsetzen"), #selector(NSText.paste(_:)), "v")] {
+        for (title, action, key) in [(String(localized: "Kopieren", bundle: Bundle.app), #selector(NSText.copy(_:)), "c"),
+                                     (String(localized: "Einsetzen", bundle: Bundle.app), #selector(NSText.paste(_:)), "v")] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
             item.target = terminal
             menu.addItem(item)

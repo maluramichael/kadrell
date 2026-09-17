@@ -107,14 +107,14 @@ final class ClaudeCLI: Sendable {
     func checkVersion() async -> VersionCheck {
         let out: String
         do { out = try await run(["--version"]) } catch {
-            return .failed(String(localized: "\(binary): claude --version fehlgeschlagen: \(CLIError.firstLine(of: error))"))
+            return .failed(String(localized: "\(binary): claude --version fehlgeschlagen: \(CLIError.firstLine(of: error))", bundle: Bundle.app))
         }
         guard let v = ClaudeCLI.parseVersion(out) else {
-            return .failed(String(localized: "\(binary): claude --version liefert kein erkennbares Versionsformat: \(out.trimmingCharacters(in: .whitespacesAndNewlines))"))
+            return .failed(String(localized: "\(binary): claude --version liefert kein erkennbares Versionsformat: \(out.trimmingCharacters(in: .whitespacesAndNewlines))", bundle: Bundle.app))
         }
         guard v < ClaudeCLI.minVersion else { return .ok }
         let found = "\(v.major).\(v.minor).\(v.patch)", tested = "\(ClaudeCLI.minVersion.major).\(ClaudeCLI.minVersion.minor).\(ClaudeCLI.minVersion.patch)"
-        return .tooOld(String(localized: "claude \(found): älter als die von Kadrell getestete Version \(tested), bitte mit „\(ClaudeCLI.updateCommand)“ aktualisieren"))
+        return .tooOld(String(localized: "claude \(found): älter als die von Kadrell getestete Version \(tested), bitte mit „\(ClaudeCLI.updateCommand)“ aktualisieren", bundle: Bundle.app))
     }
 
     static func parseVersion(_ output: String) -> (major: Int, minor: Int, patch: Int)? {

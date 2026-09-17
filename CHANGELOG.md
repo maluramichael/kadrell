@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.43.0 (2026-09-17)
+
+- Feature: Die Sprache lässt sich in den Einstellungen zwischen Deutsch, Englisch und der Sprache des Systems umschalten, sofort und ohne Neustart.
+- Feature: Beim ersten Start stehen zwei Flaggen über „Erste Session starten“, damit die Sprache gleich passt.
+
 ## 1.42.0 (2026-09-17)
 
 - Feature: Rechtsklick auf markierten Text in einer Session zeigt Kopieren und Einsetzen statt des Session-Menüs.

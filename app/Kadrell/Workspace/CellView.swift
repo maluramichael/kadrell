@@ -157,9 +157,9 @@ final class CellView: NSView {
         a11y = [
             a11y.reuse("header").update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: headerRect,
                                         press: { [weak ws] in ws?.activate(key) }),
-            a11y.reuse("rename").update(parent: self, role: .button, label: String(localized: "Umbenennen"), frame: penRect,
+            a11y.reuse("rename").update(parent: self, role: .button, label: String(localized: "Umbenennen", bundle: Bundle.app), frame: penRect,
                                         press: { [weak ws] in ws?.onRenameSession?(key) }),
-            a11y.reuse("close").update(parent: self, role: .button, label: String(localized: "Schließen"), frame: xRect,
+            a11y.reuse("close").update(parent: self, role: .button, label: String(localized: "Schließen", bundle: Bundle.app), frame: xRect,
                                        press: { [weak ws] in ws?.onCloseSession?(key, false) }),
         ]
         return a11y + terminal
@@ -170,24 +170,24 @@ final class CellView: NSView {
         if state.missingFolder {
             Self.shade.withAlphaComponent(0.72).setFill()
             body.fill()
-            drawLabel(String(localized: "ORDNER FEHLT · \(Theme.shortPath(state.session.cwd))"), in: body, color: Theme.error)
+            drawLabel(String(localized: "ORDNER FEHLT · \(Theme.shortPath(state.session.cwd))", bundle: Bundle.app), in: body, color: Theme.error)
         } else if let exitCode = state.exitCode {
             // Startfehler statt normalem `/exit`: keine Schraffur, die letzten Zeilen bleiben lesbar (Kanboard #20).
             Self.shade.withAlphaComponent(0.35).setFill()
             body.fill()
             if !state.lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
-            drawLabel(String(localized: "START FEHLGESCHLAGEN · EXIT \(String(exitCode))"), in: body, color: Theme.error)
+            drawLabel(String(localized: "START FEHLGESCHLAGEN · EXIT \(String(exitCode))", bundle: Bundle.app), in: body, color: Theme.error)
         } else if state.ended {
             drawHatch(in: body)
             if !state.lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
-            drawLabel(String(localized: "BEENDET · KLICK SETZT FORT"), in: body)
+            drawLabel(String(localized: "BEENDET · KLICK SETZT FORT", bundle: Bundle.app), in: body)
         } else if !state.attached, state.previewing {
-            drawLabel(String(localized: "VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET"), in: body)
+            drawLabel(String(localized: "VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET", bundle: Bundle.app), in: body)
         } else if !state.attached {
             Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
-            drawLabel(String(localized: "STARTET …"), in: body)
+            drawLabel(String(localized: "STARTET …", bundle: Bundle.app), in: body)
         } else if !terminalMounted, state.elsewhere {
-            drawLabel(String(localized: "IN ANDEREM FENSTER · KLICK HOLT HIERHER"), in: body)
+            drawLabel(String(localized: "IN ANDEREM FENSTER · KLICK HOLT HIERHER", bundle: Bundle.app), in: body)
         } else if !terminalMounted {
             drawLines(in: body.insetBy(dx: 10, dy: 8))
         }

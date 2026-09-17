@@ -9,7 +9,7 @@ enum StatusMenu {
 
     /// „3 warten · 1 neu“, leer ohne beides.
     static func title(waiting: Int, done: Int) -> String {
-        waiting == 0 && done == 0 ? "" : String(localized: "  \(waiting) warten · \(done) neu")
+        waiting == 0 && done == 0 ? "" : String(localized: "  \(waiting) warten · \(done) neu", bundle: Bundle.app)
     }
 }
 
@@ -55,15 +55,15 @@ final class StatusItemController: NSObject {
             item.image = NSImage(systemSymbolName: waiting ? "clock" : "checkmark.circle", accessibilityDescription: nil)
         }
         if rows.waiting.isEmpty, rows.done.isEmpty {
-            menu.addItem(withTitle: String(localized: "Keine wartenden Sessions"), action: nil, keyEquivalent: "").isEnabled = false
+            menu.addItem(withTitle: String(localized: "Keine wartenden Sessions", bundle: Bundle.app), action: nil, keyEquivalent: "").isEnabled = false
         } else {
             for key in rows.waiting { addRow(key, waiting: true) }
             for key in rows.done { addRow(key, waiting: false) }
             menu.addItem(.separator())
-            add(String(localized: "Nächste wartende Session"), #selector(nextWaiting)).isEnabled = !rows.waiting.isEmpty
+            add(String(localized: "Nächste wartende Session", bundle: Bundle.app), #selector(nextWaiting)).isEnabled = !rows.waiting.isEmpty
         }
         menu.addItem(.separator())
-        _ = add(String(localized: "Kadrell öffnen"), #selector(open))
+        _ = add(String(localized: "Kadrell öffnen", bundle: Bundle.app), #selector(open))
         return menu
     }
 

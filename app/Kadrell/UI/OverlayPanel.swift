@@ -16,7 +16,7 @@ final class OverlayPanel: ChildPanel {
     private let limit = OverlayLimit()
 
     init<V: View>(rootView: V) {
-        let host = NSHostingController(rootView: OverlayScroll(limit: limit, content: rootView))
+        let host = NSHostingController(rootView: OverlayScroll(limit: limit, content: rootView).environment(\.locale, Localization.locale))
         host.sizingOptions = [.preferredContentSize]   // Fenster folgt der Inhaltsgröße, kein Zentrieren
         super.init(size: NSSize(width: 640, height: 200))
         isOpaque = true

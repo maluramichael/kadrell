@@ -31,6 +31,9 @@ final class SettingsModel {
     @ObservationIgnored var onClose: (() -> Void)?
     @ObservationIgnored private var monitor: Any?
 
+    /// Sprache der Dialoge. Liest `revision` mit: nach der Umstellung zeichnet SwiftUI sofort in der neuen Sprache.
+    var locale: Locale { _ = revision; return Localization.locale }
+
     /// Jede Änderung gilt sofort, ohne Speichern: das Binding schreibt direkt in `Settings`.
     func binding<T>(_ key: ReferenceWritableKeyPath<Settings.Type, T>) -> Binding<T> { binding(Settings.self, key) }
 
@@ -85,7 +88,7 @@ struct SettingsView: View {
     private var hotkeyGroups: [(String, [HotkeyAction])] {
         let nav: [HotkeyAction] = [.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
             + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace]
-        return [(String(localized: "Navigation"), nav), (String(localized: "Kacheln verwalten"), HotkeyAction.allCases.filter { !nav.contains($0) })]
+        return [(String(localized: "Navigation", bundle: Bundle.app), nav), (String(localized: "Kacheln verwalten", bundle: Bundle.app), HotkeyAction.allCases.filter { !nav.contains($0) })]
     }
 
     var body: some View {
@@ -99,9 +102,9 @@ struct SettingsView: View {
             .padding(.horizontal, 16).padding(.top, 12)
             Divider().overlay(Theme.lineColor).padding(.top, 12)
 
-            heading(String(localized: "Sessions"), first: true)
+            heading(String(localized: "Sessions", bundle: Bundle.app), first: true)
             table {
-                setting(String(localized: "Projektordner für ⌘N (nach Git-Repos durchsucht)")) {
+                setting(String(localized: "Projektordner für ⌘N (nach Git-Repos durchsucht)", bundle: Bundle.app)) {
                     HStack(spacing: 4) {
                         pathField(Binding(get: { Theme.shortPath(model.startFolder) }, set: { model.startFolder = $0 }),
                                   onTab: { if let p = FolderIndex.expandAbbreviated(model.startFolder).first { model.startFolder = p } }) { urls in
@@ -112,45 +115,48 @@ struct SettingsView: View {
                         iconButton("folder") { chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } } }.help("Im Finder wählen")
                     }
                 }
-                setting(String(localized: "Externer Editor (Kommando wie im Terminal)")) {
+                setting(String(localized: "Externer Editor (Kommando wie im Terminal)", bundle: Bundle.app)) {
                     TextField("z. B. code", text: $model.editorCommand)
                         .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
                         .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
                 }
-                setting(String(localized: "Wenn Claude endet (zweimal ⌃C, /exit)")) {
-                    menu(model.binding(\.closeTileOnExit), [(false, String(localized: "Kachel bleibt, Klick setzt fort")), (true, String(localized: "Kachel schließen"))])
+                setting(String(localized: "Wenn Claude endet (zweimal ⌃C, /exit)", bundle: Bundle.app)) {
+                    menu(model.binding(\.closeTileOnExit), [(false, String(localized: "Kachel bleibt, Klick setzt fort", bundle: Bundle.app)), (true, String(localized: "Kachel schließen", bundle: Bundle.app))])
                 }
             }
 
-            heading(String(localized: "Claude"), note: String(localized: "gilt für neu gestartete Claude-Prozesse"))
+            heading(String(localized: "Claude", bundle: Bundle.app), note: String(localized: "gilt für neu gestartete Claude-Prozesse", bundle: Bundle.app))
             table {
-                setting(String(localized: "Bypass-Modus erlauben (--allow-dangerously-skip-permissions)")) { onOff(model.binding(\.claudeAllowBypass)) }
-                setting(String(localized: "Startmodus")) { options(Settings.claudeModes, model.binding(\.claudeMode)) }
-                setting(String(localized: "Modell")) { options(Settings.claudeModels, model.binding(\.claudeModel)) }
-                setting(String(localized: "Effort")) { options(Settings.claudeEfforts, model.binding(\.claudeEffort)) }
-                setting(String(localized: "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)")) { onOff(model.binding(\.controlOtherSessions)) }
+                setting(String(localized: "Bypass-Modus erlauben (--allow-dangerously-skip-permissions)", bundle: Bundle.app)) { onOff(model.binding(\.claudeAllowBypass)) }
+                setting(String(localized: "Startmodus", bundle: Bundle.app)) { options(Settings.claudeModes, model.binding(\.claudeMode)) }
+                setting(String(localized: "Modell", bundle: Bundle.app)) { options(Settings.claudeModels, model.binding(\.claudeModel)) }
+                setting(String(localized: "Effort", bundle: Bundle.app)) { options(Settings.claudeEfforts, model.binding(\.claudeEffort)) }
+                setting(String(localized: "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)", bundle: Bundle.app)) { onOff(model.binding(\.controlOtherSessions)) }
             }
 
-            heading(String(localized: "Darstellung"))
+            heading(String(localized: "Darstellung", bundle: Bundle.app))
             table {
-                setting(String(localized: "Farbschema")) { menu(model.binding(\.colorTheme), ColorTheme.all.map { ($0.id, $0.name) }) }
-                setting(String(localized: "UI-Größe")) { slider(model.binding(\.uiScale), Settings.uiScalePercent, step: 5, factor: 100, unit: "%", live: false) }
-                setting(String(localized: "Terminal-Schrift")) { menu(model.binding(\.terminalFontName), model.fonts.map { ($0.name, $0.display) }) }
-                setting(String(localized: "Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad")) { slider(model.binding(\.terminalFontSize), Settings.fontSizes, step: 1, unit: "pt") }
-                setting(String(localized: "Zeilenabstand")) { slider(model.binding(\.terminalLineSpacing), Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
-                setting(String(localized: "Innenabstand der Kacheln")) { slider(model.binding(\.terminalPadding), Settings.pixelRange, step: 1, unit: "px") }
-                setting(String(localized: "Verlauf zum Zurückscrollen")) { slider(Binding(get: { Double(model.binding(\.terminalScrollback).wrappedValue) }, set: { model.binding(\.terminalScrollback).wrappedValue = Int($0) }), Settings.scrollbackRange, step: 1_000, unit: String(localized: "Zeilen")) }
-                setting(String(localized: "Abstand zwischen Kacheln")) { slider(model.binding(\.tileGap), Settings.pixelRange, step: 1, unit: "px") }
-                setting(String(localized: "Terminal auf der GPU zeichnen (Metal)")) { onOff(model.binding(\.terminalMetal)) }
+                setting(String(localized: "Sprache", bundle: Bundle.app)) {
+                    menu(model.binding(\.language), Localization.Language.allCases.map { ($0, "\($0.flag)  \($0.title)") })
+                }
+                setting(String(localized: "Farbschema", bundle: Bundle.app)) { menu(model.binding(\.colorTheme), ColorTheme.all.map { ($0.id, $0.name) }) }
+                setting(String(localized: "UI-Größe", bundle: Bundle.app)) { slider(model.binding(\.uiScale), Settings.uiScalePercent, step: 5, factor: 100, unit: "%", live: false) }
+                setting(String(localized: "Terminal-Schrift", bundle: Bundle.app)) { menu(model.binding(\.terminalFontName), model.fonts.map { ($0.name, $0.display) }) }
+                setting(String(localized: "Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad", bundle: Bundle.app)) { slider(model.binding(\.terminalFontSize), Settings.fontSizes, step: 1, unit: "pt") }
+                setting(String(localized: "Zeilenabstand", bundle: Bundle.app)) { slider(model.binding(\.terminalLineSpacing), Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
+                setting(String(localized: "Innenabstand der Kacheln", bundle: Bundle.app)) { slider(model.binding(\.terminalPadding), Settings.pixelRange, step: 1, unit: "px") }
+                setting(String(localized: "Verlauf zum Zurückscrollen", bundle: Bundle.app)) { slider(Binding(get: { Double(model.binding(\.terminalScrollback).wrappedValue) }, set: { model.binding(\.terminalScrollback).wrappedValue = Int($0) }), Settings.scrollbackRange, step: 1_000, unit: String(localized: "Zeilen", bundle: Bundle.app)) }
+                setting(String(localized: "Abstand zwischen Kacheln", bundle: Bundle.app)) { slider(model.binding(\.tileGap), Settings.pixelRange, step: 1, unit: "px") }
+                setting(String(localized: "Terminal auf der GPU zeichnen (Metal)", bundle: Bundle.app)) { onOff(model.binding(\.terminalMetal)) }
             }
 
-            heading(String(localized: "Anpassen"), note: String(localized: "Bild nur hinter den Kacheln"))
+            heading(String(localized: "Anpassen", bundle: Bundle.app), note: String(localized: "Bild nur hinter den Kacheln", bundle: Bundle.app))
             table {
-                setting(String(localized: "Hintergrundbild")) {
+                setting(String(localized: "Hintergrundbild", bundle: Bundle.app)) {
                     let image = model.binding(\.backgroundImage)
                     HStack(spacing: 4) {
                         pathField(Binding(get: { Theme.shortPath(image.wrappedValue) }, set: { image.wrappedValue = FolderIndex.normalize($0) }),
-                                  placeholder: String(localized: "kein Bild · Datei hineinziehen")) { urls in
+                                  placeholder: String(localized: "kein Bild · Datei hineinziehen", bundle: Bundle.app)) { urls in
                             guard let u = urls.first(where: { NSImage(contentsOf: $0) != nil }) else { return false }
                             image.wrappedValue = u.path
                             return true
@@ -161,54 +167,55 @@ struct SettingsView: View {
                         iconButton("xmark") { image.wrappedValue = "" }.help("Kein Bild")
                     }
                 }
-                setting(String(localized: "Deckkraft der Kacheln")) { slider(model.binding(\.tileOpacity), 0...100, step: 1, factor: 100, unit: "%") }
+                setting(String(localized: "Deckkraft der Kacheln", bundle: Bundle.app)) { slider(model.binding(\.tileOpacity), 0...100, step: 1, factor: 100, unit: "%") }
             }
 
-            heading(String(localized: "Baum und Kacheln"))
+            heading(String(localized: "Baum und Kacheln", bundle: Bundle.app))
             table {
-                setting(String(localized: "Design des Baums")) { menu(model.binding(\.sidebarStyle), SidebarStyle.allCases.map { ($0, $0.title) }) }
-                setting(String(localized: "Laufzeit im Baum")) { onOff(model.binding(\.sidebarShowAge)) }
-                setting(String(localized: "Pfad in Stack-Zeilen")) { onOff(model.binding(\.stackShowPath)) }
-                setting(String(localized: "Letzte Antwort von Claude im Baum")) { onOff(model.binding(\.showLastMessage)) }
-                setting(String(localized: "Sounds")) { menu(model.binding(\.sounds), Feedback.Level.allCases.map { ($0, $0.title) }) }
-                setting(String(localized: "Systembenachrichtigungen")) { menu(model.binding(\.notifications), Notifications.Level.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Design des Baums", bundle: Bundle.app)) { menu(model.binding(\.sidebarStyle), SidebarStyle.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Laufzeit im Baum", bundle: Bundle.app)) { onOff(model.binding(\.sidebarShowAge)) }
+                setting(String(localized: "Pfad in Stack-Zeilen", bundle: Bundle.app)) { onOff(model.binding(\.stackShowPath)) }
+                setting(String(localized: "Letzte Antwort von Claude im Baum", bundle: Bundle.app)) { onOff(model.binding(\.showLastMessage)) }
+                setting(String(localized: "Sounds", bundle: Bundle.app)) { menu(model.binding(\.sounds), Feedback.Level.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Systembenachrichtigungen", bundle: Bundle.app)) { menu(model.binding(\.notifications), Notifications.Level.allCases.map { ($0, $0.title) }) }
             }
 
-            heading(String(localized: "Updates"))
+            heading(String(localized: "Updates", bundle: Bundle.app))
             table {
-                setting(String(localized: "Nach Updates suchen")) { onOff(model.binding(\.checkForUpdates)) }
+                setting(String(localized: "Nach Updates suchen", bundle: Bundle.app)) { onOff(model.binding(\.checkForUpdates)) }
             }
 
-            heading(String(localized: "Auto-Modus"), note: String(localized: "AUTO in der Leiste"))
+            heading(String(localized: "Auto-Modus", bundle: Bundle.app), note: String(localized: "AUTO in der Leiste", bundle: Bundle.app))
             table {
-                setting(String(localized: "Gilt für")) { menu(model.binding(\.autoAllSessions), [(true, String(localized: "alle Sessions")), (false, String(localized: "nur die Auswahl im Baum"))]) }
-                setting(String(localized: "Zeigt")) {
+                setting(String(localized: "Gilt für", bundle: Bundle.app)) { menu(model.binding(\.autoAllSessions), [(true, String(localized: "alle Sessions", bundle: Bundle.app)), (false, String(localized: "nur die Auswahl im Baum", bundle: Bundle.app))]) }
+                setting(String(localized: "Zeigt", bundle: Bundle.app)) {
                     let waiting = model.binding(\.autoWaiting), running = model.binding(\.autoRunning)
                     menu(Binding(get: { AutoShow(waiting: waiting.wrappedValue, running: running.wrappedValue) },
                                  set: { waiting.wrappedValue = $0.waiting; running.wrappedValue = $0.running }),
-                         [(AutoShow(waiting: true, running: false), String(localized: "wartende")), (AutoShow(waiting: false, running: true), String(localized: "arbeitende")),
-                          (AutoShow(waiting: true, running: true), String(localized: "wartende und arbeitende")), (AutoShow(waiting: false, running: false), String(localized: "keine"))])
+                         [(AutoShow(waiting: true, running: false), String(localized: "wartende", bundle: Bundle.app)), (AutoShow(waiting: false, running: true), String(localized: "arbeitende", bundle: Bundle.app)),
+                          (AutoShow(waiting: true, running: true), String(localized: "wartende und arbeitende", bundle: Bundle.app)), (AutoShow(waiting: false, running: false), String(localized: "keine", bundle: Bundle.app))])
                 }
             }
 
-            heading(String(localized: "Rückfragen"), note: String(localized: "aus = ohne Nachfrage ausführen"))
+            heading(String(localized: "Rückfragen", bundle: Bundle.app), note: String(localized: "aus = ohne Nachfrage ausführen", bundle: Bundle.app))
             table {
                 ForEach(Settings.Ask.allCases, id: \.self) { a in
                     setting(a.title) { onOff(model.binding(a, \.enabled)) }
                 }
             }
 
-            heading(String(localized: "Tastenkürzel"), note: String(localized: "Kürzel anklicken, Tasten drücken · ⌫ entfernt"))
+            heading(String(localized: "Tastenkürzel", bundle: Bundle.app), note: String(localized: "Kürzel anklicken, Tasten drücken · ⌫ entfernt", bundle: Bundle.app))
             ForEach(hotkeyGroups, id: \.0) { title, actions in
                 Text(title).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.mutedColor)
                     .padding(.horizontal, 16).padding(.top, title == hotkeyGroups.first?.0 ? 0 : 12).padding(.bottom, 4)
                 table { ForEach(actions, id: \.self) { a in row(a) } }
             }
             Color.clear.frame(height: 12)
-            DialogFoot(hint: String(localized: "Änderungen gelten sofort · Esc schließt"), button: String(localized: "Fertig")) { model.stopRecording(); model.onClose?() }
+            DialogFoot(hint: String(localized: "Änderungen gelten sofort · Esc schließt", bundle: Bundle.app), button: String(localized: "Fertig", bundle: Bundle.app)) { model.stopRecording(); model.onClose?() }
         }
         .frame(width: 900 * Theme.scale, alignment: .leading)
         .background(Theme.panelColor)
+        .environment(\.locale, model.locale)
         .onDisappear { model.stopRecording() }
     }
 
@@ -280,11 +287,11 @@ struct SettingsView: View {
         .buttonStyle(.plain).kbdFocusRing()
     }
 
-    private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, String(localized: "an")), (false, String(localized: "aus"))]) }
+    private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, String(localized: "an", bundle: Bundle.app)), (false, String(localized: "aus", bundle: Bundle.app))]) }
 
     /// Texte als Dropdown. "" heißt Claude-Default.
     private func options(_ values: [String], _ value: Binding<String>) -> some View {
-        menu(value, values.map { ($0, $0.isEmpty ? String(localized: "Standard") : $0) })
+        menu(value, values.map { ($0, $0.isEmpty ? String(localized: "Standard", bundle: Bundle.app) : $0) })
     }
 
     private func row(_ a: HotkeyAction) -> some View {
@@ -298,7 +305,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain).kbdFocusRing().help("Zurück auf \(a.defaultKey.display)")
             }
             Button { isRecording ? model.stopRecording() : model.record(a) } label: {
-                Text(isRecording ? String(localized: "Tasten drücken …") : key?.display ?? "–")
+                Text(isRecording ? String(localized: "Tasten drücken …", bundle: Bundle.app) : key?.display ?? "–")
                     .font(Theme.ui(12, bold: true))
                     .foregroundStyle(isRecording ? Theme.bgColor : Theme.fgColor)
                     .padding(.horizontal, 8).padding(.vertical, 3).frame(width: controlWidth, alignment: .leading)

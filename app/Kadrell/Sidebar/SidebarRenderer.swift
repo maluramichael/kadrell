@@ -50,9 +50,9 @@ enum SidebarStyle: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .classic: String(localized: "Klassisch")
-        case .tinted: String(localized: "Getönte Gruppen")
-        case .compact: String(localized: "Kompakt")
+        case .classic: String(localized: "Klassisch", bundle: Bundle.app)
+        case .tinted: String(localized: "Getönte Gruppen", bundle: Bundle.app)
+        case .compact: String(localized: "Kompakt", bundle: Bundle.app)
         }
     }
 
@@ -126,7 +126,7 @@ extension SidebarRenderer {
         }
         if s.unread {
             let pillColor = Theme.color(for: s.session.status == .waiting ? .waiting : .running)
-            let tag = NSAttributedString(string: String(localized: "neu"), attributes: Theme.attrs(10, Theme.pillText(on: pillColor), bold: true))
+            let tag = NSAttributedString(string: String(localized: "neu", bundle: Bundle.app), attributes: Theme.attrs(10, Theme.pillText(on: pillColor), bold: true))
             let w = tag.size().width + 10
             right -= w
             let pill = CGRect(x: right, y: r.midY - 8, width: w, height: 16)

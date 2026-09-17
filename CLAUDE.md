@@ -36,6 +36,17 @@ Die Version steht in der App unter Einstellungen (⌘,) und im About (F1).
   Services und Helfer wiederverwenden, keine Logik duplizieren.
 - Vor dem Commit beides prüfen, genau wie die Tests.
 
+## Zweisprachig: jeder Nutzertext über das Bundle der eingestellten Sprache
+
+Kadrell ist deutsch und englisch, umschaltbar in den Einstellungen ohne Neustart (ein Neustart würde alle
+Claude-Prozesse mitnehmen). Deshalb:
+
+- Jeder neue Nutzertext in AppKit: `String(localized: "…", bundle: Bundle.app)`. Ohne `bundle:` bleibt er beim
+  Umschalten in der Startsprache stehen; `LocalizationTests` schlägt dann fehl.
+- SwiftUI-Dialoge erben die Sprache über `\.locale` (siehe `OverlayPanel`), dort genügt `Text("…")`.
+- Deutsch und Englisch gehören im selben Arbeitsgang in `app/Kadrell/Localization/Localizable.xcstrings`.
+- Texte, die beim Erzeugen gebaut werden (Palette), müssen beim Sprachwechsel neu entstehen, siehe `applyAppearance`.
+
 ## Testen an der laufenden App: immer ein frisches Profil
 
 Michaels eigenes Kadrell (Standardprofil) nie beenden, neu starten oder dessen Daten anfassen. Zum Testen den Debug-Build

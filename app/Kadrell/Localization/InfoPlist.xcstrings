@@ -1,40 +1,56 @@
 {
-  "sourceLanguage" : "de",
-  "strings" : {
-    "NSAppleEventsUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kadrell schlägt bei ⌘N den Ordner des vordersten Finder-Fensters vor."
+  "sourceLanguage": "de",
+  "strings": {
+    "NSAppleEventsUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell schlägt bei ⌘N den Ordner des vordersten Finder-Fensters vor."
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kadrell suggests the folder of the frontmost Finder window when you press ⌘N."
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell suggests the folder of the frontmost Finder window when you press ⌘N."
           }
         }
       }
     },
-    "NSMicrophoneUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude-Sessions im Terminal nutzen das Mikrofon für die Spracheingabe."
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Sessions im Terminal nutzen das Mikrofon für die Spracheingabe."
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claude sessions in the terminal use the microphone for voice input."
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude sessions in the terminal use the microphone for voice input."
+          }
+        }
+      }
+    },
+    "NSUserNotificationsUsageDescription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell benachrichtigt dich, wenn eine Session auf dich wartet oder fertig ist."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell notifies you when a session is waiting for you or has finished."
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }
