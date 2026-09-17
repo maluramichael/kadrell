@@ -1,0 +1,5 @@
+# Ausgeschlossen aus dem graphify-Wissensgraph (nicht aus git):
+# grosse/generierte HTML-Reports und Bild-Assets ohne Codewert.
+booster-report.html
+sidebar-varianten.html
+docs/images/

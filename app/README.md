@@ -77,6 +77,21 @@ anzufassen) und legt je tmux-Session eine Gruppe in `groups.json` an. Kadrell mu
 Der Leerzustand zählt separat, wie viele Claude-Sessions gerade interaktiv in anderen Terminals laufen, und
 verweist auf dieses Skript.
 
+Wissensgraph (graphify): `graphify-out/` enthält einen mit [graphify](https://github.com/safishamsi/graphify)
+(`uv tool install graphifyy`) gebauten Code-Graph über `app/Kadrell`, nicht eingecheckt (`.gitignore`),
+Ausschlüsse zusätzlicher Pfade (Reports, Bilder) in `.graphifyignore`. `graphify hook install` hat post-commit
+und post-checkout eingerichtet (rebuildet Code-Only im Hintergrund, kein API-Key nötig, Log unter
+`graphify-out/graphify-hook.log`). Für post-merge (fehlt in `graphify hook install`, da `git merge`/`git pull`
+kein `post-commit` auslösen) `tools/graphify-hook.sh` einmalig anhängen:
+```bash
+hook=".git/hooks/post-merge"
+[ -f "$hook" ] || printf '#!/bin/sh\n' > "$hook"
+grep -q 'tools/graphify-hook.sh' "$hook" || printf '\n"$(git rev-parse --show-toplevel)"/tools/graphify-hook.sh "$@" &\n' >> "$hook"
+chmod +x "$hook"
+```
+Beide Wege überspringen linked worktrees (`.claude/worktrees/`), laufen nie blockierend und scheitern nie am
+fehlenden `graphify`. Abfragen: `graphify query "<Frage>"` gegen `graphify-out/graph.json`.
+
 ## Warum Kadrell statt Terminal-Tabs oder tmux allein
 
 - **Startet und hält Claude selbst.** Kein `claude --bg`, kein separates Attach-Kommando: jede Kachel ist eine echte PTY mit einem Claude-Kindprozess, neue Sessions per `--session-id`, bekannte per `--resume`. Beendet sich Kadrell, enden die Prozesse mit; beim nächsten Start läuft jede angezeigte Session mit ihrem Verlauf weiter.
