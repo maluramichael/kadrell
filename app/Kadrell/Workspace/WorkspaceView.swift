@@ -67,6 +67,9 @@ final class WorkspaceView: NSView {
     var lastError: String?
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     var polled = false
+    /// Interaktive Claude-Sessions, die woanders laufen (tmux, iTerm), nicht von diesem Profil verwaltet.
+    /// AppDelegate hält es aktuell (`offerAdopt`), nur für den Hinweis im Leerzustand.
+    var otherInteractiveCount = 0 { didSet { if otherInteractiveCount != oldValue { needsDisplay = true } } }
     /// Rechtsklick auf Kachel-Header oder Stack-Zeile: liefert das Kontextmenü der Session.
     var onContextMenu: ((String) -> NSMenu?)?
 
@@ -551,6 +554,7 @@ final class WorkspaceView: NSView {
         drawBackground()
         if tiles.isEmpty {
             let a: NSAttributedString, b: NSAttributedString
+            var c: NSAttributedString?
             switch emptyReason {
             case .error(let message):
                 a = NSAttributedString(string: "Sessions können nicht geladen werden", attributes: Theme.attrs(12, Theme.error))
@@ -561,6 +565,11 @@ final class WorkspaceView: NSView {
             case .noSessions:
                 a = NSAttributedString(string: "Noch keine Session", attributes: Theme.attrs(12, Theme.muted))
                 b = NSAttributedString(string: "⌘N startet eine", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+                if otherInteractiveCount > 0 {
+                    let noun = otherInteractiveCount == 1 ? "Claude-Session läuft" : "Claude-Sessions laufen"
+                    c = NSAttributedString(string: "\(otherInteractiveCount) \(noun) interaktiv in anderen Terminals · Import: tools/tmux-dump.py",
+                                           attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.55)))
+                }
             case .hint:
                 let idle = auto && !autoPool.isEmpty
                 a = NSAttributedString(string: idle ? "Gerade wartet keine Session" : "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
@@ -569,6 +578,7 @@ final class WorkspaceView: NSView {
             Theme.scaled(bounds) { r in
                 a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
                 b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
+                c?.draw(at: CGPoint(x: r.midX - c!.size().width / 2, y: r.midY + 24))
             }
             return
         }

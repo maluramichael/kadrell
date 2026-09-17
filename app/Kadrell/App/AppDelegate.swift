@@ -316,8 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
             await registry.pollNow()
-            // Hintergrund-Sessions übernimmt nur das Standardprofil, sonst stiehlt ein Testprofil sie.
-            if Profile.name == nil { await offerAdopt() }
+            await offerAdopt()
             registry.start()
         }
         startControlServer()
@@ -332,9 +331,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attach.enqueue(workspace.shownSessions())
     }
 
-    /// Hintergrund-Sessions aus `claude --bg` (frühere Kadrell-Versionen, andere Terminals) anbieten zu übernehmen:
-    /// `claude stop` hält sie an, danach setzt Kadrell sie als eigenen Prozess mit `--resume` fort. Die Kurz-Id bleibt
-    /// Schlüssel, damit Gruppen und Auswahl passen. Kein `claude rm`: das löscht ggf. den Worktree, in dem die Session arbeitet.
+    /// Fremde Claude-Sessions (andere Terminals, frühere Kadrell-Versionen) beim Start erfassen. Hintergrund-Sessions
+    /// aus `claude --bg` bietet es zur Übernahme an: `claude stop` hält sie an, danach setzt Kadrell sie als eigenen
+    /// Prozess mit `--resume` fort. Die Kurz-Id bleibt Schlüssel, damit Gruppen und Auswahl passen. Kein `claude rm`:
+    /// das löscht ggf. den Worktree, in dem die Session arbeitet. Interaktive Sessions (tmux, iTerm) laufen noch, die
+    /// zeigt nur der Leerzustand als Hinweis (Übernahme dort per `tools/tmux-dump.py`, das startet sichere Kopien).
     private func offerAdopt() async {
         let owned = Set(registry.sessions.map(\.sessionId))
         let agents: [Agent]
@@ -343,7 +344,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             registry.fail("\(cli.binary): \(Self.firstLine(of: error))")
             return
         }
-        let bg = agents.filter { $0.isRunningBackground && !owned.contains($0.sessionId) }
+        let elsewhere = agents.filter { !owned.contains($0.sessionId) }
+        workspace.otherInteractiveCount = elsewhere.filter { $0.kind == "interactive" }.count
+        // Übernahme in die Sessions-Liste nur das Standardprofil, sonst stiehlt ein Testprofil sie.
+        guard Profile.name == nil else { return }
+        let bg = elsewhere.filter(\.isRunningBackground)
         guard !bg.isEmpty else { return }
         let list = bg.map { "· \($0.name)\($0.status == "busy" ? " (arbeitet gerade)" : "")" }.joined(separator: "\n")
         confirm("\(bg.count) Hintergrund-Session(s) übernehmen?", "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:\n\(list)", button: "Übernehmen", destructive: false, ask: .adoptBackground) { [weak self] in
