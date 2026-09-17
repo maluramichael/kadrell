@@ -73,7 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Versionssprung einmalig schon. `WhatsNew.lastSeenVersion` übersteht einen Neustart.
     private func showWhatsNewIfNeeded() {
         let version = Settings.version
-        guard WhatsNew.lastSeenVersion != version else { return }
+        // Temp-Profile erben den Lesestand des Standardprofils, sonst öffnet jeder Teststart den Dialog.
+        guard !Profile.isTemporary, WhatsNew.lastSeenVersion != version else { return }
         WhatsNew.lastSeenVersion = version
         showWhatsNew(version: version, fallback: nil)
     }
