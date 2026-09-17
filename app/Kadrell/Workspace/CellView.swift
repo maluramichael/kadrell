@@ -17,6 +17,10 @@ final class CellView: NSView {
     var attached = false
     /// Claude hat sich beendet oder wurde gestoppt; ohne das Flag startet der Prozess gerade.
     var ended = false
+    /// `ended`, aber kein reguläres `/exit`: der Prozess ist innerhalb weniger Sekunden mit diesem Code gestorben.
+    var exitCode: Int32?
+    /// `ended`, aber gar nicht erst gestartet: der Ordner der Session existiert nicht mehr.
+    var missingFolder = false
     /// Vorschau (⌥J/⌥K) startet keinen Prozess: ohne Terminal kein „STARTET …“.
     var previewing = false
     /// Das Terminal hängt gerade in einem anderen Fenster.
@@ -157,7 +161,17 @@ final class CellView: NSView {
 
     private func drawBody(_ body: CGRect) {
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }
-        if ended {
+        if missingFolder {
+            NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 0.72).setFill()
+            body.fill()
+            drawLabel(String(localized: "ORDNER FEHLT · \(Theme.shortPath(session.cwd))"), in: body, color: Theme.error)
+        } else if let exitCode {
+            // Startfehler statt normalem `/exit`: keine Schraffur, die letzten Zeilen bleiben lesbar (Kanboard #20).
+            NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 0.35).setFill()
+            body.fill()
+            if !lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
+            drawLabel(String(localized: "START FEHLGESCHLAGEN · EXIT \(String(exitCode))"), in: body, color: Theme.error)
+        } else if ended {
             drawHatch(in: body)
             if !lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
             drawLabel(String(localized: "BEENDET · KLICK SETZT FORT"), in: body)
@@ -175,6 +189,7 @@ final class CellView: NSView {
 
     private var borderColor: NSColor {
         if dropTarget { return Theme.fg }
+        if missingFolder || exitCode != nil { return Theme.error }
         if focused { return groupColor }
         if session.status == .waiting, attached { return Theme.waiting }
         if session.status == .error { return Theme.error }
@@ -212,10 +227,10 @@ final class CellView: NSView {
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    private func drawLabel(_ text: String, in r: CGRect) {
+    private func drawLabel(_ text: String, in r: CGRect, color: NSColor = Theme.muted) {
         guard r.height > 24 else { return }
         let para = NSMutableParagraphStyle(); para.alignment = .center; para.lineBreakMode = .byTruncatingTail
-        let a = NSAttributedString(string: text, attributes: [.font: Theme.font(11), .foregroundColor: Theme.muted, .kern: 0.5, .paragraphStyle: para])
+        let a = NSAttributedString(string: text, attributes: [.font: Theme.font(11), .foregroundColor: color, .kern: 0.5, .paragraphStyle: para])
         let h = a.size().height
         a.draw(with: CGRect(x: r.minX + 6, y: r.maxY - 10 - h, width: r.width - 12, height: h), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }

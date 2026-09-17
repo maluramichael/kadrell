@@ -206,9 +206,9 @@ extension AppDelegate {
             }
             if (try? fm.destinationOfSymbolicLink(atPath: link)) == nil { try fm.createSymbolicLink(atPath: link, withDestinationPath: target) }
             confirm(String(localized: "Kommandozeilen-Tool installiert"), String(localized: "\(link) zeigt auf diese App. `kadrell help` listet die Befehle. In Sessions dieser App steht der Pfad zusätzlich in $KADRELL."),
-                    button: String(localized: "OK"), destructive: false) {}
+                    button: String(localized: "OK"), destructive: false, infoOnly: true) {}
         } catch {
-            confirm(String(localized: "Installation fehlgeschlagen"), (error as? ControlError)?.message ?? String(describing: error), button: String(localized: "OK"), destructive: false) {}
+            confirm(String(localized: "Installation fehlgeschlagen"), (error as? ControlError)?.message ?? String(describing: error), button: String(localized: "OK"), destructive: false, infoOnly: true) {}
         }
     }
 }

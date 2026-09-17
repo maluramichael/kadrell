@@ -8,6 +8,12 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     var crumbGroupAttrs: [NSAttributedString.Key: Any]?
     /// Sessions können nicht geladen werden: steht statt der Session-Zahl in der Mitte, rot.
     var errorText: String?
+    /// claude läuft, ist aber älter als von Kadrell getestet: blockiert nichts, nur ein Hinweis-Badge rechts.
+    var versionWarning: String?
+    var onCopyUpdateCommand: (() -> Void)?
+    /// Einmaliger Tipp (zweite Session, Bedeutung von Gelb), verschwindet mit einem Klick darauf.
+    var tip: String?
+    var onDismissTip: (() -> Void)?
     var sessionCount = 0
     var openCount = 0
     var attachText = String(localized: "läuft \(0)/\(0)")
@@ -238,6 +244,23 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             hitRects.append((wr, String(localized: "Wartende Sessions"), "\(waitingCount)", { [weak self] in self?.onSelectWaiting?() }))
         }
         module([NSAttributedString(string: attachText, attributes: f)], tip: String(localized: "Laufende Claude-Prozesse / Sessions"))
+        if let tip {
+            let tt = NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))
+            let tw = tt.size().width + 20
+            rx -= tw
+            Theme.line.setFill(); CGRect(x: rx, y: 0, width: 1, height: b.height - 1).fill()
+            tt.draw(at: CGPoint(x: rx + 10, y: midY - 7))
+            hitRects.append((CGRect(x: rx, y: 0, width: tw, height: b.height - 1), String(localized: "Tipp"), tip, { [weak self] in self?.onDismissTip?() }))
+        }
+        if versionWarning != nil {
+            let wt = NSAttributedString(string: String(localized: "claude alt · claude update"), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))
+            let ww = wt.size().width + 20
+            rx -= ww
+            Theme.line.setFill(); CGRect(x: rx, y: 0, width: 1, height: b.height - 1).fill()
+            wt.draw(at: CGPoint(x: rx + 10, y: midY - 7))
+            let wr = CGRect(x: rx, y: 0, width: ww, height: b.height - 1)
+            hitRects.append((wr, String(localized: "Ältere claude-Version"), versionWarning, { [weak self] in self?.onCopyUpdateCommand?() }))
+        }
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
         let countUp = Feedback.progress(since: usageAt, duration: 0.5)
         func pctString(_ target: Int?, from: Int?) -> NSAttributedString {

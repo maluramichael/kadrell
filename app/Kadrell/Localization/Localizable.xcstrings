@@ -246,6 +246,22 @@
         }
       }
     },
+    "%lld Claude-Sessions laufen interaktiv in anderen Terminals": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Claude-Sessions laufen interaktiv in anderen Terminals"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Claude sessions are running interactively in other terminals"
+          }
+        }
+      }
+    },
     "%lld Claude-Sessions laufen interaktiv in anderen Terminals · Import: tools/tmux-dump.py": {
       "localizations": {
         "de": {
@@ -302,6 +318,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld COL"
+          }
+        }
+      }
+    },
+    "%lld Session(s) konnten nicht übernommen werden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Session(s) konnten nicht übernommen werden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld session(s) could not be adopted"
           }
         }
       }
@@ -378,6 +410,22 @@
           "stringUnit": {
             "state": "translated",
             "value": ", collapsed"
+          }
+        }
+      }
+    },
+    "1 Claude-Session läuft interaktiv in anderen Terminals": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Claude-Session läuft interaktiv in anderen Terminals"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Claude session is running interactively in other terminals"
           }
         }
       }
@@ -862,6 +910,22 @@
         }
       }
     },
+    "Bypass": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bypass"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bypass"
+          }
+        }
+      }
+    },
     "Bypass-Modus erlauben (--allow-dangerously-skip-permissions)": {
       "localizations": {
         "de": {
@@ -1102,6 +1166,22 @@
         }
       }
     },
+    "Doku öffnen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doku öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open docs"
+          }
+        }
+      }
+    },
     "EINSTELLUNGEN": {
       "localizations": {
         "de": {
@@ -1242,6 +1322,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove…"
+          }
+        }
+      }
+    },
+    "Erneut prüfen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut prüfen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
+    "Erste Session starten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erste Session starten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start first session"
           }
         }
       }
@@ -1758,6 +1870,22 @@
         }
       }
     },
+    "Gelb heißt: Claude wartet auf dich. ⌥N springt zur nächsten wartenden Session.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gelb heißt: Claude wartet auf dich. ⌥N springt zur nächsten wartenden Session."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yellow means: Claude is waiting for you. ⌥N jumps to the next waiting session."
+          }
+        }
+      }
+    },
     "Gerade wartet keine Session": {
       "localizations": {
         "de": {
@@ -2160,6 +2288,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Installation failed"
+          }
+        }
+      }
+    },
+    "Installationsbefehl kopieren": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installationsbefehl kopieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy install command"
           }
         }
       }
@@ -2966,6 +3110,22 @@
         }
       }
     },
+    "Neue Session starten  ⌘N": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Session starten  ⌘N"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start new session  ⌘N"
+          }
+        }
+      }
+    },
     "Neue Session: Projekt suchen, ~/d/p abkürzen, ⌘O Finder, Ordner hineinziehen": {
       "localizations": {
         "de": {
@@ -3154,6 +3314,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "ORDNER FEHLT · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ORDNER FEHLT · %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FOLDER MISSING · %@"
           }
         }
       }
@@ -3362,6 +3538,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "RENAME SESSION"
+          }
+        }
+      }
+    },
+    "START FEHLGESCHLAGEN · EXIT %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "START FEHLGESCHLAGEN · EXIT %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "START FAILED · EXIT %@"
           }
         }
       }
@@ -3894,6 +4086,22 @@
         }
       }
     },
+    "Standardmodell": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardmodell"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default model"
+          }
+        }
+      }
+    },
     "Starten": {
       "localizations": {
         "de": {
@@ -3906,6 +4114,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Start"
+          }
+        }
+      }
+    },
+    "Startet mit: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet mit: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starts with: %@"
           }
         }
       }
@@ -4274,6 +4498,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Terminal font size  ⌘+ ⌘- ⌘0  ⌘ scroll wheel"
+          }
+        }
+      }
+    },
+    "Tipp": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipp"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tip"
           }
         }
       }
@@ -4758,6 +4998,22 @@
         }
       }
     },
+    "alle Kürzel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alle Kürzel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "all shortcuts"
+          }
+        }
+      }
+    },
     "alle Sessions": {
       "localizations": {
         "de": {
@@ -4950,6 +5206,38 @@
         }
       }
     },
+    "claude %@: älter als die von Kadrell getestete Version %@, bitte mit „%@“ aktualisieren": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "claude %@: älter als die von Kadrell getestete Version %@, bitte mit „%@“ aktualisieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "claude %@: older than the version Kadrell was tested with (%@), update with “%@”"
+          }
+        }
+      }
+    },
+    "claude alt · claude update": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "claude alt · claude update"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "claude outdated · claude update"
+          }
+        }
+      }
+    },
     "diese Hilfe": {
       "localizations": {
         "de": {
@@ -4978,6 +5266,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "done"
+          }
+        }
+      }
+    },
+    "fragt nach Rechten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fragt nach Rechten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "asks for permissions"
           }
         }
       }
@@ -5257,6 +5561,22 @@
         }
       }
     },
+    "sucht Projekt oder Ordner": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sucht Projekt oder Ordner"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "searches for a project or folder"
+          }
+        }
+      }
+    },
     "tmux ls auf %@": {
       "localizations": {
         "de": {
@@ -5404,6 +5724,38 @@
         }
       }
     },
+    "zweite Session im selben Ordner": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zweite Session im selben Ordner"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "second session in the same folder"
+          }
+        }
+      }
+    },
+    "Ältere claude-Version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ältere claude-Version"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Older claude version"
+          }
+        }
+      }
+    },
     "Änderungen gelten sofort · Esc schließt": {
       "localizations": {
         "de": {
@@ -5448,6 +5800,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Take Over"
+          }
+        }
+      }
+    },
+    "ändern": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ändern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "change"
           }
         }
       }
@@ -5592,6 +5960,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "⌘N starts one"
+          }
+        }
+      }
+    },
+    "⌘N sucht Projekt oder Ordner · ⌘⏎ zweite Session im selben Ordner · F1 alle Kürzel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘N sucht Projekt oder Ordner · ⌘⏎ zweite Session im selben Ordner · F1 alle Kürzel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘N searches for a project or folder · ⌘⏎ second session in the same folder · F1 all shortcuts"
+          }
+        }
+      }
+    },
+    "⌘⏎ startet eine zweite Session im selben Ordner. Kadrell meldet sich, sobald eine auf dich wartet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘⏎ startet eine zweite Session im selben Ordner. Kadrell meldet sich, sobald eine auf dich wartet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘⏎ starts a second session in the same folder. Kadrell lets you know as soon as one is waiting for you."
           }
         }
       }

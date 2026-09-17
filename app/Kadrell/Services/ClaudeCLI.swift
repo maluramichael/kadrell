@@ -136,18 +136,27 @@ final class ClaudeCLI: Sendable {
     /// das sich Kadrell verlässt. Ältere Versionen können daran unbemerkt scheitern.
     static let minVersion = (major: 2, minor: 1, patch: 273)
 
-    /// Liest `claude --version` ("2.1.274 (Claude Code)") und vergleicht mit `minVersion`. `nil` = passt.
-    func checkVersion() async -> String? {
+    /// Offizieller Installationsweg (docs.claude.com/en/docs/claude-code/setup, Stand 2026-09).
+    static let installCommand = "curl -fsSL https://claude.ai/install.sh | bash"
+    static let installDocsURL = URL(string: "https://docs.claude.com/en/docs/claude-code/setup")!
+    static let updateCommand = "claude update"
+
+    /// Ergebnis von `checkVersion()`. Zu alt blockiert nicht mehr (siehe Kanboard #17): Kadrell lief bisher meist
+    /// auch mit einer knapp älteren CLI, `agents --json` ist die eigentliche Probe. Nur ein fehlgeschlagener
+    /// `--version`-Aufruf (kaputte Installation) bleibt ein echter, blockierender Fehler.
+    enum VersionCheck { case ok, tooOld(String), failed(String) }
+
+    func checkVersion() async -> VersionCheck {
         let out: String
         do { out = try await run(["--version"]) } catch {
-            return String(localized: "\(binary): claude --version fehlgeschlagen: \(CLIError.firstLine(of: error))")
+            return .failed(String(localized: "\(binary): claude --version fehlgeschlagen: \(CLIError.firstLine(of: error))"))
         }
         guard let v = ClaudeCLI.parseVersion(out) else {
-            return String(localized: "\(binary): claude --version liefert kein erkennbares Versionsformat: \(out.trimmingCharacters(in: .whitespacesAndNewlines))")
+            return .failed(String(localized: "\(binary): claude --version liefert kein erkennbares Versionsformat: \(out.trimmingCharacters(in: .whitespacesAndNewlines))"))
         }
-        guard v < ClaudeCLI.minVersion else { return nil }
+        guard v < ClaudeCLI.minVersion else { return .ok }
         let found = "\(v.major).\(v.minor).\(v.patch)", tested = "\(ClaudeCLI.minVersion.major).\(ClaudeCLI.minVersion.minor).\(ClaudeCLI.minVersion.patch)"
-        return String(localized: "claude \(found): älter als die von Kadrell getestete Version \(tested), bitte aktualisieren")
+        return .tooOld(String(localized: "claude \(found): älter als die von Kadrell getestete Version \(tested), bitte mit „\(ClaudeCLI.updateCommand)“ aktualisieren"))
     }
 
     static func parseVersion(_ output: String) -> (major: Int, minor: Int, patch: Int)? {

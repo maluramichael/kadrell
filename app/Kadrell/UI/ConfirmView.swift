@@ -6,6 +6,8 @@ struct ConfirmView: View {
     let info: String
     let button: String
     let destructive: Bool
+    /// Reine Mitteilung ohne echte Alternative (Fehlermeldung, Erfolg): kein „Abbrechen“ daneben, das dasselbe täte wie der Button.
+    var infoOnly: Bool = false
     /// Gesetzt: Häkchen „Nicht mehr fragen“. Schreibt sofort (⏎ läuft am Button vorbei), Abbrechen stellt zurück.
     var ask: Settings.Ask? = nil
     let onConfirm: () -> Void
@@ -30,10 +32,12 @@ struct ConfirmView: View {
                     }.buttonStyle(.plain).help("Wieder einschalten: Einstellungen (⌘,) › Rückfragen")
                 }
                 Spacer()
-                Button(action: onCancel) {
-                    Text("Abbrechen").font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
-                        .padding(.horizontal, 12).padding(.vertical, 6).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
-                }.buttonStyle(.plain)
+                if !infoOnly {
+                    Button(action: onCancel) {
+                        Text("Abbrechen").font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
+                            .padding(.horizontal, 12).padding(.vertical, 6).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+                    }.buttonStyle(.plain)
+                }
                 Button(action: onConfirm) {
                     Text(destructive ? "\(button)  ⌘⏎" : button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.runningColor)

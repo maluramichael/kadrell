@@ -133,9 +133,12 @@ final class NewSessionModel {
 struct NewSessionView: View {
     @Bindable var model: NewSessionModel
     @State private var dropping = false
+    /// ⌘, öffnet die Einstellungen, direkt an der Zusammenfassung der Start-Flags (Kanboard #75).
+    var onOpenSettings: (() -> Void)?
 
-    init(model: NewSessionModel, onStart: @escaping (Group?, String) -> Void) {
+    init(model: NewSessionModel, onOpenSettings: (() -> Void)? = nil, onStart: @escaping (Group?, String) -> Void) {
         self.model = model
+        self.onOpenSettings = onOpenSettings
         model.onStart = onStart
     }
 
@@ -148,6 +151,14 @@ struct NewSessionView: View {
                 .frame(height: 22 * Theme.scale).padding(14)
             Divider().overlay(Theme.lineColor)
             list
+            Divider().overlay(Theme.lineColor)
+            HStack(spacing: 6) {
+                Text(String(localized: "Startet mit: \(Settings.claudeSummary)")).font(Theme.ui(10.5)).foregroundStyle(Theme.mutedColor).lineLimit(1)
+                Spacer()
+                if let onOpenSettings {
+                    Button(String(localized: "ändern")) { onOpenSettings() }.buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.runningColor)
+                }
+            }.padding(.horizontal, 16).padding(.vertical, 6)
             DialogFoot(hint: String(localized: "⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen"), button: String(localized: "Starten")) { model.start() }
         }
         .font(Theme.ui(12))
