@@ -165,6 +165,12 @@ enum Settings {
         get { double("terminal.lineSpacing", 1) }
         set { Profile.defaults.set(newValue, forKey: "terminal.lineSpacing") }
     }
+    /// Zeilen Verlauf pro Terminal (SwiftTerm hält sonst nur 500). Kostet grob 1 MB je 1000 Zeilen bei breiten Kacheln.
+    static let scrollbackRange = 1_000.0...50_000.0
+    static var terminalScrollback: Int {
+        get { Int(min(max(double("terminal.scrollback", 10_000), scrollbackRange.lowerBound), scrollbackRange.upperBound)) }
+        set { Profile.defaults.set(Double(newValue), forKey: "terminal.scrollback") }
+    }
     /// Abstand zwischen Kachelrahmen und Terminaltext, zusätzlich zu den 2 px Rahmenschutz.
     static var terminalPadding: Double {
         get { double("terminal.padding", 0) }
@@ -285,6 +291,7 @@ final class SettingsModel {
     var fontSize = Settings.terminalFontSize
     var lineSpacing = Settings.terminalLineSpacing
     var padding = Settings.terminalPadding
+    var scrollback = Double(Settings.terminalScrollback)
     var tileGap = Settings.tileGap
     var backgroundImage = Settings.backgroundImage
     var tileOpacity = Settings.tileOpacity
@@ -338,6 +345,7 @@ final class SettingsModel {
         Settings.terminalFontSize = fontSize
         Settings.terminalLineSpacing = lineSpacing
         Settings.terminalPadding = padding
+        Settings.terminalScrollback = Int(scrollback)
         Settings.tileGap = tileGap
         Settings.backgroundImage = backgroundImage.trimmingCharacters(in: .whitespacesAndNewlines)
         Settings.tileOpacity = tileOpacity
@@ -447,6 +455,7 @@ struct SettingsView: View {
                 setting(String(localized: "Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad")) { slider($model.fontSize, Settings.fontSizes, step: 1, unit: "pt") }
                 setting(String(localized: "Zeilenabstand")) { slider($model.lineSpacing, Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
                 setting(String(localized: "Innenabstand der Kacheln")) { slider($model.padding, Settings.pixelRange, step: 1, unit: "px") }
+                setting(String(localized: "Verlauf zum Zurückscrollen")) { slider($model.scrollback, Settings.scrollbackRange, step: 1_000, unit: String(localized: "Zeilen")) }
                 setting(String(localized: "Abstand zwischen Kacheln")) { slider($model.tileGap, Settings.pixelRange, step: 1, unit: "px") }
                 setting(String(localized: "Terminal auf der GPU zeichnen (Metal)")) { onOff($model.metal) }
             }

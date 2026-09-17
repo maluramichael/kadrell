@@ -122,7 +122,9 @@ final class AttachManager {
             onChange?()
             return
         }
-        let t = KadrellTerminalView(frame: NSRect(x: 0, y: 0, width: 960, height: 600), font: Settings.terminalFont, options: .default)
+        var options = TerminalOptions.default
+        options.scrollback = Settings.terminalScrollback
+        let t = KadrellTerminalView(frame: NSRect(x: 0, y: 0, width: 960, height: 600), font: Settings.terminalFont, options: options)
         t.lineSpacing = CGFloat(Settings.terminalLineSpacing)
         t.nativeBackgroundColor = Theme.bg
         applyColors(t)
@@ -219,14 +221,19 @@ final class AttachManager {
         let font = Settings.terminalFont, spacing = CGFloat(Settings.terminalLineSpacing)
         let recolor = themeId != Theme.current.id
         themeId = Theme.current.id
+        let scrollback = Settings.terminalScrollback, resize = scrollback != appliedScrollback
+        appliedScrollback = scrollback
         for t in terminals.values {
             if t.font != font { t.font = font }
             if t.lineSpacing != spacing { t.lineSpacing = spacing }
             if recolor { applyColors(t) }
+            // Laufende Terminals übernehmen den neuen Verlauf sofort, beim Verkleinern fallen die ältesten Zeilen weg.
+            if resize { t.changeScrollback(scrollback) }
         }
     }
 
     private var themeId = Theme.current.id
+    private var appliedScrollback = Settings.terminalScrollback
 
     /// Schrift, Cursor und ANSI-Farben aus dem Farbschema; den Hintergrund setzt die Kachel.
     private func applyColors(_ t: KadrellTerminalView) {

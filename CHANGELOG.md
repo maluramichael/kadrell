@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.40.0 (2026-09-17)
+
+- Feature: Neue Einstellung „Verlauf zum Zurückscrollen“ (1.000 bis 50.000 Zeilen, Standard 10.000). Bisher hielt jedes Terminal nur 500 Zeilen, lange Claude-Antworten waren nach oben hin abgeschnitten. Gilt sofort auch für laufende Sessions.
+
 ## 1.39.0 (2026-09-17)
 
 - Feature: Einstellung „Sessions dürfen andere Sessions steuern“. Ist sie aus, darf eine Session per `kadrell` nur Sessions ihrer eigenen Gruppe steuern und lesen.

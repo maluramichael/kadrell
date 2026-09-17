@@ -4742,6 +4742,22 @@
         }
       }
     },
+    "Verlauf zum Zurückscrollen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf zum Zurückscrollen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrollback"
+          }
+        }
+      }
+    },
     "Vorige Kachel": {
       "localizations": {
         "de": {
@@ -4898,6 +4914,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shows"
+          }
+        }
+      }
+    },
+    "Zeilen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeilen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "lines"
           }
         }
       }
