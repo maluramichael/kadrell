@@ -11,7 +11,8 @@ final class FolderIndex {
 
     private(set) var repos: [String] = []
     private(set) var uses: [String: Use] = [:]
-    private var scanning = false
+    /// Läuft `refresh` gerade im Hintergrund: ⌘N zeigt solange einen dezenten Hinweis über der Liste.
+    private(set) var scanning = false
     private let reposURL: URL
     private static let usesKey = "folders.uses"
 

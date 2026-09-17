@@ -93,4 +93,43 @@ final class ControlTests: XCTestCase {
         XCTAssertEqual(help.status, 0)
         XCTAssertTrue(help.output.contains("kadrell new-group"))
     }
+
+    /// `ControlClient.run` wartet weiter, solange die Antwort `startingStatus` trägt (`boot()` läuft noch),
+    /// statt sie wie einen echten Fehler zu behandeln.
+    func testClientWaitsWhileStarting() async throws {
+        let path = "/tmp/kadrell-test-boot-\(getpid()).sock"
+        nonisolated(unsafe) var calls = 0
+        let server = ControlServer(path: path) { _ in
+            calls += 1
+            return calls < 2 ? ControlResponse(status: ControlResponse.startingStatus, stderr: "kadrell: Kadrell startet noch\n") : .ok("hallo")
+        }
+        try server.start()
+        defer { server.stop() }
+        let bin = try XCTUnwrap(Bundle.main.executablePath)
+        let env = ["KADRELL_SOCKET": path, "HOME": NSHomeDirectory()]
+        let ok = try await ClaudeCLI.runRaw(bin, ["ls"], environment: env, cwd: "/tmp")
+        XCTAssertEqual(ok.status, 0)
+        XCTAssertEqual(ok.output, "hallo\n")
+    }
+
+    /// Zwei `kadrell send` nacheinander (wie in einem Orchestrierungs-Skript): die Antwort auf den ersten
+    /// Aufruf kommt erst, wenn dessen Handler ganz fertig ist, der zweite startet also nie hinein.
+    func testHandlerRunsSequentiallyAcrossCalls() async throws {
+        let path = "/tmp/kadrell-test-seq-\(getpid()).sock"
+        nonisolated(unsafe) var order: [String] = []
+        let server = ControlServer(path: path) { req in
+            let tag = req.argv.last ?? "?"
+            order.append("\(tag) start")
+            try? await Task.sleep(for: .milliseconds(40))
+            order.append("\(tag) end")
+            return .ok()
+        }
+        try server.start()
+        defer { server.stop() }
+        let bin = try XCTUnwrap(Bundle.main.executablePath)
+        let env = ["KADRELL_SOCKET": path, "HOME": NSHomeDirectory()]
+        _ = try await ClaudeCLI.runRaw(bin, ["send", "foo"], environment: env, cwd: "/tmp")
+        _ = try await ClaudeCLI.runRaw(bin, ["send", "bar"], environment: env, cwd: "/tmp")
+        XCTAssertEqual(order, ["foo start", "foo end", "bar start", "bar end"])
+    }
 }

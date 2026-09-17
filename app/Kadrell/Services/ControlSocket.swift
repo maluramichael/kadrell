@@ -57,12 +57,12 @@ enum ControlSocket {
 /// Lauscht auf dem Socket und reicht jede Anfrage an `handler` auf dem Main-Thread weiter.
 final class ControlServer: @unchecked Sendable {
     let path: String
-    private let handler: @MainActor @Sendable (ControlRequest) -> ControlResponse
+    private let handler: @MainActor @Sendable (ControlRequest) async -> ControlResponse
     private let queue = DispatchQueue(label: "de.malura.kadrell.control")
     private var listenFd: Int32 = -1
     private var source: DispatchSourceRead?
 
-    init(path: String = ControlSocket.defaultPath, handler: @escaping @MainActor @Sendable (ControlRequest) -> ControlResponse) {
+    init(path: String = ControlSocket.defaultPath, handler: @escaping @MainActor @Sendable (ControlRequest) async -> ControlResponse) {
         self.path = path
         self.handler = handler
     }
@@ -114,7 +114,7 @@ final class ControlServer: @unchecked Sendable {
         }
         let handler = handler, queue = queue
         Task { @MainActor in
-            let out = ControlServer.encode(handler(req))
+            let out = ControlServer.encode(await handler(req))
             queue.async { ControlSocket.writeAll(fd, out); close(fd) }
         }
     }
@@ -161,21 +161,22 @@ enum ControlClient {
         let req = ControlRequest(argv: argv, cwd: FileManager.default.currentDirectoryPath, caller: env["KADRELL_SESSION_KEY"])
         do {
             var resp = try send(req, path: path)
-            if resp == nil {
-                // Läuft Kadrell ohne Socket (Version vor der Fernsteuerung), würde `open` sie nur nach vorn holen.
-                // Mit Profil kann eine andere Instanz laufen, ohne dass dieses Profil offen ist.
-                guard Profile.name != nil || NSRunningApplication.runningApplications(withBundleIdentifier: "de.malura.kadrell").isEmpty else {
-                    throw ControlError("Kadrell läuft, lauscht aber nicht auf \(path). Alte Version? Kadrell neu starten.")
-                }
-                launchApp()
-                // Die App braucht fürs Einlesen der Login-Shell-Umgebung ein paar Sekunden, erst danach lauscht sie.
+            // Mit Profil kann eine andere Instanz laufen, ohne dass dieses Profil offen ist.
+            let alreadyRunning = Profile.name == nil && !NSRunningApplication.runningApplications(withBundleIdentifier: "de.malura.kadrell").isEmpty
+            if resp == nil, !alreadyRunning { launchApp() }
+            // Kein Socket (App startet gerade erst) oder Socket da, aber `boot()` läuft noch (startingStatus):
+            // beides bis 30 s abwarten, die App braucht fürs Einlesen der Login-Shell-Umgebung ein paar Sekunden.
+            if resp == nil || resp?.status == ControlResponse.startingStatus {
                 let deadline = Date().addingTimeInterval(30)
-                while resp == nil, Date() < deadline {
+                while resp == nil || resp?.status == ControlResponse.startingStatus, Date() < deadline {
                     usleep(250_000)
                     resp = try send(req, path: path)
                 }
             }
-            guard let resp else { throw ControlError("Kadrell antwortet nicht (\(path))") }
+            guard let resp, resp.status != ControlResponse.startingStatus else {
+                if alreadyRunning { throw ControlError("Kadrell läuft, lauscht aber nicht auf \(path). Alte Version? Kadrell neu starten.") }
+                throw ControlError("Kadrell antwortet nicht (\(path))")
+            }
             FileHandle.standardOutput.write(Data(resp.stdout.utf8))
             FileHandle.standardError.write(Data(resp.stderr.utf8))
             return resp.status

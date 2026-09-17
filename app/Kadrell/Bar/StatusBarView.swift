@@ -3,7 +3,7 @@ import AppKit
 /// 30 px Leiste: Layout-Toggle links, Breadcrumb in der Mitte, rechts Nutzung, Attach und Uhr.
 /// Alles gezeichnet, Hit-Rects von Hand.
 @MainActor
-final class StatusBarView: NSView {
+final class StatusBarView: NSView, NSViewToolTipOwner {
     var crumb: (group: String, session: String)?
     var crumbGroupAttrs: [NSAttributedString.Key: Any]?
     /// Sessions können nicht geladen werden: steht statt der Session-Zahl in der Mitte, rot.
@@ -44,6 +44,14 @@ final class StatusBarView: NSView {
 
     /// Trefferflächen mit Label und Wert, dieselbe Liste liefert die Knöpfe für VoiceOver.
     private var hitRects: [(rect: CGRect, label: String, value: String?, action: @MainActor () -> Void)] = []
+    /// Tooltip-Text nur für Module ohne eigenen Klick (Nutzungszahlen, Kürzel „läuft x/y“); die anklickbaren
+    /// Module bekommen ihren Tooltip aus `hitRects` (Label + Wert).
+    private var moduleTips: [(rect: CGRect, text: String)] = []
+    /// Registrierte Tooltip-Rects fürs Nachschlagen in `view(_:stringForToolTip:point:userData:)`, nur neu
+    /// gesetzt, wenn sich seit dem letzten Zeichnen etwas geändert hat: sonst reißt `removeAllToolTips()` bei
+    /// jedem Uhr-Tick (jede Sekunde) den Hover-Timer ab, und der Tooltip erscheint nie.
+    private var toolTipEntries: [(rect: CGRect, text: String)] = []
+    private var toolTipsKey = ""
     private var a11y: [A11yElement] = []
     private var clockTask: Task<Void, Never>?
     /// Umgeschaltete Badges: die Füllung wächst aus der Mitte auf.
@@ -95,7 +103,22 @@ final class StatusBarView: NSView {
     /// Gezeichnet in unskalierten Punkten, die Hit-Rects auch.
     override func draw(_ dirtyRect: NSRect) {
         hitRects = []
+        moduleTips = []
         Theme.scaled(bounds) { drawBar($0) }
+        updateToolTips()
+    }
+
+    private func updateToolTips() {
+        toolTipEntries = moduleTips + hitRects.map { h in (h.rect, h.value.map { "\(h.label): \($0)" } ?? h.label) }
+        let key = toolTipEntries.map { "\($0.rect)|\($0.text)" }.joined(separator: "\n")
+        guard key != toolTipsKey else { return }
+        toolTipsKey = key
+        removeAllToolTips()
+        for t in toolTipEntries { addToolTip(t.rect.scaled(Theme.scale), owner: self, userData: nil) }
+    }
+
+    func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint, userData data: UnsafeMutableRawPointer?) -> String {
+        toolTipEntries.first { $0.rect.scaled(Theme.scale).contains(point) }?.text ?? ""
     }
 
     private func drawBar(_ b: CGRect) {
@@ -168,16 +191,23 @@ final class StatusBarView: NSView {
 
         // Rechts: von rechts nach links
         var rx = b.width
-        func module(_ parts: [NSAttributedString]) {
+        func module(_ parts: [NSAttributedString], tip: String? = nil) {
             var w: CGFloat = 20
             for p in parts { w += p.size().width }
             w += CGFloat(max(0, parts.count - 1)) * 5
+            let rect = CGRect(x: rx - w, y: 0, width: w, height: b.height - 1)
             rx -= w
             Theme.line.setFill(); CGRect(x: rx, y: 0, width: 1, height: b.height - 1).fill()
             var px = rx + 10
             for (i, p) in parts.enumerated() {
                 p.draw(at: CGPoint(x: px, y: midY - 8 + (i > 0 ? 1 : 0))); px += p.size().width + 5
             }
+            if let tip { moduleTips.append((rect, tip)) }
+        }
+        /// Tooltip für ein Nutzungsmodul: Bezeichnung plus Prozentwert, oder Hinweis, wenn er fehlt.
+        func usageTip(_ label: String, _ pct: Int?) -> String {
+            guard let pct else { return String(localized: "\(label): Nutzung nicht abrufbar") }
+            return String(localized: "\(label): \(pct) % verbraucht")
         }
         let df = DateFormatter(); df.dateFormat = "HH:mm"
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
@@ -191,7 +221,7 @@ final class StatusBarView: NSView {
             wt.draw(at: CGPoint(x: wr.minX + 10, y: midY - 8))
             hitRects.append((wr, String(localized: "Wartende Sessions"), "\(waitingCount)", { [weak self] in self?.onSelectWaiting?() }))
         }
-        module([NSAttributedString(string: attachText, attributes: f)])
+        module([NSAttributedString(string: attachText, attributes: f)], tip: String(localized: "Laufende Claude-Prozesse / Sessions"))
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
         let countUp = Feedback.progress(since: usageAt, duration: 0.5)
         func pctString(_ target: Int?, from: Int?) -> NSAttributedString {
@@ -201,9 +231,12 @@ final class StatusBarView: NSView {
             let c: NSColor = v >= 90 ? Theme.error : v >= 70 ? Theme.waiting : Theme.idle
             return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, c))
         }
-        module([NSAttributedString(string: "fable", attributes: fMuted), pctString(usage.fable, from: usageFrom.fable)])
-        module([NSAttributedString(string: "7d", attributes: fMuted), pctString(usage.weekly, from: usageFrom.weekly)])
-        module([NSAttributedString(string: "5h", attributes: fMuted), pctString(usage.session, from: usageFrom.session)])
+        module([NSAttributedString(string: "fable", attributes: fMuted), pctString(usage.fable, from: usageFrom.fable)],
+               tip: usageTip(String(localized: "Fable-Kontingent"), usage.fable))
+        module([NSAttributedString(string: "7d", attributes: fMuted), pctString(usage.weekly, from: usageFrom.weekly)],
+               tip: usageTip(String(localized: "Claude-Nutzung der letzten 7 Tage"), usage.weekly))
+        module([NSAttributedString(string: "5h", attributes: fMuted), pctString(usage.session, from: usageFrom.session)],
+               tip: usageTip(String(localized: "Claude-Nutzung der letzten 5 Stunden"), usage.session))
 
         // Mitte: Breadcrumb
         let mid: NSAttributedString
@@ -213,9 +246,9 @@ final class StatusBarView: NSView {
             if openCount > 1 { m.append(NSAttributedString(string: String(localized: " · \(openCount) offen"), attributes: fMuted)) }
             mid = m
         } else if let e = errorText {
-            mid = NSAttributedString(string: "kadrell · \(e)", attributes: Theme.attrs(11.5, Theme.error))
+            mid = NSAttributedString(string: String(localized: "kadrell · \(e)"), attributes: Theme.attrs(11.5, Theme.error))
         } else {
-            mid = NSAttributedString(string: "kadrell · \(sessionCount) sessions", attributes: fMuted)
+            mid = NSAttributedString(string: String(localized: "kadrell · \(sessionCount) sessions"), attributes: fMuted)
         }
         let avail = rx - leftEnd - 16
         let mw = min(mid.size().width, max(0, avail))

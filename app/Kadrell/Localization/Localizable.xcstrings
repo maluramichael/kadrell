@@ -103,6 +103,22 @@
     "%@  ⏎": {
       "shouldTranslate": false
     },
+    "%@ existiert nicht · ⌘⏎ anlegen und starten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ existiert nicht · ⌘⏎ anlegen und starten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ doesn't exist · ⌘⏎ create and start"
+          }
+        }
+      }
+    },
     "%@ nicht erreichbar": {
       "localizations": {
         "de": {
@@ -131,6 +147,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ points to this app. `kadrell help` lists the commands. Sessions in this app also have the path in $KADRELL."
+          }
+        }
+      }
+    },
+    "%@: %lld % verbraucht": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %lld % verbraucht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %lld% used"
+          }
+        }
+      }
+    },
+    "%@: Nutzung nicht abrufbar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: Nutzung nicht abrufbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: usage unavailable"
           }
         }
       }
@@ -942,6 +990,38 @@
         }
       }
     },
+    "Claude-Nutzung der letzten 5 Stunden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Nutzung der letzten 5 Stunden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude usage over the last 5 hours"
+          }
+        }
+      }
+    },
+    "Claude-Nutzung der letzten 7 Tage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Nutzung der letzten 7 Tage"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude usage over the last 7 days"
+          }
+        }
+      }
+    },
     "Darstellung": {
       "localizations": {
         "de": {
@@ -1226,6 +1306,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "External editor (command as in the terminal)"
+          }
+        }
+      }
+    },
+    "Fable-Kontingent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fable-Kontingent"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fable quota"
           }
         }
       }
@@ -2566,6 +2662,22 @@
         }
       }
     },
+    "Laufende Claude-Prozesse / Sessions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufende Claude-Prozesse / Sessions"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running Claude processes / sessions"
+          }
+        }
+      }
+    },
     "Laufzeit im Baum": {
       "localizations": {
         "de": {
@@ -3878,6 +3990,22 @@
         }
       }
     },
+    "Suche Git-Repos unter ~ …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche Git-Repos unter ~ …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching Git repos under ~ …"
+          }
+        }
+      }
+    },
     "Suche, mit > Kommandos": {
       "localizations": {
         "de": {
@@ -4882,6 +5010,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "applies to newly started Claude processes"
+          }
+        }
+      }
+    },
+    "kadrell · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kadrell · %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kadrell · %@"
+          }
+        }
+      }
+    },
+    "kadrell · %lld sessions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kadrell · %lld sessions"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kadrell · %lld sessions"
           }
         }
       }
