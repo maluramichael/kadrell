@@ -192,4 +192,16 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(Session(id: "a", cwd: "/p/proj", startedAt: 1, sessionId: "a", name: "", firstPrompt: "Hallo").title, "Hallo")
         XCTAssertNil(Transcript.firstPrompt(path: "/gibt/es/nicht.jsonl"))
     }
+
+    /// Worktree-Erkennung: Pfad-Felder und Bash-Kommandos aus `tool_use`, neueste zuerst, Sidechain fällt raus.
+    func testToolCandidates() {
+        let jsonl = """
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}
+        {"type":"assistant","isSidechain":true,"message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/sub/x.php"}}]}}
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"relative.txt"}},{"type":"tool_use","name":"Edit","input":{"file_path":"/repo-wt-1/src/x.php"}}]}}
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cd /repo-wt-1 && npm test"}}]}}
+        """
+        let candidates = Transcript.toolCandidates(jsonl: Data(jsonl.utf8))
+        XCTAssertEqual(candidates, ["cd /repo-wt-1 && npm test", "/repo-wt-1/src/x.php", "ls"])
+    }
 }

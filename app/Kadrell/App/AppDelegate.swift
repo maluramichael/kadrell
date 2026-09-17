@@ -24,6 +24,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     /// Session, für die zuletzt `session-focus` gefeuert hat.
     private var hookFocus: String?
+    /// Aktiver Worktree dieser Session beim letzten `session-focus` (siehe `Session.activeWorktree`). Wechselt er,
+    /// obwohl die Session dieselbe bleibt, feuert der Hook erneut, sonst bekäme ein Hook-Skript den Wechsel nie mit.
+    private var hookFocusWorktree: String?
     /// Wartende Sessions beim letzten Abgleich: neu dazugekommene lösen `requestUserAttention` aus.
     private var lastWaitingIds: Set<String> = []
     /// Status angehängter Sessions beim letzten Abgleich: Wechsel spielen Sound und lassen den Punkt im Baum aufblitzen.
@@ -402,8 +405,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
         let fg = focused.flatMap { workspace.group(forSession: $0.id) }
         bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
-        if let cli, let key = workspace.focused, key != hookFocus, let s = sessions[key] {
+        if let cli, let key = workspace.focused, let s = sessions[key], key != hookFocus || s.activeWorktree != hookFocusWorktree {
             hookFocus = key
+            hookFocusWorktree = s.activeWorktree
             Hooks.fire(.sessionFocus, s, environment: cli.environment)
         }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }

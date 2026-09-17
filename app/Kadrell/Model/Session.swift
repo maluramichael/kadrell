@@ -24,8 +24,11 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var rawStatus: String? = nil
     var pid: Int? = nil
     var waitingFor: String? = nil
-    /// Git-Branch des Projektordners, wird bei jedem Refresh aus `.git/HEAD` gelesen.
+    /// Git-Branch des Projektordners (oder des aktiven Worktrees, siehe `activeWorktree`), bei jedem Refresh neu gelesen.
     var branch: String? = nil
+    /// Worktree, in dem laut Transcript zuletzt tatsächlich gearbeitet wurde (Geschwister- oder Unterordner
+    /// von `cwd`), nil = Hauptverzeichnis. Nur für Hooks und Anzeige, `cwd` selbst bleibt unverändert.
+    var activeWorktree: String? = nil
     /// Erste Nachricht aus dem Transcript, Ersatztitel solange Claude Code keinen vergeben hat (Haiku scheitert still).
     var firstPrompt: String? = nil
     /// Remote-Session (⌘⇧N): ssh-Host aus `~/.ssh/config`, die Kachel hängt sich an dessen tmux.
