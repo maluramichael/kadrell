@@ -14,6 +14,9 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Sessions, die gerade auf dich warten (Status waiting, angehängt). Modul „N warten“ nur bei > 0.
     var waitingCount = 0
     var onSelectWaiting: (() -> Void)?
+    /// Neuere Version als die laufende gefunden (`UpdateChecker`), Klick zeigt Changelog und Download-Link.
+    var updateAvailable: UpdateManifest?
+    var onShowUpdate: (() -> Void)?
     /// Neue Werte zählen vom alten Stand hoch bzw. herunter.
     var usage = Usage.empty {
         didSet { if usage != oldValue { usageFrom = oldValue; usageAt = CACurrentMediaTime(); animate(0.5) } }
@@ -211,6 +214,17 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         }
         let df = DateFormatter(); df.dateFormat = "HH:mm"
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
+        if let update = updateAvailable {
+            // Dezent statt der waiting-Farbe: kein Alarm, nur ein Hinweis.
+            let ut = NSAttributedString(string: String(localized: "\(update.version) verfügbar"), attributes: Theme.attrs(11, Theme.fg))
+            let uw = ut.size().width + 20
+            rx -= uw
+            Theme.line.setFill(); CGRect(x: rx, y: 0, width: 1, height: b.height - 1).fill()
+            let ur = CGRect(x: rx + 4, y: midY - 9, width: uw - 8, height: 18)
+            Theme.surface.setFill(); ur.fill()
+            ut.draw(at: CGPoint(x: ur.minX + 10, y: midY - 8))
+            hitRects.append((ur, String(localized: "Update verfügbar"), update.version, { [weak self] in self?.onShowUpdate?() }))
+        }
         if waitingCount > 0 {
             let wt = NSAttributedString(string: String(localized: "\(waitingCount) warten"), attributes: Theme.attrs(11, Theme.bg, bold: true))
             let ww = wt.size().width + 20
