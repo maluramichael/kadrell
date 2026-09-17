@@ -531,8 +531,7 @@ final class WorkspaceView: NSView {
         // Fenster verdeckt/versteckt: nichts zu zeichnen, kein Puls nötig.
         guard window?.occlusionState.contains(.visible) == true else { return }
         syncFirstResponder()
-        let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
-        pulse = Feedback.reduceMotion ? 1 : 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
+        pulse = Feedback.pulse()
         for (key, v) in cells where sessions[key]?.status == .running && !v.isHidden {
             v.pulse = pulse
             if !v.state.headerHidden { v.setNeedsDisplay(v.dotRect) }
@@ -723,7 +722,7 @@ final class WorkspaceView: NSView {
         (on ? color : color.mixed(0.45, into: Theme.bg)).setFill()
         CGRect(x: r.minX, y: r.minY, width: on ? 3 : 1, height: r.height).fill()
         let attached = attach?.isAttached(key) ?? false
-        let c = attached ? Theme.color(for: s.status) : Theme.detached
+        let c = Theme.statusColor(s.status, attached: attached)
         let dotColor = s.status == .running && attached ? c.withAlphaComponent(pulse) : c
         Icons.statusDot(in: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8), status: s.status, attached: attached, color: dotColor)
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
@@ -765,7 +764,7 @@ final class WorkspaceView: NSView {
     override func accessibilityChildren() -> [Any]? {
         a11y = (stackRows.isEmpty || zen || preview != nil ? [] : stackRows).compactMap { r, key in
             guard let s = sessions[key] else { return nil }
-            let label = [s.title, (attach?.isAttached(key) ?? false) ? s.status.spoken : String(localized: "nicht gestartet"), group(forSession: key)?.name]
+            let label = [s.title, s.status.spoken(attached: attach?.isAttached(key) ?? false), group(forSession: key)?.name]
             return a11y.reuse(key).update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: r,
                                           press: { [weak self] in self?.activate(key) },
                                           actions: [a11yAction(String(localized: "Umbenennen")) { [weak self] in self?.onRenameSession?(key) },

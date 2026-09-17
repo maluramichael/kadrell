@@ -71,7 +71,7 @@ final class CellView: NSView {
     var xRect: CGRect { xRectLogical.scaled(Theme.scale) }
     var penRect: CGRect { penRectLogical.scaled(Theme.scale) }
     var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
-    var statusColor: NSColor { state.attached ? Theme.color(for: state.session.status) : Theme.detached }
+    var statusColor: NSColor { Theme.statusColor(state.session.status, attached: state.attached) }
     /// Hintergrund der Kachel, leicht in Gruppenfarbe getönt, damit Gruppen auf einen Blick auseinanderfallen.
     /// Mit Deckkraft unter 100 % scheint das Hintergrundbild der Arbeitsfläche durch, auch durchs Terminal.
     var bodyColor: NSColor { state.groupColor.mixed(0.05, into: Theme.bg).withAlphaComponent(CGFloat(Settings.tileOpacity)) }
@@ -152,7 +152,7 @@ final class CellView: NSView {
         let terminal = super.accessibilityChildren() ?? []
         guard !state.headerHidden, let ws = superview as? WorkspaceView else { return terminal }
         let key = state.session.id
-        let label = [state.session.title, state.attached ? state.session.status.spoken : state.ended ? String(localized: "beendet") : String(localized: "nicht gestartet"),
+        let label = [state.session.title, state.session.status.spoken(attached: state.attached, ended: state.ended),
                      state.groupName.isEmpty ? nil : state.groupName, state.session.branch]
         a11y = [
             a11y.reuse("header").update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: headerRect,
