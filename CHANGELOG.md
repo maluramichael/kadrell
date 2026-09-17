@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.47.0 (2026-09-17)
+
+- Feature: Mittelklick auf eine Session im Baum schließt sie, auf eine Gruppe die ganze Gruppe. Mit ⌥ ohne Rückfrage, wie beim X.
+
 ## 1.46.0 (2026-09-17)
 
 - Änderung: Eine Gruppe ohne Sessions verschwindet jetzt immer, sobald sie kein Herz mehr hat. Bisher blieb sie stehen, wenn sie einmal umbenannt oder umgefärbt worden war.

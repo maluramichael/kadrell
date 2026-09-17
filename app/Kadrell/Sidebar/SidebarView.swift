@@ -200,7 +200,7 @@ final class SidebarView: NSView {
         if case .group = r { renderer.groupRow } else { renderer.sessionRow + (showMessages ? 14 : 0) }
     }
 
-    private func rowRect(_ i: Int) -> CGRect {
+    func rowRect(_ i: Int) -> CGRect {
         guard rowOffsets.indices.contains(i) else { return .zero }
         let (y, h) = rowOffsets[i]
         return CGRect(x: 0, y: y, width: bounds.width / Theme.scale, height: h)
@@ -554,6 +554,33 @@ final class SidebarView: NSView {
         case .session: break
         }
         pressed = (p, rows[i], event.modifierFlags)
+    }
+
+    /// Mittelklick schließt die Zeile darunter, wie das X der schwebenden Toolbar: Session oder ganze Gruppe,
+    /// mit ⌥ ohne Rückfrage. Ausgewertet erst beim Loslassen über derselben Zeile, damit Verrutschen nichts trifft.
+    private var middlePressed: Row?
+
+    /// Knopf 2 ist die mittlere Taste; Seitentasten (zurück/vorwärts) dürfen keine Session beenden.
+    override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { return super.otherMouseDown(with: event) }
+        middleDown(at: local(event))
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { return super.otherMouseUp(with: event) }
+        middleUp(at: local(event), force: event.modifierFlags.contains(.option))
+    }
+
+    func middleDown(at p: CGPoint) { middlePressed = rowIndex(at: p).map { rows[$0] } }
+
+    func middleUp(at p: CGPoint, force: Bool) {
+        let start = middlePressed
+        middlePressed = nil
+        guard let start, let i = rowIndex(at: p), rows[i].key == start.key else { return }
+        switch rows[i] {
+        case .group(let g): onCloseGroup?(g.id, force)
+        case .session(let s, _): onCloseSession?(s.id, force)
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {

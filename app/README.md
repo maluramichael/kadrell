@@ -32,6 +32,7 @@ die Fläche scrollt seitlich (Wischen, ⇧ + Mausrad), die Fokus-Kachel rückt v
 Bedienung: Klick im Baum zeigt nur diese Session, ⌘-Klick nimmt sie dazu oder weg, ⇧-Klick markiert den
 Bereich seit dem letzten Klick, Klick auf eine Gruppe zeigt alle ihre Sessions. Ziehen im Baum oder an der Titelzeile
 einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf eine fremde Gruppe zieht die ganze Gruppe mit).
+Mittelklick auf eine Session-Zeile schließt sie, auf eine Gruppenzeile die ganze Gruppe, mit ⌥ ohne Rückfrage.
 Zwei Schalter in der Leiste ordnen den Baum: „GRP“ (⌥G) gruppiert nach Projekt, aus („FLACH“) stehen alle Sessions
 in einer Liste mit dem Projektnamen vor dem Titel; „SORT“ (⌥O) schaltet aus → A–Z → Status weiter. Status heißt:
 wartet vor Fehler vor arbeitet vor fertig, bei gleichem Stand die neuere Session zuerst. Die beiden Handreihenfolgen

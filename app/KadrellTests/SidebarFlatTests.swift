@@ -97,3 +97,62 @@ final class SidebarFlatTests: XCTestCase {
         XCTAssertEqual(tree.rowCount, 6, "zwei Gruppenzeilen dazu")
     }
 }
+
+/// Mittelklick im Baum schließt die Zeile unter dem Zeiger, wie das X in der Hover-Toolbar.
+/// Geprüft wird die Zeilenlogik: synthetische Events tragen keine Tastennummer, die Weiche auf Knopf 2
+/// sitzt deshalb in `otherMouseDown`/`otherMouseUp` selbst.
+@MainActor
+final class SidebarMiddleClickTests: XCTestCase {
+    private func tree() -> SidebarView {
+        let a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha")
+        let b = Session(id: "b", cwd: "/p", startedAt: 0, sessionId: "b", name: "Beta")
+        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a", "b"])
+        let v = SidebarView(frame: NSRect(x: 0, y: 0, width: 240, height: 400))
+        v.reload(groups: [g], sessions: [a, b])
+        return v
+    }
+
+    private func middleClick(_ v: SidebarView, row: Int, force: Bool = false) {
+        let p = CGPoint(x: 100, y: v.rowRect(row).midY)
+        v.middleDown(at: p)
+        v.middleUp(at: p, force: force)
+    }
+
+    func testMiddleClickClosesSessionAndGroup() {
+        let v = tree()
+        var closedSession: (String, Bool)?, closedGroup: (String, Bool)?, selected = 0
+        v.onCloseSession = { closedSession = ($0, $1) }
+        v.onCloseGroup = { closedGroup = ($0, $1) }
+        v.onSelect = { _, _ in selected += 1 }
+
+        middleClick(v, row: 1)
+        XCTAssertEqual(closedSession?.0, "a")
+        XCTAssertEqual(closedSession?.1, false, "ohne ⌥ mit Rückfrage")
+        middleClick(v, row: 2, force: true)
+        XCTAssertEqual(closedSession?.0, "b")
+        XCTAssertEqual(closedSession?.1, true, "mit ⌥ ohne Rückfrage")
+        middleClick(v, row: 0)
+        XCTAssertEqual(closedGroup?.0, "g", "Kopfzeile schließt die ganze Gruppe")
+        XCTAssertEqual(selected, 0, "Mittelklick ändert die Auswahl nicht")
+    }
+
+    /// Losgelassen über einer anderen Zeile: nichts schließen, sonst trifft ein Verrutschen die falsche Session.
+    func testMiddleClickReleasedElsewhereClosesNothing() {
+        let v = tree()
+        var closed = false
+        v.onCloseSession = { _, _ in closed = true }
+        v.onCloseGroup = { _, _ in closed = true }
+        v.middleDown(at: CGPoint(x: 100, y: v.rowRect(1).midY))
+        v.middleUp(at: CGPoint(x: 100, y: v.rowRect(2).midY), force: false)
+        XCTAssertFalse(closed)
+    }
+
+    /// Loslassen ohne vorheriges Drücken (Klick begann außerhalb): nichts schließen.
+    func testMiddleUpWithoutDownClosesNothing() {
+        let v = tree()
+        var closed = false
+        v.onCloseSession = { _, _ in closed = true }
+        v.middleUp(at: CGPoint(x: 100, y: v.rowRect(1).midY), force: false)
+        XCTAssertFalse(closed)
+    }
+}

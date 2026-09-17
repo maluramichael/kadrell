@@ -3014,6 +3014,22 @@
         }
       }
     },
+    "Mittelklick im Baum": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mittelklick im Baum"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Middle-click in the tree"
+          }
+        }
+      }
+    },
     "Modell": {
       "localizations": {
         "de": {
@@ -3874,6 +3890,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close session (focused)"
+          }
+        }
+      }
+    },
+    "Session schließen · auf Gruppe: die ganze Gruppe · mit ⌥ ohne Rückfrage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session schließen · auf Gruppe: die ganze Gruppe · mit ⌥ ohne Rückfrage"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close session · on a group: the whole group · with ⌥ no confirmation"
           }
         }
       }
