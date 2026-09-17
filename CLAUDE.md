@@ -27,6 +27,15 @@ Erfindungen. Passt ein Vorschlag da nicht rein, erst nachfragen statt bauen.
 
 Die Version steht in der App unter Einstellungen (⌘,) und im About (F1).
 
+## Codequalität: keine Warnungen, Komplexität niedrig
+
+- Jede Änderung baut ohne eigene Compiler-Warnungen (Clean Build). Einzige Ausnahme ist der Toolchain-Hinweis
+  `appintentsmetadataprocessor: Metadata extraction skipped`, der kommt nicht aus unserem Code.
+- `lizard` bleibt ohne Warnungen (CCN ≤ 15): `cd app && ~/.local/bin/uv tool run lizard Kadrell -w` muss leer sein.
+- Wird eine Funktion zu verzweigt, in kleine benannte Funktionen zerlegen, statt Zweige anzuhängen. Vorhandene
+  Services und Helfer wiederverwenden, keine Logik duplizieren.
+- Vor dem Commit beides prüfen, genau wie die Tests.
+
 ## Testen an der laufenden App: immer ein frisches Profil
 
 Michaels eigenes Kadrell (Standardprofil) nie beenden, neu starten oder dessen Daten anfassen. Zum Testen den Debug-Build

@@ -37,30 +37,44 @@ extension AppDelegate {
         case let .newGroup(dir, name, color): return .ok(try controlNewGroup(dir: dir, name: name, color: color, req))
         case let .newSession(t, dir, name, detached, prompt, resume):
             return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, req))
-        case let .select(t, add):
-            switch try ControlTarget.sessionOrGroup(t, groups: store.groups, sessions: registry.sessions, caller: req.caller, focused: workspace.focused) {
-            case .session(let s): workspace.select([s.id], add: add)
-            case .group(let g): workspace.select(g.sessionIds, add: add)
-            }
+        case let .capture(t, all): return .ok(try controlCapture(target: t, all: all, req))
+        default:
+            try await performControl(cmd, req)
+            return .ok()
+        }
+    }
+
+    /// Befehle ohne Ausgabe.
+    private func performControl(_ cmd: ControlCommand, _ req: ControlRequest) async throws {
+        switch cmd {
+        case let .select(t, add): try controlSelect(target: t, add: add, req)
         case .layout(let m): workspace.setMode(m)
         case .zoom(let t): try controlZoom(target: t, req)
         case let .rename(t, name): registry.rename(try session(t, req).id, to: name)
         case let .move(t, target):
-            let key = try session(t, req).id
-            store.attach(sessionId: key, to: try group(target, req).id)
+            store.attach(sessionId: try session(t, req).id, to: try group(target, req).id)
             reloadViews()
         case let .setGroup(t, name, color, favorite): try controlSetGroup(target: t, name: name, color: color, favorite: favorite, req)
-        case .stop(let t):
-            let s = try session(t, req)
-            guard attach.isAttached(s.id) else { throw ControlError("„\(s.title)“ läuft nicht") }
-            attach.stop(s.id)
+        case .stop(let t): try controlStop(target: t, req)
         case .resume(let t): attach.attachNow(try session(t, req))
         case .killSession(let t): closeSession(try session(t, req).id, force: true)
         case .killGroup(let t): closeGroup(try group(t, req).id, force: true)
         case let .send(t, text, enter, keys): try await controlSend(target: t, text: text, enter: enter, keys: keys, req)
-        case let .capture(t, all): return .ok(try controlCapture(target: t, all: all, req))
+        case .help, .list, .newGroup, .newSession, .capture: break
         }
-        return .ok()
+    }
+
+    private func controlSelect(target t: String?, add: Bool, _ req: ControlRequest) throws {
+        switch try ControlTarget.sessionOrGroup(t, groups: store.groups, sessions: registry.sessions, caller: req.caller, focused: workspace.focused) {
+        case .session(let s): workspace.select([s.id], add: add)
+        case .group(let g): workspace.select(g.sessionIds, add: add)
+        }
+    }
+
+    private func controlStop(target t: String?, _ req: ControlRequest) throws {
+        let s = try session(t, req)
+        guard attach.isAttached(s.id) else { throw ControlError("„\(s.title)“ läuft nicht") }
+        attach.stop(s.id)
     }
 
     /// Ziel einer Session-Aktion, aus einer Kachel heraus nur im erlaubten Bereich (`ControlCaller.allowed`).

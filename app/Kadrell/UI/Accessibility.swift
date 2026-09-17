@@ -31,7 +31,7 @@ final class A11yElement: NSAccessibilityElement {
 
     /// Nicht `accessibilityFrameInParentSpace`: das ignoriert `isFlipped` (im Test gemessen), alle Views hier sind gespiegelt.
     override func accessibilityFrame() -> NSRect {
-        nonisolated(unsafe) let v = view
+        let v = view
         let r = rect
         return MainActor.assumeIsolated { v.map { NSAccessibility.screenRect(fromView: $0, rect: r) } ?? .zero }
     }

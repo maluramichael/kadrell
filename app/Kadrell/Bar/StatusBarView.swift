@@ -135,104 +135,129 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private func drawBar(_ b: CGRect) {
         Theme.panel.setFill(); b.fill()
         Theme.line.setFill(); CGRect(x: 0, y: b.height - 1, width: b.width, height: 1).fill()
-        let f = Theme.attrs(11.5, Theme.sub)
-        let fMuted = Theme.attrs(11.5, Theme.muted)
-        let fFg = Theme.attrs(11.5, Theme.fg, bold: true)
-        let midY = b.midY
-        func divider(_ x: CGFloat) { Theme.line.setFill(); CGRect(x: x, y: 0, width: 1, height: b.height - 1).fill() }
+        let leftEnd = drawLeft(b)
+        var rx = b.width
+        module(b, &rx, [NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
+        drawNotices(b, &rx)
+        drawUsage(b, &rx)
+        drawCrumb(b, from: leftEnd, to: rx)
+    }
 
-        // Links: Layout-Toggle, zeigt den aktuellen Modus, Klick wechselt zum anderen.
+    private func divider(_ x: CGFloat, _ b: CGRect) { Theme.line.setFill(); CGRect(x: x, y: 0, width: 1, height: b.height - 1).fill() }
+
+    // MARK: Links
+
+    /// Layout-Toggle, Spalten bzw. Teilrichtung, AUTO/SYNC/SORT und ZOOM. Gibt das Ende der linken Seite zurück.
+    private func drawLeft(_ b: CGRect) -> CGFloat {
+        // Layout-Toggle: zeigt den aktuellen Modus, Klick öffnet die Auswahl.
         let toggle = CGRect(x: 0, y: 0, width: 36, height: b.height - 1)
-        Icons.layout(layoutMode, in: CGRect(x: 11, y: midY - 7, width: 14, height: 14), color: Theme.sub)
-        divider(toggle.maxX)
+        Icons.layout(layoutMode, in: CGRect(x: 11, y: b.midY - 7, width: 14, height: 14), color: Theme.sub)
+        divider(toggle.maxX, b)
         hitRects.append(HitRegion(rect: toggle, label: String(localized: "Layout"), value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) })
         var x = toggle.maxX + 1
-        /// Schalter mit Trennlinie rechts. `fill` = an: gefülltes Badge (wächst beim Umschalten aus der Mitte), sonst gedämpfter Text.
-        func segment(_ text: String, color: NSColor? = nil, fill: NSColor? = nil, key: String = "", _ label: String, _ value: String?, action: @escaping @MainActor () -> Void) {
-            let t = NSAttributedString(string: text, attributes: Theme.attrs(10, color ?? fill.map { Theme.pillText(on: $0) } ?? Theme.muted, bold: true))
-            let r = CGRect(x: x, y: 0, width: t.size().width + 20, height: b.height - 1)
-            if let fill { fill.setFill(); badge(r, key).fill() }
-            t.draw(at: CGPoint(x: r.minX + 10, y: midY - 7))
-            divider(r.maxX)
-            hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
-            x = r.maxX + 1
-        }
-        if layoutMode == .grid {
-            // ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl, unter 1 wird es wieder automatisch.
-            let value = NSAttributedString(string: gridColumns == 0 ? String(localized: "AUTO SP") : String(localized: "\(gridColumns) SP"), attributes: Theme.attrs(10, gridColumns == 0 ? Theme.muted : Theme.fg, bold: true))
-            let less = NSAttributedString(string: "‹", attributes: Theme.attrs(12, Theme.sub, bold: true))
-            let more = NSAttributedString(string: "›", attributes: Theme.attrs(12, Theme.sub, bold: true))
-            let lessRect = CGRect(x: x, y: 0, width: less.size().width + 14, height: b.height - 1)
-            less.draw(at: CGPoint(x: lessRect.minX + 7, y: midY - 9))
-            value.draw(at: CGPoint(x: lessRect.maxX, y: midY - 7))
-            let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
-            more.draw(at: CGPoint(x: moreRect.minX + 7, y: midY - 9))
-            let cols = gridColumns, spoken = cols == 0 ? String(localized: "automatisch") : "\(cols)"
-            hitRects.append(HitRegion(rect: lessRect, label: String(localized: "Weniger Spalten"), value: spoken) { [weak self] in self?.onGridColumns?(max(0, cols - 1)) })
-            hitRects.append(HitRegion(rect: moreRect, label: String(localized: "Mehr Spalten"), value: spoken) { [weak self] in self?.onGridColumns?(min(12, cols + 1)) })
-            divider(moreRect.maxX)
-            x = moreRect.maxX + 1
-        }
-        if layoutMode == .custom {
-            let next: Character = split == "a" ? "r" : split == "r" ? "d" : "a"
-            segment(split == "r" ? String(localized: "TEILT →") : split == "d" ? String(localized: "TEILT ↓") : String(localized: "TEILT AUTO"), color: split == "a" ? Theme.muted : Theme.fg,
-                    String(localized: "Nächste Kachel teilt"), split == "r" ? String(localized: "rechts") : split == "d" ? String(localized: "unten") : String(localized: "automatisch")) { [weak self] in self?.onSplit?(next) }
-        }
+        if layoutMode == .grid { drawGridColumns(b, &x) }
+        if layoutMode == .custom { drawSplit(b, &x) }
         let onOff = { (on: Bool) in on ? String(localized: "an") : String(localized: "aus") }
-        segment("AUTO", fill: auto ? Theme.waiting : nil, key: "auto", String(localized: "Auto-Modus"), onOff(auto)) { [weak self] in self?.onToggleAuto?() }
-        segment("SYNC", fill: sync ? Theme.error : nil, key: "sync", "Sync", onOff(sync)) { [weak self] in self?.onToggleSync?() }
+        segment(b, &x, "AUTO", fill: auto ? Theme.waiting : nil, key: "auto", String(localized: "Auto-Modus"), onOff(auto)) { [weak self] in self?.onToggleAuto?() }
+        segment(b, &x, "SYNC", fill: sync ? Theme.error : nil, key: "sync", "Sync", onOff(sync)) { [weak self] in self?.onToggleSync?() }
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
-        segment(sortLabel, fill: sort == .off ? nil : Theme.sub, key: "sort", String(localized: "Sortierung"), sort == .off ? String(localized: "aus") : sortLabel) { [weak self] in self?.onCycleSort?() }
-        var leftEnd = x + 7   // 8 pt hinter der letzten Trennlinie
-        if zoomed {
-            let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
-            let z = CGRect(x: leftEnd, y: midY - 9, width: zt.size().width + 12, height: 18)
-            Theme.waiting.setFill(); z.fill()
-            zt.draw(at: CGPoint(x: z.minX + 6, y: midY - 8))
-            hitRects.append(HitRegion(rect: z, label: String(localized: "Zoom aufheben")) { [weak self] in self?.onToggleZoom?() })
-            leftEnd = z.maxX + 8
-        }
+        segment(b, &x, sortLabel, fill: sort == .off ? nil : Theme.sub, key: "sort", String(localized: "Sortierung"), sort == .off ? String(localized: "aus") : sortLabel) { [weak self] in self?.onCycleSort?() }
+        return drawZoom(b, x: x + 7)   // 8 pt hinter der letzten Trennlinie
+    }
 
-        // Rechts: von rechts nach links. `pill`: gefüllte Fläche mit 4 pt Abstand, sonst die ganze Modulhöhe.
-        var rx = b.width
-        func module(_ parts: [NSAttributedString], tip: String? = nil, pill: NSColor? = nil, textY: CGFloat = -8,
-                    _ label: String? = nil, value: String? = nil, action: (@MainActor () -> Void)? = nil) {
-            let w = parts.reduce(20) { $0 + $1.size().width } + CGFloat(max(0, parts.count - 1)) * 5
-            rx -= w
-            divider(rx)
-            var rect = CGRect(x: rx, y: 0, width: w, height: b.height - 1), px = rx + 10
-            if let pill { rect = CGRect(x: rx + 4, y: midY - 9, width: w - 8, height: 18); pill.setFill(); rect.fill(); px += 4 }
-            for (i, p) in parts.enumerated() {
-                p.draw(at: CGPoint(x: px, y: midY + textY + (i > 0 ? 1 : 0))); px += p.size().width + 5
-            }
-            if let tip { moduleTips.append((rect, tip)) }
-            if let label, let action { hitRects.append(HitRegion(rect: rect, label: label, value: value, action: action)) }
+    /// Schalter mit Trennlinie rechts. `fill` = an: gefülltes Badge (wächst beim Umschalten aus der Mitte), sonst gedämpfter Text.
+    private func segment(_ b: CGRect, _ x: inout CGFloat, _ text: String, color: NSColor? = nil, fill: NSColor? = nil, key: String = "",
+                         _ label: String, _ value: String?, action: @escaping @MainActor () -> Void) {
+        let t = NSAttributedString(string: text, attributes: Theme.attrs(10, color ?? fill.map { Theme.pillText(on: $0) } ?? Theme.muted, bold: true))
+        let r = CGRect(x: x, y: 0, width: t.size().width + 20, height: b.height - 1)
+        if let fill { fill.setFill(); badge(r, key).fill() }
+        t.draw(at: CGPoint(x: r.minX + 10, y: b.midY - 7))
+        divider(r.maxX, b)
+        hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
+        x = r.maxX + 1
+    }
+
+    /// ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl, unter 1 wird es wieder automatisch.
+    private func drawGridColumns(_ b: CGRect, _ x: inout CGFloat) {
+        let cols = gridColumns, midY = b.midY
+        let value = NSAttributedString(string: cols == 0 ? String(localized: "AUTO SP") : String(localized: "\(cols) SP"), attributes: Theme.attrs(10, cols == 0 ? Theme.muted : Theme.fg, bold: true))
+        let less = NSAttributedString(string: "‹", attributes: Theme.attrs(12, Theme.sub, bold: true))
+        let more = NSAttributedString(string: "›", attributes: Theme.attrs(12, Theme.sub, bold: true))
+        let lessRect = CGRect(x: x, y: 0, width: less.size().width + 14, height: b.height - 1)
+        less.draw(at: CGPoint(x: lessRect.minX + 7, y: midY - 9))
+        value.draw(at: CGPoint(x: lessRect.maxX, y: midY - 7))
+        let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
+        more.draw(at: CGPoint(x: moreRect.minX + 7, y: midY - 9))
+        let spoken = cols == 0 ? String(localized: "automatisch") : "\(cols)"
+        hitRects.append(HitRegion(rect: lessRect, label: String(localized: "Weniger Spalten"), value: spoken) { [weak self] in self?.onGridColumns?(max(0, cols - 1)) })
+        hitRects.append(HitRegion(rect: moreRect, label: String(localized: "Mehr Spalten"), value: spoken) { [weak self] in self?.onGridColumns?(min(12, cols + 1)) })
+        divider(moreRect.maxX, b)
+        x = moreRect.maxX + 1
+    }
+
+    /// Teilrichtung der nächsten Kachel im Layout „Frei“, Klick schaltet auto → rechts → unten weiter.
+    private func drawSplit(_ b: CGRect, _ x: inout CGFloat) {
+        let next: Character = split == "a" ? "r" : split == "r" ? "d" : "a"
+        let (text, spoken) = switch split {
+        case "r": (String(localized: "TEILT →"), String(localized: "rechts"))
+        case "d": (String(localized: "TEILT ↓"), String(localized: "unten"))
+        default: (String(localized: "TEILT AUTO"), String(localized: "automatisch"))
         }
-        /// Tooltip für ein Nutzungsmodul: Bezeichnung plus Prozentwert, oder Hinweis, wenn er fehlt.
-        func usageTip(_ label: String, _ pct: Int?) -> String {
-            guard let pct else { return String(localized: "\(label): Nutzung nicht abrufbar") }
-            return String(localized: "\(label): \(pct) % verbraucht")
+        segment(b, &x, text, color: split == "a" ? Theme.muted : Theme.fg, String(localized: "Nächste Kachel teilt"), spoken) { [weak self] in self?.onSplit?(next) }
+    }
+
+    private func drawZoom(_ b: CGRect, x: CGFloat) -> CGFloat {
+        guard zoomed else { return x }
+        let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
+        let z = CGRect(x: x, y: b.midY - 9, width: zt.size().width + 12, height: 18)
+        Theme.waiting.setFill(); z.fill()
+        zt.draw(at: CGPoint(x: z.minX + 6, y: b.midY - 8))
+        hitRects.append(HitRegion(rect: z, label: String(localized: "Zoom aufheben")) { [weak self] in self?.onToggleZoom?() })
+        return z.maxX + 8
+    }
+
+    // MARK: Rechts, von rechts nach links
+
+    /// Modul links von `rx`. `pill`: gefüllte Fläche mit 4 pt Abstand, sonst die ganze Modulhöhe.
+    private func module(_ b: CGRect, _ rx: inout CGFloat, _ parts: [NSAttributedString], tip: String? = nil, pill: NSColor? = nil, textY: CGFloat = -8,
+                        _ label: String? = nil, value: String? = nil, action: (@MainActor () -> Void)? = nil) {
+        let w = parts.reduce(20) { $0 + $1.size().width } + CGFloat(max(0, parts.count - 1)) * 5
+        rx -= w
+        divider(rx, b)
+        var rect = CGRect(x: rx, y: 0, width: w, height: b.height - 1), px = rx + 10
+        if let pill { rect = CGRect(x: rx + 4, y: b.midY - 9, width: w - 8, height: 18); pill.setFill(); rect.fill(); px += 4 }
+        for (i, p) in parts.enumerated() {
+            p.draw(at: CGPoint(x: px, y: b.midY + textY + (i > 0 ? 1 : 0))); px += p.size().width + 5
         }
-        module([NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
+        if let tip { moduleTips.append((rect, tip)) }
+        if let label, let action { hitRects.append(HitRegion(rect: rect, label: label, value: value, action: action)) }
+    }
+
+    /// Update, wartende Sessions, laufende Prozesse, Tipp und Versionswarnung.
+    private func drawNotices(_ b: CGRect, _ rx: inout CGFloat) {
         if let update = updateAvailable {
             // Dezent statt der waiting-Farbe: kein Alarm, nur ein Hinweis.
-            module([NSAttributedString(string: String(localized: "\(update.version) verfügbar"), attributes: Theme.attrs(11, Theme.fg))], pill: Theme.surface,
+            module(b, &rx, [NSAttributedString(string: String(localized: "\(update.version) verfügbar"), attributes: Theme.attrs(11, Theme.fg))], pill: Theme.surface,
                    String(localized: "Update verfügbar"), value: update.version) { [weak self] in self?.onShowUpdate?() }
         }
         if waitingCount > 0 {
-            module([NSAttributedString(string: String(localized: "\(waitingCount) warten"), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))], pill: Theme.waiting,
+            module(b, &rx, [NSAttributedString(string: String(localized: "\(waitingCount) warten"), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))], pill: Theme.waiting,
                    String(localized: "Wartende Sessions"), value: "\(waitingCount)") { [weak self] in self?.onSelectWaiting?() }
         }
-        module([NSAttributedString(string: attachText, attributes: f)], tip: String(localized: "Laufende Claude-Prozesse / Sessions"))
+        module(b, &rx, [NSAttributedString(string: attachText, attributes: Theme.attrs(11.5, Theme.sub))], tip: String(localized: "Laufende Claude-Prozesse / Sessions"))
         if let tip {
-            module([NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))], textY: -7,
+            module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))], textY: -7,
                    String(localized: "Tipp"), value: tip) { [weak self] in self?.onDismissTip?() }
         }
         if versionWarning != nil {
-            module([NSAttributedString(string: String(localized: "claude alt · claude update"), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))], textY: -7,
+            module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update"), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))], textY: -7,
                    String(localized: "Ältere claude-Version"), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
         }
-        // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
+    }
+
+    /// Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
+    private func drawUsage(_ b: CGRect, _ rx: inout CGFloat) {
+        let fMuted = Theme.attrs(11.5, Theme.muted)
         let countUp = Feedback.progress(since: usageAt, duration: 0.5)
         func pctString(_ target: Int?, from: Int?) -> NSAttributedString {
             guard let target else { return NSAttributedString(string: "–%", attributes: fMuted) }
@@ -241,18 +266,30 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             let c: NSColor = v >= 90 ? Theme.error : v >= 70 ? Theme.waiting : Theme.idle
             return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, c))
         }
-        module([NSAttributedString(string: "fable", attributes: fMuted), pctString(usage.fable, from: usageFrom.fable)],
-               tip: usageTip(String(localized: "Fable-Kontingent"), usage.fable))
-        module([NSAttributedString(string: "7d", attributes: fMuted), pctString(usage.weekly, from: usageFrom.weekly)],
-               tip: usageTip(String(localized: "Claude-Nutzung der letzten 7 Tage"), usage.weekly))
-        module([NSAttributedString(string: "5h", attributes: fMuted), pctString(usage.session, from: usageFrom.session)],
-               tip: usageTip(String(localized: "Claude-Nutzung der letzten 5 Stunden"), usage.session))
+        /// Tooltip: Bezeichnung plus Prozentwert, oder Hinweis, wenn er fehlt.
+        func usageTip(_ label: String, _ pct: Int?) -> String {
+            guard let pct else { return String(localized: "\(label): Nutzung nicht abrufbar") }
+            return String(localized: "\(label): \(pct) % verbraucht")
+        }
+        let rows: [(String, Int?, Int?, String)] = [
+            ("fable", usage.fable, usageFrom.fable, String(localized: "Fable-Kontingent")),
+            ("7d", usage.weekly, usageFrom.weekly, String(localized: "Claude-Nutzung der letzten 7 Tage")),
+            ("5h", usage.session, usageFrom.session, String(localized: "Claude-Nutzung der letzten 5 Stunden")),
+        ]
+        for (name, pct, from, label) in rows {
+            module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), pctString(pct, from: from)], tip: usageTip(label, pct))
+        }
+    }
 
-        // Mitte: Breadcrumb
+    // MARK: Mitte
+
+    /// Breadcrumb mittig zwischen linker und rechter Seite, gekürzt, wenn der Platz fehlt.
+    private func drawCrumb(_ b: CGRect, from leftEnd: CGFloat, to rx: CGFloat) {
+        let fMuted = Theme.attrs(11.5, Theme.muted)
         let mid: NSAttributedString
         if let c = crumb {
             let m = NSMutableAttributedString(string: c.group + " › ", attributes: crumbGroupAttrs ?? fMuted)
-            m.append(NSAttributedString(string: c.session, attributes: fFg))
+            m.append(NSAttributedString(string: c.session, attributes: Theme.attrs(11.5, Theme.fg, bold: true)))
             if openCount > 1 { m.append(NSAttributedString(string: String(localized: " · \(openCount) offen"), attributes: fMuted)) }
             mid = m
         } else if let e = errorText {
@@ -262,7 +299,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         }
         let avail = rx - leftEnd - 16
         let mw = min(mid.size().width, max(0, avail))
-        mid.draw(with: CGRect(x: leftEnd + (avail - mw) / 2, y: midY - 8, width: mw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        mid.draw(with: CGRect(x: leftEnd + (avail - mw) / 2, y: b.midY - 8, width: mw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     private func showLayoutMenu(at p: CGPoint) {

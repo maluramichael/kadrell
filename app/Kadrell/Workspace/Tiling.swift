@@ -45,17 +45,34 @@ enum Tiling {
     /// nur eingefüllt, die Größen gehören der Vorlage (`ratios`), nicht einzelnen Sessions. Stack hat keine Vorlage.
     /// `columns` 0 = Grid wählt ⌈√n⌉ Spalten. `splits`: Frei, Zeichen i teilt Feld i „r“ rechts oder „d“ unten.
     static func layout(_ mode: LayoutMode, count n: Int, in b: CGRect, gap: CGFloat, columns fixed: Int = 0, splits: String = "",
-                       ratios: Ratios = { _, _ in nil }) -> (frames: [CGRect], dividers: [SplitLine]) {
+                       ratios: @escaping Ratios = { _, _ in nil }) -> (frames: [CGRect], dividers: [SplitLine]) {
         guard n > 0 else { return ([], []) }
-        func r(_ key: String, _ count: Int) -> [Double] {
+        var s = Splitter(gap: gap, ratios: ratios)
+        let frames = switch mode {
+        case .grid, .stack: s.grid(n, in: b, columns: fixed)
+        case .main: s.main(n, in: b)
+        case .spiral, .custom: s.chain(n, in: b, mode: mode, splits: Array(splits))
+        case .scroll: scroll(n, in: b, gap: gap, widths: ratios("scroll.widths", n) ?? [])
+        }
+        return (frames, s.dividers)
+    }
+
+    /// Teilt Flächen nach den Verhältnissen der Vorlage und sammelt dabei die ziehbaren Grenzen.
+    private struct Splitter {
+        let gap: CGFloat
+        let ratios: Ratios
+        var dividers: [SplitLine] = []
+
+        /// Gespeicherte Verhältnisse normiert, ungültige oder fehlende gleich verteilt.
+        func normalized(_ key: String, _ count: Int) -> [Double] {
             guard let v = ratios(key, count), v.count == count, v.allSatisfy({ $0 > 0 }) else { return Array(repeating: 1 / Double(count), count: count) }
             let sum = v.reduce(0, +)
             return v.map { $0 / sum }
         }
-        var dividers: [SplitLine] = []
+
         /// Teilt `area` entlang einer Achse nach `key` und merkt sich die Grenzen.
-        func split(_ area: CGRect, vertical: Bool, key: String, count: Int) -> [CGRect] {
-            let parts = segments(start: vertical ? area.minX : area.minY, length: vertical ? area.width : area.height, gap: gap, ratios: r(key, count))
+        mutating func split(_ area: CGRect, vertical: Bool, key: String, count: Int) -> [CGRect] {
+            let parts = segments(start: vertical ? area.minX : area.minY, length: vertical ? area.width : area.height, gap: gap, ratios: normalized(key, count))
             for i in 0..<(count - 1) {
                 let a = parts[i].end, z = parts[i + 1].start, mid = (a + z) / 2, w = max(z - a, 8)
                 let grip = vertical ? CGRect(x: mid - w / 2, y: area.minY, width: w, height: area.height)
@@ -65,41 +82,45 @@ enum Tiling {
             return parts.map { vertical ? CGRect(x: $0.start, y: area.minY, width: $0.end - $0.start, height: area.height)
                                         : CGRect(x: area.minX, y: $0.start, width: area.width, height: $0.end - $0.start) }
         }
-        switch mode {
-        case .grid, .stack:
+
+        mutating func grid(_ n: Int, in b: CGRect, columns fixed: Int) -> [CGRect] {
             let cols = fixed > 0 ? min(fixed, n) : columns(for: n), rows = (n + cols - 1) / cols
             let xs = cols > 1 ? split(b, vertical: true, key: "grid.cols.\(cols)", count: cols) : [b]
             let ys = rows > 1 ? split(b, vertical: false, key: "grid.rows.\(rows)", count: rows) : [b]
-            return ((0..<n).map { CGRect(x: xs[$0 % cols].minX, y: ys[$0 / cols].minY, width: xs[$0 % cols].width, height: ys[$0 / cols].height) }, dividers)
-        case .main:
-            guard n > 1 else { return ([b], []) }
+            return (0..<n).map { CGRect(x: xs[$0 % cols].minX, y: ys[$0 / cols].minY, width: xs[$0 % cols].width, height: ys[$0 / cols].height) }
+        }
+
+        mutating func main(_ n: Int, in b: CGRect) -> [CGRect] {
+            guard n > 1 else { return [b] }
             let cols = split(b, vertical: true, key: "main.cols", count: 2)
             let rest = n > 2 ? split(cols[1], vertical: false, key: "main.rows.\(n - 1)", count: n - 1) : [cols[1]]
-            return ([cols[0]] + rest, dividers)
-        case .spiral, .custom:
-            // Kette: jede Kachel teilt den Rest. Spirale (bspwm) abwechselnd senkrecht und waagerecht. Frei (i3/bspwm-Insert):
-            // Kachel i+1 teilt Feld i rechts oder unten, ohne Vorgabe entlang der längeren Seite.
-            // ponytail: geteilt wird immer der Rest (Kette), kein Baum; 2×2 geht so nicht, dafür gibt es das Grid.
-            let dirs = Array(splits)
+            return [cols[0]] + rest
+        }
+
+        /// Kette: jede Kachel teilt den Rest. Spirale (bspwm) abwechselnd senkrecht und waagerecht. Frei (i3/bspwm-Insert):
+        /// Kachel i+1 teilt Feld i rechts oder unten, ohne Vorgabe entlang der längeren Seite.
+        /// ponytail: geteilt wird immer der Rest (Kette), kein Baum; 2×2 geht so nicht, dafür gibt es das Grid.
+        mutating func chain(_ n: Int, in b: CGRect, mode: LayoutMode, splits dirs: [Character]) -> [CGRect] {
             var area = b, frames: [CGRect] = []
             for i in 0..<(n - 1) {
-                let vertical = mode == .spiral ? i % 2 == 0 : dirs.indices.contains(i) && dirs[i] != "a" ? dirs[i] == "r" : area.width >= area.height
-                let parts = split(area, vertical: vertical, key: "\(mode.rawValue).\(i)", count: 2)
+                let given = dirs.indices.contains(i) && dirs[i] != "a" ? dirs[i] == "r" : area.width >= area.height
+                let parts = split(area, vertical: mode == .spiral ? i % 2 == 0 : given, key: "\(mode.rawValue).\(i)", count: 2)
                 frames.append(parts[0])
                 area = parts[1]
             }
-            return (frames + [area], dividers)
-        case .scroll:
-            // niri: Spalten fester Breite (Anteil der Fläche) nebeneinander, was nicht passt, ragt rechts hinaus.
-            let v = ratios("scroll.widths", n) ?? []
-            var x = b.minX, frames: [CGRect] = []
-            for i in 0..<n {
-                let w = ((b.width + gap) * CGFloat(min(max(v.indices.contains(i) ? v[i] : 0.5, 0.1), 1)) - gap).rounded()
-                frames.append(CGRect(x: x, y: b.minY, width: w, height: b.height))
-                x += w + gap
-            }
-            return (frames, [])
+            return frames + [area]
         }
+    }
+
+    /// niri: Spalten fester Breite (Anteil der Fläche) nebeneinander, was nicht passt, ragt rechts hinaus.
+    private static func scroll(_ n: Int, in b: CGRect, gap: CGFloat, widths v: [Double]) -> [CGRect] {
+        var x = b.minX, frames: [CGRect] = []
+        for i in 0..<n {
+            let w = ((b.width + gap) * CGFloat(min(max(v.indices.contains(i) ? v[i] : 0.5, 0.1), 1)) - gap).rounded()
+            frames.append(CGRect(x: x, y: b.minY, width: w, height: b.height))
+            x += w + gap
+        }
+        return frames
     }
 
     /// Spaltenbreiten beim Scrollen, ⌃⌥←/→ schaltet eine Stufe weiter.

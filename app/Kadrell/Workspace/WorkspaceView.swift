@@ -118,7 +118,7 @@ final class WorkspaceView: NSView {
         // Entfernte Kacheln blenden kurz aus, neue ein. Beim allerersten Laden erscheint alles sofort.
         for (k, v) in cells where self.sessions[k] == nil {
             cells[k] = nil
-            NSAnimationContext.runAnimationGroup({ $0.duration = 0.15; v.animator().alphaValue = 0 }, completionHandler: { v.removeFromSuperview() })
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.15; v.animator().alphaValue = 0 }, completionHandler: { MainActor.assumeIsolated { v.removeFromSuperview() } })
         }
         for id in selected { ensureCell(id, fadeIn: true)?.state.session = self.sessions[id]! }
         loaded = true
