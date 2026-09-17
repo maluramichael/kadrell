@@ -2,6 +2,16 @@
 
 Neueste Version oben.
 
+## 1.36.0 (2026-09-17)
+
+- Feature: Neues Layout „Frei“ wie in i3: an jeder Kachel legst du mit ⌃⌥⇧→ oder ⌃⌥⇧↓ fest, ob die nächste rechts oder unten entsteht, auch per Klick auf „TEILT“ in der Leiste.
+- Feature: Neues Layout „Scrollen“ wie in niri: Spalten mit fester Breite (⌃⌥←/→ schaltet ⅓, ½, ⅔), die Fläche scrollt seitlich per Wischen oder ⇧ + Mausrad, die fokussierte Kachel rückt von selbst ins Bild.
+- Feature: Zeittracking-Hooks erkennen den Worktree, in dem eine Session tatsächlich arbeitet, auch wenn sie im Hauptverzeichnis gestartet wurde. Wechselt die fokussierte Session den Worktree, feuert der Hook erneut, und der Kachelkopf zeigt dessen Branch.
+- Feature: VoiceOver und Sprachsteuerung erkennen Baum, Statusleiste, Kacheln, Stack-Zeilen und Suche, samt Status und Aktionen wie Umbenennen und Schließen.
+- Feature: Kadrell meldet, wenn die installierte Claude-CLI älter als die getestete Version ist.
+- Feature: Ein leerer Erststart zeigt, wie viele Claude-Sessions gerade interaktiv in anderen Terminals laufen, und verweist auf den tmux-Import.
+- Änderung: Deutlich weniger Hintergrundlast: Terminal-Text wird nur noch für die Suche gelesen statt zweimal pro Sekunde, und bei verstecktem oder inaktivem Fenster fragt Kadrell Sessions seltener ab.
+
 ## 1.35.0 (2026-09-17)
 
 - Änderung: Wird eine Session fertig oder wartet auf dich, während du woanders bist (andere Session oder Kadrell im Hintergrund), bekommt sie im Baum einen hellen, fetten Titel und die Marke „neu“, auch wenn sie die fokussierte ist. Die Marke bleibt, bis du die Session anklickst, in ihr Terminal klickst oder sie fokussierst, und übersteht einen Neustart. Arbeitet die Session wieder, verschwindet sie.
