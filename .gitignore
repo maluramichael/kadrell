@@ -4,3 +4,4 @@ app/*.xcodeproj
 app/build/
 DerivedData/
 app/build-release/
+.claude/worktrees/
