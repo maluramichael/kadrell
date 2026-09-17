@@ -217,12 +217,17 @@ struct PathField: NSViewRepresentable {
     @Binding var text: String
     var placeholder = ""
     var autofocus = true
+    /// Schriftgröße in unskalierten Punkten, damit das Feld in den Einstellungen so hoch wird wie die Menüs daneben.
+    var size: CGFloat = 13
     var onTab: () -> Void
     var onSubmit: () -> Void
     var onMove: (Int) -> Void
 
     func makeNSView(context: Context) -> NSTextField {
         let f = NSTextField()
+        f.cell = CenteredTextFieldCell(textCell: "")   // sonst klebt der Text an der Oberkante des Feldes
+        f.isEditable = true
+        f.isSelectable = true
         f.isBordered = false
         f.drawsBackground = false
         // Kein nativer Fokusring (passt nicht zum Dialog-Stil), stattdessen ein eigener Rahmen bei Tastaturfokus,
@@ -230,7 +235,7 @@ struct PathField: NSViewRepresentable {
         f.focusRingType = .none
         f.wantsLayer = true
         f.layer?.cornerRadius = 3
-        f.font = Theme.font(13 * Theme.scale)
+        f.font = Theme.font(size * Theme.scale)
         f.textColor = Theme.fg
         f.usesSingleLineMode = true      // lange Pfade scrollen horizontal statt umzubrechen
         f.cell?.wraps = false
@@ -238,7 +243,7 @@ struct PathField: NSViewRepresentable {
         f.lineBreakMode = .byClipping
         f.delegate = context.coordinator
         f.stringValue = text
-        f.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [.font: Theme.font(13 * Theme.scale), .foregroundColor: Theme.muted])
+        f.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [.font: Theme.font(size * Theme.scale), .foregroundColor: Theme.muted])
         if autofocus { DispatchQueue.main.async {
             f.window?.makeFirstResponder(f)
             f.currentEditor()?.selectedRange = NSRange(location: f.stringValue.utf16.count, length: 0)

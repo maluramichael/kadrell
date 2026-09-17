@@ -83,3 +83,28 @@ struct DialogFootBar: View {
         .background(Theme.panelColor)
     }
 }
+
+/// Setzt den Text senkrecht in die Mitte. Ein randloses NSTextField zeichnet seine Zeile sonst oben im Rahmen:
+/// in unseren Feldern ist der Rahmen höher als die Zeile, der Text klebt dadurch an der Oberkante.
+final class CenteredTextFieldCell: NSTextFieldCell {
+    override func titleRect(forBounds rect: NSRect) -> NSRect {
+        var r = super.titleRect(forBounds: rect)
+        let line = cellSize(forBounds: rect).height
+        guard r.height > line else { return r }
+        r.origin.y += (r.height - line) / 2
+        r.size.height = line
+        return r
+    }
+
+    override func drawInterior(withFrame frame: NSRect, in view: NSView) {
+        super.drawInterior(withFrame: titleRect(forBounds: frame), in: view)
+    }
+
+    override func select(withFrame frame: NSRect, in view: NSView, editor: NSText, delegate: Any?, start: Int, length: Int) {
+        super.select(withFrame: titleRect(forBounds: frame), in: view, editor: editor, delegate: delegate, start: start, length: length)
+    }
+
+    override func edit(withFrame frame: NSRect, in view: NSView, editor: NSText, delegate: Any?, event: NSEvent?) {
+        super.edit(withFrame: titleRect(forBounds: frame), in: view, editor: editor, delegate: delegate, event: event)
+    }
+}

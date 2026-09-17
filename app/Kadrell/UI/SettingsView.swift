@@ -278,15 +278,16 @@ struct SettingsView: View {
 
     /// Pfadfeld der rechten Spalte, nimmt Dateien per Drag & Drop an.
     private func pathField(_ text: Binding<String>, placeholder: String = "", onTab: @escaping () -> Void = {}, drop: @escaping ([URL]) -> Bool) -> some View {
-        PathField(text: text, placeholder: placeholder, autofocus: false, onTab: onTab, onSubmit: {}, onMove: { _ in })
-            .frame(height: 18 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 2)
+        PathField(text: text, placeholder: placeholder, autofocus: false, size: 12, onTab: onTab, onSubmit: {}, onMove: { _ in })
+            .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Theme.bgColor)
             .dropDestination(for: URL.self) { urls, _ in drop(urls) }
     }
 
     private func iconButton(_ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
+            // Höhe knapp unter der Zeilenhöhe der Felder daneben, sonst zieht der Knopf die Tabellenzeile in die Länge.
+            Image(systemName: symbol).foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 18 * Theme.scale)
         }
         .buttonStyle(.plain).kbdFocusRing()
     }

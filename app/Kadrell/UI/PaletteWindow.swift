@@ -59,6 +59,9 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         root.layer?.borderWidth = 1
         contentView = root
 
+        field.cell = CenteredTextFieldCell(textCell: "")   // sonst klebt der Text an der Oberkante des Feldes
+        field.isEditable = true
+        field.isSelectable = true
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
