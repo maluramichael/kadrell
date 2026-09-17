@@ -89,78 +89,68 @@ enum ControlCommand: Equatable {
 
     static func parse(_ argv: [String]) throws -> ControlCommand {
         guard let cmd = argv.first else { return .help }
-        let rest = Array(argv.dropFirst())
-        switch cmd {
-        case "help", "-h", "--help":
-            return .help
-        case "ls", "list":
-            let a = try Args(rest, bools: ["--json"])
-            try a.noPositional()
-            return .list(json: a.has("--json"))
-        case "new-group":
-            let a = try Args(rest, values: ["--name", "--color"])
-            guard a.positional.count == 1 else { throw ControlError("new-group braucht genau einen Ordner") }
-            return .newGroup(dir: a.positional[0], name: a["--name"], color: try color(a["--color"]))
-        case "new", "new-session":
-            let a = try Args(rest, values: ["-t", "-c", "--name", "--resume"], bools: ["-d"])
-            let prompt = a.positional.joined(separator: " ")
-            if a["--resume"] != nil, !prompt.isEmpty { throw ControlError("--resume und prompt schließen sich aus") }
-            if let r = a["--resume"], UUID(uuidString: r) == nil { throw ControlError("--resume braucht eine sessionId (UUID)") }
-            return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt, resume: a["--resume"])
-        case "select":
-            let a = try Args(rest, values: ["-t"], bools: ["-a"])
-            try a.noPositional()
-            return .select(target: a["-t"], add: a.has("-a"))
-        case "layout":
-            guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|main|spiral|custom|scroll|stack") }
-            return .layout(m)
-        case "zoom":
-            let a = try Args(rest, values: ["-t"])
-            try a.noPositional()
-            return .zoom(target: a["-t"])
-        case "rename":
-            let a = try Args(rest, values: ["-t"])
-            return .rename(target: a["-t"], name: a.positional.joined(separator: " "))
-        case "move":
-            let a = try Args(rest, values: ["-t"])
-            guard a.positional.count == 1 else { throw ControlError("move braucht genau eine Zielgruppe") }
-            return .move(target: a["-t"], group: a.positional[0])
-        case "set-group":
-            return try parseSetGroup(rest)
-        case "stop", "resume", "kill", "kill-session", "kill-group":
-            let a = try Args(rest, values: ["-t"])
-            try a.noPositional()
-            switch cmd {
-            case "stop": return .stop(target: a["-t"])
-            case "resume": return .resume(target: a["-t"])
-            case "kill-group": return .killGroup(target: a["-t"])
-            default: return .killSession(target: a["-t"])
-            }
-        case "send", "send-keys":
-            return try parseSend(rest)
-        case "capture", "capture-pane":
-            let a = try Args(rest, values: ["-t"], bools: ["--all"])
-            try a.noPositional()
-            return .capture(target: a["-t"], all: a.has("--all"))
-        default:
-            throw ControlError("unbekannter Befehl „\(cmd)“, siehe kadrell help")
+        guard let parser = parsers[cmd] else { throw ControlError("unbekannter Befehl „\(cmd)“, siehe kadrell help") }
+        return try parser(Array(argv.dropFirst()))
+    }
+
+    private typealias Parser = @Sendable ([String]) throws -> ControlCommand
+
+    /// Befehl → Parser, Aliase zeigen auf denselben Eintrag.
+    private static let parsers: [String: Parser] = {
+        var t: [String: Parser] = [
+            "help": { _ in .help },
+            "ls": parser(bools: ["--json"]) { .list(json: $0.has("--json")) },
+            "new-group": parser(values: ["--name", "--color"], positional: true) { a in
+                guard a.positional.count == 1 else { throw ControlError("new-group braucht genau einen Ordner") }
+                return .newGroup(dir: a.positional[0], name: a["--name"], color: try color(a["--color"]))
+            },
+            "new": parser(values: ["-t", "-c", "--name", "--resume"], bools: ["-d"], positional: true) { a in
+                let prompt = a.positional.joined(separator: " ")
+                if a["--resume"] != nil, !prompt.isEmpty { throw ControlError("--resume und prompt schließen sich aus") }
+                if let r = a["--resume"], UUID(uuidString: r) == nil { throw ControlError("--resume braucht eine sessionId (UUID)") }
+                return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt, resume: a["--resume"])
+            },
+            "select": parser(values: ["-t"], bools: ["-a"]) { .select(target: $0["-t"], add: $0.has("-a")) },
+            "layout": { rest in
+                guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|main|spiral|custom|scroll|stack") }
+                return .layout(m)
+            },
+            "zoom": parser(values: ["-t"]) { .zoom(target: $0["-t"]) },
+            "rename": parser(values: ["-t"], positional: true) { .rename(target: $0["-t"], name: $0.positional.joined(separator: " ")) },
+            "move": parser(values: ["-t"], positional: true) { a in
+                guard a.positional.count == 1 else { throw ControlError("move braucht genau eine Zielgruppe") }
+                return .move(target: a["-t"], group: a.positional[0])
+            },
+            "set-group": parser(values: ["-t", "--name", "--color", "--favorite"]) { a in
+                let fav = a["--favorite"]
+                guard fav == nil || fav == "on" || fav == "off" else { throw ControlError("--favorite on|off") }
+                return .setGroup(target: a["-t"], name: a["--name"], color: try color(a["--color"]), favorite: fav.map { $0 == "on" })
+            },
+            "stop": parser(values: ["-t"]) { .stop(target: $0["-t"]) },
+            "resume": parser(values: ["-t"]) { .resume(target: $0["-t"]) },
+            "kill": parser(values: ["-t"]) { .killSession(target: $0["-t"]) },
+            "kill-group": parser(values: ["-t"]) { .killGroup(target: $0["-t"]) },
+            "send": parser(values: ["-t"], bools: ["--no-enter", "-k"], positional: true) { a in
+                guard !a.positional.isEmpty else { throw ControlError("send braucht Text oder Tasten") }
+                let keys = a.has("-k")
+                if keys, let bad = a.positional.first(where: { keyNames[$0.lowercased()] == nil }) { throw ControlError("unbekannte Taste „\(bad)“") }
+                return .send(target: a["-t"], text: a.positional.joined(separator: " "), enter: !keys && !a.has("--no-enter"), keys: keys)
+            },
+            "capture": parser(values: ["-t"], bools: ["--all"]) { .capture(target: $0["-t"], all: $0.has("--all")) },
+        ]
+        for (alias, name) in ["-h": "help", "--help": "help", "list": "ls", "new-session": "new", "kill-session": "kill",
+                              "send-keys": "send", "capture-pane": "capture"] { t[alias] = t[name] }
+        return t
+    }()
+
+    /// Flags lesen, ohne `positional` ist jedes weitere Argument ein Fehler, dann `make`.
+    private static func parser(values: Set<String> = [], bools: Set<String> = [], positional: Bool = false,
+                               _ make: @escaping @Sendable (Args) throws -> ControlCommand) -> Parser {
+        { rest in
+            let a = try Args(rest, values: values, bools: bools)
+            if !positional { try a.noPositional() }
+            return try make(a)
         }
-    }
-
-    private static func parseSetGroup(_ rest: [String]) throws -> ControlCommand {
-        let a = try Args(rest, values: ["-t", "--name", "--color", "--favorite"])
-        try a.noPositional()
-        let fav = a["--favorite"]
-        guard fav == nil || fav == "on" || fav == "off" else { throw ControlError("--favorite on|off") }
-        return .setGroup(target: a["-t"], name: a["--name"], color: try color(a["--color"]), favorite: fav.map { $0 == "on" })
-    }
-
-    private static func parseSend(_ rest: [String]) throws -> ControlCommand {
-        let a = try Args(rest, values: ["-t"], bools: ["--no-enter", "-k"])
-        guard !a.positional.isEmpty else { throw ControlError("send braucht Text oder Tasten") }
-        let keys = a.has("-k")
-        if keys, let bad = a.positional.first(where: { keyNames[$0.lowercased()] == nil }) { throw ControlError("unbekannte Taste „\(bad)“") }
-        return .send(target: a["-t"], text: a.positional.joined(separator: " "), enter: !keys && !a.has("--no-enter"), keys: keys)
     }
 
     private static func color(_ c: String?) throws -> String? {

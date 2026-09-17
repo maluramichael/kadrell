@@ -89,7 +89,7 @@ final class UsageService {
             struct OAuth: Decodable { let accessToken: String }
             let claudeAiOauth: OAuth
         }
-        guard let r = try? await ClaudeCLI.runRaw("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], environment: nil, cwd: nil) else {
+        guard let r = try? await ProcessRunner.run("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"]) else {
             log.warning("usage: security nicht startbar"); return nil
         }
         guard r.status == 0 else { log.warning("usage: security exit \(r.status, privacy: .public)"); return nil }

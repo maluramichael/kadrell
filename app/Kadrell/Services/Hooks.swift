@@ -23,15 +23,7 @@ enum Hooks {
         env["KADRELL_SESSION_KEY"] = s.id
         env["KADRELL_TITLE"] = s.title
         env["KADRELL_BRANCH"] = (s.activeWorktree != nil ? Git.branch(at: cwd) : s.branch) ?? Git.branch(at: cwd) ?? ""
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = [cwd, s.sessionId, s.title]
-        p.environment = env
-        if FileManager.default.fileExists(atPath: cwd) { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
-        p.standardInput = FileHandle.nullDevice
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { ClaudeCLI.log.error("Hook \(path, privacy: .public): \(String(describing: error), privacy: .public)") }
+        do { try ProcessRunner.spawn(path, [cwd, s.sessionId, s.title], environment: env, cwd: FileManager.default.fileExists(atPath: cwd) ? cwd : nil, discardOutput: true) } catch { ClaudeCLI.log.error("Hook \(path, privacy: .public): \(String(describing: error), privacy: .public)") }
     }
 
     /// Wie sshd bei `authorized_keys`: nur Dateien des eigenen Benutzers, die weder Gruppe noch andere schreiben dürfen.

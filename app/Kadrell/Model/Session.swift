@@ -1,5 +1,6 @@
 import Foundation
 import os
+import Synchronization
 
 enum SessionStatus: String, Codable, CaseIterable, Sendable {
     case running, waiting, idle, error
@@ -7,7 +8,7 @@ enum SessionStatus: String, Codable, CaseIterable, Sendable {
 
 /// Eine Session, die Kadrell selbst als Claude-Prozess im Terminal startet (`claude --resume`).
 /// Gespeichert werden nur Schlüssel, Ordner, Start, sessionId und Name; Status und pid kommen live
-/// aus `claude agents --json`, solange der eigene Prozess läuft.
+/// aus `<configDir>/sessions/<pid>.json` des eigenen Prozesses (`Agent.local`), solange er läuft.
 struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Stabiler Schlüssel für Gruppen und Auswahl: bei neuen Sessions die erste sessionId,
     /// bei übernommenen Hintergrund-Sessions deren alte kurze Id.
@@ -47,7 +48,8 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Terminal ohne Claude (⌘T): Login-Shell statt `claude`, erkennbar am Schlüssel.
     static let shellPrefix = "shell-"
     var isShell: Bool { id.hasPrefix(Session.shellPrefix) }
-    /// Remote-Session (⌘⇧N): ssh statt `claude`, erkennbar am Schlüssel wie bei Shells.
+    static func newShellId() -> String { shellPrefix + UUID().uuidString.lowercased() }
+    /// Remote-Session (⌘⇧N): ssh statt `claude`, erkannt an `host`; das Präfix macht nur den Schlüssel lesbar.
     static let remotePrefix = "ssh-"
     var isRemote: Bool { host != nil }
     var status: SessionStatus { Session.mapStatus(state: nil, status: rawStatus) }
@@ -60,7 +62,7 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     }
 
     static let log = Logger(subsystem: "de.malura.kadrell", category: "session")
-    nonisolated(unsafe) private static var loggedUnknown = Set<String>()
+    private static let loggedUnknown = Mutex(Set<String>())
 
     static func mapStatus(state: String?, status: String?) -> SessionStatus {
         for raw in [status, state].compactMap({ $0 }) {
@@ -72,8 +74,7 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
             default:
                 if v.contains("error") || v.contains("fail") { return .error }
                 if v.contains("run") || v.contains("work") || v.contains("active") { return .running }
-                if !loggedUnknown.contains(v) {
-                    loggedUnknown.insert(v)
+                if loggedUnknown.withLock({ $0.insert(v).inserted }) {
                     log.warning("Unbekannter Session-Wert '\(v, privacy: .public)', behandle als idle")
                 }
                 return .idle

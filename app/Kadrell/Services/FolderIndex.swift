@@ -188,18 +188,9 @@ final class FolderIndex {
     /// Ordner des vordersten Finder-Fensters. Fragt beim ersten Mal nach der Erlaubnis, den Finder zu steuern.
     /// Über `osascript` statt NSAppleScript: das darf nur auf den Main-Thread, und die Rückfrage würde ihn blockieren.
     nonisolated static func finderFolder() async -> String? {
-        await Task.detached(priority: .userInitiated) {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            p.arguments = ["-e", "tell application \"Finder\" to if (count of Finder windows) > 0 then POSIX path of (target of front Finder window as alias)"]
-            let out = Pipe()
-            p.standardOutput = out
-            p.standardError = FileHandle.nullDevice
-            guard (try? p.run()) != nil else { return nil }
-            let data = out.fileHandleForReading.readDataToEndOfFile()
-            p.waitUntilExit()
-            let r = String(decoding: data, as: UTF8.self)
-            return p.terminationStatus == 0 ? folder(for: normalize(r)) : nil
-        }.value
+        // Kein Timeout: die Rückfrage wartet auf den Nutzer.
+        guard let r = try? await ProcessRunner.run("/usr/bin/osascript", ["-e", "tell application \"Finder\" to if (count of Finder windows) > 0 then POSIX path of (target of front Finder window as alias)"],
+                                                   timeout: .infinity, mergeStderr: false), r.status == 0 else { return nil }
+        return folder(for: normalize(r.output))
     }
 }
