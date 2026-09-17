@@ -321,6 +321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.updatePollBackground() }
         }
         if !FileManager.default.isExecutableFile(atPath: cli.binary) { registry.fail("\(cli.binary): claude nicht gefunden") }
+        else if let tooOld = await cli.checkVersion() { registry.fail(tooOld) }
         // Leer nicht abgleichen: das würde Gruppen alter Hintergrund-Sessions verwerfen, bevor sie übernommen sind.
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
@@ -355,7 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let agents: [Agent]
         do { agents = try await cli.agents() } catch {
             AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)")
-            registry.fail("\(cli.binary): \(Self.firstLine(of: error))")
+            registry.fail("\(cli.binary): \(CLIError.firstLine(of: error))")
             return
         }
         let elsewhere = agents.filter { !owned.contains($0.sessionId) }
@@ -376,12 +377,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-    }
-
-    /// Erste Zeile einer CLI-Fehlermeldung: `CLIError` liefert die Prozessausgabe, sonst die Fehlerbeschreibung.
-    private static func firstLine(of error: Error) -> String {
-        let text = ((error as? CLIError)?.output ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.split(separator: "\n").first.map(String.init) ?? text
     }
 
     func reloadViews() {
