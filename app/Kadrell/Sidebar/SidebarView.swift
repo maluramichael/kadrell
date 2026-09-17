@@ -46,7 +46,7 @@ final class SidebarView: NSView {
     private var flagsMonitor: Any?
 
     enum SelectMode { case replace, toggle, add, cursor }
-    /// Klick = nur diese, ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu,
+    /// Klick = nur diese (schon ausgewählt: weg), ⌘-Klick = dazu oder weg, ⇧-Klick = Bereich seit dem letzten Klick dazu,
     /// ↑↓ (cursor) = nur diese, die Tastatur bleibt im Baum.
     var onSelect: (([String], SelectMode) -> Void)?
     var onNewSession: ((String) -> Void)?
@@ -582,7 +582,8 @@ final class SidebarView: NSView {
                 return
             }
             anchor = s.id
-            onSelect?([s.id], cmd ? .toggle : .replace)
+            // Klick auf eine schon ausgewählte Session nimmt sie wieder heraus, wie ⌘-Klick.
+            onSelect?([s.id], cmd || selected.contains(s.id) ? .toggle : .replace)
         }
     }
 }

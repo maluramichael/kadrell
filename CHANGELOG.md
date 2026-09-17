@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.40.3 (2026-09-17)
+
+- Änderung: Ein Klick auf eine schon ausgewählte Session in der Seitenleiste nimmt sie wieder aus der Auswahl.
+
 ## 1.40.2 (2026-09-17)
 
 - Fix: Wurde Kadrell während des Betriebs aktualisiert, hängt die App beim Wählen eines Hintergrundbilds oder Ordners nicht mehr. Stattdessen kommt der Hinweis, Kadrell neu zu starten.

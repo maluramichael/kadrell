@@ -58,6 +58,32 @@ final class AccessibilityTests: XCTestCase {
     }
 
     /// ←/→ klappt die Gruppe der fokussierten Session zu/auf, auch wenn diese dadurch unsichtbar wird.
+    /// Klick auf eine noch nicht ausgewählte Session wählt nur diese, Klick auf eine ausgewählte nimmt sie heraus.
+    func testSidebarClickSelectedDeselects() {
+        let a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha")
+        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a"], favorite: false)
+        let sidebar = SidebarView(frame: .zero)
+        let w = window(sidebar, NSSize(width: 240, height: 400))
+        defer { w.close() }
+        var picked: ([String], SidebarView.SelectMode)?
+        sidebar.onSelect = { picked = ($0, $1) }
+        sidebar.reload(groups: [g], sessions: [a])
+        let row = elements(sidebar)[1].accessibilityFrame()
+        let p = w.convertPoint(fromScreen: CGPoint(x: row.midX, y: row.midY))
+        func click() {
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                let e = NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber,
+                                           context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                type == .leftMouseDown ? sidebar.mouseDown(with: e) : sidebar.mouseUp(with: e)
+            }
+        }
+        click()
+        XCTAssertEqual(picked?.0, ["a"]); XCTAssertEqual(picked?.1, .replace)
+        sidebar.selected = ["a"]
+        click()
+        XCTAssertEqual(picked?.0, ["a"]); XCTAssertEqual(picked?.1, .toggle)
+    }
+
     func testSidebarCollapseExpandKeyboard() {
         let a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha")
         let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a"], favorite: false)
