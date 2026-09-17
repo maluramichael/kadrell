@@ -13,14 +13,15 @@ final class SidebarView: NSView {
 
     private(set) var groups: [Group] = []
     private(set) var sessions: [String: Session] = [:]
-    var selected: Set<String> = []
-    var focused: String?
+    // Nicht Teil von `Row`: `invalidateChangedRows` sieht diese Änderungen nicht, deshalb selbst neu zeichnen.
+    var selected: Set<String> = [] { didSet { if selected != oldValue { needsDisplay = true } } }
+    var focused: String? { didSet { if focused != oldValue { needsDisplay = true } } }
     var attach: AttachManager?
     /// Eingeschaltet: jede Session-Zeile bekommt eine zweite Zeile mit `messages[id]`.
     var showMessages = false
-    var messages: [String: String] = [:]
+    var messages: [String: String] = [:] { didSet { if messages != oldValue { needsDisplay = true } } }
     /// Sessions, die fertig geworden sind oder warten, ohne dass du hingesehen hast: Titel hervorgehoben, Marke „neu“.
-    var unread: Set<String> = []
+    var unread: Set<String> = [] { didSet { if unread != oldValue { needsDisplay = true } } }
     private var collapsed: Set<String> = []
     private var rows: [Row] = []
     private var hovered: Int?

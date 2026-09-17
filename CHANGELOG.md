@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.40.1 (2026-09-17)
+
+- Fix: Mit ⌘A markierte Sessions sind in der Seitenleiste sofort hervorgehoben, nicht erst nach einigen Sekunden.
+
 ## 1.40.0 (2026-09-17)
 
 - Feature: Neue Einstellung „Verlauf zum Zurückscrollen“ (1.000 bis 50.000 Zeilen, Standard 10.000). Bisher hielt jedes Terminal nur 500 Zeilen, lange Claude-Antworten waren nach oben hin abgeschnitten. Gilt sofort auch für laufende Sessions.
