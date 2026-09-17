@@ -10,18 +10,20 @@ enum Hooks {
     static func fire(_ event: Event, _ s: Session, environment: [String: String]) {
         let path = dir + "/" + event.rawValue
         guard FileManager.default.isExecutableFile(atPath: path) else { return }
+        // Bei aktivem Worktree (siehe `Session.activeWorktree`) zeigt der Hook dorthin statt auf den Repo-Root.
+        let cwd = s.activeWorktree ?? s.cwd
         var env = environment
         env["KADRELL_EVENT"] = event.rawValue
-        env["KADRELL_CWD"] = s.cwd
+        env["KADRELL_CWD"] = cwd
         env["KADRELL_SESSION_ID"] = s.sessionId
         env["KADRELL_SESSION_KEY"] = s.id
         env["KADRELL_TITLE"] = s.title
-        env["KADRELL_BRANCH"] = s.branch ?? Git.branch(at: s.cwd) ?? ""
+        env["KADRELL_BRANCH"] = (s.activeWorktree != nil ? Git.branch(at: cwd) : s.branch) ?? Git.branch(at: cwd) ?? ""
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
-        p.arguments = [s.cwd, s.sessionId, s.title]
+        p.arguments = [cwd, s.sessionId, s.title]
         p.environment = env
-        if FileManager.default.fileExists(atPath: s.cwd) { p.currentDirectoryURL = URL(fileURLWithPath: s.cwd) }
+        if FileManager.default.fileExists(atPath: cwd) { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice

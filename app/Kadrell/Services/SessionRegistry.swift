@@ -14,6 +14,11 @@ final class SessionRegistry {
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     private(set) var polled = false
     private var transcripts: [String: Transcript.Entry] = [:]
+    /// `git worktree list` je Root-Ordner (`cwd`), neu geholt nur wenn sich der oberste Transcript-Kandidat
+    /// einer Session in diesem Ordner ändert (siehe `applyActiveWorktree`), nicht bei jedem 2-s-Poll.
+    private var worktreeCache: [String: [Worktree.Entry]] = [:]
+    /// Oberster Transcript-Kandidat je Session beim letzten Abgleich, löst bei Änderung einen `worktreeCache`-Refresh aus.
+    private var lastCandidate: [String: String] = [:]
     /// Ersatztitel je sessionId. Die erste Nachricht ändert sich nicht, einmal gefunden wird nie wieder gelesen.
     private var firstPrompts: [String: String] = [:]
     /// Schlüssel der Session je pid des eigenen Claude-Prozesses, liefert der AttachManager.
@@ -75,6 +80,7 @@ final class SessionRegistry {
         applyShellCwd(&merged, pids: pids)
         await fillFirstPrompts(&merged)
         let messages = await refreshTranscripts(merged)
+        await applyActiveWorktree(&merged)
         // Erster Poll meldet sich auch ohne Änderung: Registrierte hören darauf, um den Lade-Zustand zu verlassen.
         let firstPoll = !polled
         polled = true
@@ -114,6 +120,25 @@ final class SessionRegistry {
             for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
         }
         return messages
+    }
+
+    /// Viele Sessions laufen im Repo-Root, arbeiten per absoluten Pfaden aber in einem Geschwister- oder
+    /// Unterordner-Worktree: `cwd` und Branch aus `merge()` stimmen dann nicht. Ordnet über die zuletzt
+    /// angefassten Transcript-Pfade den tatsächlich aktiven Worktree zu (`Worktree.active`).
+    private func applyActiveWorktree(_ merged: inout [Session]) async {
+        for i in merged.indices {
+            let sessionId = merged[i].sessionId
+            guard let candidates = transcripts[sessionId]?.toolCandidates, let top = candidates.first else { continue }
+            let cwd = merged[i].cwd
+            if lastCandidate[sessionId] != top || worktreeCache[cwd] == nil {
+                lastCandidate[sessionId] = top
+                worktreeCache[cwd] = await Worktree.list(at: cwd)
+            }
+            guard let list = worktreeCache[cwd] else { continue }
+            guard let active = Worktree.active(candidates: candidates, in: list) else { merged[i].activeWorktree = nil; continue }
+            merged[i].activeWorktree = active.path
+            merged[i].branch = active.branch ?? merged[i].branch
+        }
     }
 
     /// Live-Werte nur über die pid des eigenen Prozesses: eine fremde Session mit derselben sessionId
