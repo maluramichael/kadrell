@@ -44,11 +44,11 @@ enum SSHConfig {
     }
 
     /// Zuletzt verbundene Hosts, neueste vorn. Ersetzt eine Favoritenliste: was man nutzt, steht oben.
-    static var recent: [String] { UserDefaults.standard.stringArray(forKey: recentKey) ?? [] }
+    static var recent: [String] { Profile.defaults.stringArray(forKey: recentKey) ?? [] }
     static func recordUse(_ host: String) {
         var r = recent.filter { $0 != host }
         r.insert(host, at: 0)
-        UserDefaults.standard.set(Array(r.prefix(20)), forKey: recentKey)
+        Profile.defaults.set(Array(r.prefix(20)), forKey: recentKey)
     }
 
     /// tmux-Sessions auf dem Host. nil, wenn ssh scheitert; leer, wenn dort kein tmux-Server läuft.

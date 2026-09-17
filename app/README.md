@@ -16,6 +16,11 @@ xcodebuild -project Kadrell.xcodeproj -scheme Kadrell -configuration Debug -deri
 open build/Build/Products/Debug/Kadrell.app
 ```
 
+Profile: `open -n Kadrell.app --args --profile <name>` startet eine weitere Instanz mit eigenen Sessions, Gruppen,
+Einstellungen und eigenem Socket (`~/Library/Application Support/de.malura.kadrell/profiles/<name>/`). Ohne Namen
+gilt das Standardprofil am bisherigen Ort. `--profile tmp` ist ein Wegwerfprofil im Temp-Ordner, das beim Beenden
+verschwindet (auch im Menü: „Neue Instanz mit temporärem Profil“). Jedes Profil läuft höchstens einmal.
+
 Bedienung: Klick im Baum zeigt nur diese Session, ⌘-Klick nimmt sie dazu oder weg, ⇧-Klick markiert den
 Bereich seit dem letzten Klick, Klick auf eine Gruppe zeigt alle ihre Sessions. Ziehen im Baum oder an der Titelzeile
 einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf eine fremde Gruppe zieht die ganze Gruppe mit).

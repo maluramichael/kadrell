@@ -33,11 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var controlServer: ControlServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Nur eine Instanz: läuft schon ein Kadrell (egal aus welchem Pfad), das nach vorn holen und selbst beenden.
-        let others = NSRunningApplication.runningApplications(withBundleIdentifier: "de.malura.kadrell")
-            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
-        if let other = others.first, NSClassFromString("XCTestCase") == nil {
-            other.activate()
+        // Nur eine Instanz pro Profil: hält schon eine das Profil, die nach vorn holen und selbst beenden.
+        if NSClassFromString("XCTestCase") == nil, let other = Profile.acquire() {
+            NSRunningApplication(processIdentifier: other)?.activate()
             NSApp.terminate(nil)
             return
         }
@@ -50,8 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         trapSignals()
         Task { await boot() }
         // Beim ersten Start die Hilfe zeigen: da steht alles, die Oberfläche selbst erklärt nichts.
-        if !UserDefaults.standard.bool(forKey: "helpShown") {
-            UserDefaults.standard.set(true, forKey: "helpShown")
+        if !Profile.defaults.bool(forKey: "helpShown") {
+            Profile.defaults.set(true, forKey: "helpShown")
             showAbout()
         }
         buildStatusItem()
@@ -101,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Nur noch Reste (z. B. Abmelden ohne Prozesse): SIGHUP, beim nächsten Start setzt `--resume` fort.
         attach?.detachAll()
         controlServer?.stop()
+        Profile.cleanUp()
     }
 
     private var quitConfirmed = false
@@ -149,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1400, height: 900),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Kadrell"
+        window.title = "Kadrell" + Profile.label
         window.appearance = Theme.appearance
         window.backgroundColor = Theme.bg
         window.minSize = NSSize(width: 800, height: 500)
@@ -288,7 +287,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
             await registry.pollNow()
-            await offerAdopt()
+            // Hintergrund-Sessions übernimmt nur das Standardprofil, sonst stiehlt ein Testprofil sie.
+            if Profile.name == nil { await offerAdopt() }
             registry.start()
         }
         startControlServer()
@@ -406,6 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Einstellungen …", action: #selector(menuSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: "Kommandozeilen-Tool installieren …", action: #selector(menuInstallCLI), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Neue Instanz mit temporärem Profil", action: #selector(menuTemporaryInstance), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Kadrell ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
@@ -513,6 +514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startSession(group: nil, cwd: cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
     }
     @objc private func menuAbout() { showAbout() }
+    @objc private func menuTemporaryInstance() { Profile.launchTemporary() }
     @objc private func menuSettings() {
         let model = SettingsModel()
         model.onApply = { [weak self] in

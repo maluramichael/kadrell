@@ -7,10 +7,7 @@ enum ControlSocket {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "control")
     static let maxRequest = 1 << 20
 
-    static var defaultPath: String {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("de.malura.kadrell/kadrell.sock").path
-    }
+    static var defaultPath: String { Profile.directory.appendingPathComponent("kadrell.sock").path }
 
     /// `sun_path` fasst 104 Bytes. Längere Pfade (sehr lange Benutzernamen) scheitern mit klarer Meldung.
     static func address(_ path: String) throws -> sockaddr_un {
@@ -166,7 +163,8 @@ enum ControlClient {
             var resp = try send(req, path: path)
             if resp == nil {
                 // Läuft Kadrell ohne Socket (Version vor der Fernsteuerung), würde `open` sie nur nach vorn holen.
-                guard NSRunningApplication.runningApplications(withBundleIdentifier: "de.malura.kadrell").isEmpty else {
+                // Mit Profil kann eine andere Instanz laufen, ohne dass dieses Profil offen ist.
+                guard Profile.name != nil || NSRunningApplication.runningApplications(withBundleIdentifier: "de.malura.kadrell").isEmpty else {
                     throw ControlError("Kadrell läuft, lauscht aber nicht auf \(path). Alte Version? Kadrell neu starten.")
                 }
                 launchApp()
@@ -194,7 +192,9 @@ enum ControlClient {
         let bundle = Bundle.main.bundleURL
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        p.arguments = bundle.pathExtension == "app" ? ["-g", bundle.path] : ["-g", "-b", "de.malura.kadrell"]
+        let target = bundle.pathExtension == "app" ? [bundle.path] : ["-b", "de.malura.kadrell"]
+        // Ein Profil ist eine eigene Instanz: `-n`, sonst holt `open` nur die laufende nach vorn.
+        p.arguments = Profile.name.map { ["-g", "-n"] + target + ["--args", "--profile", $0] } ?? ["-g"] + target
         try? p.run()
         p.waitUntilExit()
     }

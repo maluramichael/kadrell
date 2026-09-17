@@ -18,8 +18,8 @@ final class SessionRegistry {
     private var transcripts: [String: Transcript.Entry] = [:]
     /// Transcript-Größe je Session beim letzten Fokus, übersteht einen Neustart der App.
     private var lastSeenSize: [String: Int] {
-        get { UserDefaults.standard.dictionary(forKey: "session.lastSeenSize") as? [String: Int] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: "session.lastSeenSize") }
+        get { Profile.defaults.dictionary(forKey: "session.lastSeenSize") as? [String: Int] ?? [:] }
+        set { Profile.defaults.set(newValue, forKey: "session.lastSeenSize") }
     }
     /// Ersatztitel je sessionId. Die erste Nachricht ändert sich nicht, einmal gefunden wird nie wieder gelesen.
     private var firstPrompts: [String: String] = [:]
@@ -28,10 +28,7 @@ final class SessionRegistry {
     var onChange: (([Session]) -> Void)?
     private var task: Task<Void, Never>?
 
-    static var defaultURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("de.malura.kadrell/sessions.json")
-    }
+    static var defaultURL: URL { Profile.directory.appendingPathComponent("sessions.json") }
 
     init(cli: ClaudeCLI, url: URL = SessionRegistry.defaultURL) {
         self.cli = cli

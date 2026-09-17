@@ -5,80 +5,80 @@ enum Settings {
     /// Startordner für ⌘N, Default Home. Immer mit abschließendem Slash.
     static var startFolder: String {
         get {
-            var p = UserDefaults.standard.string(forKey: startFolderKey) ?? NSHomeDirectory()
+            var p = Profile.defaults.string(forKey: startFolderKey) ?? NSHomeDirectory()
             if p.hasPrefix("~") { p = NSHomeDirectory() + p.dropFirst() }
             return p.hasSuffix("/") ? p : p + "/"
         }
-        set { UserDefaults.standard.set(newValue, forKey: startFolderKey) }
+        set { Profile.defaults.set(newValue, forKey: startFolderKey) }
     }
 
     /// Kommando des externen Editors, so wie im Terminal getippt (`code`, `subl`, `zed`). "" = Hotkey tut nichts.
     static var editorCommand: String {
-        get { UserDefaults.standard.string(forKey: "editorCommand") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "editorCommand") }
+        get { Profile.defaults.string(forKey: "editorCommand") ?? "" }
+        set { Profile.defaults.set(newValue, forKey: "editorCommand") }
     }
 
     /// Letzte Antwort von Claude als zweite Zeile unter jeder Session im Baum.
     static var showLastMessage: Bool {
-        get { UserDefaults.standard.bool(forKey: "showLastMessage") }
-        set { UserDefaults.standard.set(newValue, forKey: "showLastMessage") }
+        get { Profile.defaults.bool(forKey: "showLastMessage") }
+        set { Profile.defaults.set(newValue, forKey: "showLastMessage") }
     }
 
     /// Farbschema der Oberfläche und Terminals, Default Catppuccin Mocha.
     static var colorTheme: String {
-        get { UserDefaults.standard.string(forKey: "colorTheme") ?? ColorTheme.all[0].id }
-        set { UserDefaults.standard.set(newValue, forKey: "colorTheme") }
+        get { Profile.defaults.string(forKey: "colorTheme") ?? ColorTheme.all[0].id }
+        set { Profile.defaults.set(newValue, forKey: "colorTheme") }
     }
 
     /// Aussehen des Baums, Default getönte Gruppen.
     static var sidebarStyle: SidebarStyle {
-        get { UserDefaults.standard.string(forKey: "sidebar.style").flatMap(SidebarStyle.init) ?? .tinted }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: "sidebar.style") }
+        get { Profile.defaults.string(forKey: "sidebar.style").flatMap(SidebarStyle.init) ?? .tinted }
+        set { Profile.defaults.set(newValue.rawValue, forKey: "sidebar.style") }
     }
 
     /// Sortierung des Baums (Leiste), Default aus = Handreihenfolge.
     static var sidebarSort: SidebarSort {
-        get { UserDefaults.standard.string(forKey: "sidebar.sort").flatMap(SidebarSort.init) ?? .off }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: "sidebar.sort") }
+        get { Profile.defaults.string(forKey: "sidebar.sort").flatMap(SidebarSort.init) ?? .off }
+        set { Profile.defaults.set(newValue.rawValue, forKey: "sidebar.sort") }
     }
 
     /// Laufzeit („12m“) in jeder Session-Zeile des Baums, Default an.
     static var sidebarShowAge: Bool {
-        get { UserDefaults.standard.object(forKey: "sidebar.showAge") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "sidebar.showAge") }
+        get { Profile.defaults.object(forKey: "sidebar.showAge") as? Bool ?? true }
+        set { Profile.defaults.set(newValue, forKey: "sidebar.showAge") }
     }
 
     /// Welche Sounds Kadrell spielt, Default alle.
     static var sounds: Feedback.Level {
-        get { UserDefaults.standard.string(forKey: "sounds").flatMap(Feedback.Level.init) ?? .all }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: "sounds") }
+        get { Profile.defaults.string(forKey: "sounds").flatMap(Feedback.Level.init) ?? .all }
+        set { Profile.defaults.set(newValue.rawValue, forKey: "sounds") }
     }
 
     /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default an.
     static var stackShowPath: Bool {
-        get { UserDefaults.standard.object(forKey: "stackShowPath") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "stackShowPath") }
+        get { Profile.defaults.object(forKey: "stackShowPath") as? Bool ?? true }
+        set { Profile.defaults.set(newValue, forKey: "stackShowPath") }
     }
 
     /// Beendet sich Claude selbst (zweimal ⌃C, `/exit`), verschwindet die Kachel. Default aus: sie bleibt, Klick setzt fort.
     static var closeTileOnExit: Bool {
-        get { UserDefaults.standard.bool(forKey: "closeTileOnExit") }
-        set { UserDefaults.standard.set(newValue, forKey: "closeTileOnExit") }
+        get { Profile.defaults.bool(forKey: "closeTileOnExit") }
+        set { Profile.defaults.set(newValue, forKey: "closeTileOnExit") }
     }
 
     /// Auto-Modus zeigt aus der Auswahl nur Sessions in diesen Zuständen. Default: nur wartende.
     static var autoWaiting: Bool {
-        get { UserDefaults.standard.object(forKey: "auto.waiting") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "auto.waiting") }
+        get { Profile.defaults.object(forKey: "auto.waiting") as? Bool ?? true }
+        set { Profile.defaults.set(newValue, forKey: "auto.waiting") }
     }
     /// Auto-Modus filtert alle Sessions des Baums statt nur der Auswahl. Default an.
     static var autoAllSessions: Bool {
-        get { UserDefaults.standard.object(forKey: "auto.allSessions") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "auto.allSessions") }
+        get { Profile.defaults.object(forKey: "auto.allSessions") as? Bool ?? true }
+        set { Profile.defaults.set(newValue, forKey: "auto.allSessions") }
     }
     static var autoRunning: Bool {
-        get { UserDefaults.standard.bool(forKey: "auto.running") }
-        set { UserDefaults.standard.set(newValue, forKey: "auto.running") }
+        get { Profile.defaults.bool(forKey: "auto.running") }
+        set { Profile.defaults.set(newValue, forKey: "auto.running") }
     }
 
     /// Start-Flags für Claude, gelten ab dem nächsten Start eines Claude-Prozesses. "" = Claude-Default.
@@ -86,20 +86,20 @@ enum Settings {
     static let claudeModels = ["", "fable", "opus", "sonnet"]
     static let claudeEfforts = ["", "low", "medium", "high", "xhigh", "max"]
     static var claudeAllowBypass: Bool {
-        get { UserDefaults.standard.bool(forKey: "claude.allowBypass") }
-        set { UserDefaults.standard.set(newValue, forKey: "claude.allowBypass") }
+        get { Profile.defaults.bool(forKey: "claude.allowBypass") }
+        set { Profile.defaults.set(newValue, forKey: "claude.allowBypass") }
     }
     static var claudeMode: String {
-        get { UserDefaults.standard.string(forKey: "claude.mode") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "claude.mode") }
+        get { Profile.defaults.string(forKey: "claude.mode") ?? "" }
+        set { Profile.defaults.set(newValue, forKey: "claude.mode") }
     }
     static var claudeModel: String {
-        get { UserDefaults.standard.string(forKey: "claude.model") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "claude.model") }
+        get { Profile.defaults.string(forKey: "claude.model") ?? "" }
+        set { Profile.defaults.set(newValue, forKey: "claude.model") }
     }
     static var claudeEffort: String {
-        get { UserDefaults.standard.string(forKey: "claude.effort") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "claude.effort") }
+        get { Profile.defaults.string(forKey: "claude.effort") ?? "" }
+        set { Profile.defaults.set(newValue, forKey: "claude.effort") }
     }
 
     /// Bereiche der Schieberegler, Prozentwerte in Prozent (gespeichert als Faktor).
@@ -111,52 +111,52 @@ enum Settings {
     static let defaultFontName = "JetBrainsMonoNF-Regular"
 
     private static func double(_ key: String, _ fallback: Double) -> Double {
-        UserDefaults.standard.object(forKey: key) as? Double ?? fallback
+        Profile.defaults.object(forKey: key) as? Double ?? fallback
     }
 
     static var uiScale: Double {
         get { double("uiScale", 1) }
-        set { UserDefaults.standard.set(newValue, forKey: "uiScale") }
+        set { Profile.defaults.set(newValue, forKey: "uiScale") }
     }
     static var terminalFontSize: Double {
         get { min(max(double("terminal.fontSize", defaultFontSize), fontSizes.lowerBound), fontSizes.upperBound) }
-        set { UserDefaults.standard.set(min(max(newValue, fontSizes.lowerBound), fontSizes.upperBound), forKey: "terminal.fontSize") }
+        set { Profile.defaults.set(min(max(newValue, fontSizes.lowerBound), fontSizes.upperBound), forKey: "terminal.fontSize") }
     }
     static var terminalFontName: String {
-        get { UserDefaults.standard.string(forKey: "terminal.fontName") ?? defaultFontName }
-        set { UserDefaults.standard.set(newValue, forKey: "terminal.fontName") }
+        get { Profile.defaults.string(forKey: "terminal.fontName") ?? defaultFontName }
+        set { Profile.defaults.set(newValue, forKey: "terminal.fontName") }
     }
     static var terminalLineSpacing: Double {
         get { double("terminal.lineSpacing", 1) }
-        set { UserDefaults.standard.set(newValue, forKey: "terminal.lineSpacing") }
+        set { Profile.defaults.set(newValue, forKey: "terminal.lineSpacing") }
     }
     /// Abstand zwischen Kachelrahmen und Terminaltext, zusätzlich zu den 2 px Rahmenschutz.
     static var terminalPadding: Double {
         get { double("terminal.padding", 0) }
-        set { UserDefaults.standard.set(newValue, forKey: "terminal.padding") }
+        set { Profile.defaults.set(newValue, forKey: "terminal.padding") }
     }
 
     /// Bild hinter den Kacheln, nur in der Arbeitsfläche. "" = keins.
     static var backgroundImage: String {
-        get { UserDefaults.standard.string(forKey: "workspace.backgroundImage") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "workspace.backgroundImage") }
+        get { Profile.defaults.string(forKey: "workspace.backgroundImage") ?? "" }
+        set { Profile.defaults.set(newValue, forKey: "workspace.backgroundImage") }
     }
     /// Deckkraft des Kachelkörpers samt Terminal-Hintergrund; Text bleibt voll sichtbar. 1 = undurchsichtig.
     static var tileOpacity: Double {
         get { double("tiles.opacity", 1) }
-        set { UserDefaults.standard.set(newValue, forKey: "tiles.opacity") }
+        set { Profile.defaults.set(newValue, forKey: "tiles.opacity") }
     }
 
     /// Abstand zwischen den Kacheln und zum Rand der Arbeitsfläche.
     static var tileGap: Double {
         get { double("tiles.gap", 6) }
-        set { UserDefaults.standard.set(newValue, forKey: "tiles.gap") }
+        set { Profile.defaults.set(newValue, forKey: "tiles.gap") }
     }
 
     /// SwiftTerm zeichnet per Metal auf der GPU statt per CoreGraphics auf dem Main-Thread, Default an.
     static var terminalMetal: Bool {
-        get { UserDefaults.standard.object(forKey: "terminal.metal") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "terminal.metal") }
+        get { Profile.defaults.object(forKey: "terminal.metal") as? Bool ?? true }
+        set { Profile.defaults.set(newValue, forKey: "terminal.metal") }
     }
 
     static var terminalFont: NSFont {
@@ -192,8 +192,8 @@ enum Settings {
         }
         var key: String { "ask.\(rawValue)" }
         var enabled: Bool {
-            get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
-            nonmutating set { UserDefaults.standard.set(newValue, forKey: key) }
+            get { Profile.defaults.object(forKey: key) as? Bool ?? true }
+            nonmutating set { Profile.defaults.set(newValue, forKey: key) }
         }
     }
 

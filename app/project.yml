@@ -32,8 +32,8 @@ targets:
       properties:
         CFBundleName: Kadrell
         CFBundleDisplayName: Kadrell
-        CFBundleShortVersionString: "1.32.2"
-        CFBundleVersion: "59"
+        CFBundleShortVersionString: "1.33.0"
+        CFBundleVersion: "60"
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true

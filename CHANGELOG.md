@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.33.0 (2026-09-17)
+
+- Feature: Profile: `--profile <name>` startet eine weitere Kadrell-Instanz mit eigenen Sessions, Gruppen und Einstellungen. Ohne Namen gilt wie bisher das Standardprofil, bestehende Daten bleiben unverändert. Ein neues Profil übernimmt die Einstellungen des Standardprofils.
+- Feature: „Neue Instanz mit temporärem Profil“ im App-Menü öffnet ein Wegwerfprofil, das beim Beenden spurlos verschwindet.
+- Änderung: Nur noch eine Instanz pro Profil statt einer Instanz insgesamt. Das Fenster zeigt den Profilnamen im Titel.
+
 ## 1.32.2 (2026-09-16)
 
 - Fix: Der Schieberegler für die UI-Größe übernimmt den Wert erst beim Loslassen, der Einstellungsdialog springt beim Ziehen nicht mehr mit.

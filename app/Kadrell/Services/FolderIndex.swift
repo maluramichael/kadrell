@@ -18,7 +18,7 @@ final class FolderIndex {
     init(directory: URL = SessionRegistry.defaultURL.deletingLastPathComponent()) {
         reposURL = directory.appendingPathComponent("folders.json")
         if let d = try? Data(contentsOf: reposURL), let r = try? JSONDecoder().decode([String].self, from: d) { repos = r }
-        if let d = UserDefaults.standard.data(forKey: Self.usesKey), let u = try? JSONDecoder().decode([String: Use].self, from: d) { uses = u }
+        if let d = Profile.defaults.data(forKey: Self.usesKey), let u = try? JSONDecoder().decode([String: Use].self, from: d) { uses = u }
     }
 
     func recordUse(_ path: String) {
@@ -27,7 +27,7 @@ final class FolderIndex {
         u.count += 1
         u.last = Date().timeIntervalSince1970
         uses[p] = u
-        if let d = try? JSONEncoder().encode(uses) { UserDefaults.standard.set(d, forKey: Self.usesKey) }
+        if let d = try? JSONEncoder().encode(uses) { Profile.defaults.set(d, forKey: Self.usesKey) }
     }
 
     /// Neu einlesen, ohne zu warten: bis der Scan fertig ist, gilt der gespeicherte Stand. `then` läuft danach.

@@ -17,14 +17,14 @@ final class WorkspaceView: NSView {
     }
     /// Für „zuletzt fokussierte Kachel“ (tmux M-Tab).
     private var lastFocused: String?
-    private(set) var mode: LayoutMode = LayoutMode(rawValue: UserDefaults.standard.string(forKey: "workspace.mode") ?? "") ?? .grid
+    private(set) var mode: LayoutMode = LayoutMode(rawValue: Profile.defaults.string(forKey: "workspace.mode") ?? "") ?? .grid
     /// Zoom: nur die Fokus-Kachel, bildschirmfüllend, die Auswahl bleibt.
     private(set) var zen = false
     /// ⌥J/⌥K: eine Session aus dem Baum vorübergehend allein zeigen. Auswahl und Fokus bleiben unangetastet.
     private(set) var preview: String?
     var attach: AttachManager?
     /// Auto-Modus: aus der Auswahl nur wartende bzw. arbeitende Sessions zeigen (Einstellungen).
-    private(set) var auto = UserDefaults.standard.bool(forKey: "workspace.auto")
+    private(set) var auto = Profile.defaults.bool(forKey: "workspace.auto")
     /// Passt eine Session nicht mehr, bleibt ihre Kachel bis zu diesem Zeitpunkt stehen.
     private var linger: [String: CFTimeInterval] = [:]
     private var lastMatching: Set<String> = []
@@ -63,7 +63,7 @@ final class WorkspaceView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        selected = UserDefaults.standard.stringArray(forKey: "workspace.selected") ?? []
+        selected = Profile.defaults.stringArray(forKey: "workspace.selected") ?? []
         focused = selected.first
         pulseTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -204,7 +204,7 @@ final class WorkspaceView: NSView {
 
     func toggleAuto() {
         auto.toggle()
-        UserDefaults.standard.set(auto, forKey: "workspace.auto")
+        Profile.defaults.set(auto, forKey: "workspace.auto")
         linger = [:]
         lastMatching = []
         zen = false
@@ -254,7 +254,7 @@ final class WorkspaceView: NSView {
 
     func setMode(_ m: LayoutMode) {
         mode = m
-        UserDefaults.standard.set(m.rawValue, forKey: "workspace.mode")
+        Profile.defaults.set(m.rawValue, forKey: "workspace.mode")
         relayout()
         focusTerminal()
     }
@@ -272,7 +272,7 @@ final class WorkspaceView: NSView {
         selected = selected.enumerated().sorted { (order[$0.1] ?? .max, $0.0) < (order[$1.1] ?? .max, $1.0) }.map(\.1)
     }
 
-    private func persist() { UserDefaults.standard.set(selected, forKey: "workspace.selected") }
+    private func persist() { Profile.defaults.set(selected, forKey: "workspace.selected") }
 
     private func focusTerminal() {
         guard let f = focused, let t = attach?.terminal(for: f), t.superview != nil else { window?.makeFirstResponder(self); return }

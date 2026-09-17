@@ -18,6 +18,22 @@ Mac-App, Aufbau und Build: `app/README.md`.
 
 Die Version steht in der App unter Einstellungen (⌘,) und im About (F1).
 
+## Testen an der laufenden App: immer ein frisches Profil
+
+Michaels eigenes Kadrell (Standardprofil) nie beenden, neu starten oder dessen Daten anfassen. Zum Testen den Debug-Build
+selbst starten, immer mit frischem Temp-Profil:
+
+```bash
+open -n app/build/Build/Products/Debug/Kadrell.app --args --profile tmp
+```
+
+- `tmp` legt Sessions, Gruppen, Socket und Lock in `$TMPDIR/kadrell-tmp-<pid>/`, übernimmt die Einstellungen des
+  Standardprofils (ohne Auswahl) und löscht beim Beenden alles wieder. Keine Hintergrund-Sessions übernehmen.
+- Fernsteuern über den Socket des Profils: `KADRELL_SOCKET=$TMPDIR/kadrell-tmp-<pid>/kadrell.sock app/build/Build/Products/Debug/Kadrell.app/Contents/MacOS/Kadrell ls`.
+- Beenden nur die eigene Testinstanz: `kill -TERM <pid>` (pid aus `/bin/ps -axo pid=,args= | grep "profile tmp"`).
+- Benannte Profile (`--profile <name>`) bleiben unter `~/Library/Application Support/de.malura.kadrell/profiles/<name>/`
+  liegen, zum Testen deshalb nicht verwenden.
+
 ## Release (kein App Store)
 
 Vertrieb per Developer ID und Notarisierung, Download über https://kadrell.malura.de. Der Mac App Store

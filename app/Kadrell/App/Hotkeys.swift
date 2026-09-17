@@ -149,7 +149,7 @@ enum Hotkeys {
     /// Gespeichert werden nur Abweichungen vom Default; "" heißt bewusst ohne Kürzel.
     static var current: [HotkeyAction: Hotkey] {
         get {
-            let saved = UserDefaults.standard.dictionary(forKey: defaultsKey) as? [String: String] ?? [:]
+            let saved = Profile.defaults.dictionary(forKey: defaultsKey) as? [String: String] ?? [:]
             var out: [HotkeyAction: Hotkey] = [:]
             for a in HotkeyAction.allCases {
                 if let s = saved[a.rawValue] { out[a] = Hotkey(string: s) } else { out[a] = a.defaultKey }
@@ -159,7 +159,7 @@ enum Hotkeys {
         set {
             var saved: [String: String] = [:]
             for a in HotkeyAction.allCases where newValue[a] != a.defaultKey { saved[a.rawValue] = newValue[a]?.string ?? "" }
-            UserDefaults.standard.set(saved, forKey: defaultsKey)
+            Profile.defaults.set(saved, forKey: defaultsKey)
         }
     }
 

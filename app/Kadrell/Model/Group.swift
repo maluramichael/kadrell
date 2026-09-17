@@ -20,10 +20,7 @@ final class GroupStore {
     private(set) var groups: [Group] = []
     let url: URL
 
-    static var defaultURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("de.malura.kadrell/groups.json")
-    }
+    static var defaultURL: URL { Profile.directory.appendingPathComponent("groups.json") }
 
     init(url: URL = GroupStore.defaultURL) {
         self.url = url
