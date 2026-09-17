@@ -875,13 +875,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attach?.refreshSnapshots()
         var src = PaletteWindow.Source()
         let sessions = workspace.sessions
-        src.sessions = store.groups.flatMap { g in g.sessionIds.compactMap { sessions[$0] }.map { ($0, group: g, lines: attach?.lines(for: $0.id) ?? []) } }
+        let bufferSessions = store.groups.flatMap { g in g.sessionIds.compactMap { sessions[$0] }.map { ($0, group: g, lines: attach?.lines(for: $0.id) ?? []) } }
+        src.sessions = bufferSessions
         src.groups = store.groups
-        src.buffers = src.sessions.compactMap { s, g, _ in
-            attach.terminal(for: s.id).map { (s, group: g, lines: String(decoding: $0.getBufferAsData(kind: .active), as: UTF8.self).components(separatedBy: "\n")) }
+        // getBufferAsData + UTF-8-Dekodierung je Terminal kostet spürbar: erst holen, wenn die `/`-Suche sie
+        // tatsächlich braucht (siehe `PaletteWindow.terminalMatches`), nicht bei jedem Öffnen der Palette.
+        src.buffers = { [weak self] in
+            guard let self else { return [] }
+            return bufferSessions.compactMap { s, g, _ in
+                self.attach.terminal(for: s.id).map { (s, group: g, lines: String(decoding: $0.getBufferAsData(kind: .active), as: UTF8.self).components(separatedBy: "\n")) }
+            }
         }
         src.onFindInSession = { [weak self] key, term, index in self?.findInSession(key, term: term, index: index) }
-        src.hosts = SSHConfig.recent + SSHConfig.hosts().filter { !SSHConfig.recent.contains($0) }
+        // Liest `~/.ssh/config` samt Include-Globs: erst beim `@`-Modus, nicht bei jedem Öffnen.
+        src.hosts = { SSHConfig.recent + SSHConfig.hosts().filter { !SSHConfig.recent.contains($0) } }
         src.onConnect = { [weak self] host, name in self?.startRemote(host: host, tmuxSession: name) }
         src.remoteSessions = { [weak self] host, done in
             guard let env = self?.attach.cli.environment else { done(nil); return }

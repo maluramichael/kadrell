@@ -55,7 +55,9 @@ enum Worktree {
     }
 
     /// Datei-/Notebook-Pfade als Präfix, Bash-Kommandos (auch `cd <pfad>`) als Teilstring gegen den Worktree-Pfad.
-    private static func match(_ candidate: String, in worktrees: [Entry]) -> Entry? {
+    /// Intern statt `private`: `SessionRegistry` prüft damit, ob ein neuer Kandidat noch von der gecachten
+    /// Liste abgedeckt ist, ohne für jede Kandidatenänderung `git worktree list` neu aufzurufen.
+    static func match(_ candidate: String, in worktrees: [Entry]) -> Entry? {
         if candidate.hasPrefix("/") { return longestPrefixMatch(candidate, in: worktrees) }
         return worktrees.filter { candidate.contains($0.path) }.max { $0.path.count < $1.path.count }
     }

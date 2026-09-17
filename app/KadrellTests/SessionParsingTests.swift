@@ -307,4 +307,43 @@ final class TranscriptTests: XCTestCase {
         let candidates = Transcript.toolCandidates(jsonl: Data(jsonl.utf8))
         XCTAssertEqual(candidates, ["cd /repo-wt-1 && npm test", "/repo-wt-1/src/x.php", "ls"])
     }
+
+    /// `refresh` liest bei gewachsener Datei nur die neuen Bytes: neuer Text/Tool-Aufruf setzt sich durch, wächst
+    /// die Datei aber ohne neue Assistant-Zeile, bleiben Text und Kandidaten des Caches stehen statt zu verschwinden.
+    func testRefreshReadsOnlyGrowthAndKeepsOldWhereNothingNew() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jsonl")
+        try Data((#"{"type":"assistant","message":{"content":[{"type":"text","text":"erste Antwort"}]}}"# + "\n").utf8).write(to: path)
+        defer { try? FileManager.default.removeItem(at: path) }
+        func size() -> UInt64 { UInt64((try? FileManager.default.attributesOfItem(atPath: path.path)[.size] as? Int) ?? 0) }
+        let cache = ["s1": Transcript.Entry(path: path.path, size: size(), text: "erste Antwort", toolCandidates: ["ls"])]
+
+        let h1 = try FileHandle(forWritingTo: path)
+        h1.seekToEndOfFile()
+        h1.write(Data((#"{"type":"assistant","message":{"content":[{"type":"text","text":"zweite Antwort"},{"type":"tool_use","name":"Bash","input":{"command":"pwd"}}]}}"# + "\n").utf8))
+        try h1.close()
+        let grown = Transcript.refresh(["s1"], configDir: "/nonexistent", cache: cache, wantText: true)
+        XCTAssertEqual(grown["s1"]?.text, "zweite Antwort")
+        XCTAssertEqual(grown["s1"]?.toolCandidates, ["pwd", "ls"])
+        XCTAssertEqual(grown["s1"]?.size, size())
+
+        let h2 = try FileHandle(forWritingTo: path)
+        h2.seekToEndOfFile()
+        h2.write(Data((#"{"type":"user","message":{"content":"ok"}}"# + "\n").utf8))
+        try h2.close()
+        let noNewAssistant = Transcript.refresh(["s1"], configDir: "/nonexistent", cache: grown, wantText: true)
+        XCTAssertEqual(noNewAssistant["s1"]?.text, "zweite Antwort")
+        XCTAssertEqual(noNewAssistant["s1"]?.toolCandidates, ["pwd", "ls"])
+        XCTAssertEqual(noNewAssistant["s1"]?.size, size())
+
+        // Unveränderte Größe: der Cache-Eintrag geht unverändert durch, ohne die Datei erneut zu lesen.
+        let unchanged = Transcript.refresh(["s1"], configDir: "/nonexistent", cache: noNewAssistant, wantText: true)
+        XCTAssertEqual(unchanged["s1"]?.text, "zweite Antwort")
+
+        // `wantText: false` (Settings.showLastMessage aus): kein Text, Tool-Kandidaten bleiben für die Worktree-Erkennung.
+        // Bekannter Pfad über eine leere Basis (size 0), damit der Test nicht den echten `~/.claude/projects`-Scan auslöst.
+        let freshCache = ["s1": Transcript.Entry(path: path.path, size: 0, text: nil, toolCandidates: [])]
+        let noText = Transcript.refresh(["s1"], configDir: "/nonexistent", cache: freshCache, wantText: false)
+        XCTAssertNil(noText["s1"]?.text)
+        XCTAssertEqual(noText["s1"]?.toolCandidates, ["pwd"])
+    }
 }

@@ -37,6 +37,8 @@ final class WorkspaceView: NSView {
     /// Ziehbare Grenzen der aktuellen Vorlage und die Felder der Kacheln, beides aus `relayout`.
     private var dividers: [SplitLine] = []
     private var tileFrames: [String: CGRect] = [:]
+    /// Session je Kachel beim letzten `relayout`: nur wer sich seither ändert (oder neu erscheint), wird invalidiert.
+    private var lastCellSession: [String: Session] = [:]
     private var draggedDivider: SplitLine?
     /// Scrollen: seitlicher Versatz der Spalten; nach Fokuswechsel oder neuer Breite rückt die Fokus-Kachel ins Bild.
     private var scrollX: CGFloat = 0
@@ -450,32 +452,15 @@ final class WorkspaceView: NSView {
         tileFrames = frames
         // Scrollen: Kacheln ganz außerhalb verstecken und ihre Terminals aushängen, Nachbarn per Pfeil finden sie trotzdem.
         if mode == .scroll { frames = frames.filter { $0.value.intersects(bounds) } }
+        let multiVisible = visible.count > 1, manyTiles = tiles.count > 1
         for (key, v) in cells {
             guard let f = frames[key], let s = sessions[key] else {
                 v.isHidden = true
                 unmountTerminal(for: key)
+                lastCellState[key] = nil
                 continue
             }
-            v.isHidden = false
-            v.headerHidden = mode == .stack && !zen && preview == nil
-            if v.frame != f { v.frame = f }
-            let g = group(forSession: key)
-            v.groupName = g?.name ?? ""
-            v.groupColor = Theme.group(g?.color ?? "#6c7086")
-            // Sync: alle Kacheln bekommen Eingaben, also sehen auch alle ausgewählt aus.
-            v.focused = (focused == key || sync) && visible.count > 1
-            v.zoomed = zen && tiles.count > 1
-            v.dropTarget = dragging && dropTarget == key
-            v.hovered = hoveredCell == key
-            v.attached = attach?.isAttached(key) ?? false
-            v.ended = attach?.isEnded(key) ?? false
-            v.previewing = preview == key
-            v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
-            v.lines = attach?.lines(for: key) ?? []
-            v.pulse = pulse
-            mountTerminal(for: key, in: v, session: s)
-            v.elsewhere = attach?.terminal(for: key).flatMap(host).map { $0 !== self } ?? false
-            v.needsDisplay = true
+            updateCell(v, key: key, frame: f, session: s, multiVisible: multiVisible, manyTiles: manyTiles)
         }
         // Terminals nicht sichtbarer Sessions dürfen nirgends hängen.
         for (key, t) in attach?.terminals ?? [:] where frames[key] == nil && t.superview != nil { unmountTerminal(for: key) }
@@ -484,6 +469,45 @@ final class WorkspaceView: NSView {
         if refocus { focusTerminal() }
         if released { released = false; onReleaseTerminal?() }
         onChange?()
+    }
+
+    /// Sichtbarer Zustand einer Kachel, wie `updateCell` sie zuletzt gezeichnet hat: nur bei echter Änderung
+    /// (auch der Session selbst, z. B. ein neuer Status oder Titel) wird sie erneut invalidiert, nicht bei jedem
+    /// Poll (eine neue Nachricht in Session A soll nicht alle anderen Kacheln neu zeichnen).
+    private struct CellVisualState: Equatable {
+        let session: Session, frame: CGRect, headerHidden: Bool, groupName: String
+        let focused: Bool, zoomed: Bool, dropTarget: Bool, hovered: Bool
+        let attached: Bool, ended: Bool, previewing: Bool, keyboardFocus: Bool
+        let lines: [String], elsewhere: Bool
+    }
+    private var lastCellState: [String: CellVisualState] = [:]
+
+    private func updateCell(_ v: CellView, key: String, frame f: CGRect, session s: Session, multiVisible: Bool, manyTiles: Bool) {
+        v.isHidden = false
+        v.headerHidden = mode == .stack && !zen && preview == nil
+        if v.frame != f { v.frame = f }
+        let g = group(forSession: key)
+        v.groupName = g?.name ?? ""
+        v.groupColor = Theme.group(g?.color ?? "#6c7086")
+        // Sync: alle Kacheln bekommen Eingaben, also sehen auch alle ausgewählt aus.
+        v.focused = (focused == key || sync) && multiVisible
+        v.zoomed = zen && manyTiles
+        v.dropTarget = dragging && dropTarget == key
+        v.hovered = hoveredCell == key
+        v.attached = attach?.isAttached(key) ?? false
+        v.ended = attach?.isEnded(key) ?? false
+        v.previewing = preview == key
+        v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
+        v.lines = attach?.lines(for: key) ?? []
+        v.pulse = pulse
+        mountTerminal(for: key, in: v, session: s)
+        v.elsewhere = attach?.terminal(for: key).flatMap(host).map { $0 !== self } ?? false
+        let state = CellVisualState(session: s, frame: v.frame, headerHidden: v.headerHidden, groupName: v.groupName,
+                                    focused: v.focused, zoomed: v.zoomed, dropTarget: v.dropTarget, hovered: v.hovered,
+                                    attached: v.attached, ended: v.ended, previewing: v.previewing, keyboardFocus: v.keyboardFocus,
+                                    lines: v.lines, elsewhere: v.elsewhere)
+        if lastCellState[key] != state { v.needsDisplay = true }
+        lastCellState[key] = state
     }
 
     private func mountTerminal(for key: String, in cell: CellView, session: Session) {
@@ -513,7 +537,15 @@ final class WorkspaceView: NSView {
         relayout()
     }
 
+    /// Punkt einer Stack-Zeile in Bounds-Koordinaten, wie `drawStackRow` ihn zeichnet (dort in lokalen,
+    /// unskalierten Koordinaten relativ zu `r`): für gezieltes `setNeedsDisplay` ohne die ganze Fläche.
+    private func stackDotRect(_ r: CGRect) -> CGRect {
+        CGRect(x: r.minX + 12 * Theme.scale, y: r.midY - 4 * Theme.scale, width: 8 * Theme.scale, height: 8 * Theme.scale)
+    }
+
     private func tick() {
+        // Fenster verdeckt/versteckt: nichts zu zeichnen, kein Puls nötig.
+        guard window?.occlusionState.contains(.visible) == true else { return }
         // Klick in ein Terminal macht es still zum First Responder: Fokus und Rahmen nachziehen.
         if window?.firstResponder !== lastFirstResponder {
             lastFirstResponder = window?.firstResponder
@@ -536,7 +568,11 @@ final class WorkspaceView: NSView {
             v.pulse = pulse
             if !v.headerHidden { v.setNeedsDisplay(v.dotRect) }
         }
-        if !stackRows.isEmpty { needsDisplay = true }
+        // Stack-Zeilen zeichnet die Fläche selbst: nur die Punkte laufender Sessions pulsieren, nicht die ganze
+        // Fläche samt Hintergrundbild (siehe `drawBackground`).
+        for (r, key) in stackRows where sessions[key]?.status == .running && (attach?.isAttached(key) ?? false) {
+            setNeedsDisplay(stackDotRect(r).insetBy(dx: -1, dy: -1))
+        }
         let now = CACurrentMediaTime()
         if linger.values.contains(where: { $0 <= now }) { relayout() }
     }
