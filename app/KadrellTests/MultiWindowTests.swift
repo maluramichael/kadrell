@@ -32,12 +32,12 @@ final class MultiWindowTests: XCTestCase {
         }
         guard let t = attach.terminal(for: id) else { return XCTFail("kein Terminal") }
         XCTAssertTrue(t.superview?.superview === a)
-        XCTAssertTrue(cell(b).elsewhere)
+        XCTAssertTrue(cell(b).state.elsewhere)
 
         b.setFocus(id)
         XCTAssertTrue(t.superview?.superview === b)
-        XCTAssertTrue(cell(a).elsewhere)
-        XCTAssertFalse(cell(b).elsewhere)
+        XCTAssertTrue(cell(a).state.elsewhere)
+        XCTAssertFalse(cell(b).state.elsewhere)
 
         var released = false
         b.onReleaseTerminal = { released = true }
@@ -45,6 +45,6 @@ final class MultiWindowTests: XCTestCase {
         XCTAssertTrue(released)
         a.relayout()
         XCTAssertTrue(t.superview?.superview === a)
-        XCTAssertFalse(cell(a).elsewhere)
+        XCTAssertFalse(cell(a).state.elsewhere)
     }
 }

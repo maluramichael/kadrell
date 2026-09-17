@@ -5,16 +5,17 @@ final class TilingTests: XCTestCase {
     let b = CGRect(x: 0, y: 0, width: 1000, height: 600)
 
     func testGridColumnsAndFill() {
-        XCTAssertEqual(Tiling.grid(count: 0, in: b), [])
-        XCTAssertEqual(Tiling.grid(count: 1, in: b), [b])
-        let five = Tiling.grid(count: 5, in: b)   // 3 Spalten, 2 Zeilen
+        func grid(_ n: Int, gap: CGFloat = 6) -> [CGRect] { Tiling.layout(.grid, count: n, in: b, gap: gap).frames }
+        XCTAssertEqual(grid(0), [])
+        XCTAssertEqual(grid(1), [b])
+        let five = grid(5)   // 3 Spalten, 2 Zeilen
         XCTAssertEqual(five.count, 5)
         XCTAssertEqual(five[0].minX, 0); XCTAssertEqual(five[2].maxX, 1000)
-        XCTAssertEqual(five[1].minX, five[0].maxX + Tiling.gap)
-        XCTAssertEqual(five[3].minY, five[0].maxY + Tiling.gap)
+        XCTAssertEqual(five[1].minX, five[0].maxX + 6)
+        XCTAssertEqual(five[3].minY, five[0].maxY + 6)
         XCTAssertEqual(five[3].minX, 0); XCTAssertEqual(five[4].maxY, 600)
         for r in five { XCTAssertEqual(r.minX, r.minX.rounded()); XCTAssertEqual(r.width, r.width.rounded()) }
-        let wide = Tiling.grid(count: 2, in: b, gap: 40)
+        let wide = grid(2, gap: 40)
         XCTAssertEqual(wide[1].minX, wide[0].maxX + 40); XCTAssertEqual(wide[1].maxX, 1000)
     }
 

@@ -37,8 +37,6 @@ final class WorkspaceView: NSView {
     /// Ziehbare Grenzen der aktuellen Vorlage und die Felder der Kacheln, beides aus `relayout`.
     private var dividers: [SplitLine] = []
     private var tileFrames: [String: CGRect] = [:]
-    /// Session je Kachel beim letzten `relayout`: nur wer sich seither ändert (oder neu erscheint), wird invalidiert.
-    private var lastCellSession: [String: Session] = [:]
     private var draggedDivider: SplitLine?
     /// Scrollen: seitlicher Versatz der Spalten; nach Fokuswechsel oder neuer Breite rückt die Fokus-Kachel ins Bild.
     private var scrollX: CGFloat = 0
@@ -74,6 +72,7 @@ final class WorkspaceView: NSView {
     /// `lastError` ist genau das fehlende Binary: der Leerzustand zeigt den Installationsbefehl statt nur den Pfad.
     var lastErrorIsMissingBinary = false
     var onRecheckCLI: (() -> Void)?
+    /// Ungenutzt: Kopieren und Doku-Link führt der Leerzustand selbst aus. Fällt mit der Verdrahtung im AppDelegate weg.
     var onCopyInstallCommand: (() -> Void)?
     var onOpenInstallDocs: (() -> Void)?
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
@@ -113,7 +112,7 @@ final class WorkspaceView: NSView {
     func reload(groups: [Group], sessions: [Session]) {
         self.groups = groups
         // uniquingKeysWith statt uniqueKeysWithValues: eine doppelte Id (kaputte sessions.json, Handbearbeitung)
-        // soll nicht bei jedem Start dasselbe Trap auslösen, siehe AppDelegate+Control.swift:161.
+        // soll nicht bei jedem Start dasselbe Trap auslösen, siehe `listOutput` in AppDelegate+Control.swift.
         self.sessions = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         selected.removeAll { self.sessions[$0] == nil }
         if let p = preview, self.sessions[p] == nil { preview = nil }
@@ -124,15 +123,7 @@ final class WorkspaceView: NSView {
             cells[k] = nil
             NSAnimationContext.runAnimationGroup({ $0.duration = 0.15; v.animator().alphaValue = 0 }, completionHandler: { v.removeFromSuperview() })
         }
-        for id in selected {
-            let v = cells[id] ?? CellView(session: self.sessions[id]!)
-            v.session = self.sessions[id]!
-            if v.superview == nil {
-                addSubview(v)
-                if loaded { v.alphaValue = 0; NSAnimationContext.runAnimationGroup { $0.duration = 0.18; v.animator().alphaValue = 1 } }
-            }
-            cells[id] = v
-        }
+        for id in selected { ensureCell(id, fadeIn: true)?.state.session = self.sessions[id]! }
         loaded = true
         relayout()
     }
@@ -167,11 +158,7 @@ final class WorkspaceView: NSView {
         sortSelected()
         let shown = tiles
         for (k, v) in cells where !selected.contains(k) && !shown.contains(k) { v.removeFromSuperview(); cells[k] = nil }
-        for id in selected where cells[id] == nil {
-            let v = CellView(session: sessions[id]!)
-            addSubview(v)
-            cells[id] = v
-        }
+        for id in selected { ensureCell(id) }
         // Nur die angeklickten starten sofort, auch beendete; andere beendete bleiben stehen.
         for id in ids where selected.contains(id) { attach?.attachNow(sessions[id]!) }
         persist()
@@ -216,35 +203,40 @@ final class WorkspaceView: NSView {
     }
 
     /// ⌃⌥-Pfeile wie tmux `resize-pane`: die Trennlinie an der Fokus-Kachel wandert 5 % in Pfeilrichtung.
-    /// Bevorzugt die Linie auf der Seite des Pfeils, sonst die gegenüberliegende.
+    /// Bevorzugt die Linie auf der Seite des Pfeils, sonst die gegenüberliegende. Beim Scrollen die Spaltenbreite.
     func resizeFocused(_ d: Tiling.Direction) {
-        guard let f = focused, let frame = tileFrames[f], !zen, preview == nil else { NSSound.beep(); return }
-        if mode == .scroll {
-            // Scrollen: ← / → schaltet die Breite der Fokus-Spalte eine Stufe (⅓ ½ ⅔) schmaler bzw. breiter.
-            guard d == .left || d == .right, let i = tiles.firstIndex(of: f) else { NSSound.beep(); return }
-            var v = Settings.layoutRatios("scroll.widths", 0) ?? []
-            while v.count <= i { v.append(0.5) }
-            let w = Tiling.scrollWidths, cur = w.indices.min { abs(w[$0] - v[i]) < abs(w[$1] - v[i]) }!, next = cur + (d == .right ? 1 : -1)
-            guard w.indices.contains(next) else { NSSound.beep(); return }
-            v[i] = w[next]
-            Settings.setLayoutRatios("scroll.widths", v)
-            revealFocus = true
-            relayout()
-            return
-        }
+        guard let f = focused, let frame = tileFrames[f], !zen, preview == nil,
+              mode == .scroll ? resizeScrollColumn(f, d) : resizeDivider(at: frame, d) else { NSSound.beep(); return }
+    }
+
+    /// Scrollen: ← / → schaltet die Breite der Fokus-Spalte eine Stufe (⅓ ½ ⅔) schmaler bzw. breiter. false: nichts zu tun.
+    private func resizeScrollColumn(_ key: String, _ d: Tiling.Direction) -> Bool {
+        guard d == .left || d == .right, let i = tiles.firstIndex(of: key) else { return false }
+        var v = Settings.layoutRatios("scroll.widths", 0) ?? []
+        while v.count <= i { v.append(0.5) }
+        let w = Tiling.scrollWidths, cur = w.indices.min { abs(w[$0] - v[i]) < abs(w[$1] - v[i]) }!, next = cur + (d == .right ? 1 : -1)
+        guard w.indices.contains(next) else { return false }
+        v[i] = w[next]
+        Settings.setLayoutRatios("scroll.widths", v)
+        revealFocus = true
+        relayout()
+        return true
+    }
+
+    /// Schiebt die Trennlinie an `frame` in Pfeilrichtung. false: keine passende Linie.
+    private func resizeDivider(at frame: CGRect, _ d: Tiling.Direction) -> Bool {
         let vertical = d == .left || d == .right, forward = d == .right || d == .down
+        let (lo, hi) = vertical ? (frame.minX, frame.maxX) : (frame.minY, frame.maxY)
         let near = dividers.filter { div in
-            guard div.vertical == vertical else { return false }
-            return vertical ? div.rect.minY < frame.maxY && div.rect.maxY > frame.minY : div.rect.minX < frame.maxX && div.rect.maxX > frame.minX
+            div.vertical == vertical && (vertical ? div.rect.minY < frame.maxY && div.rect.maxY > frame.minY : div.rect.minX < frame.maxX && div.rect.maxX > frame.minX)
         }
         let mid = { (div: SplitLine) in vertical ? div.rect.midX : div.rect.midY }
-        let far = vertical ? (forward ? frame.maxX : frame.minX) : (forward ? frame.maxY : frame.minY)
-        let other = vertical ? (forward ? frame.minX : frame.maxX) : (forward ? frame.minY : frame.maxY)
         let reach = CGFloat(Settings.tileGap) + 10
-        guard let div = near.first(where: { abs(mid($0) - far) <= reach }) ?? near.first(where: { abs(mid($0) - other) <= reach }) else { NSSound.beep(); return }
+        let at = { (edge: CGFloat) in near.first { abs(mid($0) - edge) <= reach } }
+        guard let div = at(forward ? hi : lo) ?? at(forward ? lo : hi) else { return false }
         let step = (vertical ? div.span.width : div.span.height) * 0.05 * (forward ? 1 : -1)
-        let p = vertical ? CGPoint(x: mid(div) + step, y: 0) : CGPoint(x: 0, y: mid(div) + step)
-        moveDivider(div, to: p)
+        moveDivider(div, to: vertical ? CGPoint(x: mid(div) + step, y: 0) : CGPoint(x: 0, y: mid(div) + step))
+        return true
     }
 
     private func moveDivider(_ d: SplitLine, to p: CGPoint) {
@@ -300,11 +292,7 @@ final class WorkspaceView: NSView {
         let old = preview
         preview = key.flatMap { sessions[$0] == nil ? nil : $0 }
         if let o = old, o != preview, !selected.contains(o), !tiles.contains(o) { cells[o]?.removeFromSuperview(); cells[o] = nil }
-        if let p = preview, cells[p] == nil {
-            let v = CellView(session: sessions[p]!)
-            addSubview(v)
-            cells[p] = v
-        }
+        if let p = preview { ensureCell(p) }
         relayout()
     }
 
@@ -408,63 +396,21 @@ final class WorkspaceView: NSView {
     // MARK: Layout
 
     func relayout() {
-        let gap = CGFloat(Settings.tileGap)
-        let inset = bounds.insetBy(dx: gap, dy: gap)
-        var frames: [String: CGRect] = [:]
-        stackRows = []
-        dividers = []
         updateLinger()
         let tiles = tiles
-        // Auto-Modus: ist die Fokus-Kachel weg, bekommt eine neu aufgetauchte (sonst die erste) den Fokus.
-        var refocus = false
-        if auto, preview == nil, let first = tiles.first, !(focused.map(tiles.contains) ?? false) {
-            focused = tiles.first { !lastTiles.contains($0) } ?? first
-            refocus = true
-        }
-        lastTiles = tiles
+        let refocus = autoRefocus(tiles)
         // Auto-Modus über alle Sessions: auch nicht ausgewählte bekommen eine Kachel, sobald sie passen.
-        for id in tiles where cells[id] == nil {
-            guard let s = sessions[id] else { continue }
-            let v = CellView(session: s)
-            addSubview(v)
-            cells[id] = v
-            if loaded { v.alphaValue = 0; NSAnimationContext.runAnimationGroup { $0.duration = 0.18; v.animator().alphaValue = 1 } }
-        }
-        let visible: [String]
-        if let p = preview {
-            visible = [p]
-            frames[p] = inset
-        } else if zen, let f = focused, tiles.contains(f) {
-            visible = [f]
-            frames[f] = inset
-        } else if mode != .stack {
-            visible = tiles
-            let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, splits: Settings.customSplits, ratios: Settings.layoutRatios)
-            var laid = t.frames
-            if mode == .scroll {
-                let reveal = revealFocus ? focused.flatMap { tiles.firstIndex(of: $0) }.map { laid[$0] } : nil
-                scrollX = Tiling.scrollOffset(scrollX, reveal: reveal, contentMaxX: laid.last?.maxX ?? 0, in: inset)
-                laid = laid.map { $0.offsetBy(dx: -scrollX, dy: 0) }
-            }
-            for (id, r) in zip(tiles, laid) { frames[id] = r }
-            dividers = t.dividers
-        } else {
-            let active = focused.flatMap { tiles.firstIndex(of: $0) } ?? 0
-            let (rows, body) = Tiling.stack(count: tiles.count, active: active, in: inset, rowHeight: (Tiling.rowHeight * Theme.scale).rounded())
-            stackRows = Array(zip(rows, tiles))
-            visible = tiles.isEmpty ? [] : [tiles[active]]
-            if !tiles.isEmpty { frames[tiles[active]] = body }
-        }
+        for id in tiles { ensureCell(id, fadeIn: true) }
+        var frames = layoutFrames(tiles)
         revealFocus = false
         tileFrames = frames
+        let multiVisible = frames.count > 1, manyTiles = tiles.count > 1
         // Scrollen: Kacheln ganz außerhalb verstecken und ihre Terminals aushängen, Nachbarn per Pfeil finden sie trotzdem.
         if mode == .scroll { frames = frames.filter { $0.value.intersects(bounds) } }
-        let multiVisible = visible.count > 1, manyTiles = tiles.count > 1
         for (key, v) in cells {
             guard let f = frames[key], let s = sessions[key] else {
                 v.isHidden = true
                 unmountTerminal(for: key)
-                lastCellState[key] = nil
                 continue
             }
             updateCell(v, key: key, frame: f, session: s, multiVisible: multiVisible, manyTiles: manyTiles)
@@ -478,48 +424,77 @@ final class WorkspaceView: NSView {
         onChange?()
     }
 
-    /// Sichtbarer Zustand einer Kachel, wie `updateCell` sie zuletzt gezeichnet hat: nur bei echter Änderung
-    /// (auch der Session selbst, z. B. ein neuer Status oder Titel) wird sie erneut invalidiert, nicht bei jedem
-    /// Poll (eine neue Nachricht in Session A soll nicht alle anderen Kacheln neu zeichnen).
-    private struct CellVisualState: Equatable {
-        let session: Session, frame: CGRect, headerHidden: Bool, groupName: String
-        let focused: Bool, zoomed: Bool, dropTarget: Bool, hovered: Bool
-        let attached: Bool, ended: Bool, previewing: Bool, keyboardFocus: Bool
-        let lines: [String], elsewhere: Bool, exitCode: Int32?, missingFolder: Bool
+    /// Auto-Modus: ist die Fokus-Kachel weg, bekommt eine neu aufgetauchte (sonst die erste) den Fokus. true: umfokussiert.
+    private func autoRefocus(_ tiles: [String]) -> Bool {
+        defer { lastTiles = tiles }
+        guard auto, preview == nil, let first = tiles.first, !(focused.map(tiles.contains) ?? false) else { return false }
+        focused = tiles.first { !lastTiles.contains($0) } ?? first
+        return true
     }
-    private var lastCellState: [String: CellVisualState] = [:]
 
+    /// Felder der sichtbaren Kacheln: Vorschau und Zoom füllen die Fläche, sonst Vorlage oder Stack.
+    /// Setzt dabei `dividers`, `stackRows` und beim Scrollen den Versatz.
+    private func layoutFrames(_ tiles: [String]) -> [String: CGRect] {
+        let gap = CGFloat(Settings.tileGap)
+        let inset = bounds.insetBy(dx: gap, dy: gap)
+        stackRows = []
+        dividers = []
+        if let p = preview { return [p: inset] }
+        if zen, let f = focused, tiles.contains(f) { return [f: inset] }
+        if mode == .stack {
+            let active = focused.flatMap { tiles.firstIndex(of: $0) } ?? 0
+            let (rows, body) = Tiling.stack(count: tiles.count, active: active, in: inset, rowHeight: (Tiling.rowHeight * Theme.scale).rounded())
+            stackRows = Array(zip(rows, tiles))
+            return tiles.isEmpty ? [:] : [tiles[active]: body]
+        }
+        let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, splits: Settings.customSplits, ratios: Settings.layoutRatios)
+        dividers = t.dividers
+        var laid = t.frames
+        if mode == .scroll {
+            let reveal = revealFocus ? focused.flatMap { tiles.firstIndex(of: $0) }.map { laid[$0] } : nil
+            scrollX = Tiling.scrollOffset(scrollX, reveal: reveal, contentMaxX: laid.last?.maxX ?? 0, in: inset)
+            laid = laid.map { $0.offsetBy(dx: -scrollX, dy: 0) }
+        }
+        return Dictionary(zip(tiles, laid), uniquingKeysWith: { _, b in b })
+    }
+
+    /// Kachel für `id` anlegen, falls es sie noch nicht gibt. `fadeIn`: nach dem ersten Laden kurz einblenden.
+    @discardableResult
+    private func ensureCell(_ id: String, fadeIn: Bool = false) -> CellView? {
+        if let v = cells[id] { return v }
+        guard let s = sessions[id] else { return nil }
+        let v = CellView(session: s)
+        addSubview(v)
+        cells[id] = v
+        if fadeIn, loaded { v.alphaValue = 0; NSAnimationContext.runAnimationGroup { $0.duration = 0.18; v.animator().alphaValue = 1 } }
+        return v
+    }
+
+    private func groupColor(_ g: Group?) -> NSColor { Theme.group(g?.color ?? "#6c7086") }
+
+    /// Die Kachel zeichnet nur bei echter Änderung ihres Zustands neu (siehe `CellView.State`).
     private func updateCell(_ v: CellView, key: String, frame f: CGRect, session s: Session, multiVisible: Bool, manyTiles: Bool) {
-        v.isHidden = false
-        v.headerHidden = mode == .stack && !zen && preview == nil
-        if v.frame != f { v.frame = f }
-        let g = group(forSession: key)
-        v.groupName = g?.name ?? ""
-        v.groupColor = Theme.group(g?.color ?? "#6c7086")
-        // Sync: alle Kacheln bekommen Eingaben, also sehen auch alle ausgewählt aus.
-        v.focused = (focused == key || sync) && multiVisible
-        v.zoomed = zen && manyTiles
-        v.dropTarget = dragging && dropTarget == key
-        v.hovered = hoveredCell == key
-        v.attached = attach?.isAttached(key) ?? false
-        v.ended = attach?.isEnded(key) ?? false
-        v.exitCode = attach?.exitCode(for: key)
-        v.missingFolder = attach?.isMissingFolder(key) ?? false
-        v.previewing = preview == key
-        v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
-        v.lines = attach?.lines(for: key) ?? []
+        if v.isHidden { v.isHidden = false; v.needsDisplay = true }
+        if v.frame != f { v.frame = f; v.needsDisplay = true }
+        let g = group(forSession: key), t = attach?.terminal(for: key)
+        v.state = CellView.State(
+            session: s, groupName: g?.name ?? "", groupColor: groupColor(g),
+            // Sync: alle Kacheln bekommen Eingaben, also sehen auch alle ausgewählt aus.
+            focused: (focused == key || sync) && multiVisible,
+            keyboardFocus: t.map { $0 === window?.firstResponder } ?? false,
+            hovered: hoveredCell == key, dropTarget: dragging && dropTarget == key,
+            attached: attach?.isAttached(key) ?? false, ended: attach?.isEnded(key) ?? false,
+            exitCode: attach?.exitCode(for: key), missingFolder: attach?.isMissingFolder(key) ?? false,
+            previewing: preview == key,
+            // Vor dem Einhängen gleichwertig: `mountTerminal` holt nie ein Terminal aus einem anderen Fenster.
+            elsewhere: t.flatMap(host).map { $0 !== self } ?? false,
+            lines: attach?.lines(for: key) ?? [],
+            headerHidden: mode == .stack && !zen && preview == nil, zoomed: zen && manyTiles)
         v.pulse = pulse
-        mountTerminal(for: key, in: v, session: s)
-        v.elsewhere = attach?.terminal(for: key).flatMap(host).map { $0 !== self } ?? false
-        let state = CellVisualState(session: s, frame: v.frame, headerHidden: v.headerHidden, groupName: v.groupName,
-                                    focused: v.focused, zoomed: v.zoomed, dropTarget: v.dropTarget, hovered: v.hovered,
-                                    attached: v.attached, ended: v.ended, previewing: v.previewing, keyboardFocus: v.keyboardFocus,
-                                    lines: v.lines, elsewhere: v.elsewhere, exitCode: v.exitCode, missingFolder: v.missingFolder)
-        if lastCellState[key] != state { v.needsDisplay = true }
-        lastCellState[key] = state
+        mountTerminal(for: key, in: v)
     }
 
-    private func mountTerminal(for key: String, in cell: CellView, session: Session) {
+    private func mountTerminal(for key: String, in cell: CellView) {
         // Hängt schon in einem anderen Fenster: dort lassen, die Kachel zeigt den Hinweis (siehe `focusTerminal`).
         guard let t = attach?.terminal(for: key), host(of: t) == nil || host(of: t) === self else { return }
         if t.superview !== cell { cell.addSubview(t) }
@@ -555,27 +530,12 @@ final class WorkspaceView: NSView {
     private func tick() {
         // Fenster verdeckt/versteckt: nichts zu zeichnen, kein Puls nötig.
         guard window?.occlusionState.contains(.visible) == true else { return }
-        // Klick in ein Terminal macht es still zum First Responder: Fokus und Rahmen nachziehen.
-        if window?.firstResponder !== lastFirstResponder {
-            lastFirstResponder = window?.firstResponder
-            if let hit = cells.first(where: { attach?.terminal(for: $0.key) === window?.firstResponder }), focused != hit.key {
-                focused = hit.key
-                onActivate?(hit.key)
-                relayout()
-            } else {
-                // Klick ins schon fokussierte Terminal zählt auch als Hinsehen.
-                if let hit = cells.first(where: { attach?.terminal(for: $0.key) === window?.firstResponder }) { onActivate?(hit.key) }
-                for (key, v) in cells {
-                    let has = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
-                    if v.keyboardFocus != has { v.keyboardFocus = has; v.needsDisplay = true }
-                }
-            }
-        }
+        syncFirstResponder()
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
         pulse = Feedback.reduceMotion ? 1 : 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
         for (key, v) in cells where sessions[key]?.status == .running && !v.isHidden {
             v.pulse = pulse
-            if !v.headerHidden { v.setNeedsDisplay(v.dotRect) }
+            if !v.state.headerHidden { v.setNeedsDisplay(v.dotRect) }
         }
         // Stack-Zeilen zeichnet die Fläche selbst: nur die Punkte laufender Sessions pulsieren, nicht die ganze
         // Fläche samt Hintergrundbild (siehe `drawBackground`).
@@ -584,6 +544,23 @@ final class WorkspaceView: NSView {
         }
         let now = CACurrentMediaTime()
         if linger.values.contains(where: { $0 <= now }) { relayout() }
+    }
+
+    /// Klick in ein Terminal macht es still zum First Responder: Fokus und Rahmen nachziehen.
+    private func syncFirstResponder() {
+        let responder = window?.firstResponder
+        guard responder !== lastFirstResponder else { return }
+        lastFirstResponder = responder
+        let hit = cells.keys.first { attach?.terminal(for: $0) === responder }
+        if let hit, focused != hit {
+            focused = hit
+            onActivate?(hit)
+            relayout()
+            return
+        }
+        // Klick ins schon fokussierte Terminal zählt auch als Hinsehen.
+        if let hit { onActivate?(hit) }
+        for (key, v) in cells { v.state.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false }
     }
 
     // MARK: Zeichnen
@@ -626,24 +603,27 @@ final class WorkspaceView: NSView {
         ctx.restoreGState()
     }
 
-    /// Ein Knopf im Leerzustand: Pille mit Rahmen (oder gefüllt für die Haupt-Aktion). Zeichnet ab der linken Kante
-    /// `x` in den logischen Koordinaten von `Theme.scaled`, registriert seine reale Klickfläche in `collected` und
-    /// liefert die Breite, damit der nächste Knopf direkt danebensteht.
-    @discardableResult
-    private func drawEmptyButton(_ text: String, x: CGFloat, y: CGFloat, primary: Bool = false, collected: inout [(CGRect, () -> Void)], action: @escaping () -> Void) -> CGFloat {
-        let t = NSAttributedString(string: text, attributes: Theme.attrs(11.5, primary ? Theme.bg : Theme.fg, bold: true))
-        let w = t.size().width + 32, h: CGFloat = 32
-        let r = CGRect(x: x, y: y, width: w, height: h)
-        let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
-        if primary { Theme.running.setFill(); path.fill() } else { Theme.line.setStroke(); path.lineWidth = 1; path.stroke() }
-        t.draw(at: CGPoint(x: r.midX - t.size().width / 2, y: r.midY - t.size().height / 2 + 1))
-        collected.append((r.scaled(Theme.scale), action))
-        return w
+    /// Knöpfe im Leerzustand nebeneinander, mittig um `midX` in den logischen Koordinaten von `Theme.scaled`: Pillen
+    /// mit Rahmen, die Haupt-Aktion gefüllt. Ihre realen Klickflächen landen in `collected`.
+    private func drawEmptyButtons(_ buttons: [(title: String, primary: Bool, action: () -> Void)], midX: CGFloat, y: CGFloat, collected: inout [(CGRect, () -> Void)]) {
+        let gap: CGFloat = 8
+        let labels = buttons.map { NSAttributedString(string: $0.title, attributes: Theme.attrs(11.5, $0.primary ? Theme.bg : Theme.fg, bold: true)) }
+        let widths = labels.map { $0.size().width + 32 }
+        var x = midX - (widths.reduce(0, +) + gap * CGFloat(buttons.count - 1)) / 2
+        for (i, (_, primary, action)) in buttons.enumerated() {
+            let r = CGRect(x: x, y: y, width: widths[i], height: 32), t = labels[i]
+            let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
+            if primary { Theme.running.setFill(); path.fill() } else { Theme.line.setStroke(); path.lineWidth = 1; path.stroke() }
+            t.draw(at: CGPoint(x: r.midX - t.size().width / 2, y: r.midY - t.size().height / 2 + 1))
+            collected.append((r.scaled(Theme.scale), action))
+            x += widths[i] + gap
+        }
     }
 
-    /// Breite eines Knopfs, ohne ihn zu zeichnen (für die Zentrierung mehrerer Knöpfe nebeneinander).
-    private func emptyButtonWidth(_ text: String) -> CGFloat {
-        NSAttributedString(string: text, attributes: Theme.attrs(11.5, Theme.fg, bold: true)).size().width + 32
+    /// Ein- oder zweizeiliger Hinweis mittig in `r` (logische Koordinaten).
+    private func drawCentered(_ a: NSAttributedString, _ b: NSAttributedString? = nil, in r: CGRect) {
+        a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
+        if let b { b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4)) }
     }
 
     /// Erststart-Karte im Leerzustand: Titel, darunter der Knopf, darunter die drei Kernkürzel als eigene Zeilen,
@@ -651,7 +631,6 @@ final class WorkspaceView: NSView {
     /// zum ersten Entwurf: alles klebte aneinander).
     private func drawEmptyOnboarding(in r: CGRect, collected: inout [(CGRect, () -> Void)]) {
         let title = NSAttributedString(string: String(localized: "Erste Session starten"), attributes: Theme.attrs(13, Theme.fg, bold: true))
-        let btnLabel = String(localized: "Neue Session starten  ⌘N")
         let shortcuts: [(String, String)] = [
             ("⌘N", String(localized: "sucht Projekt oder Ordner")),
             ("⌘⏎", String(localized: "zweite Session im selben Ordner")),
@@ -672,7 +651,7 @@ final class WorkspaceView: NSView {
         title.draw(at: CGPoint(x: r.midX - title.size().width / 2, y: y))
         y += title.size().height + titleButtonGap
 
-        drawEmptyButton(btnLabel, x: r.midX - emptyButtonWidth(btnLabel) / 2, y: y, primary: true, collected: &collected) { [weak self] in self?.onEmptyClick?() }
+        drawEmptyButtons([(String(localized: "Neue Session starten  ⌘N"), true, { [weak self] in self?.onEmptyClick?() })], midX: r.midX, y: y, collected: &collected)
         y += buttonHeight + buttonShortcutsGap
 
         for (key, text) in shortcuts {
@@ -699,32 +678,26 @@ final class WorkspaceView: NSView {
             case .error(let message):
                 let a = NSAttributedString(string: String(localized: "Sessions können nicht geladen werden"), attributes: Theme.attrs(12, Theme.error))
                 let b = NSAttributedString(string: message, attributes: Theme.attrs(11, Theme.error.withAlphaComponent(0.7), truncate: false))
+                var buttons: [(title: String, primary: Bool, action: () -> Void)] = [(String(localized: "Erneut prüfen"), true, { [weak self] in self?.onRecheckCLI?() })]
+                if lastErrorIsMissingBinary {
+                    buttons.append((String(localized: "Installationsbefehl kopieren"), false, {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(ClaudeCLI.installCommand, forType: .string)
+                    }))
+                    buttons.append((String(localized: "Doku öffnen"), false, { NSWorkspace.shared.open(ClaudeCLI.installDocsURL) }))
+                }
                 Theme.scaled(bounds) { r in
-                    a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
-                    b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
-                    var buttons: [(String, Bool, () -> Void)] = [(String(localized: "Erneut prüfen"), true, { [weak self] in self?.onRecheckCLI?() })]
-                    if lastErrorIsMissingBinary {
-                        buttons.append((String(localized: "Installationsbefehl kopieren"), false, { [weak self] in self?.onCopyInstallCommand?() }))
-                        buttons.append((String(localized: "Doku öffnen"), false, { [weak self] in self?.onOpenInstallDocs?() }))
-                    }
-                    let gap: CGFloat = 8
-                    let totalW = buttons.map { emptyButtonWidth($0.0) }.reduce(0, +) + gap * CGFloat(buttons.count - 1)
-                    var x = r.midX - totalW / 2
-                    for (title, primary, action) in buttons {
-                        x += drawEmptyButton(title, x: x, y: r.midY + 26, primary: primary, collected: &collected, action: action) + gap
-                    }
+                    drawCentered(a, b, in: r)
+                    drawEmptyButtons(buttons, midX: r.midX, y: r.midY + 26, collected: &collected)
                 }
             case .loading:
                 let a = NSAttributedString(string: String(localized: "Lade Sessions …"), attributes: Theme.attrs(12, Theme.muted))
-                Theme.scaled(bounds) { r in a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16)) }
+                Theme.scaled(bounds) { drawCentered(a, in: $0) }
             case .hint:
                 let idle = auto && !autoPool.isEmpty
                 let a = NSAttributedString(string: idle ? String(localized: "Gerade wartet keine Session") : String(localized: "Session im Baum wählen"), attributes: Theme.attrs(12, Theme.muted))
                 let b = NSAttributedString(string: idle ? String(localized: "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will") : String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe"), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
-                Theme.scaled(bounds) { r in
-                    a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
-                    b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
-                }
+                Theme.scaled(bounds) { drawCentered(a, b, in: $0) }
             }
             emptyHitRects = collected
             return
@@ -741,7 +714,7 @@ final class WorkspaceView: NSView {
     private func drawStackRow(_ r: CGRect, key: String) {
         guard let s = sessions[key] else { return }
         let g = group(forSession: key)
-        let color = Theme.group(g?.color ?? "#6c7086")
+        let color = groupColor(g)
         let on = focused == key || sync, hover = hoveredRow == key
         color.mixed(on ? 0.22 : 0.1, into: on ? Theme.surface : Theme.panel).setFill()
         r.fill()
@@ -803,7 +776,16 @@ final class WorkspaceView: NSView {
 
     // MARK: Events
 
-    private enum Hit { case cell(String), cellClose(String), cellRename(String), row(String), rowClose(String), rowRename(String), none }
+    private enum Hit {
+        case cell(String), cellClose(String), cellRename(String), row(String), rowClose(String), rowRename(String), none
+
+        var key: String? {
+            switch self {
+            case .cell(let k), .cellClose(let k), .cellRename(let k), .row(let k), .rowClose(let k), .rowRename(let k): k
+            case .none: nil
+            }
+        }
+    }
 
     private func hit(at p: CGPoint) -> Hit {
         for (r, key) in stackRows where r.contains(p) {
@@ -812,8 +794,8 @@ final class WorkspaceView: NSView {
         }
         for (key, v) in cells where !v.isHidden && v.frame.contains(p) {
             let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
-            if !v.headerHidden, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .cellClose(key) }
-            if !v.headerHidden, v.penRect.insetBy(dx: -2, dy: -4).contains(local) { return .cellRename(key) }
+            if !v.state.headerHidden, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .cellClose(key) }
+            if !v.state.headerHidden, v.penRect.insetBy(dx: -2, dy: -4).contains(local) { return .cellRename(key) }
             return .cell(key)
         }
         return .none
@@ -842,30 +824,25 @@ final class WorkspaceView: NSView {
         switch hit(at: p) {
         case .cell(let k): cell = k; NSCursor.arrow.set()
         case .cellClose(let k), .cellRename(let k): cell = k; NSCursor.pointingHand.set()
-        case .row(let k): row = k; NSCursor.pointingHand.set()
-        case .rowClose(let k), .rowRename(let k): row = k; NSCursor.pointingHand.set()
+        case .row(let k), .rowClose(let k), .rowRename(let k): row = k; NSCursor.pointingHand.set()
         case .none: NSCursor.arrow.set()
         }
         guard cell != hoveredCell || row != hoveredRow else { return }
         let old = hoveredCell
         hoveredCell = cell; hoveredRow = row
-        for k in [old, cell].compactMap({ $0 }) { cells[k]?.hovered = hoveredCell == k; cells[k]?.needsDisplay = true }
+        for k in [old, cell].compactMap({ $0 }) { cells[k]?.state.hovered = hoveredCell == k }
         needsDisplay = true
     }
 
     override func mouseExited(with event: NSEvent) {
-        if let c = hoveredCell { cells[c]?.hovered = false; cells[c]?.needsDisplay = true }
+        if let c = hoveredCell { cells[c]?.state.hovered = false }
         hoveredCell = nil; hoveredRow = nil
         needsDisplay = true
     }
 
     /// Rechtsklick (bzw. Ctrl-Klick): Kontextmenü der Session unter Kachel-Header oder Stack-Zeile.
     override func menu(for event: NSEvent) -> NSMenu? {
-        switch hit(at: convert(event.locationInWindow, from: nil)) {
-        case .cell(let k), .cellClose(let k), .cellRename(let k), .row(let k), .rowClose(let k), .rowRename(let k):
-            return onContextMenu?(k)
-        case .none: return nil
-        }
+        hit(at: convert(event.locationInWindow, from: nil)).key.flatMap { onContextMenu?($0) }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -898,11 +875,7 @@ final class WorkspaceView: NSView {
         if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true }
         guard dragging else { return }
         NSCursor.closedHand.set()
-        var t: String?
-        switch hit(at: p) {
-        case .cell(let k), .cellClose(let k), .cellRename(let k), .row(let k), .rowClose(let k), .rowRename(let k): t = k == press.key ? nil : k
-        case .none: t = nil
-        }
+        let k = hit(at: p).key, t = k == press.key ? nil : k
         guard t != dropTarget else { return }
         if t != nil { Feedback.snap() }
         dropTarget = t
