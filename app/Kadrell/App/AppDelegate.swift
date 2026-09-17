@@ -304,6 +304,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registry = SessionRegistry(cli: cli)
         registry.pids = { [weak attach] in attach?.pids ?? [:] }
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
+        // Fenster versteckt (Menüleisten-Betrieb) oder App im Hintergrund: seltener pollen, siehe `updatePollBackground`.
+        for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updatePollBackground() }
+            }
+        }
+        NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updatePollBackground() }
+        }
         if !FileManager.default.isExecutableFile(atPath: cli.binary) { registry.fail("\(cli.binary): claude nicht gefunden") }
         // Leer nicht abgleichen: das würde Gruppen alter Hintergrund-Sessions verwerfen, bevor sie übernommen sind.
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
@@ -316,6 +325,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startControlServer()
         usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true }
         usage.start()
+    }
+
+    /// Fenster verdeckt/versteckt oder App nicht aktiv: `SessionRegistry` seltener pollen lassen.
+    private func updatePollBackground() {
+        registry?.setBackground(!NSApp.isActive || window?.isVisible != true)
     }
 
     private func sessionsChanged(_ sessions: [Session]) {
@@ -732,6 +746,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             palette.dismiss(runHighlightReset: false)
         }
         dismissSheet()
+        // Kein Hintergrund-Timer mehr: Snapshots erst hier auf den aktuellen Stand bringen, direkt vorm Zeigen.
+        attach?.refreshSnapshots()
         var src = PaletteWindow.Source()
         let sessions = workspace.sessions
         src.sessions = store.groups.flatMap { g in g.sessionIds.compactMap { sessions[$0] }.map { ($0, group: g, lines: attach?.lines(for: $0.id) ?? []) } }
