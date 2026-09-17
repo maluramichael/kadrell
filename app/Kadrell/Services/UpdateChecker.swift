@@ -44,8 +44,6 @@ final class UpdateChecker {
     /// `a` neuer als `b`, beide "x.y.z". Unbekanntes Format gilt als nicht neuer. `nonisolated`: reine Funktion, auch aus Tests ohne MainActor aufrufbar.
     nonisolated static func isNewer(_ a: String, than b: String) -> Bool {
         guard let va = ClaudeCLI.parseVersion(a), let vb = ClaudeCLI.parseVersion(b) else { return false }
-        if va.major != vb.major { return va.major > vb.major }
-        if va.minor != vb.minor { return va.minor > vb.minor }
-        return va.patch > vb.patch
+        return vb < va
     }
 }

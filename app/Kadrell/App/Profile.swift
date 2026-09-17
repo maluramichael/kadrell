@@ -107,9 +107,6 @@ enum Profile {
 
     /// Weitere Instanz mit frischem Temp-Profil, derselbe Build.
     static func launchTemporary() {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        p.arguments = ["-n", Bundle.main.bundlePath, "--args", "--profile", "tmp"]
-        try? p.run()
+        _ = try? ProcessRunner.spawn("/usr/bin/open", ["-n", Bundle.main.bundlePath, "--args", "--profile", "tmp"])
     }
 }

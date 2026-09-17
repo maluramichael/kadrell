@@ -56,19 +56,8 @@ enum SSHConfig {
 
     /// tmux-Sessions auf dem Host. nil, wenn ssh scheitert; leer, wenn dort kein tmux-Server läuft.
     static func tmuxSessions(host: String, environment: [String: String]) async -> [String]? {
-        await Task.detached(priority: .userInitiated) { () -> [String]? in
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            p.arguments = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", host, "tmux list-sessions -F '#S' 2>/dev/null || true"]
-            p.environment = environment
-            let out = Pipe()
-            p.standardOutput = out
-            p.standardError = FileHandle.nullDevice
-            do { try p.run() } catch { return nil }
-            let data = out.fileHandleForReading.readDataToEndOfFile()
-            p.waitUntilExit()
-            guard p.terminationStatus == 0 else { return nil }
-            return String(decoding: data, as: UTF8.self).split(separator: "\n").map(String.init).filter { !$0.isEmpty }
-        }.value
+        guard let r = try? await ProcessRunner.run("/usr/bin/ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", host, "tmux list-sessions -F '#S' 2>/dev/null || true"],
+                                                   environment: environment, mergeStderr: false), r.status == 0 else { return nil }
+        return r.output.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
     }
 }

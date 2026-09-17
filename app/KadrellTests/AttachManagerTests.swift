@@ -19,14 +19,14 @@ final class AttachManagerTests: XCTestCase {
         XCTAssertNil(weakTerminal)
     }
 
-    /// Hintergrundjob, der die Pipe erbt, blockiert `runRaw` nicht; ein hängender Prozess endet per Timeout.
-    func testRunRawReturnsAtProcessExitAndTimesOut() async throws {
+    /// Hintergrundjob, der die Pipe erbt, blockiert `ProcessRunner.run` nicht; ein hängender Prozess endet per Timeout.
+    func testProcessRunnerReturnsAtProcessExitAndTimesOut() async throws {
         let t0 = Date()
-        let r = try await ClaudeCLI.runRaw("/bin/sh", ["-c", "sleep 30 & echo fertig"], environment: nil, cwd: nil)
+        let r = try await ProcessRunner.run("/bin/sh", ["-c", "sleep 30 & echo fertig"])
         XCTAssertEqual(r.status, 0)
         XCTAssertEqual(r.output, "fertig\n")
         XCTAssertLessThan(Date().timeIntervalSince(t0), 10)
-        let hung = try await ClaudeCLI.runRaw("/bin/sleep", ["30"], environment: nil, cwd: nil, timeout: 0.5)
+        let hung = try await ProcessRunner.run("/bin/sleep", ["30"], timeout: 0.5)
         XCTAssertEqual(hung.status, SIGKILL)
         XCTAssertLessThan(Date().timeIntervalSince(t0), 15)
     }

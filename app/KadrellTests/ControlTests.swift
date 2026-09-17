@@ -131,7 +131,7 @@ final class ControlTests: XCTestCase {
 
         let bin = try XCTUnwrap(Bundle.main.executablePath)
         let env = ["KADRELL_SOCKET": path, "KADRELL_SESSION_KEY": "k1", "HOME": NSHomeDirectory()]
-        let ok = try await ClaudeCLI.runRaw(bin, ["ls"], environment: env, cwd: "/tmp")
+        let ok = try await ProcessRunner.run(bin, ["ls"], environment: env, cwd: "/tmp")
         XCTAssertEqual(ok.status, 0)
         XCTAssertEqual(ok.output, "hallo\n")
         XCTAssertEqual(seen?.caller, "k1")
@@ -139,11 +139,11 @@ final class ControlTests: XCTestCase {
         XCTAssertNil(stranger)
         XCTAssertEqual(seen?.cwd, "/private/tmp")
 
-        let bad = try await ClaudeCLI.runRaw(bin, ["kill"], environment: env, cwd: "/tmp")
+        let bad = try await ProcessRunner.run(bin, ["kill"], environment: env, cwd: "/tmp")
         XCTAssertEqual(bad.status, 1)
         XCTAssertEqual(bad.output, "kadrell: nein\n")
 
-        let help = try await ClaudeCLI.runRaw(bin, ["help"], environment: env, cwd: "/tmp")
+        let help = try await ProcessRunner.run(bin, ["help"], environment: env, cwd: "/tmp")
         XCTAssertEqual(help.status, 0)
         XCTAssertTrue(help.output.contains("kadrell new-group"))
     }
@@ -161,7 +161,7 @@ final class ControlTests: XCTestCase {
         defer { server.stop() }
         let bin = try XCTUnwrap(Bundle.main.executablePath)
         let env = ["KADRELL_SOCKET": path, "HOME": NSHomeDirectory()]
-        let ok = try await ClaudeCLI.runRaw(bin, ["ls"], environment: env, cwd: "/tmp")
+        let ok = try await ProcessRunner.run(bin, ["ls"], environment: env, cwd: "/tmp")
         XCTAssertEqual(ok.status, 0)
         XCTAssertEqual(ok.output, "hallo\n")
     }
@@ -182,8 +182,8 @@ final class ControlTests: XCTestCase {
         defer { server.stop() }
         let bin = try XCTUnwrap(Bundle.main.executablePath)
         let env = ["KADRELL_SOCKET": path, "HOME": NSHomeDirectory()]
-        _ = try await ClaudeCLI.runRaw(bin, ["send", "foo"], environment: env, cwd: "/tmp")
-        _ = try await ClaudeCLI.runRaw(bin, ["send", "bar"], environment: env, cwd: "/tmp")
+        _ = try await ProcessRunner.run(bin, ["send", "foo"], environment: env, cwd: "/tmp")
+        _ = try await ProcessRunner.run(bin, ["send", "bar"], environment: env, cwd: "/tmp")
         XCTAssertEqual(order, ["foo start", "foo end", "bar start", "bar end"])
     }
 }

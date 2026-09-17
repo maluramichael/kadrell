@@ -80,8 +80,6 @@ final class AttachManager {
     func isEnded(_ key: String) -> Bool { ended.contains(key) }
     func isMissingFolder(_ key: String) -> Bool { missingFolder.contains(key) }
     func exitCode(for key: String) -> Int32? { exitCodes[key] }
-    /// Beendet mit Fehlercode innerhalb weniger Sekunden nach dem Start, statt regulär per `/exit` o. Ä.
-    func startFailed(_ key: String) -> Bool { exitCodes[key] != nil }
     func terminal(for key: String) -> KadrellTerminalView? { terminals[key] }
     func lines(for key: String) -> [String] { snapshots[key] ?? [] }
     /// Schlüssel der Session je pid ihres Claude-Prozesses.
@@ -135,7 +133,7 @@ final class AttachManager {
             guard let self else { return }
             if self.closing.removeValue(forKey: key) == nil {
                 self.ended.insert(key)
-                self.snapshots[key] = t.terminalStateSnapshot().visibleRows.map(\.text).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                self.snapshots[key] = AttachManager.snapshotRows(t, trimTrailing: false)
                 AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .private)")
                 // Innerhalb weniger Sekunden mit Fehlercode gestorben: kein reguläres `/exit`, sondern ein Startfehler
                 // (kaputtes Flag, alte CLI, nicht eingeloggt). Die Kachel bekommt eine eigene Meldung statt der
@@ -151,6 +149,7 @@ final class AttachManager {
         env["KADRELL_SESSION_KEY"] = key
         env["KADRELL_SOCKET"] = ControlSocket.defaultPath
         env["KADRELL"] = Bundle.main.executablePath
+        let executable: String, args: [String], execName: String
         if let host = session.host {
             // Wie das tmux-Popup (M-h): an die laufende Remote-tmux hängen, ohne tmux dort eine Login-Shell.
             // Endet ssh (Detach, Fehler), bleibt die Kachel mit den letzten Zeilen stehen, Klick verbindet neu.
@@ -158,28 +157,20 @@ final class AttachManager {
             let cmd = "command -v tmux >/dev/null 2>&1 && { \(remote); } || { echo 'kein tmux auf diesem Host, normale Shell'; exec \"$SHELL\" -l; }"
             AttachManager.log.info("ssh \(host, privacy: .private): \(remote, privacy: .private)")
             // `--`: ein Host wie `-oProxyCommand=…` bleibt Hostname und wird keine Option.
-            t.startProcess(executable: "/usr/bin/ssh", args: ["-t", "-o", "ConnectTimeout=5", "--", host, cmd],
-                           environment: env.map { "\($0.key)=\($0.value)" }, execName: "ssh", currentDirectory: session.cwd)
-            terminals[key] = t
-            onChange?()
-            return
-        }
-        if session.isShell {
+            (executable, args, execName) = ("/usr/bin/ssh", ["-t", "-o", "ConnectTimeout=5", "--", host, cmd], "ssh")
+        } else if session.isShell {
             // Login-Shell des Nutzers: argv[0] mit Bindestrich, wie Terminal.app sie startet.
             let shell = env["SHELL"] ?? "/bin/zsh"
-            t.startProcess(executable: shell, environment: env.map { "\($0.key)=\($0.value)" },
-                           execName: "-" + URL(fileURLWithPath: shell).lastPathComponent, currentDirectory: session.cwd)
-            terminals[key] = t
-            onChange?()
-            return
+            (executable, args, execName) = (shell, [], "-" + URL(fileURLWithPath: shell).lastPathComponent)
+        } else {
+            let hasTranscript = Transcript.path(sessionId: session.sessionId, configDir: cli.configDir) != nil
+            var claudeArgs = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
+                + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
+            AttachManager.log.info("claude \(claudeArgs.joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
+            if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { claudeArgs += ClaudeCLI.promptArgs(prompt) }
+            (executable, args, execName) = (cli.binary, claudeArgs, "claude")
         }
-        let hasTranscript = Transcript.path(sessionId: session.sessionId, configDir: cli.configDir) != nil
-        var args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
-            + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
-        AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
-        if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { args += ClaudeCLI.promptArgs(prompt) }
-        t.startProcess(executable: cli.binary, args: args, environment: env.map { "\($0.key)=\($0.value)" },
-                       execName: "claude", currentDirectory: session.cwd)
+        t.startProcess(executable: executable, args: args, environment: env.map { "\($0.key)=\($0.value)" }, execName: execName, currentDirectory: session.cwd)
         terminals[key] = t
         onChange?()
     }
@@ -201,7 +192,7 @@ final class AttachManager {
 
     /// Stoppen: Prozess beenden, Kachel bleibt mit dem letzten Bildschirm stehen, bis ein Klick fortsetzt.
     func stop(_ key: String) {
-        if let t = terminals[key] { snapshots[key] = t.terminalStateSnapshot().visibleRows.map(\.text).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty } }
+        if let t = terminals[key] { snapshots[key] = AttachManager.snapshotRows(t, trimTrailing: false) }
         ended.insert(key)
         detach(key)
     }
@@ -276,16 +267,25 @@ final class AttachManager {
         var changed = false
         // Ein eingehängtes Terminal zeichnet sich selbst; nur ausgehängte brauchen den Snapshot überhaupt.
         for (key, t) in terminals where t.superview == nil {
-            var rows = t.terminalStateSnapshot().visibleRows.map { row -> String in
-                var s = row.text
-                while let last = s.last, last.isWhitespace { s.removeLast() }
-                return s
-            }
-            while rows.last?.isEmpty == true { rows.removeLast() }
+            let rows = AttachManager.snapshotRows(t, trimTrailing: true)
             guard snapshots[key] != rows else { continue }
             snapshots[key] = rows
             changed = true
         }
         if changed { onChange?() }
+    }
+
+    /// Sichtbare Zeilen als Text. `trimTrailing`: Leerraum am Zeilenende und leere Zeilen am Ende weg (Kachel, `capture`),
+    /// sonst alle leeren Zeilen weg (letzter Bildschirm eines beendeten Prozesses).
+    static func snapshotRows(_ t: TerminalView, trimTrailing: Bool) -> [String] {
+        let rows = t.terminalStateSnapshot().visibleRows.map(\.text)
+        guard trimTrailing else { return rows.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty } }
+        var trimmed = rows.map { row in
+            var s = row
+            while s.last?.isWhitespace == true { s.removeLast() }
+            return s
+        }
+        while trimmed.last?.isEmpty == true { trimmed.removeLast() }
+        return trimmed
     }
 }

@@ -36,7 +36,7 @@ final class ClaudeCLI: Sendable {
     static func resolve() async -> ClaudeCLI {
         var env = ProcessInfo.processInfo.environment
         // NUL-getrennt, damit mehrzeilige Werte keine Variablen erfinden. Das führende NUL trennt Ausgaben des Profils ab.
-        if let out = try? await runRaw("/bin/zsh", ["-lc", "printf '\\0'; exec env -0"], environment: nil, cwd: nil, timeout: 10).output {
+        if let out = try? await ProcessRunner.run("/bin/zsh", ["-lc", "printf '\\0'; exec env -0"], timeout: 10).output {
             for line in out.split(separator: "\0", omittingEmptySubsequences: false).dropFirst() {
                 guard let eq = line.firstIndex(of: "=") else { continue }
                 let key = String(line[..<eq])
@@ -46,7 +46,7 @@ final class ClaudeCLI: Sendable {
         }
         var binary = NSHomeDirectory() + "/.local/bin/claude"
         if !FileManager.default.isExecutableFile(atPath: binary) {
-            let found = (try? await runRaw("/bin/zsh", ["-lc", "command -v claude"], environment: env, cwd: nil, timeout: 10).output)?
+            let found = (try? await ProcessRunner.run("/bin/zsh", ["-lc", "command -v claude"], environment: env, timeout: 10).output)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if found.hasPrefix("/") { binary = found }
         }
@@ -54,52 +54,10 @@ final class ClaudeCLI: Sendable {
         return ClaudeCLI(binary: binary, environment: env)
     }
 
-    /// Führt einen Prozess aus und liefert stdout+stderr. Der Prozess wird komplett auf einem
-    /// Hintergrund-Thread aufgebaut, damit nichts Nicht-Sendable die Isolation kreuzt. Gelesen wird bis zum Prozessende,
-    /// nicht bis EOF: ein Hintergrundjob aus dem Shell-Profil, der die Pipe erbt, hält sie sonst ewig offen.
-    /// Nach `timeout` Sekunden bekommt der Prozess SIGKILL, die bis dahin gelesene Ausgabe kommt trotzdem zurück.
-    static func runRaw(_ executable: String, _ args: [String], environment: [String: String]?, cwd: String?, timeout: TimeInterval = 60) async throws -> (status: Int32, output: String) {
-        try await withCheckedThrowingContinuation { cont in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let p = Process()
-                p.executableURL = URL(fileURLWithPath: executable)
-                p.arguments = args
-                if let environment { p.environment = environment }
-                if let cwd { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
-                let pipe = Pipe()
-                p.standardOutput = pipe
-                p.standardError = pipe
-                p.standardInput = FileHandle.nullDevice
-                do { try p.run() } catch { cont.resume(throwing: error); return }
-                let fd = pipe.fileHandleForReading.fileDescriptor
-                _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
-                let deadline = Date().addingTimeInterval(timeout)
-                var data = Data(), buf = [UInt8](repeating: 0, count: 1 << 16)
-                while true {
-                    if Date() >= deadline {
-                        log.warning("\(executable, privacy: .public) \(args.joined(separator: " "), privacy: .public): nach \(Int(timeout)) s abgebrochen")
-                        if p.isRunning { kill(p.processIdentifier, SIGKILL) }
-                        break
-                    }
-                    let exited = !p.isRunning
-                    var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-                    if poll(&pfd, 1, exited ? 0 : 100) > 0 {
-                        let n = read(fd, &buf, buf.count)
-                        if n > 0 { data.append(buf, count: n); continue }
-                        if n == 0 { break }
-                    }
-                    if exited { break }
-                }
-                p.waitUntilExit()
-                cont.resume(returning: (p.terminationStatus, String(decoding: data, as: UTF8.self)))
-            }
-        }
-    }
-
     @discardableResult
     func run(_ args: [String], cwd: String? = nil) async throws -> String {
         if args.first != "agents" { ClaudeCLI.log.info("claude \(args.joined(separator: " "), privacy: .private)") }
-        let r = try await ClaudeCLI.runRaw(binary, args, environment: environment, cwd: cwd)
+        let r = try await ProcessRunner.run(binary, args, environment: environment, cwd: cwd)
         guard r.status == 0 else { throw CLIError(command: "claude " + args.joined(separator: " "), status: r.status, output: r.output) }
         return r.output
     }
@@ -165,12 +123,6 @@ final class ClaudeCLI: Sendable {
         guard parts.count == 3 else { return nil }
         return (parts[0], parts[1], parts[2])
     }
-}
-
-private func < (lhs: (major: Int, minor: Int, patch: Int), rhs: (major: Int, minor: Int, patch: Int)) -> Bool {
-    if lhs.major != rhs.major { return lhs.major < rhs.major }
-    if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
-    return lhs.patch < rhs.patch
 }
 
 extension CLIError {

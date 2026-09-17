@@ -193,12 +193,8 @@ enum ControlClient {
     private static func launchApp() {
         FileHandle.standardError.write(Data("kadrell: starte Kadrell …\n".utf8))
         let bundle = Bundle.main.bundleURL
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         let target = bundle.pathExtension == "app" ? [bundle.path] : ["-b", "de.malura.kadrell"]
         // Ein Profil ist eine eigene Instanz: `-n`, sonst holt `open` nur die laufende nach vorn.
-        p.arguments = Profile.name.map { ["-g", "-n"] + target + ["--args", "--profile", $0] } ?? ["-g"] + target
-        try? p.run()
-        p.waitUntilExit()
+        try? ProcessRunner.spawn("/usr/bin/open", Profile.name.map { ["-g", "-n"] + target + ["--args", "--profile", $0] } ?? ["-g"] + target).waitUntilExit()
     }
 }
