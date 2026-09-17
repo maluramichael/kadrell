@@ -45,6 +45,8 @@ final class WorkspaceView: NSView {
     private var stackRows: [(CGRect, String)] = []
     private var hoveredCell: String?
     private var hoveredRow: String?
+    /// Klickflächen der Knöpfe im Leerzustand (Fehler-/Erststart-Karte), in echten View-Koordinaten, neu bei jedem `draw`.
+    private var emptyHitRects: [(rect: CGRect, action: () -> Void)] = []
     private var pulse: CGFloat = 1
     private var pulseTask: Task<Void, Never>?
     private weak var lastFirstResponder: NSResponder?
@@ -67,6 +69,11 @@ final class WorkspaceView: NSView {
     var onEmptyClick: (() -> Void)?
     /// Binary nicht gefunden oder `claude agents` schlägt fehl. AppDelegate hält es aktuell (`SessionRegistry.lastError`).
     var lastError: String?
+    /// `lastError` ist genau das fehlende Binary: der Leerzustand zeigt den Installationsbefehl statt nur den Pfad.
+    var lastErrorIsMissingBinary = false
+    var onRecheckCLI: (() -> Void)?
+    var onCopyInstallCommand: (() -> Void)?
+    var onOpenInstallDocs: (() -> Void)?
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     var polled = false
     /// Interaktive Claude-Sessions, die woanders laufen (tmux, iTerm), nicht von diesem Profil verwaltet.
@@ -467,6 +474,8 @@ final class WorkspaceView: NSView {
             v.hovered = hoveredCell == key
             v.attached = attach?.isAttached(key) ?? false
             v.ended = attach?.isEnded(key) ?? false
+            v.exitCode = attach?.exitCode(for: key)
+            v.missingFolder = attach?.isMissingFolder(key) ?? false
             v.previewing = preview == key
             v.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
             v.lines = attach?.lines(for: key) ?? []
@@ -579,41 +588,110 @@ final class WorkspaceView: NSView {
         ctx.restoreGState()
     }
 
+    /// Ein Knopf im Leerzustand: Pille mit Rahmen (oder gefüllt für die Haupt-Aktion). Zeichnet ab der linken Kante
+    /// `x` in den logischen Koordinaten von `Theme.scaled`, registriert seine reale Klickfläche in `collected` und
+    /// liefert die Breite, damit der nächste Knopf direkt danebensteht.
+    @discardableResult
+    private func drawEmptyButton(_ text: String, x: CGFloat, y: CGFloat, primary: Bool = false, collected: inout [(CGRect, () -> Void)], action: @escaping () -> Void) -> CGFloat {
+        let t = NSAttributedString(string: text, attributes: Theme.attrs(11.5, primary ? Theme.bg : Theme.fg, bold: true))
+        let w = t.size().width + 32, h: CGFloat = 32
+        let r = CGRect(x: x, y: y, width: w, height: h)
+        let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
+        if primary { Theme.running.setFill(); path.fill() } else { Theme.line.setStroke(); path.lineWidth = 1; path.stroke() }
+        t.draw(at: CGPoint(x: r.midX - t.size().width / 2, y: r.midY - t.size().height / 2 + 1))
+        collected.append((r.scaled(Theme.scale), action))
+        return w
+    }
+
+    /// Breite eines Knopfs, ohne ihn zu zeichnen (für die Zentrierung mehrerer Knöpfe nebeneinander).
+    private func emptyButtonWidth(_ text: String) -> CGFloat {
+        NSAttributedString(string: text, attributes: Theme.attrs(11.5, Theme.fg, bold: true)).size().width + 32
+    }
+
+    /// Erststart-Karte im Leerzustand: Titel, darunter der Knopf, darunter die drei Kernkürzel als eigene Zeilen,
+    /// ganz unten der Hinweis auf anderswo laufende Sessions. Deutliche Abstände, nichts berührt sich (Feedback
+    /// zum ersten Entwurf: alles klebte aneinander).
+    private func drawEmptyOnboarding(in r: CGRect, collected: inout [(CGRect, () -> Void)]) {
+        let title = NSAttributedString(string: String(localized: "Erste Session starten"), attributes: Theme.attrs(13, Theme.fg, bold: true))
+        let btnLabel = String(localized: "Neue Session starten  ⌘N")
+        let shortcuts: [(String, String)] = [
+            ("⌘N", String(localized: "sucht Projekt oder Ordner")),
+            ("⌘⏎", String(localized: "zweite Session im selben Ordner")),
+            ("F1", String(localized: "alle Kürzel")),
+        ]
+        let hint: NSAttributedString? = otherInteractiveCount > 0 ? NSAttributedString(
+            string: otherInteractiveCount == 1 ? String(localized: "1 Claude-Session läuft interaktiv in anderen Terminals")
+                : String(localized: "\(otherInteractiveCount) Claude-Sessions laufen interaktiv in anderen Terminals"),
+            attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.55))) : nil
+
+        let titleButtonGap: CGFloat = 16, buttonHeight: CGFloat = 32, buttonShortcutsGap: CGFloat = 28
+        let shortcutLineHeight: CGFloat = 20, shortcutsHintGap: CGFloat = 32
+
+        var total = title.size().height + titleButtonGap + buttonHeight + buttonShortcutsGap + CGFloat(shortcuts.count) * shortcutLineHeight
+        if let hint { total += (shortcutsHintGap - shortcutLineHeight) + hint.size().height }
+
+        var y = r.midY - total / 2
+        title.draw(at: CGPoint(x: r.midX - title.size().width / 2, y: y))
+        y += title.size().height + titleButtonGap
+
+        drawEmptyButton(btnLabel, x: r.midX - emptyButtonWidth(btnLabel) / 2, y: y, primary: true, collected: &collected) { [weak self] in self?.onEmptyClick?() }
+        y += buttonHeight + buttonShortcutsGap
+
+        for (key, text) in shortcuts {
+            let line = NSMutableAttributedString(string: key + "  ", attributes: Theme.attrs(11, Theme.fg, bold: true))
+            line.append(NSAttributedString(string: text, attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.75))))
+            line.draw(at: CGPoint(x: r.midX - line.size().width / 2, y: y))
+            y += shortcutLineHeight
+        }
+        if let hint {
+            y += shortcutsHintGap - shortcutLineHeight
+            hint.draw(at: CGPoint(x: r.midX - hint.size().width / 2, y: y))
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         Theme.bg.setFill()
         dirtyRect.fill()
         drawBackground()
         if tiles.isEmpty {
-            let a: NSAttributedString, b: NSAttributedString
-            var c: NSAttributedString?
+            var collected: [(CGRect, () -> Void)] = []
             switch emptyReason {
-            case .error(let message):
-                a = NSAttributedString(string: String(localized: "Sessions können nicht geladen werden"), attributes: Theme.attrs(12, Theme.error))
-                b = NSAttributedString(string: message, attributes: Theme.attrs(11, Theme.error.withAlphaComponent(0.7)))
-            case .loading:
-                a = NSAttributedString(string: String(localized: "Lade Sessions …"), attributes: Theme.attrs(12, Theme.muted))
-                b = NSAttributedString(string: "", attributes: Theme.attrs(11, Theme.muted))
             case .noSessions:
-                a = NSAttributedString(string: String(localized: "Noch keine Session"), attributes: Theme.attrs(12, Theme.muted))
-                b = NSAttributedString(string: String(localized: "⌘N startet eine"), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
-                if otherInteractiveCount > 0 {
-                    let text = otherInteractiveCount == 1 ? String(localized: "1 Claude-Session läuft interaktiv in anderen Terminals · Import: tools/tmux-dump.py")
-                        : String(localized: "\(otherInteractiveCount) Claude-Sessions laufen interaktiv in anderen Terminals · Import: tools/tmux-dump.py")
-                    c = NSAttributedString(string: text,
-                                           attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.55)))
+                Theme.scaled(bounds) { r in drawEmptyOnboarding(in: r, collected: &collected) }
+            case .error(let message):
+                let a = NSAttributedString(string: String(localized: "Sessions können nicht geladen werden"), attributes: Theme.attrs(12, Theme.error))
+                let b = NSAttributedString(string: message, attributes: Theme.attrs(11, Theme.error.withAlphaComponent(0.7), truncate: false))
+                Theme.scaled(bounds) { r in
+                    a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
+                    b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
+                    var buttons: [(String, Bool, () -> Void)] = [(String(localized: "Erneut prüfen"), true, { [weak self] in self?.onRecheckCLI?() })]
+                    if lastErrorIsMissingBinary {
+                        buttons.append((String(localized: "Installationsbefehl kopieren"), false, { [weak self] in self?.onCopyInstallCommand?() }))
+                        buttons.append((String(localized: "Doku öffnen"), false, { [weak self] in self?.onOpenInstallDocs?() }))
+                    }
+                    let gap: CGFloat = 8
+                    let totalW = buttons.map { emptyButtonWidth($0.0) }.reduce(0, +) + gap * CGFloat(buttons.count - 1)
+                    var x = r.midX - totalW / 2
+                    for (title, primary, action) in buttons {
+                        x += drawEmptyButton(title, x: x, y: r.midY + 26, primary: primary, collected: &collected, action: action) + gap
+                    }
                 }
+            case .loading:
+                let a = NSAttributedString(string: String(localized: "Lade Sessions …"), attributes: Theme.attrs(12, Theme.muted))
+                Theme.scaled(bounds) { r in a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16)) }
             case .hint:
                 let idle = auto && !autoPool.isEmpty
-                a = NSAttributedString(string: idle ? String(localized: "Gerade wartet keine Session") : String(localized: "Session im Baum wählen"), attributes: Theme.attrs(12, Theme.muted))
-                b = NSAttributedString(string: idle ? String(localized: "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will") : String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe"), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+                let a = NSAttributedString(string: idle ? String(localized: "Gerade wartet keine Session") : String(localized: "Session im Baum wählen"), attributes: Theme.attrs(12, Theme.muted))
+                let b = NSAttributedString(string: idle ? String(localized: "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will") : String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe"), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+                Theme.scaled(bounds) { r in
+                    a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
+                    b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
+                }
             }
-            Theme.scaled(bounds) { r in
-                a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
-                b.draw(at: CGPoint(x: r.midX - b.size().width / 2, y: r.midY + 4))
-                c?.draw(at: CGPoint(x: r.midX - c!.size().width / 2, y: r.midY + 24))
-            }
+            emptyHitRects = collected
             return
         }
+        emptyHitRects = []
         guard !stackRows.isEmpty, !zen, preview == nil else { return }
         for (r, key) in stackRows { Theme.scaled(r) { drawStackRow($0, key: key) } }
         if dragging, let t = dropTarget, let (r, _) = stackRows.first(where: { $0.1 == t }) {
@@ -719,6 +797,7 @@ final class WorkspaceView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        if emptyHitRects.contains(where: { $0.rect.contains(p) }) { NSCursor.pointingHand.set(); return }
         guard p.x > ThinSplitView.grabWidth / 2 else { return }   // Griffzone des Trenners: Cursor gehört dem Split
         if let d = divider(at: p) { (d.vertical ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).set(); return }
         var cell: String?, row: String?
@@ -753,6 +832,8 @@ final class WorkspaceView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        // Knöpfe im Leerzustand (Fehler-/Erststart-Karte) gehen vor allem anderen.
+        if let hit = emptyHitRects.first(where: { $0.rect.contains(p) }) { hit.action(); return }
         let force = event.modifierFlags.contains(.option)
         pressed = nil
         // Trennlinie: ziehen ändert die Vorlage, Doppelklick verteilt diese Liste wieder gleich.

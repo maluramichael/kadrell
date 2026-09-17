@@ -12,6 +12,8 @@ final class SessionRegistry {
     private(set) var lastMessages: [String: String] = [:]
     /// Binary nicht gefunden oder `claude agents` schlägt fehl. Von außen über `fail(_:)` gesetzt, kein Poll räumt es wieder ab.
     private(set) var lastError: String?
+    /// `lastError` ist speziell das fehlende Binary: der Leerzustand zeigt dann den Installationsbefehl statt nur den Pfad.
+    private(set) var lastErrorIsMissingBinary = false
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     private(set) var polled = false
     private var transcripts: [String: Transcript.Entry] = [:]
@@ -82,8 +84,17 @@ final class SessionRegistry {
     }
 
     /// Binary fehlt oder `claude agents` schlägt fehl: vom Aufrufer gesetzt, kein Poll räumt es automatisch wieder ab.
-    func fail(_ message: String) {
+    func fail(_ message: String, missingBinary: Bool = false) {
         lastError = message
+        lastErrorIsMissingBinary = missingBinary
+        onChange?(sessions)
+    }
+
+    /// Erfolgreiche Neuprüfung (`AppDelegate.recheckCLI`) oder erfolgreicher `agents`-Aufruf: den alten Fehler wegräumen.
+    func clearError() {
+        guard lastError != nil else { return }
+        lastError = nil
+        lastErrorIsMissingBinary = false
         onChange?(sessions)
     }
 

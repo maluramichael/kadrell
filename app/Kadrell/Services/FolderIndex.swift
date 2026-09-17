@@ -61,7 +61,11 @@ final class FolderIndex {
     /// Git-Repos bis Tiefe 4 unter den Wurzeln. In ein Repo wird nicht weiter hineingeschaut.
     /// ponytail: fester Tiefen- und Mengen-Deckel statt echter Ausschlussliste, reicht für Projektordner.
     nonisolated static func scanRepos(roots: [String], maxDepth: Int = 4, limit: Int = 5000) -> [String] {
-        let skip: Set<String> = ["node_modules", "vendor", "build", "dist", "Library", "Applications", "Pictures", "Music", "Movies"]
+        // Desktop/Documents/Downloads mit rein: sonst löst der erste ⌘N beim Scan von ~ eine Kaskade an TCC-Abfragen
+        // aus (Kanboard #23). Als ausdrücklicher Startordner bleiben sie trotzdem durchsuchbar, der Skip greift nur
+        // beim Hineinlaufen aus einer anderen Wurzel, nicht auf die Wurzel selbst.
+        let skip: Set<String> = ["node_modules", "vendor", "build", "dist", "Library", "Applications", "Pictures", "Music", "Movies",
+                                  "Desktop", "Documents", "Downloads"]
         let fm = FileManager.default
         var out: [String] = []
         var queue = roots.map { ($0, 0) }

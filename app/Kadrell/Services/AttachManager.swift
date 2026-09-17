@@ -5,7 +5,7 @@ import os
 /// Terminal einer laufenden Session.
 @MainActor
 final class KadrellTerminalView: LocalProcessTerminalView {
-    var onExit: (() -> Void)?
+    var onExit: ((Int32?) -> Void)?
 
     /// Sync: Taste an ein Terminal ohne Tastatur. `keyDown` taugt dafür nur bei Funktionstasten (Pfeile, F-Tasten, Pos1/Ende),
     /// die SwiftTerm selbst kodiert. Text, ⏎, ⌫, Esc und ⌃-Tasten laufen dort über das Eingabesystem von macOS, und das liefert
@@ -38,7 +38,7 @@ final class KadrellTerminalView: LocalProcessTerminalView {
 
     override func processTerminated(_ source: LocalProcess, exitCode: Int32?) {
         super.processTerminated(source, exitCode: exitCode)
-        onExit?()
+        onExit?(exitCode)
     }
 }
 
@@ -55,6 +55,13 @@ final class AttachManager {
     private(set) var ended: Set<String> = []
     /// Von Kadrell selbst beendete Prozesse (SIGHUP), mit pid, bis ihr Ende gemeldet ist.
     private var closing: [String: pid_t] = [:]
+    /// Zeitpunkt des letzten `attachNow` je Session: stirbt der Prozess kurz danach mit Fehlercode, ist das ein
+    /// Startfehler (kaputtes Flag, falscher Ordner), kein normales `/exit` (Kanboard #20).
+    private var attachStarted: [String: CFAbsoluteTime] = [:]
+    /// Exit-Code eines Startfehlers je Session, nur gesetzt bei schnellem, unerwartetem Ende.
+    private(set) var exitCodes: [String: Int32] = [:]
+    /// Ordner der Session existiert nicht mehr: kein Prozess gestartet, die Kachel zeigt das statt „STARTET …“ endlos.
+    private(set) var missingFolder: Set<String> = []
     private var queueTask: Task<Void, Never>?
     /// App wird beendet: nichts mehr starten, sonst setzt das Polling die eben beendeten Sessions fort.
     private var shuttingDown = false
@@ -71,6 +78,10 @@ final class AttachManager {
     var attachedCount: Int { terminals.count }
     func isAttached(_ key: String) -> Bool { terminals[key] != nil }
     func isEnded(_ key: String) -> Bool { ended.contains(key) }
+    func isMissingFolder(_ key: String) -> Bool { missingFolder.contains(key) }
+    func exitCode(for key: String) -> Int32? { exitCodes[key] }
+    /// Beendet mit Fehlercode innerhalb weniger Sekunden nach dem Start, statt regulär per `/exit` o. Ä.
+    func startFailed(_ key: String) -> Bool { exitCodes[key] != nil }
     func terminal(for key: String) -> KadrellTerminalView? { terminals[key] }
     func lines(for key: String) -> [String] { snapshots[key] ?? [] }
     /// Schlüssel der Session je pid ihres Claude-Prozesses.
@@ -95,18 +106,34 @@ final class AttachManager {
         guard !shuttingDown, terminals[session.id] == nil else { return }
         queue.removeAll { $0.id == session.id }
         ended.remove(session.id)
+        exitCodes[session.id] = nil
+        missingFolder.remove(session.id)
         snapshots[session.id] = nil
+        let key = session.id
+        // Ordner weg (gelöscht, Worktree entfernt): kein Prozess, sonst startet der Klick auf „Klick setzt fort“
+        // denselben kaputten Aufruf endlos neu (Kanboard #20). Remote-Sessions haben kein lokales `cwd`.
+        if session.host == nil, !FileManager.default.fileExists(atPath: session.cwd) {
+            ended.insert(key)
+            missingFolder.insert(key)
+            onChange?()
+            return
+        }
         let t = KadrellTerminalView(frame: NSRect(x: 0, y: 0, width: 960, height: 600), font: Settings.terminalFont, options: .default)
         t.lineSpacing = CGFloat(Settings.terminalLineSpacing)
         t.nativeBackgroundColor = Theme.bg
         applyColors(t)
-        let key = session.id
-        t.onExit = { [weak self] in
+        attachStarted[key] = CFAbsoluteTimeGetCurrent()
+        t.onExit = { [weak self] exitCode in
             guard let self else { return }
             if self.closing.removeValue(forKey: key) == nil {
                 self.ended.insert(key)
                 self.snapshots[key] = t.terminalStateSnapshot().visibleRows.map(\.text).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                 AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .public)")
+                // Innerhalb weniger Sekunden mit Fehlercode gestorben: kein reguläres `/exit`, sondern ein Startfehler
+                // (kaputtes Flag, alte CLI, nicht eingeloggt). Die Kachel bekommt eine eigene Meldung statt der
+                // normalen Schraffur, damit ein Klick nicht denselben Fehler stumm wiederholt.
+                let quick = self.attachStarted[key].map { CFAbsoluteTimeGetCurrent() - $0 < 5 } ?? false
+                if let exitCode, exitCode != 0, quick { self.exitCodes[key] = exitCode }
             }
             self.detach(key, signal: false)
             if self.ended.contains(key) { self.onEnded?(key) }
@@ -175,6 +202,9 @@ final class AttachManager {
         let live = Set(sessions.map(\.id))
         for key in terminals.keys where !live.contains(key) { detach(key) }
         ended.formIntersection(live)
+        missingFolder.formIntersection(live)
+        exitCodes = exitCodes.filter { live.contains($0.key) }
+        attachStarted = attachStarted.filter { live.contains($0.key) }
     }
 
     /// Schrift und Zeilenabstand aus den Einstellungen auf alle offenen Terminals; SwiftTerm passt Spalten und Zeilen selbst an.

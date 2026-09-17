@@ -42,6 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ⌘A/⌘⇧A: Auswahl davor und danach, damit ein zweiter Druck zurückschaltet.
     private var selectAllUndo: (shift: Bool, before: [String], focus: String?, after: Set<String>)?
     var controlServer: ControlServer?
+    /// claude läuft, ist aber älter als `ClaudeCLI.minVersion`: nicht blockierend, nur die Leiste warnt (`recheckCLI`).
+    private var versionWarning: String?
+    /// Einmaliger Tipp in der Leiste (zweite Session, Bedeutung von Gelb), siehe `showTip`.
+    private var tip: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz pro Profil: hält schon eine das Profil, die nach vorn holen und selbst beenden.
@@ -59,11 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard NSClassFromString("XCTestCase") == nil else { return }
         trapSignals()
         Task { await boot() }
-        // Beim ersten Start die Hilfe zeigen: da steht alles, die Oberfläche selbst erklärt nichts.
-        if !Profile.defaults.bool(forKey: "helpShown") {
-            Profile.defaults.set(true, forKey: "helpShown")
-            showAbout()
-        }
+        // Kein automatisches F1 mehr: der Leerzustand führt selbst zur ersten Session, F1 bleibt zum Nachschlagen.
         buildStatusItem()
     }
 
@@ -220,6 +220,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
+        workspace.onRecheckCLI = { [weak self] in Task { await self?.recheckCLI() } }
+        workspace.onCopyInstallCommand = {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(ClaudeCLI.installCommand, forType: .string)
+        }
+        workspace.onOpenInstallDocs = { NSWorkspace.shared.open(ClaudeCLI.installDocsURL) }
         sidebar.onSelect = { [weak self, weak workspace] ids, mode in
             guard let self, let workspace else { return }
             // Eine einzelne Session anklicken quittiert ihre Marke „neu“, eine ganze Gruppe nicht.
@@ -252,6 +259,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleAuto = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleAuto() }
         bar.onToggleSync = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
+        bar.onCopyUpdateCommand = {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(ClaudeCLI.updateCommand, forType: .string)
+        }
+        bar.onDismissTip = { [weak self] in
+            guard let self else { return }
+            self.tip = nil
+            for c in self.windows { c.bar.tip = nil; c.bar.needsDisplay = true }
+        }
         bar.onSelectWaiting = { [weak self, weak workspace] in guard let self else { return }; workspace?.select(waitingIds(), add: false) }
     }
 
@@ -333,16 +350,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registry.pids = { [weak attach] in attach?.pids ?? [:] }
         registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
         // Fenster versteckt (Menüleisten-Betrieb) oder App im Hintergrund: seltener pollen, siehe `updatePollBackground`.
+        // Aktiviert sich die App wieder und steht noch der alte Fehler (claude fehlt/zu alt), gleich nochmal prüfen:
+        // ohne das bleibt „claude nicht gefunden“ auch nach einer Installation bis zum Neustart stehen.
         for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.updatePollBackground() }
+                guard name == NSApplication.didBecomeActiveNotification else { return }
+                MainActor.assumeIsolated { self?.recheckIfBroken() }
             }
         }
         NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.updatePollBackground() }
         }
-        if !FileManager.default.isExecutableFile(atPath: cli.binary) { registry.fail(String(localized: "\(cli.binary): claude nicht gefunden")) }
-        else if let tooOld = await cli.checkVersion() { registry.fail(tooOld) }
+        await recheckCLI()
         // Leer nicht abgleichen: das würde Gruppen alter Hintergrund-Sessions verwerfen, bevor sie übernommen sind.
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
@@ -358,6 +378,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Fenster verdeckt/versteckt oder App nicht aktiv: `SessionRegistry` seltener pollen lassen.
     private func updatePollBackground() {
         registry?.setBackground(!NSApp.isActive || !windows.contains { $0.window.isVisible })
+    }
+
+    /// claude fehlt oder `claude --version` liefert nichts Brauchbares: blockierender Fehler, der Leerzustand
+    /// bietet „Erneut prüfen“ genau hierauf. Zu alt ist keine Blockade mehr (siehe `ClaudeCLI.VersionCheck`),
+    /// nur eine Warnung in der Leiste, solange `claude agents` trotzdem läuft.
+    func recheckCLI() async {
+        guard let cli else { return }
+        guard FileManager.default.isExecutableFile(atPath: cli.binary) else {
+            registry.fail(String(localized: "\(cli.binary): claude nicht gefunden"), missingBinary: true)
+            versionWarning = nil
+            reloadViews()
+            return
+        }
+        switch await cli.checkVersion() {
+        case .failed(let message): registry.fail(message); versionWarning = nil
+        case .tooOld(let message): registry.clearError(); versionWarning = message; await registry.pollNow()
+        case .ok: registry.clearError(); versionWarning = nil; await registry.pollNow()
+        }
+        reloadViews()
+    }
+
+    private func recheckIfBroken() {
+        guard registry?.lastError != nil else { return }
+        Task { await self.recheckCLI() }
+    }
+
+    /// Einmaliger Tipp in der Leiste (Kanboard #14): verschwindet nach 12 s von selbst oder per Klick darauf.
+    /// Setzt die Fenster direkt statt über `syncSidebar`, das lässt sich auch aus `syncSidebar` selbst heraus aufrufen.
+    private func showTip(_ text: String) {
+        tip = text
+        for c in windows { c.bar.tip = text; c.bar.needsDisplay = true }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(12))
+            guard let self, self.tip == text else { return }
+            self.tip = nil
+            for c in self.windows { c.bar.tip = nil; c.bar.needsDisplay = true }
+        }
     }
 
     private func sessionsChanged(_ sessions: [Session]) {
@@ -386,15 +443,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard Profile.name == nil else { return }
         let bg = elsewhere.filter(\.isRunningBackground)
         guard !bg.isEmpty else { return }
+        let busy = bg.contains { $0.status == "busy" }
         let list = bg.map { "· \($0.name)\($0.status == "busy" ? String(localized: " (arbeitet gerade)") : "")" }.joined(separator: "\n")
-        confirm(String(localized: "\(bg.count) Hintergrund-Session(s) übernehmen?"), String(localized: "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:") + "\n\(list)", button: String(localized: "Übernehmen"), destructive: false, ask: .adoptBackground) { [weak self] in
+        // Arbeitende Sessions per blankem ⏎ zu stoppen wäre destruktiv (Kanboard #16): sobald eine busy ist, gilt ⌘⏎ wie überall sonst.
+        confirm(String(localized: "\(bg.count) Hintergrund-Session(s) übernehmen?"), String(localized: "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:") + "\n\(list)", button: String(localized: "Übernehmen"), destructive: busy, ask: .adoptBackground) { [weak self] in
             guard let self else { return }
             Task {
+                var failures: [String] = []
                 for a in bg {
                     guard let id = a.shortId else { continue }
-                    do { try await self.cli.stop(id: id) } catch { self.report(error); continue }
+                    do { try await self.cli.stop(id: id) } catch { failures.append("· \(a.name): \(CLIError.firstLine(of: error))"); continue }
                     self.registry.add(Session(id: id, cwd: a.cwd, startedAt: a.startedAt, sessionId: a.sessionId,
                                               name: Session.isAutoName(a.name, cwd: a.cwd) ? "" : a.name))
+                }
+                // Eine Meldung für alle Fehlschläge statt einer je Session, die sich sonst gegenseitig verdrängen (#73).
+                if !failures.isEmpty {
+                    self.report(failures.joined(separator: "\n"), title: String(localized: "\(failures.count) Session(s) konnten nicht übernommen werden"))
                 }
             }
         }
@@ -403,6 +467,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func reloadViews() {
         for c in windows {
             c.workspace.lastError = registry?.lastError
+            c.workspace.lastErrorIsMissingBinary = registry?.lastErrorIsMissingBinary ?? false
             c.workspace.polled = registry?.polled ?? false
             c.workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
         }
@@ -430,6 +495,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statuses = sessions.filter { attach?.isAttached($0.key) ?? false }.mapValues(\.status)
         let changed = Feedback.transitions(from: lastStatuses, to: statuses)
         lastStatuses = statuses
+        // Einmaliger Tipp bei der allerersten wartenden Session überhaupt (Kanboard #14): sonst bleibt Gelb unerklärt.
+        if !changed.waiting.isEmpty, !Profile.defaults.bool(forKey: "tip.waiting.shown") {
+            Profile.defaults.set(true, forKey: "tip.waiting.shown")
+            showTip(String(localized: "Gelb heißt: Claude wartet auf dich. ⌥N springt zur nächsten wartenden Session."))
+        }
         // Klang und Marke „neu“ nur für das, was man gerade nicht sieht: andere Session oder Fenster im Hintergrund.
         let notLooking = { (id: String) in id != self.workspace.focused || self.window?.isKeyWindow == false }
         if changed.waiting.contains(where: notLooking) { Feedback.play(.waiting) } else if changed.done.contains(where: notLooking) { Feedback.play(.done) }
@@ -462,6 +532,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
         bar.errorText = registry?.lastError
+        bar.versionWarning = versionWarning
+        bar.tip = tip
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
@@ -749,7 +821,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.currentDirectoryURL = URL(fileURLWithPath: cwd)
         p.environment = cli?.environment
         p.standardInput = FileHandle.nullDevice
-        do { try p.run() } catch { report(error) }
+        do { try p.run() } catch { report(String(describing: error)) }
     }
 
     private func focusSidebar() {
@@ -849,18 +921,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Rückfrage im App-Design. Nicht-destruktive bestätigt blankes ⏎, destruktive nur ⌘⏎. Esc bricht immer ab.
     /// `skip` (⌥+Klick) führt direkt aus. `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
     func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false,
-                         ask: Settings.Ask? = nil, then action: @escaping () -> Void) {
+                         infoOnly: Bool = false, ask: Settings.Ask? = nil, then action: @escaping () -> Void) {
         if skip || ask?.enabled == false { action(); return }
         let run = { [weak self] in self?.dismissSheet(); action() }
         let cancel = { [weak self] in ask?.enabled = true; self?.dismissSheet() }
-        present(ConfirmView(title: message, info: info, button: button, destructive: destructive, ask: ask,
+        present(ConfirmView(title: message, info: info, button: button, destructive: destructive, infoOnly: infoOnly, ask: ask,
                             onConfirm: run, onCancel: cancel),
                 plainReturn: !destructive, onCancel: cancel, onPrimary: run)
     }
 
-    private func report(_ error: Error) {
-        AppDelegate.log.error("\(String(describing: error), privacy: .public)")
-        confirm(String(localized: "Claude CLI meldet einen Fehler"), String(describing: error), button: String(localized: "OK"), destructive: false) {}
+    /// Mitteilung ohne echte Alternative: nur „OK“, kein Abbrechen, das dasselbe täte (siehe Kanboard #73).
+    /// `detail` ist die erste Zeile der CLI-Ausgabe, nicht der ganze Prozess-Output.
+    private func report(_ detail: String, title: String = String(localized: "Claude CLI meldet einen Fehler")) {
+        AppDelegate.log.error("\(detail, privacy: .public)")
+        confirm(title, detail, button: String(localized: "OK"), destructive: false, infoOnly: true) {}
     }
 
     func stopSession(_ s: Session) {
@@ -960,7 +1034,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FolderIndex.shared.refresh(roots: [Settings.startFolder] + known.map { ($0 as NSString).deletingLastPathComponent }) { [weak model] in
             model?.refreshIfUntouched()
         }
-        let view = NewSessionView(model: model) { [weak self] g, cwd in
+        let view = NewSessionView(model: model, onOpenSettings: { [weak self] in self?.menuSettings() }) { [weak self] g, cwd in
             self?.dismissSheet()
             self?.startSession(group: g, cwd: cwd)
         }
@@ -982,9 +1056,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FolderIndex.shared.recordUse(cwd)
         let session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
         if let prompt { attach.initialPrompts[id] = prompt }
+        // Einmaliger Tipp nach der allerersten Session überhaupt (Kanboard #14): der Kernnutzen (mehrere Sessions,
+        // gelb = wartet) zeigt sich sonst nie, solange niemand zufällig mehrere parallel öffnet.
+        let firstEver = registry.sessions.isEmpty && !Profile.defaults.bool(forKey: "tip.secondSession.shown")
         registry.add(session)
         Feedback.play(.open)
         if show { workspace.select([id], add: !workspace.selected.isEmpty) } else { attach.attachNow(session) }
+        if firstEver {
+            Profile.defaults.set(true, forKey: "tip.secondSession.shown")
+            showTip(String(localized: "⌘⏎ startet eine zweite Session im selben Ordner. Kadrell meldet sich, sobald eine auf dich wartet."))
+        }
         return id
     }
 

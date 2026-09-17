@@ -2,14 +2,23 @@ import SwiftUI
 
 enum Settings {
     static let startFolderKey = "startFolder"
-    /// Startordner für ⌘N, Default Home. Immer mit abschließendem Slash.
+    /// Startordner für ⌘N. Immer mit abschließendem Slash.
     static var startFolder: String {
         get {
-            var p = Profile.defaults.string(forKey: startFolderKey) ?? NSHomeDirectory()
+            var p = Profile.defaults.string(forKey: startFolderKey) ?? defaultStartFolder
             if p.hasPrefix("~") { p = NSHomeDirectory() + p.dropFirst() }
             return p.hasSuffix("/") ? p : p + "/"
         }
         set { Profile.defaults.set(newValue, forKey: startFolderKey) }
+    }
+
+    /// Erster existierender Kandidat aus den üblichen Projektordnern, sonst Home. `~` selbst als Startordner scannt
+    /// beim ersten ⌘N auch Schreibtisch/Dokumente/Downloads an und löst eine Kaskade an TCC-Abfragen aus (#23).
+    private static var defaultStartFolder: String {
+        let home = NSHomeDirectory()
+        let candidates = ["development", "Development", "Projects", "projects", "code", "Code", "src",
+                           "workspace", "git", "Documents/GitHub"]
+        return candidates.map { home + "/" + $0 }.first { FolderIndex.isDirectory($0) } ?? home
     }
 
     /// Kommando des externen Editors, so wie im Terminal getippt (`code`, `subl`, `zed`). "" = Hotkey tut nichts.
@@ -100,6 +109,14 @@ enum Settings {
     static var claudeEffort: String {
         get { Profile.defaults.string(forKey: "claude.effort") ?? "" }
         set { Profile.defaults.set(newValue, forKey: "claude.effort") }
+    }
+    /// Kompakte Zeile für den ⌘N-Dialog: mit welchen Start-Flags eine neue Session gleich läuft (Kanboard #75).
+    static var claudeSummary: String {
+        var parts = [claudeModel.isEmpty ? String(localized: "Standardmodell") : claudeModel,
+                     claudeMode.isEmpty ? String(localized: "fragt nach Rechten") : claudeMode]
+        if !claudeEffort.isEmpty { parts.append(claudeEffort) }
+        if claudeAllowBypass { parts.append(String(localized: "Bypass")) }
+        return parts.joined(separator: " · ")
     }
 
     /// Bereiche der Schieberegler, Prozentwerte in Prozent (gespeichert als Faktor).
