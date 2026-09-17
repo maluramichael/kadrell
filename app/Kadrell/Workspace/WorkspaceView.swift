@@ -836,9 +836,22 @@ final class WorkspaceView: NSView {
         needsDisplay = true
     }
 
-    /// Rechtsklick (bzw. Ctrl-Klick): Kontextmenü der Session unter Kachel-Header oder Stack-Zeile.
+    /// Rechtsklick (bzw. Ctrl-Klick): über markiertem Terminaltext Kopieren und Einsetzen, sonst das Kontextmenü der Session.
     override func menu(for event: NSEvent) -> NSMenu? {
-        hit(at: convert(event.locationInWindow, from: nil)).key.flatMap { onContextMenu?($0) }
+        guard let key = hit(at: convert(event.locationInWindow, from: nil)).key else { return nil }
+        if let t = attach?.terminal(for: key), t.getSelection()?.isEmpty == false { return Self.textMenu(for: t) }
+        return onContextMenu?(key)
+    }
+
+    private static func textMenu(for terminal: KadrellTerminalView) -> NSMenu {
+        let menu = NSMenu()
+        for (title, action, key) in [(String(localized: "Kopieren"), #selector(NSText.copy(_:)), "c"),
+                                     (String(localized: "Einsetzen"), #selector(NSText.paste(_:)), "v")] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.target = terminal
+            menu.addItem(item)
+        }
+        return menu
     }
 
     override func mouseDown(with event: NSEvent) {
