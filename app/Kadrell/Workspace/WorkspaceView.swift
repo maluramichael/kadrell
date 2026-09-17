@@ -50,6 +50,8 @@ final class WorkspaceView: NSView {
     var onChange: (() -> Void)?
     /// Eine neue Kachel bekommt den Fokus (Klick, Pfeiltasten, ⌘-Zahlen, …).
     var onFocusChange: ((String) -> Void)?
+    /// Jeder Klick oder Fokus auf eine Kachel, auch wenn sie schon fokussiert war (Marke „neu“ quittieren).
+    var onActivate: ((String) -> Void)?
     /// Zweiter Parameter: ⌥ gehalten, dann ohne Rückfrage. Nicht ⌘: das kollidiert mit Auswahl im Baum.
     var onCloseSession: ((String, Bool) -> Void)?
     var onRenameSession: ((String) -> Void)?
@@ -155,6 +157,7 @@ final class WorkspaceView: NSView {
     func setFocus(_ key: String, takeKeyboard: Bool = true) {
         guard selected.contains(key) || tiles.contains(key) else { return }
         focused = key
+        onActivate?(key)
         relayout()
         if takeKeyboard { focusTerminal() }
     }
@@ -427,8 +430,11 @@ final class WorkspaceView: NSView {
             lastFirstResponder = window?.firstResponder
             if let hit = cells.first(where: { attach?.terminal(for: $0.key) === window?.firstResponder }), focused != hit.key {
                 focused = hit.key
+                onActivate?(hit.key)
                 relayout()
             } else {
+                // Klick ins schon fokussierte Terminal zählt auch als Hinsehen.
+                if let hit = cells.first(where: { attach?.terminal(for: $0.key) === window?.firstResponder }) { onActivate?(hit.key) }
                 for (key, v) in cells {
                     let has = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false
                     if v.keyboardFocus != has { v.keyboardFocus = has; v.needsDisplay = true }

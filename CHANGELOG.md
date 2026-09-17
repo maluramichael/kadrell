@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.35.0 (2026-09-17)
+
+- Änderung: Wird eine Session fertig oder wartet auf dich, während du woanders bist (andere Session oder Kadrell im Hintergrund), bekommt sie im Baum einen hellen, fetten Titel und die Marke „neu“, auch wenn sie die fokussierte ist. Die Marke bleibt, bis du die Session anklickst, in ihr Terminal klickst oder sie fokussierst, und übersteht einen Neustart. Arbeitet die Session wieder, verschwindet sie.
+- Entfernt: Fettschrift bei jeder neuen Ausgabe im Transcript, sie markierte auch laufende Sessions und fehlte an der fokussierten.
+
 ## 1.34.0 (2026-09-17)
 
 - Feature: Neue Layouts „Haupt + Spalte“ (eine große Kachel links, der Rest rechts untereinander) und „Spirale“ (jede Kachel halbiert den Rest, wie bspwm). Das Layout-Symbol in der Leiste öffnet die Auswahl, ⌘L schaltet reihum.

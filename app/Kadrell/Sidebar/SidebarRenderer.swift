@@ -39,7 +39,7 @@ struct SidebarSessionItem {
     let hover: Bool
     let message: String?
     let showAge: Bool
-    /// Antwort seit dem letzten Fokus: Titel fett.
+    /// Fertig oder wartet, ungesehen: fetter heller Titel und Marke „neu“, auch an der fokussierten Zeile.
     let unread: Bool
 }
 
@@ -102,9 +102,17 @@ extension SidebarRenderer {
             age.draw(at: CGPoint(x: right, y: r.midY - 7))
             right -= 8
         }
-        // Die fokussierte Zeile zeigt gerade selbst an, was neu ist: dort bleibt der Marker aus.
-        let unread = s.unread && !s.focused
-        let title = NSAttributedString(string: s.session.title, attributes: Theme.attrs(12, s.selected || s.hover ? Theme.fg : Theme.sub, bold: unread))
+        if s.unread {
+            let tag = NSAttributedString(string: "neu", attributes: Theme.attrs(10, Theme.bg, bold: true))
+            let w = tag.size().width + 10
+            right -= w
+            let pill = CGRect(x: right, y: r.midY - 8, width: w, height: 16)
+            Theme.color(for: s.session.status == .waiting ? .waiting : .running).setFill()
+            NSBezierPath(roundedRect: pill, xRadius: 3, yRadius: 3).fill()
+            tag.draw(at: CGPoint(x: pill.minX + 5, y: r.midY - 7))
+            right -= 8
+        }
+        let title = NSAttributedString(string: s.session.title, attributes: Theme.attrs(12, s.selected || s.hover || s.unread ? Theme.fg : Theme.sub, bold: s.unread))
         title.draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 

@@ -28,6 +28,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastWaitingIds: Set<String> = []
     /// Status angehängter Sessions beim letzten Abgleich: Wechsel spielen Sound und lassen den Punkt im Baum aufblitzen.
     private var lastStatuses: [String: SessionStatus] = [:]
+    /// Fertig gewordene oder wartende Sessions, die du noch nicht angesehen hast. Weg erst, wenn du sie anklickst
+    /// oder fokussierst; übersteht einen Neustart.
+    private var unseen = Set(Profile.defaults.stringArray(forKey: "sessions.unseen") ?? []) {
+        didSet { if unseen != oldValue { Profile.defaults.set(Array(unseen), forKey: "sessions.unseen") } }
+    }
     /// ⌘A/⌘⇧A: Auswahl davor und danach, damit ein zweiter Druck zurückschaltet.
     private var selectAllUndo: (shift: Bool, before: [String], focus: String?, after: Set<String>)?
     var controlServer: ControlServer?
@@ -188,11 +193,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         palette = PaletteWindow()
 
         workspace.onChange = { [weak self] in self?.syncSidebar() }
-        workspace.onFocusChange = { [weak self] key in self?.registry?.markSeen(key) }
+        workspace.onFocusChange = { [weak self] key in self?.unseen.remove(key); self?.syncSidebar() }
+        workspace.onActivate = { [weak self] key in
+            guard self?.unseen.contains(key) == true else { return }
+            self?.unseen.remove(key)
+            self?.syncSidebar()
+        }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
         sidebar.onSelect = { [weak self] ids, mode in
             guard let self else { return }
+            // Eine einzelne Session anklicken quittiert ihre Marke „neu“, eine ganze Gruppe nicht.
+            if ids.count == 1, unseen.contains(ids[0]) { unseen.remove(ids[0]); syncSidebar() }
             switch mode {
             case .replace: workspace.select(ids, add: false)
             case .toggle: workspace.select(ids, add: true)
@@ -253,6 +265,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return event
         }
         // ⌘ + Mausrad: Schriftgröße aller Terminals wie ⌘+/⌘-. Trackpad-Deltas sammeln, sonst springt es pro Wisch zweistellig.
+        // Klick in ein Terminal quittiert die Marke „neu“, auch wenn es schon die Tastatur hatte.
+        _ = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self, event.window === window, !unseen.isEmpty,
+                  var v = window.contentView?.hitTest(event.locationInWindow) else { return event }
+            while !(v is KadrellTerminalView), let up = v.superview { v = up }
+            if let key = attach?.terminals.first(where: { $0.value === v })?.key, unseen.contains(key) { unseen.remove(key); syncSidebar() }
+            return event
+        }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, event.window === self.window,
                   event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command else { return event }
@@ -354,7 +374,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.sort = Settings.sidebarSort
         sidebar.renderer = Settings.sidebarStyle.renderer
         sidebar.messages = registry?.lastMessages ?? [:]
-        sidebar.unread = registry?.unread ?? []
+        unseen = unseen.filter { workspace.sessions[$0] != nil }
+        sidebar.unread = unseen
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
         let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
@@ -384,9 +405,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statuses = sessions.filter { attach?.isAttached($0.key) ?? false }.mapValues(\.status)
         let changed = Feedback.transitions(from: lastStatuses, to: statuses)
         lastStatuses = statuses
-        // Klang nur für das, was man gerade nicht sieht: andere Session oder Fenster im Hintergrund.
-        let unseen = { (id: String) in id != self.workspace.focused || self.window?.isKeyWindow == false }
-        if changed.waiting.contains(where: unseen) { Feedback.play(.waiting) } else if changed.done.contains(where: unseen) { Feedback.play(.done) }
+        // Klang und Marke „neu“ nur für das, was man gerade nicht sieht: andere Session oder Fenster im Hintergrund.
+        let notLooking = { (id: String) in id != self.workspace.focused || self.window?.isKeyWindow == false }
+        if changed.waiting.contains(where: notLooking) { Feedback.play(.waiting) } else if changed.done.contains(where: notLooking) { Feedback.play(.done) }
+        let fresh = changed.waiting.union(changed.done).filter(notLooking)
+        if !fresh.isSubset(of: unseen) { unseen.formUnion(fresh); sidebar.unread = unseen; sidebar.needsDisplay = true }
+        // Wieder am Arbeiten: die Marke gilt der letzten Antwort, nicht der laufenden.
+        let working = unseen.filter { statuses[$0] == .running }
+        if !working.isEmpty { unseen.subtract(working); sidebar.unread = unseen; sidebar.needsDisplay = true }
         sidebar.flash(waiting: changed.waiting, done: changed.done)
         bar.waitingCount = waiting.count
         bar.needsDisplay = true

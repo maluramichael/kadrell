@@ -19,7 +19,7 @@ final class SidebarView: NSView {
     /// Eingeschaltet: jede Session-Zeile bekommt eine zweite Zeile mit `messages[id]`.
     var showMessages = false
     var messages: [String: String] = [:]
-    /// Sessions mit Antworten seit dem letzten Fokus: Titel fett.
+    /// Sessions, die fertig geworden sind oder warten, ohne dass du hingesehen hast: Titel hervorgehoben, Marke „neu“.
     var unread: Set<String> = []
     private var collapsed: Set<String> = []
     private var rows: [Row] = []
