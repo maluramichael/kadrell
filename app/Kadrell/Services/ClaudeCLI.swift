@@ -35,8 +35,9 @@ final class ClaudeCLI: Sendable {
 
     static func resolve() async -> ClaudeCLI {
         var env = ProcessInfo.processInfo.environment
-        if let out = try? await runRaw("/bin/zsh", ["-lc", "env"], environment: nil, cwd: nil).output {
-            for line in out.split(separator: "\n") {
+        // NUL-getrennt, damit mehrzeilige Werte keine Variablen erfinden. Das führende NUL trennt Ausgaben des Profils ab.
+        if let out = try? await runRaw("/bin/zsh", ["-lc", "printf '\\0'; exec env -0"], environment: nil, cwd: nil, timeout: 10).output {
+            for line in out.split(separator: "\0", omittingEmptySubsequences: false).dropFirst() {
                 guard let eq = line.firstIndex(of: "=") else { continue }
                 let key = String(line[..<eq])
                 guard key.range(of: "^[A-Za-z_][A-Za-z0-9_]*$", options: .regularExpression) != nil else { continue }
@@ -45,7 +46,7 @@ final class ClaudeCLI: Sendable {
         }
         var binary = NSHomeDirectory() + "/.local/bin/claude"
         if !FileManager.default.isExecutableFile(atPath: binary) {
-            let found = (try? await runRaw("/bin/zsh", ["-lc", "command -v claude"], environment: env, cwd: nil).output)?
+            let found = (try? await runRaw("/bin/zsh", ["-lc", "command -v claude"], environment: env, cwd: nil, timeout: 10).output)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if found.hasPrefix("/") { binary = found }
         }
@@ -54,8 +55,10 @@ final class ClaudeCLI: Sendable {
     }
 
     /// Führt einen Prozess aus und liefert stdout+stderr. Der Prozess wird komplett auf einem
-    /// Hintergrund-Thread aufgebaut, damit nichts Nicht-Sendable die Isolation kreuzt.
-    static func runRaw(_ executable: String, _ args: [String], environment: [String: String]?, cwd: String?) async throws -> (status: Int32, output: String) {
+    /// Hintergrund-Thread aufgebaut, damit nichts Nicht-Sendable die Isolation kreuzt. Gelesen wird bis zum Prozessende,
+    /// nicht bis EOF: ein Hintergrundjob aus dem Shell-Profil, der die Pipe erbt, hält sie sonst ewig offen.
+    /// Nach `timeout` Sekunden bekommt der Prozess SIGKILL, die bis dahin gelesene Ausgabe kommt trotzdem zurück.
+    static func runRaw(_ executable: String, _ args: [String], environment: [String: String]?, cwd: String?, timeout: TimeInterval = 60) async throws -> (status: Int32, output: String) {
         try await withCheckedThrowingContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {
                 let p = Process()
@@ -68,7 +71,25 @@ final class ClaudeCLI: Sendable {
                 p.standardError = pipe
                 p.standardInput = FileHandle.nullDevice
                 do { try p.run() } catch { cont.resume(throwing: error); return }
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let fd = pipe.fileHandleForReading.fileDescriptor
+                _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+                let deadline = Date().addingTimeInterval(timeout)
+                var data = Data(), buf = [UInt8](repeating: 0, count: 1 << 16)
+                while true {
+                    if Date() >= deadline {
+                        log.warning("\(executable, privacy: .public) \(args.joined(separator: " "), privacy: .public): nach \(Int(timeout)) s abgebrochen")
+                        if p.isRunning { kill(p.processIdentifier, SIGKILL) }
+                        break
+                    }
+                    let exited = !p.isRunning
+                    var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+                    if poll(&pfd, 1, exited ? 0 : 100) > 0 {
+                        let n = read(fd, &buf, buf.count)
+                        if n > 0 { data.append(buf, count: n); continue }
+                        if n == 0 { break }
+                    }
+                    if exited { break }
+                }
                 p.waitUntilExit()
                 cont.resume(returning: (p.terminationStatus, String(decoding: data, as: UTF8.self)))
             }

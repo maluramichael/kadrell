@@ -1,6 +1,6 @@
 import Foundation
 
-/// Letzte Textantwort von Claude aus dem Transcript `~/.claude/projects/<slug>/<sessionId>.jsonl`.
+/// Letzte Textantwort von Claude aus dem Transcript `<configDir>/projects/<slug>/<sessionId>.jsonl` (`ClaudeCLI.configDir`).
 enum Transcript {
     struct Entry: Sendable {
         let path: String
@@ -11,20 +11,18 @@ enum Transcript {
         let toolCandidates: [String]
     }
 
-    static let root = NSHomeDirectory() + "/.claude/projects"
-
     /// Über alle Projektordner gesucht statt aus `cwd` abgeleitet: nach einem Worktree-Wechsel stimmt der Slug nicht mehr.
-    static func path(sessionId: String) -> String? {
-        let fm = FileManager.default
+    static func path(sessionId: String, configDir: String) -> String? {
+        let fm = FileManager.default, root = configDir + "/projects"
         guard !sessionId.isEmpty, let dirs = try? fm.contentsOfDirectory(atPath: root) else { return nil }
         return dirs.lazy.map { "\(root)/\($0)/\(sessionId).jsonl" }.first { fm.fileExists(atPath: $0) }
     }
 
     /// Liest nur Transcripts neu, deren Größe sich geändert hat. Schlüssel ist die `sessionId`.
-    static func refresh(_ sessionIds: [String], cache: [String: Entry]) -> [String: Entry] {
+    static func refresh(_ sessionIds: [String], configDir: String, cache: [String: Entry]) -> [String: Entry] {
         var out: [String: Entry] = [:]
         for id in sessionIds {
-            guard let path = cache[id]?.path ?? path(sessionId: id) else { continue }
+            guard let path = cache[id]?.path ?? path(sessionId: id, configDir: configDir) else { continue }
             let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? UInt64) ?? 0
             if let old = cache[id], old.size == size { out[id] = old; continue }
             let data = tailData(path: path)

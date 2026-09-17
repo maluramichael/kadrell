@@ -95,6 +95,9 @@ final class SessionRegistry {
         await fillFirstPrompts(&merged)
         let messages = await refreshTranscripts(merged)
         await applyActiveWorktree(&merged)
+        // Während der awaits kann `add`/`remove`/`rename` gelaufen sein: nur die Live-Felder auf den aktuellen Stand legen,
+        // sonst verschwindet eine eben angelegte Session (und `attach.sync` beendet ihren Prozess).
+        merged = SessionRegistry.applyLive(merged, to: sessions)
         // Erster Poll meldet sich auch ohne Änderung: Registrierte hören darauf, um den Lade-Zustand zu verlassen.
         let firstPoll = !polled
         polled = true
@@ -117,8 +120,9 @@ final class SessionRegistry {
     private func fillFirstPrompts(_ merged: inout [Session]) async {
         let missing = merged.filter { $0.name.isEmpty && !$0.isShell && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
         if !missing.isEmpty {
+            let configDir = cli.configDir
             let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
-                if let p = Transcript.path(sessionId: id), let t = Transcript.firstPrompt(path: p) { r[id] = t }
+                if let p = Transcript.path(sessionId: id, configDir: configDir), let t = Transcript.firstPrompt(path: p) { r[id] = t }
             } }.value
             firstPrompts.merge(found) { a, _ in a }
         }
@@ -127,8 +131,8 @@ final class SessionRegistry {
 
     /// Liest nur gewachsene Transcripts neu und leitet daraus die Nachrichtenzeile ab (falls eingeschaltet).
     private func refreshTranscripts(_ merged: [Session]) async -> [String: String] {
-        let ids = merged.map(\.sessionId), cache = transcripts
-        transcripts = await Task.detached { Transcript.refresh(ids, cache: cache) }.value
+        let ids = merged.map(\.sessionId), cache = transcripts, configDir = cli.configDir
+        transcripts = await Task.detached { Transcript.refresh(ids, configDir: configDir, cache: cache) }.value
         var messages: [String: String] = [:]
         if Settings.showLastMessage {
             for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
@@ -169,6 +173,19 @@ final class SessionRegistry {
             s.rawStatus = a.status
             s.pid = a.pid
             s.waitingFor = a.waitingFor
+            return s
+        }
+    }
+
+    /// Überträgt die vom Poll ermittelten Felder per `id` auf `current`. Neu hinzugekommene Sessions bleiben unverändert,
+    /// entfernte kommen nicht zurück, `customName` bleibt aus `current`.
+    static func applyLive(_ polled: [Session], to current: [Session]) -> [Session] {
+        let byId = Dictionary(polled.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return current.map { s in
+            guard let p = byId[s.id] else { return s }
+            var s = s
+            s.cwd = p.cwd; s.sessionId = p.sessionId; s.name = p.name; s.rawStatus = p.rawStatus; s.pid = p.pid
+            s.waitingFor = p.waitingFor; s.branch = p.branch; s.activeWorktree = p.activeWorktree; s.firstPrompt = p.firstPrompt
             return s
         }
     }

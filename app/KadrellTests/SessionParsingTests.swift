@@ -134,6 +134,25 @@ final class SessionRegistryTests: XCTestCase {
         XCTAssertEqual(reloaded[0].name, "Zwei")
         XCTAssertNil(reloaded[0].pid)
     }
+
+    /// `add`/`remove` während eines laufenden Polls: die neue Session bleibt, die entfernte kommt nicht zurück.
+    func testPollKeepsChangesMadeDuringItsAwaits() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-tests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cli = ClaudeCLI(binary: "/usr/bin/false", environment: ["CLAUDE_CONFIG_DIR": dir.path])
+        let r = SessionRegistry(cli: cli, url: dir.appendingPathComponent("sessions.json"))
+        r.add(Session(id: "s1", cwd: dir.path, startedAt: 1, sessionId: "s1", name: "Eins"))
+        r.add(Session(id: "s3", cwd: dir.path, startedAt: 3, sessionId: "s3", name: "Drei"))
+        var started = false
+        r.pids = { started = true; return [:] }
+        let poll = Task { await r.pollNow() }
+        while !started { await Task.yield() }
+        r.add(Session(id: "s2", cwd: dir.path, startedAt: 2, sessionId: "s2", name: "Zwei"))
+        r.remove(["s3"])
+        await poll.value
+        XCTAssertEqual(r.sessions.map(\.id), ["s1", "s2"])
+        XCTAssertEqual(SessionRegistry(cli: cli, url: r.url).sessions.map(\.id), ["s1", "s2"])
+    }
 }
 
 final class UsageParsingTests: XCTestCase {
@@ -163,6 +182,17 @@ final class UsageParsingTests: XCTestCase {
 }
 
 final class TranscriptTests: XCTestCase {
+    /// Transcripts liegen unter dem Datenordner von Claude Code, mit `CLAUDE_CONFIG_DIR` also nicht in `~/.claude`.
+    func testPathFollowsConfigDir() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-config-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("projects/-p-proj"), withIntermediateDirectories: true)
+        try "{}".write(to: dir.appendingPathComponent("projects/-p-proj/abc.jsonl"), atomically: true, encoding: .utf8)
+        let cli = ClaudeCLI(binary: "/usr/bin/false", environment: ["CLAUDE_CONFIG_DIR": dir.path])
+        XCTAssertEqual(Transcript.path(sessionId: "abc", configDir: cli.configDir), dir.path + "/projects/-p-proj/abc.jsonl")
+        XCTAssertNil(Transcript.path(sessionId: "fehlt", configDir: cli.configDir))
+    }
+
     /// Transcript: angeschnittene erste Zeile, Tool-Aufruf ohne Text und Sidechain-Antwort werden übersprungen.
     func testTranscriptLastText() {
         let jsonl = """

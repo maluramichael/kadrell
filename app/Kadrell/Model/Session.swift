@@ -130,10 +130,22 @@ struct Agent: Decodable, Equatable, Sendable {
 
     /// Claude Code schreibt je laufendem Prozess `<configDir>/sessions/<pid>.json` mit denselben Feldern, die
     /// `claude agents --json` liefert. Die Datei zu lesen kostet nichts, der CLI-Aufruf rund 0,3 s CPU und 180 MB.
+    /// Eine liegengebliebene Datei eines früheren Prozesses mit derselben pid (SIGKILL, Absturz) hat ein `startedAt` vor dem
+    /// Start des jetzigen Prozesses und wird ignoriert, sonst übernähme die Kachel eine fremde sessionId.
     static func local(pids: [Int], configDir: String) -> [Agent] {
         pids.compactMap { pid in
-            guard let data = FileManager.default.contents(atPath: configDir + "/sessions/\(pid).json") else { return nil }
-            return try? JSONDecoder().decode(Agent.self, from: data)
+            guard let data = FileManager.default.contents(atPath: configDir + "/sessions/\(pid).json"),
+                  let a = try? JSONDecoder().decode(Agent.self, from: data) else { return nil }
+            if let start = processStart(pid: pid_t(pid)), a.startedAt / 1000 < start - 1 { return nil }
+            return a
         }
+    }
+
+    /// Startzeit eines Prozesses in Sekunden seit 1970, nil wenn es ihn nicht gibt.
+    static func processStart(pid: pid_t) -> Double? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return Double(info.pbi_start_tvsec) + Double(info.pbi_start_tvusec) / 1_000_000
     }
 }

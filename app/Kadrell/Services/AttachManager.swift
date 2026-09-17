@@ -102,6 +102,8 @@ final class AttachManager {
         applyColors(t)
         let key = session.id
         t.onExit = { [weak self] in
+            // `t` hält die Closure und die Closure `t`: erst nach dem gemeldeten Ende lösen, sonst bleibt jedes Terminal im Speicher.
+            t.onExit = nil
             guard let self else { return }
             if self.closing.removeValue(forKey: key) == nil {
                 self.ended.insert(key)
@@ -137,7 +139,7 @@ final class AttachManager {
             onChange?()
             return
         }
-        let hasTranscript = Transcript.path(sessionId: session.sessionId) != nil
+        let hasTranscript = Transcript.path(sessionId: session.sessionId, configDir: cli.configDir) != nil
         var args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
             + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
         AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .public) in \(session.cwd, privacy: .public)")
@@ -156,7 +158,7 @@ final class AttachManager {
         guard let t = terminals.removeValue(forKey: key) else { return }
         if signal {
             closing[key] = t.process.shellPid
-            if t.process.running { kill(t.process.shellPid, SIGHUP) }
+            if t.process.running { AttachManager.signal(t.process.shellPid, SIGHUP) }
         }
         t.removeFromSuperview()
         if !ended.contains(key) { snapshots[key] = nil }
@@ -215,8 +217,14 @@ final class AttachManager {
         while !closing.isEmpty, Date() < deadline { try? await Task.sleep(for: .milliseconds(100)) }
         for (key, pid) in closing {
             AttachManager.log.warning("claude \(key, privacy: .public) reagiert nicht auf SIGHUP, SIGKILL")
-            kill(pid, SIGKILL)
+            AttachManager.signal(pid, SIGKILL)
         }
+    }
+
+    /// `forkpty` macht den Prozess zum Session- und Gruppenleiter: das Signal geht an die ganze Gruppe, damit Kinder
+    /// (MCP-Server, Befehle aus dem Bash-Tool) nicht verwaist weiterlaufen. Gibt es die Gruppe nicht mehr, nur an die pid.
+    static func signal(_ pid: pid_t, _ sig: Int32) {
+        if kill(-pid, sig) != 0 { kill(pid, sig) }
     }
 
     /// Textzeilen aller angehängten Terminals aktualisieren. Kein Hintergrund-Timer: einzige Verbraucher sind die
