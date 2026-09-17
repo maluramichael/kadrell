@@ -2,6 +2,11 @@ import AppKit
 import SwiftUI
 import os
 
+/// Fest verdrahtete Tasten im Event-Monitor, Namen wie `Hotkey.specials`.
+private enum KeyCodes {
+    static let returnKey: UInt16 = 36, keypadEnter: UInt16 = 76, escape: UInt16 = 53, f1: UInt16 = 122
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "app")
@@ -21,32 +26,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let usage = UsageService()
     private let updateChecker = UpdateChecker()
     private var palette: PaletteWindow!
-    private var overlay: OverlayPanel?
-    private var keyMonitor: Any?
-    private var scrollMonitor: Any?
+    lazy var sheets = SheetPresenter(host: { [weak self] in self?.current }, palette: { [weak self] in self?.palette })
+    private let attention = AttentionTracker()
     private var fontScrollAccum: CGFloat = 0
-    private var statusItem: NSStatusItem?
-    /// Session, für die zuletzt `session-focus` gefeuert hat.
-    private var hookFocus: String?
-    /// Aktiver Worktree dieser Session beim letzten `session-focus` (siehe `Session.activeWorktree`). Wechselt er,
-    /// obwohl die Session dieselbe bleibt, feuert der Hook erneut, sonst bekäme ein Hook-Skript den Wechsel nie mit.
-    private var hookFocusWorktree: String?
-    /// Wartende Sessions beim letzten Abgleich: neu dazugekommene lösen `requestUserAttention` aus.
-    private var lastWaitingIds: Set<String> = []
-    /// Status angehängter Sessions beim letzten Abgleich: Wechsel spielen Sound und lassen den Punkt im Baum aufblitzen.
-    private var lastStatuses: [String: SessionStatus] = [:]
-    /// Fertig gewordene oder wartende Sessions, die du noch nicht angesehen hast. Weg erst, wenn du sie anklickst
-    /// oder fokussierst; übersteht einen Neustart.
-    private var unseen = Set(Profile.defaults.stringArray(forKey: "sessions.unseen") ?? []) {
-        didSet { if unseen != oldValue { Profile.defaults.set(Array(unseen), forKey: "sessions.unseen") } }
-    }
+    private var statusItem: StatusItemController?
     /// ⌘A/⌘⇧A: Auswahl davor und danach, damit ein zweiter Druck zurückschaltet.
     private var selectAllUndo: (shift: Bool, before: [String], focus: String?, after: Set<String>)?
     var controlServer: ControlServer?
     /// claude läuft, ist aber älter als `ClaudeCLI.minVersion`: nicht blockierend, nur die Leiste warnt (`recheckCLI`).
     private var versionWarning: String?
-    /// Einmaliger Tipp in der Leiste (zweite Session, Bedeutung von Gelb), siehe `showTip`.
-    private var tip: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nur eine Instanz pro Profil: hält schon eine das Profil, die nach vorn holen und selbst beenden.
@@ -60,6 +48,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Dock-Icon direkt aus dem Bundle: LaunchServices hält für Debug-Builds am selben Pfad gern das alte, leere Icon.
         if let url = Bundle.main.url(forResource: "Kadrell", withExtension: "icns"), let img = NSImage(contentsOf: url) { NSApp.applicationIconImage = img }
         buildMenu()
+        attention.onTip = { [weak self] tip in self?.windows.forEach { $0.bar.tip = tip; $0.bar.needsDisplay = true } }
+        attention.notify = { [weak self] key, s, waiting in
+            Notifications.notify(sessionKey: key, group: self?.store.group(forSession: key)?.name ?? "", title: s.title,
+                                 message: self?.registry?.lastMessages[key], waiting: waiting)
+        }
         buildWindows()
         // Unter XCTest nur das Fenster, kein Polling.
         guard NSClassFromString("XCTestCase") == nil else { return }
@@ -73,7 +66,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             showWhatsNewIfNeeded()
         }
-        buildStatusItem()
+        let item = StatusItemController(store: store)
+        item.onFocus = { [weak self] in self?.focusSession($0) }
+        item.onNextWaiting = { [weak self] in self?.focusNextWaiting() }
+        item.onOpen = { [weak self] in self?.showMainWindow() }
+        statusItem = item
     }
 
     /// Erststart zeigt „Was ist neu“ nicht (nichts davon war vorher da, siehe `helpShown`-Zweig), jeder spätere
@@ -88,84 +85,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `fallback` steht, wenn die Version keine Changelog-Zeilen hat (Menüpunkt „Was ist neu“ manuell aufgerufen).
     private func showWhatsNew(version: String, fallback: String?) {
         let notes = WhatsNew.notes(version: version, changelog: WhatsNew.bundledChangelog())
-        guard !notes.isEmpty else { if let fallback { confirm(String(localized: "Neu in \(version)"), fallback, button: String(localized: "OK"), destructive: false) {} }; return }
-        confirm(String(localized: "Neu in \(version)"), notes.joined(separator: "\n\n"), button: String(localized: "Super"), destructive: false) {}
+        let title = String(localized: "Neu in \(version)")
+        if !notes.isEmpty {
+            sheets.confirm(title, notes.joined(separator: "\n\n"), button: String(localized: "Super"), destructive: false) {}
+        } else if let fallback {
+            sheets.confirm(title, fallback, button: String(localized: "OK"), destructive: false) {}
+        }
     }
 
-    /// Menüleisten-Icon mit Kurzstatus. Sein Menü listet wartende und ungesehen fertige Sessions, Klick fokussiert
-    /// sie. Bleibt sichtbar, solange Kadrell läuft, auch wenn das Fenster versteckt ist.
-    private func buildStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "Kadrell")
-        item.button?.image?.isTemplate = true
-        item.menu = buildStatusMenu(rows: (waiting: [], done: []), sessions: [:])
-        statusItem = item
-    }
-
-    @objc private func statusItemClicked() {
+    /// Fenster nach vorn: Menüleisten-Menü, Dock-Klick, Benachrichtigung, Beenden-Rückfrage.
+    private func showMainWindow() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
 
-    /// "3 warten · 1 neu" im Menüleisten-Icon (ungesehen fertige zählen als „neu“ mit), und sein Menü.
-    private func updateStatusItem(_ sessions: [Session]) {
-        let byKey = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
-        let waiting = Set(sessions.filter { $0.status == .waiting }.map(\.id))
-        let rows = StatusMenu.rows(order: store.groups.flatMap(\.sessionIds), waiting: waiting, unseen: unseen)
-        statusItem?.button?.title = StatusMenu.title(waiting: rows.waiting.count, done: rows.done.count)
-        statusItem?.menu = buildStatusMenu(rows: rows, sessions: byKey)
+    /// Session auf der Arbeitsfläche zeigen und fokussieren, im Baum aufklappen.
+    private func reveal(_ key: String) {
+        workspace.addMissing([key])
+        workspace.setFocus(key)
+        sidebar.reveal(key)
     }
-
-    private func buildStatusMenu(rows: (waiting: [String], done: [String]), sessions: [String: Session]) -> NSMenu {
-        let menu = NSMenu()
-        func addRow(_ key: String, waiting: Bool) {
-            guard let s = sessions[key] else { return }
-            let group = store.group(forSession: key)?.name ?? ""
-            let item = NSMenuItem(title: "\(group) › \(s.title) · \(s.elapsed())", action: #selector(statusMenuSelect(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = key
-            item.image = NSImage(systemSymbolName: waiting ? "clock" : "checkmark.circle", accessibilityDescription: nil)
-            menu.addItem(item)
-        }
-        if rows.waiting.isEmpty, rows.done.isEmpty {
-            let empty = menu.addItem(withTitle: String(localized: "Keine wartenden Sessions"), action: nil, keyEquivalent: "")
-            empty.isEnabled = false
-        } else {
-            for key in rows.waiting { addRow(key, waiting: true) }
-            for key in rows.done { addRow(key, waiting: false) }
-            menu.addItem(.separator())
-            let next = menu.addItem(withTitle: String(localized: "Nächste wartende Session"), action: #selector(statusMenuNextWaiting), keyEquivalent: "")
-            next.target = self
-            next.isEnabled = !rows.waiting.isEmpty
-        }
-        menu.addItem(.separator())
-        let open = menu.addItem(withTitle: String(localized: "Kadrell öffnen"), action: #selector(statusItemClicked), keyEquivalent: "")
-        open.target = self
-        return menu
-    }
-
-    @objc private func statusMenuSelect(_ sender: NSMenuItem) {
-        guard let key = sender.representedObject as? String else { return }
-        focusSession(key)
-    }
-    @objc private func statusMenuNextWaiting() { focusNextWaiting() }
 
     /// Fenster nach vorn, Session fokussieren: Menüleisten-Menü und Klick auf eine Systembenachrichtigung.
     func focusSession(_ key: String) {
         guard workspace.sessions[key] != nil else { return }
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
-        workspace.addMissing([key])
-        workspace.setFocus(key)
-        sidebar.reveal(key)
+        showMainWindow()
+        reveal(key)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     /// Dock-Klick, während das Fenster versteckt ist: zurückholen statt neu zu starten.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        showMainWindow()
         return true
     }
 
@@ -190,8 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func confirmQuit() {
         NSApp.unhide(nil)
         window.deminiaturize(nil)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        showMainWindow()
         Task {
             await registry.pollNow()
             let running = registry.sessions.filter { attach.isAttached($0.id) }
@@ -202,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let title = busy.isEmpty ? String(localized: "Kadrell beenden?") : String(localized: "Kadrell beenden? \(busy.count) Session(s) arbeiten gerade!")
             let info = String(localized: "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.")
                 + "\n\n\(list)"
-            confirm(title, info, button: String(localized: "Beenden"), ask: .quit) { [weak self] in
+            sheets.confirm(title, info, button: String(localized: "Beenden"), ask: .quit) { [weak self] in
                 guard let self else { return }
                 Task {
                     await self.attach.shutdown()
@@ -282,25 +233,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onReleaseTerminal = { [weak self, weak c] in
             DispatchQueue.main.async { self?.windows.filter { $0 !== c }.forEach { $0.workspace.relayout() } }
         }
-        workspace.onFocusChange = { [weak self] key in self?.unseen.remove(key); self?.syncSidebar() }
-        workspace.onActivate = { [weak self] key in
-            guard self?.unseen.contains(key) == true else { return }
-            self?.unseen.remove(key)
-            self?.syncSidebar()
-        }
+        workspace.onFocusChange = { [weak self] key in self?.attention.markSeen(key); self?.syncSidebar() }
+        workspace.onActivate = { [weak self] key in if self?.attention.markSeen(key) == true { self?.syncSidebar() } }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
         workspace.onRecheckCLI = { [weak self] in Task { await self?.recheckCLI() } }
-        workspace.onCopyInstallCommand = {
-            let pb = NSPasteboard.general
-            pb.clearContents()
-            pb.setString(ClaudeCLI.installCommand, forType: .string)
-        }
+        workspace.onCopyInstallCommand = { NSPasteboard.general.copy(ClaudeCLI.installCommand) }
         workspace.onOpenInstallDocs = { NSWorkspace.shared.open(ClaudeCLI.installDocsURL) }
         sidebar.onSelect = { [weak self, weak workspace] ids, mode in
             guard let self, let workspace else { return }
             // Eine einzelne Session anklicken quittiert ihre Marke „neu“, eine ganze Gruppe nicht.
-            if ids.count == 1, unseen.contains(ids[0]) { unseen.remove(ids[0]); syncSidebar() }
+            if ids.count == 1, attention.markSeen(ids[0]) { syncSidebar() }
             switch mode {
             case .replace: workspace.select(ids, add: false)
             case .toggle: workspace.select(ids, add: true)
@@ -329,82 +272,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleAuto = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleAuto() }
         bar.onToggleSync = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
-        bar.onCopyUpdateCommand = {
-            let pb = NSPasteboard.general
-            pb.clearContents()
-            pb.setString(ClaudeCLI.updateCommand, forType: .string)
-        }
-        bar.onDismissTip = { [weak self] in
-            guard let self else { return }
-            self.tip = nil
-            for c in self.windows { c.bar.tip = nil; c.bar.needsDisplay = true }
-        }
+        bar.onCopyUpdateCommand = { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
+        bar.onDismissTip = { [weak self] in self?.attention.tip = nil }
         bar.onSelectWaiting = { [weak self, weak workspace] in guard let self else { return }; workspace?.select(waitingIds(), add: false) }
         bar.onShowUpdate = { [weak self] in self?.showUpdateAvailable() }
     }
 
     /// Einmal für alle Fenster: Tasten wirken im Key-Fenster, Mausrad in dem Fenster unter der Maus.
+    /// Die Handler halten den AppDelegate fest, der ohnehin so lange lebt wie die App (`main.swift`).
     private func installMonitors() {
-        // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
-        // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            // Offene Hilfe hat selbst die Tastatur: F1 schließt sie wieder.
-            if event.keyCode == 122, overlayIsAbout, event.window === overlay { dismissSheet(); return nil }
-            guard controller(for: event.window) != nil else { return event }
-            // Dialog offen, aber nicht mehr Key (nach Dropdown, Klick daneben oder App-Wechsel): Esc landet am
-            // Hauptfenster statt am Panel. Ohne das schließt nichts den Dialog, der Blur bleibt liegen und blockt
-            // alle Klicks (Softlock). onCancel räumt den Backdrop mit ab.
-            if event.keyCode == 53, let overlay, overlay.isVisible { overlay.onCancel?(); return nil }
-            // Vorschau offen: ⏎ übernimmt die Session als Auswahl, Esc zeigt wieder die alte.
-            if workspace.preview != nil, event.modifierFlags.intersection(Hotkey.modMask).isEmpty, [36, 76, 53].contains(event.keyCode) {
-                endPreview(commit: event.keyCode != 53)
-                return nil
-            }
-            if let action = Hotkeys.action(for: event) { self.perform(action); return nil }
-            // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
-            if event.keyCode == 36, event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command { self.newSessionInFocusedFolder(); return nil }
-            if event.keyCode == 122 { self.showAbout(); return nil }   // F1
-            // Sync: dieselbe Taste an alle anderen Kacheln (siehe `forward`). ⌘V fügt überall ein, andere ⌘-Kürzel bleiben lokal.
-            if let src = window.firstResponder as? KadrellTerminalView {
-                let mods = event.modifierFlags.intersection(Hotkey.modMask)
-                for t in workspace.syncTargets(except: src) {
-                    if !mods.contains(.command) { KadrellTerminalView.forward(event, to: t) }
-                    else if mods == .command, event.charactersIgnoringModifiers == "v" { t.paste(self) }
-                }
-            }
-            return event
-        }
-        // ⌘ + Mausrad: Schriftgröße aller Terminals wie ⌘+/⌘-. Trackpad-Deltas sammeln, sonst springt es pro Wisch zweistellig.
-        // Klick in ein Terminal quittiert die Marke „neu“, auch wenn es schon die Tastatur hatte.
-        _ = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            guard let self, controller(for: event.window) != nil, !unseen.isEmpty,
-                  var v = event.window?.contentView?.hitTest(event.locationInWindow) else { return event }
-            while !(v is KadrellTerminalView), let up = v.superview { v = up }
-            if let key = attach?.terminals.first(where: { $0.value === v })?.key, unseen.contains(key) { unseen.remove(key); syncSidebar() }
-            return event
-        }
-        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, let workspace = controller(for: event.window)?.workspace else { return event }
-            // Layout Scrollen: seitliches Wischen (bzw. ⇧ + Mausrad) über der Arbeitsfläche verschiebt die Spalten, nicht das Terminal.
-            if workspace.mode == .scroll, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY),
-               workspace.bounds.contains(workspace.convert(event.locationInWindow, from: nil)) {
-                workspace.scrollBy(-event.scrollingDeltaX * (event.hasPreciseScrollingDeltas ? 1 : 10))
-                return nil
-            }
-            guard event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command else { return event }
-            fontScrollAccum += event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 20 : event.scrollingDeltaY
-            let steps = Int(fontScrollAccum)
-            guard steps != 0 else { return nil }
-            fontScrollAccum -= CGFloat(steps)
-            Settings.terminalFontSize += Double(steps)
-            applyAppearance()
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: handleKey)
+        _ = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown, handler: handleMouseDown)
+        _ = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: handleScroll)
+    }
+
+    /// Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
+    /// Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
+    private func handleKey(_ event: NSEvent) -> NSEvent? {
+        let code = event.keyCode, mods = event.modifierFlags.intersection(Hotkey.modMask)
+        if code == KeyCodes.f1, sheets.isAbout(event.window) { sheets.dismiss(); return nil }
+        guard controller(for: event.window) != nil else { return event }
+        if code == KeyCodes.escape, sheets.cancelVisible() { return nil }
+        // Vorschau offen: ⏎ übernimmt die Session als Auswahl, Esc zeigt wieder die alte.
+        if workspace.preview != nil, mods.isEmpty, [KeyCodes.returnKey, KeyCodes.keypadEnter, KeyCodes.escape].contains(code) {
+            endPreview(commit: code != KeyCodes.escape)
             return nil
         }
+        if let action = Hotkeys.action(for: event) { perform(action); return nil }
+        // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
+        if code == KeyCodes.returnKey, mods == .command { newSessionInFocusedFolder(); return nil }
+        if code == KeyCodes.f1 { sheets.toggleAbout(); return nil }
+        forwardSync(event, mods: mods)
+        return event
+    }
+
+    /// Sync: dieselbe Taste an alle anderen Kacheln (siehe `forward`). ⌘V fügt überall ein, andere ⌘-Kürzel bleiben lokal.
+    private func forwardSync(_ event: NSEvent, mods: NSEvent.ModifierFlags) {
+        guard let src = window.firstResponder as? KadrellTerminalView else { return }
+        for t in workspace.syncTargets(except: src) {
+            if !mods.contains(.command) { KadrellTerminalView.forward(event, to: t) }
+            else if mods == .command, event.charactersIgnoringModifiers == "v" { t.paste(self) }
+        }
+    }
+
+    /// Klick in ein Terminal quittiert die Marke „neu“, auch wenn es schon die Tastatur hatte.
+    private func handleMouseDown(_ event: NSEvent) -> NSEvent? {
+        guard controller(for: event.window) != nil, !attention.unseen.isEmpty,
+              var v = event.window?.contentView?.hitTest(event.locationInWindow) else { return event }
+        while !(v is KadrellTerminalView), let up = v.superview { v = up }
+        if let key = attach?.terminals.first(where: { $0.value === v })?.key, attention.markSeen(key) { syncSidebar() }
+        return event
+    }
+
+    /// Layout Scrollen: seitliches Wischen (bzw. ⇧ + Mausrad) über der Arbeitsfläche verschiebt die Spalten, nicht das Terminal.
+    /// ⌘ + Mausrad: Schriftgröße aller Terminals wie ⌘+/⌘-. Trackpad-Deltas sammeln, sonst springt es pro Wisch zweistellig.
+    private func handleScroll(_ event: NSEvent) -> NSEvent? {
+        guard let workspace = controller(for: event.window)?.workspace else { return event }
+        if workspace.mode == .scroll, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY),
+           workspace.bounds.contains(workspace.convert(event.locationInWindow, from: nil)) {
+            workspace.scrollBy(-event.scrollingDeltaX * (event.hasPreciseScrollingDeltas ? 1 : 10))
+            return nil
+        }
+        guard event.modifierFlags.intersection(Hotkey.modMask) == .command else { return event }
+        fontScrollAccum += event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 20 : event.scrollingDeltaY
+        let steps = Int(fontScrollAccum)
+        guard steps != 0 else { return nil }
+        fontScrollAccum -= CGFloat(steps)
+        Settings.terminalFontSize += Double(steps)
+        applyAppearance()
+        return nil
     }
 
     private func boot() async {
         cli = await ClaudeCLI.resolve()
+        attention.fireFocusHook = { [cli] s in Hooks.fire(.sessionFocus, s, environment: cli!.environment) }
         attach = AttachManager(cli: cli)
         for c in windows { c.workspace.attach = attach; c.sidebar.attach = attach }
         attach.onChange = { [weak self] in self?.windows.forEach { $0.workspace.relayout() } }
@@ -479,19 +420,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await self.recheckCLI() }
     }
 
-    /// Einmaliger Tipp in der Leiste (Kanboard #14): verschwindet nach 12 s von selbst oder per Klick darauf.
-    /// Setzt die Fenster direkt statt über `syncSidebar`, das lässt sich auch aus `syncSidebar` selbst heraus aufrufen.
-    private func showTip(_ text: String) {
-        tip = text
-        for c in windows { c.bar.tip = text; c.bar.needsDisplay = true }
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(12))
-            guard let self, self.tip == text else { return }
-            self.tip = nil
-            for c in self.windows { c.bar.tip = nil; c.bar.needsDisplay = true }
-        }
-    }
-
     private func sessionsChanged(_ sessions: [Session]) {
         store.assign(sessions)
         attach.sync(with: sessions)
@@ -521,7 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let busy = bg.contains { $0.status == "busy" }
         let list = bg.map { "· \($0.name)\($0.status == "busy" ? String(localized: " (arbeitet gerade)") : "")" }.joined(separator: "\n")
         // Arbeitende Sessions per blankem ⏎ zu stoppen wäre destruktiv (Kanboard #16): sobald eine busy ist, gilt ⌘⏎ wie überall sonst.
-        confirm(String(localized: "\(bg.count) Hintergrund-Session(s) übernehmen?"), String(localized: "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:") + "\n\(list)", button: String(localized: "Übernehmen"), destructive: busy, ask: .adoptBackground) { [weak self] in
+        sheets.confirm(String(localized: "\(bg.count) Hintergrund-Session(s) übernehmen?"), String(localized: "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:") + "\n\(list)", button: String(localized: "Übernehmen"), destructive: busy, ask: .adoptBackground) { [weak self] in
             guard let self else { return }
             Task {
                 var failures: [String] = []
@@ -533,7 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 // Eine Meldung für alle Fehlschläge statt einer je Session, die sich sonst gegenseitig verdrängen (#73).
                 if !failures.isEmpty {
-                    self.report(failures.joined(separator: "\n"), title: String(localized: "\(failures.count) Session(s) konnten nicht übernommen werden"))
+                    self.sheets.report(failures.joined(separator: "\n"), title: String(localized: "\(failures.count) Session(s) konnten nicht übernommen werden"))
                 }
             }
         }
@@ -550,57 +478,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Baum und Leiste jedes Fensters folgen seiner Arbeitsfläche (Auswahl, Fokus, Layout). Hook, Dock, Sounds und
-    /// Marke „neu“ gelten global und folgen dem Fokus des Key-Fensters.
+    /// Marke „neu“ (`AttentionTracker`) gelten global und folgen dem Fokus des Key-Fensters.
     private func syncSidebar() {
         guard current != nil else { return }
-        unseen = unseen.filter { workspace.sessions[$0] != nil }
+        let sessions = workspace.sessions
+        attention.prune(to: sessions)
         let waiting = waitingIds()
         for c in windows { syncWindow(c, waiting: waiting.count) }
-        let sessions = workspace.sessions
-        if let cli, let key = workspace.focused, let s = sessions[key], key != hookFocus || s.activeWorktree != hookFocusWorktree {
-            hookFocus = key
-            hookFocusWorktree = s.activeWorktree
-            Hooks.fire(.sessionFocus, s, environment: cli.environment)
-        }
-        // Wartend oder fertig, aber noch nicht angesehen: beides zusammen, sonst verschwinden fertige Sessions aus dem Badge.
-        let badgeCount = Set(waiting).union(unseen).count
-        NSApp.dockTile.badgeLabel = badgeCount == 0 ? nil : "\(badgeCount)"
-        let waitingSet = Set(waiting)
-        // Neu dazugekommene wartende Session, Fenster nicht im Vordergrund: kurz im Dock hüpfen, ohne Notification-Rechte.
-        if !waitingSet.subtracting(lastWaitingIds).isEmpty, window?.isKeyWindow == false { NSApp.requestUserAttention(.informationalRequest) }
-        lastWaitingIds = waitingSet
-        let statuses = sessions.filter { attach?.isAttached($0.key) ?? false }.mapValues(\.status)
-        let changed = Feedback.transitions(from: lastStatuses, to: statuses)
-        lastStatuses = statuses
-        // Einmaliger Tipp bei der allerersten wartenden Session überhaupt (Kanboard #14): sonst bleibt Gelb unerklärt.
-        if !changed.waiting.isEmpty, !Profile.defaults.bool(forKey: "tip.waiting.shown") {
-            Profile.defaults.set(true, forKey: "tip.waiting.shown")
-            showTip(String(localized: "Gelb heißt: Claude wartet auf dich. ⌥N springt zur nächsten wartenden Session."))
-        }
-        // VoiceOver bekommt sonst nichts vom Kernnutzen der App mit: welche Session gerade auf einen wartet oder fertig ist.
-        for id in changed.waiting { announce(String(localized: "\(sessions[id]?.title ?? "") wartet")) }
-        for id in changed.done { announce(String(localized: "\(sessions[id]?.title ?? "") fertig")) }
-        // Klang und Marke „neu“ nur für das, was man gerade nicht sieht: andere Session oder Fenster im Hintergrund.
-        let notLooking = { (id: String) in id != self.workspace.focused || self.window?.isKeyWindow == false }
-        if changed.waiting.contains(where: notLooking) { Feedback.play(.waiting) } else if changed.done.contains(where: notLooking) { Feedback.play(.done) }
-        notify(changed.waiting.filter(notLooking), waiting: true, sessions: sessions)
-        notify(changed.done.filter(notLooking), waiting: false, sessions: sessions)
-        let fresh = changed.waiting.union(changed.done).filter(notLooking)
-        let before = unseen
-        if !fresh.isSubset(of: unseen) { unseen.formUnion(fresh) }
-        // Wieder am Arbeiten: die Marke gilt der letzten Antwort, nicht der laufenden.
-        unseen.subtract(unseen.filter { statuses[$0] == .running })
+        let before = attention.unseen
+        let changed = attention.update(sessions: sessions, waiting: waiting,
+                                       statuses: sessions.filter { attach?.isAttached($0.key) ?? false }.mapValues(\.status),
+                                       focused: workspace.focused, isKey: window?.isKeyWindow != false)
         for c in windows {
-            if unseen != before { c.sidebar.unread = unseen; c.sidebar.needsDisplay = true }
+            if attention.unseen != before { c.sidebar.unread = attention.unseen; c.sidebar.needsDisplay = true }
             c.sidebar.flash(waiting: changed.waiting, done: changed.done)
         }
-        updateStatusItem(Array(sessions.values))
-    }
-
-    /// VoiceOver-Ankündigung, unabhängig vom aktuellen Fokus (Muster aus PaletteWindow.move).
-    private func announce(_ text: String) {
-        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
-                             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+        statusItem?.update(Array(sessions.values), unseen: attention.unseen)
     }
 
     private func syncWindow(_ c: MainWindowController, waiting: Int) {
@@ -612,7 +505,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.sort = Settings.sidebarSort
         sidebar.renderer = Settings.sidebarStyle.renderer
         sidebar.messages = registry?.lastMessages ?? [:]
-        sidebar.unread = unseen
+        sidebar.unread = attention.unseen
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
         let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
@@ -621,7 +514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
         bar.errorText = registry?.lastError
         bar.versionWarning = versionWarning
-        bar.tip = tip
+        bar.tip = attention.tip
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
@@ -634,14 +527,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.attachText = String(localized: "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)")
         bar.waitingCount = waiting
         bar.needsDisplay = true
-    }
-
-    /// Systembenachrichtigung je Session in `keys`, Rest der Entscheidung (Level, Rechte) übernimmt `Notifications`.
-    private func notify(_ keys: Set<String>, waiting: Bool, sessions: [String: Session]) {
-        for key in keys {
-            guard let s = sessions[key] else { continue }
-            Notifications.notify(sessionKey: key, group: store.group(forSession: key)?.name ?? "", title: s.title, message: registry?.lastMessages[key], waiting: waiting)
-        }
     }
 
     /// Wartende Sessions in Baumreihenfolge, unabhängig von eingeklappten Gruppen: `waitingFor` kommt nur bei
@@ -755,7 +640,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let s = workspace.focused.flatMap({ workspace.session($0) }), !s.cwd.isEmpty else { openNewSession(groupId: nil); return }
         startSession(group: workspace.group(forSession: s.id), cwd: s.cwd)
     }
-    /// ⌘T: Login-Shell im Ordner der fokussierten Session, sonst im Startordner.
     /// ⌘⇧N: Palette im Remote-Modus, `@host` verbindet per ssh mit dessen tmux, `@host:` wählt die Session.
     @objc private func menuRemote() { togglePalette(prefix: "@") }
 
@@ -772,11 +656,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.select([id], add: !workspace.selected.isEmpty)
     }
 
+    /// ⌘T: Login-Shell im Ordner der fokussierten Session, sonst im Startordner.
     @objc private func menuNewShell() {
-        let cwd = workspace.focused.flatMap { workspace.session($0) }?.cwd ?? Settings.startFolder
-        startSession(group: nil, cwd: cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
+        startShell(group: nil, cwd: workspace.focused.flatMap { workspace.session($0) }?.cwd ?? Settings.startFolder)
     }
-    @objc private func menuAbout() { showAbout() }
+
+    /// Terminal ohne Claude, erkennbar am Schlüssel-Präfix.
+    private func startShell(group: Group?, cwd: String) {
+        startSession(group: group, cwd: cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
+    }
+    @objc private func menuAbout() { sheets.toggleAbout() }
     @objc private func menuWhatsNew() { showWhatsNew(version: Settings.version, fallback: String(localized: "Keine Einträge gefunden.")) }
     @objc private func menuTemporaryInstance() { Profile.launchTemporary() }
     @objc private func menuSettings() {
@@ -788,8 +677,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await self.registry?.pollNow() }
             Task { await self.updateChecker.checkNow() }
         }
-        model.onClose = { [weak self, weak model] in model?.stopRecording(); self?.dismissSheet() }
-        present(SettingsView(model: model), onCancel: { model.onClose?() }, onPrimary: { model.onClose?() })
+        model.onClose = { [weak self, weak model] in model?.stopRecording(); self?.sheets.dismiss() }
+        sheets.present(SettingsView(model: model), onCancel: { model.onClose?() }, onPrimary: { model.onClose?() })
     }
     @objc private func menuFontBigger() { Settings.terminalFontSize += 1; applyAppearance() }
     @objc private func menuFontSmaller() { Settings.terminalFontSize -= 1; applyAppearance() }
@@ -843,39 +732,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let raw = sender.representedObject as? String, let a = HotkeyAction(rawValue: raw) { perform(a) }
     }
 
+    /// Kürzel der Arbeitsfläche erledigt `WorkspaceView.perform`, hier bleiben die mit Baum, Vorschau oder Dialog.
     private func perform(_ action: HotkeyAction) {
         if action != .previewNext, action != .previewPrev { endPreview(commit: false) }
-        if let i = action.tileIndex { workspace.focusTile(i); return }
+        guard !workspace.perform(action) else { return }
         switch action {
-        case .focusLeft: workspace.moveFocus(.left)
-        case .focusRight: workspace.moveFocus(.right)
-        case .focusUp: workspace.moveFocus(.up)
-        case .focusDown: workspace.moveFocus(.down)
-        case .swapLeft: workspace.swapFocused(.left)
-        case .swapRight: workspace.swapFocused(.right)
-        case .swapUp: workspace.swapFocused(.up)
-        case .swapDown: workspace.swapFocused(.down)
-        case .resizeLeft: workspace.resizeFocused(.left)
-        case .resizeRight: workspace.resizeFocused(.right)
-        case .resizeUp: workspace.resizeFocused(.up)
-        case .resizeDown: workspace.resizeFocused(.down)
-        case .splitRight: workspace.setSplit("r")
-        case .splitDown: workspace.setSplit("d")
-        case .nextSession: workspace.cycleFocus(1)
-        case .prevSession: workspace.cycleFocus(-1)
-        case .lastSession: workspace.focusLast()
         case .previewNext: stepPreview(1)
         case .previewPrev: stepPreview(-1)
         case .nextWaiting: focusNextWaiting()
-        case .zoom: workspace.toggleZen()
-        case .nextLayout: workspace.setMode(workspace.mode.next)
         case .focusSidebar: focusSidebar()
         case .focusWorkspace: focusWorkspace()
         case .openEditor: openEditor()
         case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
         case .cycleSort: cycleSort()
-        case .syncInput: workspace.toggleSync()
-        default: workspace.removeFocused()
+        default: break
         }
     }
 
@@ -885,10 +755,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func focusNextWaiting() {
         let ids = waitingIds()
         guard !ids.isEmpty else { NSSound.beep(); return }
-        let next = workspace.focused.flatMap { ids.firstIndex(of: $0) }.map { ids[($0 + 1) % ids.count] } ?? ids[0]
-        workspace.addMissing([next])
-        workspace.setFocus(next)
-        sidebar.reveal(next)
+        reveal(workspace.focused.flatMap { ids.firstIndex(of: $0) }.map { ids[($0 + 1) % ids.count] } ?? ids[0])
     }
 
     /// Tastatur-Besitzer vor der Vorschau: Esc gibt sie ihm zurück.
@@ -920,7 +787,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.currentDirectoryURL = URL(fileURLWithPath: cwd)
         p.environment = cli?.environment
         p.standardInput = FileHandle.nullDevice
-        do { try p.run() } catch { report(String(describing: error)) }
+        do { try p.run() } catch { sheets.report(String(describing: error)) }
     }
 
     private func focusSidebar() {
@@ -935,12 +802,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.select(first.map { [$0] } ?? [], add: false)
     }
 
-    private func showAbout() {
-        if overlay?.isVisible == true, overlayIsAbout { dismissSheet(); return }
-        present(AboutView(), plainReturn: true, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { [weak self] in self?.dismissSheet() })
-        overlayIsAbout = true   // erst nach present: das räumt über dismissSheet den alten Wert ab
-    }
-    private var overlayIsAbout = false
     @objc private func menuPalette() { togglePalette() }
     @objc private func menuFindAll() { togglePalette(prefix: "/") }
     /// ⌘W: fokussierte Session beenden und entfernen, wie das X an der Kachel. Das Fenster bleibt offen.
@@ -956,7 +817,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard !prefix.isEmpty else { palette.switchToCommandMode(); return }
             palette.dismiss(runHighlightReset: false)
         }
-        dismissSheet()
+        sheets.dismiss()
         // Kein Hintergrund-Timer mehr: Snapshots erst hier auf den aktuellen Stand bringen, direkt vorm Zeigen.
         attach?.refreshSnapshots()
         var src = PaletteWindow.Source()
@@ -1012,9 +873,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let t = attach.terminal(for: key), t.window === window else { return }
             window.makeFirstResponder(t)
             t.clearSearch()
-            let pb = NSPasteboard(name: .find)
-            pb.clearContents()
-            pb.setString(term, forType: .string)
+            NSPasteboard(name: .find).copy(term)
             let show = NSMenuItem()
             show.tag = NSTextFinder.Action.showFindInterface.rawValue
             t.performTextFinderAction(show)
@@ -1024,29 +883,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Sessions
 
-    /// Rückfrage im App-Design. Nicht-destruktive bestätigt blankes ⏎, destruktive nur ⌘⏎. Esc bricht immer ab.
-    /// `skip` (⌥+Klick) führt direkt aus. `ask` bietet „Nicht mehr fragen“ an; ist die Rückfrage abgeschaltet, läuft die Aktion sofort.
-    func confirm(_ message: String, _ info: String, button: String, destructive: Bool = true, skip: Bool = false,
-                         infoOnly: Bool = false, ask: Settings.Ask? = nil, then action: @escaping () -> Void) {
-        if skip || ask?.enabled == false { action(); return }
-        let run = { [weak self] in self?.dismissSheet(); action() }
-        let cancel = { [weak self] in ask?.enabled = true; self?.dismissSheet() }
-        present(ConfirmView(title: message, info: info, button: button, destructive: destructive, infoOnly: infoOnly, ask: ask,
-                            onConfirm: run, onCancel: cancel),
-                plainReturn: !destructive, onCancel: cancel, onPrimary: run)
-    }
-
-    /// Mitteilung ohne echte Alternative: nur „OK“, kein Abbrechen, das dasselbe täte (siehe Kanboard #73).
-    /// `detail` ist die erste Zeile der CLI-Ausgabe, nicht der ganze Prozess-Output.
-    private func report(_ detail: String, title: String = String(localized: "Claude CLI meldet einen Fehler")) {
-        AppDelegate.log.error("\(detail, privacy: .private)")
-        confirm(title, detail, button: String(localized: "OK"), destructive: false, infoOnly: true) {}
-    }
-
     /// Klick auf die Update-Pille in der Statusleiste: Changelog-Zeilen der neuen Version, Download öffnet den Browser.
     private func showUpdateAvailable() {
         guard let m = updateChecker.available else { return }
-        confirm(String(localized: "Kadrell \(m.version) verfügbar"), m.notes.joined(separator: "\n"), button: String(localized: "Herunterladen"), destructive: false) {
+        sheets.confirm(String(localized: "Kadrell \(m.version) verfügbar"), m.notes.joined(separator: "\n"), button: String(localized: "Herunterladen"), destructive: false) {
             guard let url = URL(string: m.url) else { return }
             NSWorkspace.shared.open(url)
         }
@@ -1054,7 +894,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func stopSession(_ s: Session) {
         guard attach.isAttached(s.id) else { NSSound.beep(); return }
-        confirm(String(localized: "Session „\(s.title)“ stoppen?"), String(localized: "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort."), button: String(localized: "Stoppen"), ask: .stopSession) { [weak self] in
+        sheets.confirm(String(localized: "Session „\(s.title)“ stoppen?"), String(localized: "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort."), button: String(localized: "Stoppen"), ask: .stopSession) { [weak self] in
             self?.attach.stop(s.id)
         }
     }
@@ -1064,7 +904,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let info = s.isRemote ? String(localized: "Die Verbindung wird getrennt, die tmux-Session auf \(s.host ?? "") läuft weiter.")
             : s.isShell ? String(localized: "Die Shell und alles, was darin läuft, wird beendet.")
             : String(localized: "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)")
-        confirm(String(localized: "„\(s.title)“ beenden und entfernen?"), info, button: String(localized: "Entfernen"), skip: force || s.isRemote, ask: .closeSession) { [weak self] in
+        sheets.confirm(String(localized: "„\(s.title)“ beenden und entfernen?"), info, button: String(localized: "Entfernen"), skip: force || s.isRemote, ask: .closeSession) { [weak self] in
             guard let self else { return }
             Feedback.play(.close)
             attach.detach(key)
@@ -1089,7 +929,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reloadViews()
             return
         }
-        confirm(String(localized: "Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?"),
+        sheets.confirm(String(localized: "Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?"),
                 String(localized: "Claude wird in allen Sessions beendet und die Gruppe entfernt. Die Konversationen bleiben erhalten."), button: String(localized: "Schließen"), skip: force, ask: .closeGroup) { [weak self] in
             guard let self else { return }
             Feedback.play(.close)
@@ -1099,47 +939,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: Sheets
-
-    /// Offene Hilfe (F1) nicht stillschweigend verdrängen: wer gerade ⏎ drückt, um sie zu schließen, soll nicht
-    /// aus Versehen einen anderen Dialog bestätigen. Der neue Dialog kommt erst dran, wenn die Hilfe zu ist.
-    private var pendingPresent: (() -> Void)?
-
-    private func present<V: View>(_ view: V, plainReturn: Bool = true, onCancel: @escaping () -> Void, onPrimary: @escaping () -> Void) {
-        if overlayIsAbout {
-            pendingPresent = { [weak self] in self?.present(view, plainReturn: plainReturn, onCancel: onCancel, onPrimary: onPrimary) }
-            return
-        }
-        dismissSheet()
-        if palette.isVisible { palette.dismiss() }
-        let p = OverlayPanel(rootView: view)
-        p.onCancel = onCancel
-        p.onPrimary = onPrimary
-        p.primaryOnPlainReturn = plainReturn
-        overlay = p
-        p.open(over: window)
-    }
-
-    private func dismissSheet() {
-        overlay?.dismiss()
-        overlay = nil
-        overlayIsAbout = false
-        window.makeFirstResponder(workspace)
-        if let pending = pendingPresent { pendingPresent = nil; pending() }
+    /// Host-Gruppe: kein Claude dort, das „+“ öffnet die Auswahl der tmux-Sessions des Hosts.
+    private func pickRemoteSession(in g: Group) -> Bool {
+        guard let host = g.host else { return false }
+        togglePalette(prefix: "@\(host):")
+        return true
     }
 
     /// ⌘ auf dem „+“ einer Gruppe: Terminal ohne Claude im Ordner der Gruppe, direkt in derselben Gruppe.
     private func openNewTerminal(groupId: String) {
-        guard let g = store.group(id: groupId) else { return }
-        if let host = g.host { togglePalette(prefix: "@\(host):"); return }
-        startSession(group: g, cwd: g.cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
+        guard let g = store.group(id: groupId), !pickRemoteSession(in: g) else { return }
+        startShell(group: g, cwd: g.cwd)
     }
 
     private func openNewSession(groupId: String?) {
         if let gid = groupId, let g = store.group(id: gid) {
-            // Host-Gruppe: kein Claude dort, das „+“ öffnet die Auswahl der tmux-Sessions des Hosts.
-            if let host = g.host { togglePalette(prefix: "@\(host):"); return }
-            startSession(group: g, cwd: g.cwd); return
+            if !pickRemoteSession(in: g) { startSession(group: g, cwd: g.cwd) }
+            return
         }
         let sessions = workspace.sessions
         let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
@@ -1150,10 +966,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model?.refreshIfUntouched()
         }
         let view = NewSessionView(model: model, onOpenSettings: { [weak self] in self?.menuSettings() }) { [weak self] g, cwd in
-            self?.dismissSheet()
+            self?.sheets.dismiss()
             self?.startSession(group: g, cwd: cwd)
         }
-        present(view, onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.start() })
+        sheets.present(view, onPrimary: { model.start() })
     }
 
     /// Kadrell vergibt die sessionId selbst (`claude --session-id`): die Kachel steht sofort, kein Warten auf `claude agents`.
@@ -1173,13 +989,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let prompt { attach.initialPrompts[id] = prompt }
         // Einmaliger Tipp nach der allerersten Session überhaupt (Kanboard #14): der Kernnutzen (mehrere Sessions,
         // gelb = wartet) zeigt sich sonst nie, solange niemand zufällig mehrere parallel öffnet.
-        let firstEver = registry.sessions.isEmpty && !Profile.defaults.bool(forKey: "tip.secondSession.shown")
+        let firstEver = registry.sessions.isEmpty
         registry.add(session)
         Feedback.play(.open)
         if show { workspace.select([id], add: !workspace.selected.isEmpty) } else { attach.attachNow(session) }
         if firstEver {
-            Profile.defaults.set(true, forKey: "tip.secondSession.shown")
-            showTip(String(localized: "⌘⏎ startet eine zweite Session im selben Ordner. Kadrell meldet sich, sobald eine auf dich wartet."))
+            attention.showTipOnce("tip.secondSession.shown", String(localized: "⌘⏎ startet eine zweite Session im selben Ordner. Kadrell meldet sich, sobald eine auf dich wartet."))
         }
         return id
     }
@@ -1190,11 +1005,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = RenameSessionModel(session: s)
         model.onSave = { [weak self] name in
             guard let self else { return }
-            dismissSheet()
+            sheets.dismiss()
             if s.customName == nil, name == s.title { return }
             registry.rename(key, to: name)
         }
-        present(RenameSessionView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+        sheets.present(RenameSessionView(model: model), onPrimary: { model.save() })
     }
 
     private func openEditGroup(_ gid: String) {
@@ -1202,11 +1017,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = EditGroupModel(group: g)
         model.onSave = { [weak self] updated in
             guard let self else { return }
-            dismissSheet()
+            sheets.dismiss()
             store.update(updated)
             reloadViews()
         }
-        present(EditGroupView(model: model), onCancel: { [weak self] in self?.dismissSheet() }, onPrimary: { model.save() })
+        sheets.present(EditGroupView(model: model), onPrimary: { model.save() })
     }
 }
 
