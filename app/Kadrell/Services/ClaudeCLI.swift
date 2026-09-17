@@ -105,4 +105,44 @@ final class ClaudeCLI: Sendable {
             + (model.isEmpty ? [] : ["--model", model])
             + (effort.isEmpty ? [] : ["--effort", effort])
     }
+
+    /// Zuletzt gegen `docs/kadrell-verifikation.md` geprüfte Version: dort ist ab dieser CLI-Version das
+    /// `--bg`-freie Verhalten verifiziert (Kindprozess/`--resume`, `state`/`status` in `agents --json`), auf
+    /// das sich Kadrell verlässt. Ältere Versionen können daran unbemerkt scheitern.
+    static let minVersion = (major: 2, minor: 1, patch: 273)
+
+    /// Liest `claude --version` ("2.1.274 (Claude Code)") und vergleicht mit `minVersion`. `nil` = passt.
+    func checkVersion() async -> String? {
+        let out: String
+        do { out = try await run(["--version"]) } catch {
+            return "\(binary): claude --version fehlgeschlagen: \(CLIError.firstLine(of: error))"
+        }
+        guard let v = ClaudeCLI.parseVersion(out) else {
+            return "\(binary): claude --version liefert kein erkennbares Versionsformat: \(out.trimmingCharacters(in: .whitespacesAndNewlines))"
+        }
+        guard v < ClaudeCLI.minVersion else { return nil }
+        return "claude \(v.major).\(v.minor).\(v.patch): älter als die von Kadrell getestete Version " +
+            "\(ClaudeCLI.minVersion.major).\(ClaudeCLI.minVersion.minor).\(ClaudeCLI.minVersion.patch), bitte aktualisieren"
+    }
+
+    static func parseVersion(_ output: String) -> (major: Int, minor: Int, patch: Int)? {
+        guard let match = output.range(of: #"\d+\.\d+\.\d+"#, options: .regularExpression) else { return nil }
+        let parts = output[match].split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return (parts[0], parts[1], parts[2])
+    }
+}
+
+private func < (lhs: (major: Int, minor: Int, patch: Int), rhs: (major: Int, minor: Int, patch: Int)) -> Bool {
+    if lhs.major != rhs.major { return lhs.major < rhs.major }
+    if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
+    return lhs.patch < rhs.patch
+}
+
+extension CLIError {
+    /// Erste Zeile der Prozessausgabe (bzw. Fehlerbeschreibung), für kurze Fehlermeldungen in der UI.
+    static func firstLine(of error: Error) -> String {
+        let text = ((error as? CLIError)?.output ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.split(separator: "\n").first.map(String.init) ?? text
+    }
 }
