@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.37.0 (2026-09-17)
+
+- Feature: Neues Fenster (⌘⇧T) zeigt dieselben Sessions mit eigener Auswahl, eigenem Layout und Fokus, zum Beispiel für einen zweiten Monitor. Offene Fenster kommen beim Neustart wieder.
+- Feature: Zeigt ein anderes Fenster dieselbe Session, steht dort „In anderem Fenster“. Ein Klick holt das Terminal herüber.
+- Feature: Ein Zusatzfenster schließen (⌘⇧W oder roter Knopf) beendet keine Session.
+
 ## 1.36.0 (2026-09-17)
 
 - Feature: Neues Layout „Frei“ wie in i3: an jeder Kachel legst du mit ⌃⌥⇧→ oder ⌃⌥⇧↓ fest, ob die nächste rechts oder unten entsteht, auch per Klick auf „TEILT“ in der Leiste.
