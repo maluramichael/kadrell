@@ -10,7 +10,6 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     var errorText: String?
     /// claude läuft, ist aber älter als von Kadrell getestet: blockiert nichts, nur ein Hinweis-Badge rechts.
     var versionWarning: String?
-    var onCopyUpdateCommand: (() -> Void)?
     /// Einmaliger Tipp (zweite Session, Bedeutung von Gelb), verschwindet mit einem Klick darauf.
     var tip: String?
     var onDismissTip: (() -> Void)?
@@ -231,7 +230,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         }
         if versionWarning != nil {
             module([NSAttributedString(string: String(localized: "claude alt · claude update"), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))], textY: -7,
-                   String(localized: "Ältere claude-Version"), value: versionWarning) { [weak self] in self?.onCopyUpdateCommand?() }
+                   String(localized: "Ältere claude-Version"), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
         }
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
         let countUp = Feedback.progress(since: usageAt, duration: 0.5)

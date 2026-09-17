@@ -3,10 +3,6 @@ import SwiftUI
 import os
 
 /// Fest verdrahtete Tasten im Event-Monitor, Namen wie `Hotkey.specials`.
-private enum KeyCodes {
-    static let returnKey: UInt16 = 36, keypadEnter: UInt16 = 76, escape: UInt16 = 53, f1: UInt16 = 122
-}
-
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "app")
@@ -238,8 +234,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
         workspace.onRecheckCLI = { [weak self] in Task { await self?.recheckCLI() } }
-        workspace.onCopyInstallCommand = { NSPasteboard.general.copy(ClaudeCLI.installCommand) }
-        workspace.onOpenInstallDocs = { NSWorkspace.shared.open(ClaudeCLI.installDocsURL) }
         sidebar.onSelect = { [weak self, weak workspace] ids, mode in
             guard let self, let workspace else { return }
             // Eine einzelne Session anklicken quittiert ihre Marke „neu“, eine ganze Gruppe nicht.
@@ -272,7 +266,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleAuto = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleAuto() }
         bar.onToggleSync = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
-        bar.onCopyUpdateCommand = { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
         bar.onDismissTip = { [weak self] in self?.attention.tip = nil }
         bar.onSelectWaiting = { [weak self, weak workspace] in guard let self else { return }; workspace?.select(waitingIds(), add: false) }
         bar.onShowUpdate = { [weak self] in self?.showUpdateAvailable() }
@@ -290,18 +283,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         let code = event.keyCode, mods = event.modifierFlags.intersection(Hotkey.modMask)
-        if code == KeyCodes.f1, sheets.isAbout(event.window) { sheets.dismiss(); return nil }
+        if code == KeyCode.f1, sheets.isAbout(event.window) { sheets.dismiss(); return nil }
         guard controller(for: event.window) != nil else { return event }
-        if code == KeyCodes.escape, sheets.cancelVisible() { return nil }
+        if code == KeyCode.escape, sheets.cancelVisible() { return nil }
         // Vorschau offen: ⏎ übernimmt die Session als Auswahl, Esc zeigt wieder die alte.
-        if workspace.preview != nil, mods.isEmpty, [KeyCodes.returnKey, KeyCodes.keypadEnter, KeyCodes.escape].contains(code) {
-            endPreview(commit: code != KeyCodes.escape)
+        if workspace.preview != nil, mods.isEmpty, [KeyCode.returnKey, KeyCode.keypadEnter, KeyCode.escape].contains(code) {
+            endPreview(commit: code != KeyCode.escape)
             return nil
         }
         if let action = Hotkeys.action(for: event) { perform(action); return nil }
         // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
-        if code == KeyCodes.returnKey, mods == .command { newSessionInFocusedFolder(); return nil }
-        if code == KeyCodes.f1 { sheets.toggleAbout(); return nil }
+        if code == KeyCode.returnKey, mods == .command { newSessionInFocusedFolder(); return nil }
+        if code == KeyCode.f1 { sheets.toggleAbout(); return nil }
         forwardSync(event, mods: mods)
         return event
     }
@@ -663,7 +656,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Terminal ohne Claude, erkennbar am Schlüssel-Präfix.
     private func startShell(group: Group?, cwd: String) {
-        startSession(group: group, cwd: cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
+        startSession(group: group, cwd: cwd, sessionId: Session.newShellId())
     }
     @objc private func menuAbout() { sheets.toggleAbout() }
     @objc private func menuWhatsNew() { showWhatsNew(version: Settings.version, fallback: String(localized: "Keine Einträge gefunden.")) }
@@ -781,13 +774,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cmd = Settings.editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         let cwd = workspace.focused.flatMap { workspace.session($0) }?.cwd ?? ""
         guard !cmd.isEmpty, !cwd.isEmpty else { NSSound.beep(); return }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        p.arguments = ["-lc", cmd + " ."]
-        p.currentDirectoryURL = URL(fileURLWithPath: cwd)
-        p.environment = cli?.environment
-        p.standardInput = FileHandle.nullDevice
-        do { try p.run() } catch { sheets.report(String(describing: error)) }
+        do { _ = try ProcessRunner.spawn("/bin/zsh", ["-lc", cmd + " ."], environment: cli?.environment, cwd: cwd) }
+        catch { sheets.report(String(describing: error)) }
     }
 
     private func focusSidebar() {

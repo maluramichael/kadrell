@@ -45,8 +45,8 @@ final class OverlayPanel: ChildPanel {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.keyCode == 53 { onCancel?(); return true }
-        if event.keyCode == 36, event.modifierFlags.contains(.command) || primaryOnPlainReturn { onPrimary?(); return true }
+        if event.keyCode == KeyCode.escape { onCancel?(); return true }
+        if event.keyCode == KeyCode.returnKey, event.modifierFlags.contains(.command) || primaryOnPlainReturn { onPrimary?(); return true }
         return super.performKeyEquivalent(with: event)
     }
 

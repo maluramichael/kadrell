@@ -1,11 +1,5 @@
 import AppKit
 
-/// Virtuelle Tastencodes (US-Layout-Position), statt nackter Zahlen in `keyDown`.
-enum KeyCode {
-    static let returnKey: UInt16 = 36, space: UInt16 = 49, delete: UInt16 = 51, escape: UInt16 = 53, keypadEnter: UInt16 = 76
-    static let f1: UInt16 = 122, f10: UInt16 = 109, left: UInt16 = 123, right: UInt16 = 124, down: UInt16 = 125, up: UInt16 = 126
-}
-
 /// Linke Seite: Baum Gruppe › Sessions, handgezeichnet wie die Leiste. Liegt in einem NSScrollView und
 /// setzt seine Höhe selbst.
 @MainActor

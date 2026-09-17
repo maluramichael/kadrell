@@ -72,9 +72,6 @@ final class WorkspaceView: NSView {
     /// `lastError` ist genau das fehlende Binary: der Leerzustand zeigt den Installationsbefehl statt nur den Pfad.
     var lastErrorIsMissingBinary = false
     var onRecheckCLI: (() -> Void)?
-    /// Ungenutzt: Kopieren und Doku-Link führt der Leerzustand selbst aus. Fällt mit der Verdrahtung im AppDelegate weg.
-    var onCopyInstallCommand: (() -> Void)?
-    var onOpenInstallDocs: (() -> Void)?
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     var polled = false
     /// Interaktive Claude-Sessions, die woanders laufen (tmux, iTerm), nicht von diesem Profil verwaltet.

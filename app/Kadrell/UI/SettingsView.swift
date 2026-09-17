@@ -51,8 +51,8 @@ final class SettingsModel {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let a = self.recording else { return event }
             let plain = event.modifierFlags.intersection(Hotkey.modMask).isEmpty
-            if plain, event.keyCode == 53 { self.stopRecording(); return nil }
-            if plain, event.keyCode == 51 { self.hotkeys[a] = nil; self.stopRecording(); return nil }
+            if plain, event.keyCode == KeyCode.escape { self.stopRecording(); return nil }
+            if plain, event.keyCode == KeyCode.delete { self.hotkeys[a] = nil; self.stopRecording(); return nil }
             guard let k = Hotkey(event: event), k.isUsable else { NSSound.beep(); return nil }
             for (other, v) in self.hotkeys where v == k { self.hotkeys[other] = nil }   // doppelt vergeben geht nicht
             self.hotkeys[a] = k
