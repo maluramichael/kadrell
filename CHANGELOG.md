@@ -2,6 +2,42 @@
 
 Neueste Version oben.
 
+## 1.39.0 (2026-09-17)
+
+- Feature: Einstellung „Sessions dürfen andere Sessions steuern“. Ist sie aus, darf eine Session per `kadrell` nur Sessions ihrer eigenen Gruppe steuern und lesen.
+- Feature: ⌘N bietet an, einen nicht existierenden Ordner anzulegen und dort zu starten (⌘⏎), statt stumm nichts zu tun, und zeigt an, solange Git-Repos gesucht werden.
+- Feature: Die Statusleiste zeigt Tooltips zu jedem Modul (Layout, Nutzung, laufende Sessions und mehr).
+- Feature: Systembenachrichtigung, wenn eine Session wartet oder fertig wird und du sie gerade nicht siehst. Ein Klick holt das Fenster und fokussiert die Session. Einstellbar: aus, nur wartet (Standard) oder wartet und fertig.
+- Feature: Das Menüleisten-Icon listet wartende und ungesehen fertige Sessions als Menü, ein Klick springt zur Session. Titel und Dock-Badge zählen ungesehene fertige mit.
+- Feature: Kadrell prüft beim Start und danach alle 24 Stunden, ob eine neuere Version bereitsteht, und zeigt das dezent in der Statusleiste mit Changelog-Zeilen und Download-Link. Abschaltbar unter „Nach Updates suchen“.
+- Feature: Nach einem Update zeigt Kadrell einmalig, was neu ist, jederzeit erneut über den Menüpunkt „Was ist neu“.
+- Feature: Fehlt claude, zeigt Kadrell den Installationsbefehl zum Kopieren und „Erneut prüfen“, ohne Neustart. Eine zu alte claude-Version blockiert nicht mehr, nur ein Hinweis in der Leiste.
+- Feature: Der ⌘N-Dialog zeigt, mit welchem Modell und Rechte-Modus eine neue Session startet.
+- Feature: Der Baum ist per Tastatur bedienbar: ←/→ klappt Gruppen, ⏎ öffnet, ⌫ schließt, ⌃⏎ zeigt das Kontextmenü, ⌥⌘↑/↓ tauscht mit dem Nachbarn. Für VoiceOver ist er eine echte Gliederung, und VoiceOver kündigt an, wenn eine Session wartet oder fertig ist.
+- Feature: Status-Punkte zeigen bei „Farben nicht unterscheiden“ zusätzlich eine Form, und Animationen respektieren „Bewegung reduzieren“.
+- Feature: Sichtbarer Tastaturfokus in Einstellungen, Rückfragen und „Gruppe bearbeiten“, die Farbwahl dort ist per Tastatur bedienbar, „Nicht mehr fragen“ ist eine echte Checkbox.
+- Änderung: Kadrell erkennt selbst, aus welcher Session ein `kadrell`-Befehl kommt. Eine Umgebungsvariable reicht nicht mehr, um sich als andere Session auszugeben.
+- Änderung: Terminal-Inhalte und Startbefehle stehen nicht mehr lesbar im Systemprotokoll. Hooks laufen nur noch, wenn sie dir gehören und nicht für andere beschreibbar sind.
+- Änderung: Geschlossene Sessions merken sich ihre Konversations-Id (die letzten 50), zuletzt benutzte Ordner für „Neue Session“ verfallen nach 90 Tagen.
+- Änderung: Weniger Last: Baum, Arbeitsfläche und Statusleiste zeichnen nicht, solange das Fenster verdeckt ist, Transcripts werden nur noch ab der letzten Stelle gelesen, und Shell- und Remote-Sessions lösen keine Transcript-Suche mehr aus.
+- Änderung: Mehrere Sessions starten in Wellen statt strikt nacheinander.
+- Änderung: Ohne Sessions führt der Leerzustand mit einem großen Knopf direkt zur ersten Session, statt beim ersten Start ungefragt die Hilfe zu öffnen. Ein einmaliger Tipp in der Leiste erklärt ⌘⏎ und die Bedeutung von Gelb.
+- Änderung: ⌘N durchsucht beim ersten Mal nicht mehr das ganze Home-Verzeichnis, sondern übliche Projektordner.
+- Änderung: Sekundärtext, Warte-Anzeige und Beschriftungen auf farbigen Feldern (Marke „neu“, Leiste) sind in allen Farbschemata gut lesbar, besonders in hellen. Das verändert die gedämpften Grautöne jedes Schemas leicht.
+- Fix: Eine neue Session, die während einer Aktualisierung angelegt wird, verschwindet nicht mehr, und ihr Claude-Prozess läuft weiter. Auch Umbenennen oder Schließen wird nicht mehr von einer gleichzeitigen Aktualisierung rückgängig gemacht.
+- Fix: Gestoppte und geschlossene Terminals geben ihren Speicher frei, und beim Stoppen enden auch die von Claude gestarteten Unterprozesse.
+- Fix: Kadrell hängt beim Start nicht mehr, wenn das Shell-Profil einen Hintergrunddienst startet.
+- Fix: Mit verlegtem Claude-Datenordner (`CLAUDE_CONFIG_DIR`) werden Konversationen nach dem Neustart wieder fortgesetzt.
+- Fix: Eine liegengebliebene Datei eines alten Claude-Prozesses ordnet einer Kachel keine fremde Konversation mehr zu.
+- Fix: Eine erste Nachricht, die mit einem Bindestrich beginnt, kann keine Claude-Optionen mehr einschleusen. Remote-Sessions mit Sonderzeichen im tmux-Namen oder Hostnamen führen keine fremden Befehle mehr aus.
+- Fix: `kadrell send` mischt Text und Enter nicht mehr, wenn direkt danach ein weiterer `send` folgt.
+- Fix: `kadrell` bricht nicht mehr mit „alte Version“ ab, wenn die App gerade erst startet, sondern wartet.
+- Fix: Kaputte oder halb geschriebene Sessions- und Gruppen-Dateien werden nicht mehr still geleert, das Original bleibt als Sicherungskopie liegen und Kadrell meldet es.
+- Fix: Ein fehlerhafter Ladevorgang räumt keine Gruppen mehr leer, und eine doppelte Session-Id bringt Kadrell nicht mehr zum Absturz.
+- Fix: Die ⌘P-Suche reagiert bei vielen Terminals mit langem Verlauf nicht mehr träge.
+- Fix: Startet Claude sofort mit Fehler, zeigt die Kachel Exit-Code und letzte Zeilen statt denselben Fehlversuch stumm zu wiederholen. Ein gelöschter Ordner zeigt „Ordner fehlt“.
+- Fix: Der Übernahme-Dialog für Hintergrund-Sessions braucht ⌘⏎, sobald eine Session gerade arbeitet. Fehlermeldungen zeigen nur noch „OK“, wo Abbrechen nichts anderes täte.
+
 ## 1.38.0 (2026-09-17)
 
 - Feature: Kadrell gibt es jetzt auch auf Englisch. Die Sprache folgt dem System: steht Deutsch in der Sprachliste, bleibt es deutsch, sonst Englisch. Einstellbar pro App unter Systemeinstellungen › Allgemein › Sprache & Region › Apps.
