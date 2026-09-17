@@ -564,6 +564,32 @@ final class WorkspaceView: NSView {
         title.draw(with: CGRect(x: r.minX + 28, y: r.midY - 8, width: max(0, rx - 10 - r.minX - 28), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
+    /// Klick auf Kachel oder Stack-Zeile: Fokus, eine beendete Session setzt fort.
+    func activate(_ k: String) {
+        if attach?.isAttached(k) == false, let s = sessions[k] { attach?.attachNow(s) }
+        setFocus(k)
+    }
+
+    // MARK: Accessibility
+
+    private var a11y: [A11yElement] = []
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Arbeitsfläche" }
+
+    /// Kacheln (eigene Views) plus die gezeichneten Stack-Zeilen.
+    override func accessibilityChildren() -> [Any]? {
+        a11y = (stackRows.isEmpty || zen || preview != nil ? [] : stackRows).compactMap { r, key in
+            guard let s = sessions[key] else { return nil }
+            let label = [s.title, (attach?.isAttached(key) ?? false) ? s.status.spoken : "nicht gestartet", group(forSession: key)?.name]
+            return a11y.reuse(key).update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: r,
+                                          press: { [weak self] in self?.activate(key) },
+                                          actions: [a11yAction("Umbenennen") { [weak self] in self?.onRenameSession?(key) },
+                                                    a11yAction("Schließen") { [weak self] in self?.onCloseSession?(key, false) }])
+        }
+        return (super.accessibilityChildren() ?? []) + a11y
+    }
+
     // MARK: Events
 
     private enum Hit { case cell(String), cellClose(String), cellRename(String), row(String), rowClose(String), rowRename(String), none }
@@ -644,9 +670,7 @@ final class WorkspaceView: NSView {
         case .cellRename(let k), .rowRename(let k): onRenameSession?(k)
         case .cell(let k), .row(let k):
             pressed = (p, k)
-            // Beendete Session: Klick setzt sie fort.
-            if attach?.isAttached(k) == false, let s = sessions[k] { attach?.attachNow(s) }
-            setFocus(k)
+            activate(k)
         case .none:
             if case .noSessions = emptyReason { onEmptyClick?() }
             window?.makeFirstResponder(self)

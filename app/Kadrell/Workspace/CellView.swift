@@ -127,6 +127,32 @@ final class CellView: NSView {
         if hovered { Icons.x(in: xRectLogical, color: Theme.sub); Icons.pen(in: penRectLogical, color: Theme.sub) }
     }
 
+    // MARK: Accessibility
+
+    private var a11y: [A11yElement] = []
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { session.title }
+
+    /// Titelzeile als Knopf (Fokus) mit Titel, Status, Gruppe und Branch, dazu Umbenennen und Schließen. Im Stack
+    /// zeichnet die Arbeitsfläche die Titelzeile, dann nur das Terminal.
+    override func accessibilityChildren() -> [Any]? {
+        let terminal = super.accessibilityChildren() ?? []
+        guard !headerHidden, let ws = superview as? WorkspaceView else { return terminal }
+        let key = session.id
+        let label = [session.title, attached ? session.status.spoken : ended ? "beendet" : "nicht gestartet",
+                     groupName.isEmpty ? nil : groupName, session.branch]
+        a11y = [
+            a11y.reuse("header").update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: headerRect,
+                                        press: { [weak ws] in ws?.activate(key) }),
+            a11y.reuse("rename").update(parent: self, role: .button, label: "Umbenennen", frame: penRect,
+                                        press: { [weak ws] in ws?.onRenameSession?(key) }),
+            a11y.reuse("close").update(parent: self, role: .button, label: "Schließen", frame: xRect,
+                                       press: { [weak ws] in ws?.onCloseSession?(key, false) }),
+        ]
+        return a11y + terminal
+    }
+
     private func drawBody(_ body: CGRect) {
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }
         if ended {

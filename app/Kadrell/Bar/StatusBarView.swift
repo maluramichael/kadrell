@@ -39,7 +39,9 @@ final class StatusBarView: NSView {
     var zoomed = false
     var onToggleZoom: (() -> Void)?
 
-    private var hitRects: [(CGRect, () -> Void)] = []
+    /// Trefferflächen mit Label und Wert, dieselbe Liste liefert die Knöpfe für VoiceOver.
+    private var hitRects: [(rect: CGRect, label: String, value: String?, action: @MainActor () -> Void)] = []
+    private var a11y: [A11yElement] = []
     private var clockTask: Task<Void, Never>?
     /// Umgeschaltete Badges: die Füllung wächst aus der Mitte auf.
     private var toggledAt: [String: CFTimeInterval] = [:]
@@ -104,7 +106,7 @@ final class StatusBarView: NSView {
         let toggle = CGRect(x: 0, y: 0, width: 36, height: b.height - 1)
         Icons.layout(layoutMode, in: CGRect(x: 11, y: midY - 7, width: 14, height: 14), color: Theme.sub)
         Theme.line.setFill(); CGRect(x: toggle.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((toggle, { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) }))
+        hitRects.append((toggle, "Layout", layoutMode.title, { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) }))
         var x = toggle.maxX + 1
         if layoutMode == .grid {
             // ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl, unter 1 wird es wieder automatisch.
@@ -117,8 +119,8 @@ final class StatusBarView: NSView {
             let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
             more.draw(at: CGPoint(x: moreRect.minX + 7, y: midY - 9))
             let cols = gridColumns
-            hitRects.append((lessRect, { [weak self] in self?.onGridColumns?(max(0, cols - 1)) }))
-            hitRects.append((moreRect, { [weak self] in self?.onGridColumns?(min(12, cols + 1)) }))
+            hitRects.append((lessRect, "Weniger Spalten", gridColumns == 0 ? "automatisch" : "\(gridColumns)", { [weak self] in self?.onGridColumns?(max(0, cols - 1)) }))
+            hitRects.append((moreRect, "Mehr Spalten", gridColumns == 0 ? "automatisch" : "\(gridColumns)", { [weak self] in self?.onGridColumns?(min(12, cols + 1)) }))
             Theme.line.setFill(); CGRect(x: moreRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
             x = moreRect.maxX + 1
         }
@@ -127,27 +129,27 @@ final class StatusBarView: NSView {
         if auto { Theme.waiting.setFill(); badge(autoRect, "auto").fill() }
         at.draw(at: CGPoint(x: autoRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: autoRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((autoRect, { [weak self] in self?.onToggleAuto?() }))
+        hitRects.append((autoRect, "Auto-Modus", auto ? "an" : "aus", { [weak self] in self?.onToggleAuto?() }))
         let syt = NSAttributedString(string: "SYNC", attributes: Theme.attrs(10, sync ? Theme.bg : Theme.muted, bold: true))
         let syncRect = CGRect(x: autoRect.maxX + 1, y: 0, width: syt.size().width + 20, height: b.height - 1)
         if sync { Theme.error.setFill(); badge(syncRect, "sync").fill() }
         syt.draw(at: CGPoint(x: syncRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: syncRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((syncRect, { [weak self] in self?.onToggleSync?() }))
+        hitRects.append((syncRect, "Sync", sync ? "an" : "aus", { [weak self] in self?.onToggleSync?() }))
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
         let st = NSAttributedString(string: sortLabel, attributes: Theme.attrs(10, sort == .off ? Theme.muted : Theme.bg, bold: true))
         let sortRect = CGRect(x: syncRect.maxX + 1, y: 0, width: st.size().width + 20, height: b.height - 1)
         if sort != .off { Theme.sub.setFill(); badge(sortRect, "sort").fill() }
         st.draw(at: CGPoint(x: sortRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: sortRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((sortRect, { [weak self] in self?.onCycleSort?() }))
+        hitRects.append((sortRect, "Sortierung", sort == .off ? "aus" : sortLabel, { [weak self] in self?.onCycleSort?() }))
         var leftEnd = sortRect.maxX + 8
         if zoomed {
             let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.bg, bold: true))
             let z = CGRect(x: leftEnd, y: midY - 9, width: zt.size().width + 12, height: 18)
             Theme.waiting.setFill(); z.fill()
             zt.draw(at: CGPoint(x: z.minX + 6, y: midY - 8))
-            hitRects.append((z, { [weak self] in self?.onToggleZoom?() }))
+            hitRects.append((z, "Zoom aufheben", nil, { [weak self] in self?.onToggleZoom?() }))
             leftEnd = z.maxX + 8
         }
 
@@ -174,7 +176,7 @@ final class StatusBarView: NSView {
             let wr = CGRect(x: rx + 4, y: midY - 9, width: ww - 8, height: 18)
             Theme.waiting.setFill(); wr.fill()
             wt.draw(at: CGPoint(x: wr.minX + 10, y: midY - 8))
-            hitRects.append((wr, { [weak self] in self?.onSelectWaiting?() }))
+            hitRects.append((wr, "Wartende Sessions", "\(waitingCount)", { [weak self] in self?.onSelectWaiting?() }))
         }
         module([NSAttributedString(string: attachText, attributes: f)])
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
@@ -224,9 +226,21 @@ final class StatusBarView: NSView {
         if let m = (item.representedObject as? String).flatMap(LayoutMode.init) { onPickLayout?(m) }
     }
 
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .toolbar }
+    override func accessibilityLabel() -> String? { "Statusleiste" }
+
+    /// Knöpfe aus den Trefferflächen des letzten Zeichnens.
+    override func accessibilityChildren() -> [Any]? {
+        a11y = hitRects.map { h in
+            a11y.reuse(h.label).update(parent: self, role: .button, label: h.label, value: h.value, frame: h.rect.scaled(Theme.scale), press: h.action)
+        }
+        return a11y
+    }
+
     override func mouseDown(with event: NSEvent) {
         let v = convert(event.locationInWindow, from: nil)
         let p = CGPoint(x: v.x / Theme.scale, y: v.y / Theme.scale)
-        for (r, action) in hitRects where r.contains(p) { action(); return }
+        for h in hitRects where h.rect.contains(p) { h.action(); return }
     }
 }

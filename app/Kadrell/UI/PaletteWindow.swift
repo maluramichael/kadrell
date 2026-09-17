@@ -5,6 +5,8 @@ import AppKit
 @MainActor
 final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     struct Item {
+        /// Vorgelesen: Titel, Status, Gruppe, Zusatzzeile.
+        var spoken: String { [label, status?.spoken, group, sub].compactMap { $0 }.joined(separator: ", ") }
         let label: String
         let sub: String
         let group: String?
@@ -263,6 +265,9 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         selected = max(0, min(items.count - 1, selected + d))
         table.reloadData()
         table.scrollRowToVisible(selected)
+        // Die Auswahl ist nur gezeichnet, die Tastatur bleibt im Suchfeld: VoiceOver sagt die Zeile daher an.
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                             userInfo: [.announcement: items[selected].spoken, .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
     private func activate(_ i: Int) {
@@ -289,6 +294,9 @@ final class PaletteRow: NSView {
     var selected = false
     override var isFlipped: Bool { true }
     override func draw(_ dirtyRect: NSRect) { Theme.scaled(bounds) { drawRow($0) } }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    override func accessibilityLabel() -> String? { item.map { $0.spoken } ?? "Keine Treffer" }
 
     private func drawRow(_ b: CGRect) {
         if selected {

@@ -145,6 +145,11 @@ final class SidebarView: NSView {
         return !flashes.isEmpty || !appeared.isEmpty
     }
 
+    private func toggleCollapsed(_ id: String) {
+        if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
+        reload(groups: groups, sessions: Array(sessions.values))
+    }
+
     /// Ist irgendeine Gruppe offen, gehen alle zu, sonst alle auf.
     func toggleAllGroups() {
         collapsed = groups.contains { !collapsed.contains($0.id) } ? Set(groups.map(\.id)) : []
@@ -299,6 +304,42 @@ final class SidebarView: NSView {
                                                 unread: unread.contains(s.id)), in: r)
     }
 
+    // MARK: Accessibility
+
+    /// Eine Zeile je Element, Klick wie mit der Maus, die Hover-Knöpfe als Aktionen. Rahmen folgen der Breite, daher
+    /// bei jeder Abfrage neu, die Elemente selbst bleiben je Zeile dieselben.
+    private var a11y: [A11yElement] = []
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .list }
+    override func accessibilityLabel() -> String? { "Sessions" }
+
+    override func accessibilityChildren() -> [Any]? {
+        a11y = rows.enumerated().map { i, row in
+            let e = a11y.reuse(row.key), frame = rowRect(i).scaled(Theme.scale)
+            switch row {
+            case .group(let g):
+                let n = g.sessionIds.count(where: { sessions[$0] != nil })
+                let label = "Gruppe \(g.name), \(n) \(n == 1 ? "Session" : "Sessions")" + (collapsed.contains(g.id) ? ", eingeklappt" : "")
+                return e.update(parent: self, role: .button, label: label, frame: frame,
+                                press: { [weak self] in self?.onSelect?(g.sessionIds, .replace) },
+                                actions: [a11yAction(collapsed.contains(g.id) ? "Ausklappen" : "Einklappen") { [weak self] in self?.toggleCollapsed(g.id) },
+                                          a11yAction("Neue Session") { [weak self] in self?.onNewSession?(g.id) },
+                                          a11yAction(g.isFavorite ? "Kein Favorit" : "Favorit") { [weak self] in self?.onToggleFavorite?(g.id) },
+                                          a11yAction("Bearbeiten") { [weak self] in self?.onEditGroup?(g.id) },
+                                          a11yAction("Schließen") { [weak self] in self?.onCloseGroup?(g.id, false) }])
+            case .session(let s, _):
+                let attached = attach?.isAttached(s.id) ?? false
+                let parts = ["Session \(s.title)", attached ? s.status.spoken : "nicht gestartet",
+                             unread.contains(s.id) ? "neu" : nil, selected.contains(s.id) ? "ausgewählt" : nil]
+                return e.update(parent: self, role: .button, label: parts.compactMap { $0 }.joined(separator: ", "), frame: frame,
+                                press: { [weak self] in self?.anchor = s.id; self?.onSelect?([s.id], .replace) },
+                                actions: [a11yAction("Umbenennen") { [weak self] in self?.onRenameSession?(s.id) },
+                                          a11yAction("Schließen") { [weak self] in self?.onCloseSession?(s.id, false) }])
+            }
+        }
+        return a11y
+    }
+
     // MARK: Events
 
     /// Nur per ⌘1, nicht per Klick: sonst zeigt die alte Fokus-Zeile zwischen Drücken und Loslassen kurz den
@@ -417,11 +458,7 @@ final class SidebarView: NSView {
         }
         switch rows[i] {
         case .group(let g):
-            if p.x < 26 {
-                if collapsed.contains(g.id) { collapsed.remove(g.id) } else { collapsed.insert(g.id) }
-                reload(groups: groups, sessions: Array(sessions.values))
-                return
-            }
+            if p.x < 26 { toggleCollapsed(g.id); return }
         case .session: break
         }
         pressed = (p, rows[i], event.modifierFlags)
