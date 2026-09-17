@@ -4,36 +4,43 @@ import AppKit
 /// ohne Terminal zeigt der Körper Snapshot-Zeilen oder ein Statuslabel.
 @MainActor
 final class CellView: NSView {
-    var session: Session
-    var groupName = ""
-    var groupColor = Theme.muted
-    /// Fokus-Kachel der Arbeitsfläche: Rahmen in Gruppenfarbe.
-    var focused = false
-    /// Das Terminal dieser Kachel hat gerade die Tastatur.
-    var keyboardFocus = false
-    var hovered = false
-    /// Beim Ziehen einer anderen Kachel: hier landet sie.
-    var dropTarget = false
-    var attached = false
-    /// Claude hat sich beendet oder wurde gestoppt; ohne das Flag startet der Prozess gerade.
-    var ended = false
-    /// `ended`, aber kein reguläres `/exit`: der Prozess ist innerhalb weniger Sekunden mit diesem Code gestorben.
-    var exitCode: Int32?
-    /// `ended`, aber gar nicht erst gestartet: der Ordner der Session existiert nicht mehr.
-    var missingFolder = false
-    /// Vorschau (⌥J/⌥K) startet keinen Prozess: ohne Terminal kein „STARTET …“.
-    var previewing = false
-    /// Das Terminal hängt gerade in einem anderen Fenster.
-    var elsewhere = false
-    var lines: [String] = []
+    /// Alles, was die Kachel zeichnet (außer dem Puls). Nur eine echte Änderung zeichnet neu, nicht jeder Poll:
+    /// eine neue Nachricht in Session A soll nicht alle anderen Kacheln neu zeichnen.
+    struct State: Equatable {
+        var session: Session
+        var groupName = ""
+        var groupColor = Theme.muted
+        /// Fokus-Kachel der Arbeitsfläche: Rahmen in Gruppenfarbe.
+        var focused = false
+        /// Das Terminal dieser Kachel hat gerade die Tastatur.
+        var keyboardFocus = false
+        var hovered = false
+        /// Beim Ziehen einer anderen Kachel: hier landet sie.
+        var dropTarget = false
+        var attached = false
+        /// Claude hat sich beendet oder wurde gestoppt; ohne das Flag startet der Prozess gerade.
+        var ended = false
+        /// `ended`, aber kein reguläres `/exit`: der Prozess ist innerhalb weniger Sekunden mit diesem Code gestorben.
+        var exitCode: Int32?
+        /// `ended`, aber gar nicht erst gestartet: der Ordner der Session existiert nicht mehr.
+        var missingFolder = false
+        /// Vorschau (⌥J/⌥K) startet keinen Prozess: ohne Terminal kein „STARTET …“.
+        var previewing = false
+        /// Das Terminal hängt gerade in einem anderen Fenster.
+        var elsewhere = false
+        var lines: [String] = []
+        /// Stack: die Titelzeile zeichnet die Arbeitsfläche als Stack-Zeile, die Kachel nur den Körper.
+        var headerHidden = false
+        /// Gezoomt, obwohl mehrere Sessions offen sind: Badge „Z“ in der Titelzeile wie in tmux.
+        var zoomed = false
+    }
+    var state: State { didSet { if state != oldValue { needsDisplay = true } } }
     var pulse: CGFloat = 1
-    /// Stack: die Titelzeile zeichnet die Arbeitsfläche als Stack-Zeile, die Kachel nur den Körper.
-    var headerHidden = false
-    /// Gezoomt, obwohl mehrere Sessions offen sind: Badge „Z“ in der Titelzeile wie in tmux.
-    var zoomed = false
+    /// Abgedunkelter Körper bei fehlendem Ordner, Startfehler und beendeter Session.
+    private static let shade = NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 1)
 
     init(session: Session) {
-        self.session = session
+        state = State(session: session)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = true
@@ -49,12 +56,12 @@ final class CellView: NSView {
         return nil
     }
 
-    var headerHeight: CGFloat { headerHidden ? 0 : (Tiling.rowHeight * Theme.scale).rounded() }
+    var headerHeight: CGFloat { state.headerHidden ? 0 : (Tiling.rowHeight * Theme.scale).rounded() }
     var headerRect: CGRect { CGRect(x: 0, y: 0, width: bounds.width, height: headerHeight) }
     var bodyRect: CGRect { CGRect(x: 0, y: headerHeight, width: bounds.width, height: max(0, bounds.height - headerHeight)) }
     /// Terminal liegt 2 px innerhalb des Rahmens, sonst übermalt es den Rahmen links, rechts und unten. Dazu der Innenabstand.
     var terminalRect: CGRect {
-        let p = CGFloat(Settings.terminalPadding), top = headerHeight + (headerHidden ? 2 : 0) + p
+        let p = CGFloat(Settings.terminalPadding), top = headerHeight + (state.headerHidden ? 2 : 0) + p
         return CGRect(x: 2 + p, y: top, width: max(0, bounds.width - 4 - 2 * p), height: max(0, bounds.height - top - 2 - p)).integral
     }
     /// Logische Punkte der Titelzeile (vor `Theme.scale`).
@@ -64,15 +71,15 @@ final class CellView: NSView {
     var xRect: CGRect { xRectLogical.scaled(Theme.scale) }
     var penRect: CGRect { penRectLogical.scaled(Theme.scale) }
     var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
-    var statusColor: NSColor { attached ? Theme.color(for: session.status) : Theme.detached }
+    var statusColor: NSColor { state.attached ? Theme.color(for: state.session.status) : Theme.detached }
     /// Hintergrund der Kachel, leicht in Gruppenfarbe getönt, damit Gruppen auf einen Blick auseinanderfallen.
     /// Mit Deckkraft unter 100 % scheint das Hintergrundbild der Arbeitsfläche durch, auch durchs Terminal.
-    var bodyColor: NSColor { groupColor.mixed(0.05, into: Theme.bg).withAlphaComponent(CGFloat(Settings.tileOpacity)) }
+    var bodyColor: NSColor { state.groupColor.mixed(0.05, into: Theme.bg).withAlphaComponent(CGFloat(Settings.tileOpacity)) }
 
     override func draw(_ dirtyRect: NSRect) {
         bodyColor.setFill()
         bounds.fill()
-        if !headerHidden { Theme.scaled(headerRect) { drawHeader($0) } }
+        if !state.headerHidden { Theme.scaled(headerRect) { drawHeader($0) } }
         Theme.scaled(bodyRect) { drawBody($0) }
     }
 
@@ -80,7 +87,7 @@ final class CellView: NSView {
     override func viewWillDraw() {
         super.viewWillDraw()
         guard let layer else { return }
-        let c = borderColor.cgColor, w: CGFloat = focused || dropTarget ? 2 : 1
+        let c = borderColor.cgColor, w: CGFloat = state.focused || state.dropTarget ? 2 : 1
         guard layer.borderColor != c || layer.borderWidth != w else { return }
         let anim = CABasicAnimation(keyPath: "borderColor")
         anim.fromValue = layer.borderColor
@@ -94,26 +101,26 @@ final class CellView: NSView {
     private func drawHeader(_ head: CGRect) {
         let b = head
         let c = statusColor
-        let dot = session.status == .running && attached ? c.withAlphaComponent(pulse) : c
-        let headBase = groupColor.mixed(keyboardFocus || focused ? 0.22 : 0.12, into: Theme.surface)
+        let dot = state.session.status == .running && state.attached ? c.withAlphaComponent(pulse) : c
+        let headBase = state.groupColor.mixed(state.keyboardFocus || state.focused ? 0.22 : 0.12, into: Theme.surface)
         headBase.setFill()
         head.fill()
         Theme.line.setFill()
         CGRect(x: 0, y: head.maxY - 1, width: b.width, height: 1).fill()
-        Icons.statusDot(in: dotRectLogical, status: session.status, attached: attached, color: dot)
-        let meta = NSAttributedString(string: session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
+        Icons.statusDot(in: dotRectLogical, status: state.session.status, attached: state.attached, color: dot)
+        let meta = NSAttributedString(string: state.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
-        var iconW: CGFloat = hovered ? 44 : 0
-        if zoomed {
+        var iconW: CGFloat = state.hovered ? 44 : 0
+        if state.zoomed {
             let z = CGRect(x: b.width - iconW - 9 - metaW - 8 - 16, y: 5, width: 16, height: 16)
             Theme.waiting.setFill(); z.fill()
             let zt = NSAttributedString(string: "Z", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
             zt.draw(at: CGPoint(x: z.midX - zt.size().width / 2, y: z.minY + 1))
             iconW += 24
         }
-        let title = NSAttributedString(string: session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
-        let group = NSAttributedString(string: groupName, attributes: Theme.attrs(10.5, groupColor))
-        let branch = NSAttributedString(string: session.branch ?? "", attributes: Theme.attrs(10.5, Theme.muted))
+        let title = NSAttributedString(string: state.session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
+        let group = NSAttributedString(string: state.groupName, attributes: Theme.attrs(10.5, state.groupColor))
+        let branch = NSAttributedString(string: state.session.branch ?? "", attributes: Theme.attrs(10.5, Theme.muted))
         // Der Titel hat Vorrang: Branch und Gruppe erscheinen nur, solange daneben noch Platz ist.
         let avail = max(0, b.width - 24 - metaW - iconW - 16)
         let titleW = min(title.size().width, avail)
@@ -128,8 +135,8 @@ final class CellView: NSView {
         if rest >= min(group.size().width, 40) {
             group.draw(with: CGRect(x: x, y: 6, width: rest, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
-        meta.draw(at: CGPoint(x: b.width - (hovered ? 44 : 0) - 9 - metaW, y: 6))
-        if hovered { Icons.x(in: xRectLogical, color: Theme.sub); Icons.pen(in: penRectLogical, color: Theme.sub) }
+        meta.draw(at: CGPoint(x: b.width - (state.hovered ? 44 : 0) - 9 - metaW, y: 6))
+        if state.hovered { Icons.x(in: xRectLogical, color: Theme.sub); Icons.pen(in: penRectLogical, color: Theme.sub) }
     }
 
     // MARK: Accessibility
@@ -137,16 +144,16 @@ final class CellView: NSView {
     private var a11y: [A11yElement] = []
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
-    override func accessibilityLabel() -> String? { session.title }
+    override func accessibilityLabel() -> String? { state.session.title }
 
     /// Titelzeile als Knopf (Fokus) mit Titel, Status, Gruppe und Branch, dazu Umbenennen und Schließen. Im Stack
     /// zeichnet die Arbeitsfläche die Titelzeile, dann nur das Terminal.
     override func accessibilityChildren() -> [Any]? {
         let terminal = super.accessibilityChildren() ?? []
-        guard !headerHidden, let ws = superview as? WorkspaceView else { return terminal }
-        let key = session.id
-        let label = [session.title, attached ? session.status.spoken : ended ? String(localized: "beendet") : String(localized: "nicht gestartet"),
-                     groupName.isEmpty ? nil : groupName, session.branch]
+        guard !state.headerHidden, let ws = superview as? WorkspaceView else { return terminal }
+        let key = state.session.id
+        let label = [state.session.title, state.attached ? state.session.status.spoken : state.ended ? String(localized: "beendet") : String(localized: "nicht gestartet"),
+                     state.groupName.isEmpty ? nil : state.groupName, state.session.branch]
         a11y = [
             a11y.reuse("header").update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: headerRect,
                                         press: { [weak ws] in ws?.activate(key) }),
@@ -160,26 +167,26 @@ final class CellView: NSView {
 
     private func drawBody(_ body: CGRect) {
         let terminalMounted = subviews.contains { $0 is KadrellTerminalView }
-        if missingFolder {
-            NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 0.72).setFill()
+        if state.missingFolder {
+            Self.shade.withAlphaComponent(0.72).setFill()
             body.fill()
-            drawLabel(String(localized: "ORDNER FEHLT · \(Theme.shortPath(session.cwd))"), in: body, color: Theme.error)
-        } else if let exitCode {
+            drawLabel(String(localized: "ORDNER FEHLT · \(Theme.shortPath(state.session.cwd))"), in: body, color: Theme.error)
+        } else if let exitCode = state.exitCode {
             // Startfehler statt normalem `/exit`: keine Schraffur, die letzten Zeilen bleiben lesbar (Kanboard #20).
-            NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 0.35).setFill()
+            Self.shade.withAlphaComponent(0.35).setFill()
             body.fill()
-            if !lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
+            if !state.lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
             drawLabel(String(localized: "START FEHLGESCHLAGEN · EXIT \(String(exitCode))"), in: body, color: Theme.error)
-        } else if ended {
+        } else if state.ended {
             drawHatch(in: body)
-            if !lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
+            if !state.lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
             drawLabel(String(localized: "BEENDET · KLICK SETZT FORT"), in: body)
-        } else if !attached, previewing {
+        } else if !state.attached, state.previewing {
             drawLabel(String(localized: "VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET"), in: body)
-        } else if !attached {
+        } else if !state.attached {
             Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
             drawLabel(String(localized: "STARTET …"), in: body)
-        } else if !terminalMounted, elsewhere {
+        } else if !terminalMounted, state.elsewhere {
             drawLabel(String(localized: "IN ANDEREM FENSTER · KLICK HOLT HIERHER"), in: body)
         } else if !terminalMounted {
             drawLines(in: body.insetBy(dx: 10, dy: 8))
@@ -187,21 +194,21 @@ final class CellView: NSView {
     }
 
     private var borderColor: NSColor {
-        if dropTarget { return Theme.fg }
-        if missingFolder || exitCode != nil { return Theme.error }
-        if focused { return groupColor }
-        if session.status == .waiting, attached { return Theme.waiting }
-        if session.status == .error { return Theme.error }
-        return groupColor.mixed(hovered ? 0.7 : 0.45, into: Theme.bg)
+        if state.dropTarget { return Theme.fg }
+        if state.missingFolder || state.exitCode != nil { return Theme.error }
+        if state.focused { return state.groupColor }
+        if state.session.status == .waiting, state.attached { return Theme.waiting }
+        if state.session.status == .error { return Theme.error }
+        return state.groupColor.mixed(state.hovered ? 0.7 : 0.45, into: Theme.bg)
     }
 
     private func drawLines(in r: CGRect) {
         let lineH: CGFloat = 12 * 1.45
-        guard r.height > 10, !lines.isEmpty else { return }
+        guard r.height > 10, !state.lines.isEmpty else { return }
         let fit = max(0, Int(r.height / lineH))
         guard fit > 0 else { return }
         var y = r.minY
-        for line in lines.suffix(fit) {
+        for line in state.lines.suffix(fit) {
             let color: NSColor = line.hasPrefix(">") ? Theme.fg : line.hasPrefix("⏺") || line.hasPrefix("●") ? Theme.sub : Theme.muted
             let a = NSAttributedString(string: line, attributes: Theme.attrs(12, color, bold: line.hasPrefix(">")))
             a.draw(with: CGRect(x: r.minX, y: y, width: r.width, height: lineH), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
@@ -210,7 +217,7 @@ final class CellView: NSView {
     }
 
     private func drawHatch(in r: CGRect) {
-        NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 0.72).setFill()
+        Self.shade.withAlphaComponent(0.72).setFill()
         r.fill()
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: r).addClip()

@@ -162,7 +162,7 @@ final class AccessibilityTests: XCTestCase {
         ws.reload(groups: [g], sessions: [a])
         ws.select(["a"], add: false, takeKeyboard: false)
         guard let cell = ws.subviews.compactMap({ $0 as? CellView }).first else { return XCTFail("keine Kachel") }
-        cell.groupName = g.name
+        cell.state.groupName = g.name
         let buttons = elements(cell)
         XCTAssertEqual(buttons.map { $0.accessibilityLabel() ?? "" }, ["Alpha, nicht gestartet, Projekt, master", "Umbenennen", "Schließen"])
         XCTAssertTrue(buttons[1].accessibilityPerformPress())

@@ -31,18 +31,12 @@ struct SplitLine: Equatable {
 
 /// Reine Kachel-Mathematik der Arbeitsfläche, alles in Bildschirmpunkten.
 enum Tiling {
-    static let gap: CGFloat = 6
     /// Titelzeile einer Kachel (Grid) bzw. einer Stack-Zeile.
     static let rowHeight: CGFloat = 26
 
     enum Direction { case left, right, up, down }
 
     static func columns(for n: Int) -> Int { n <= 1 ? 1 : Int(Double(n).squareRoot().rounded(.up)) }
-
-    /// Grid mit gleich großen Feldern und automatischer Spaltenzahl.
-    static func grid(count n: Int, in b: CGRect, gap: CGFloat = Tiling.gap) -> [CGRect] {
-        layout(.grid, count: n, in: b, gap: gap).frames
-    }
 
     /// Verhältnisse einer Vorlage, nil = gleich verteilt.
     typealias Ratios = (_ key: String, _ count: Int) -> [Double]?
@@ -82,23 +76,15 @@ enum Tiling {
             let cols = split(b, vertical: true, key: "main.cols", count: 2)
             let rest = n > 2 ? split(cols[1], vertical: false, key: "main.rows.\(n - 1)", count: n - 1) : [cols[1]]
             return ([cols[0]] + rest, dividers)
-        case .spiral:
-            // bspwm: jede Kachel halbiert den Rest, abwechselnd senkrecht und waagerecht.
-            var area = b, frames: [CGRect] = []
-            for i in 0..<(n - 1) {
-                let parts = split(area, vertical: i % 2 == 0, key: "spiral.\(i)", count: 2)
-                frames.append(parts[0])
-                area = parts[1]
-            }
-            return (frames + [area], dividers)
-        case .custom:
-            // i3/bspwm-Insert: Kachel i+1 teilt Feld i rechts oder unten, ohne Vorgabe entlang der längeren Seite.
+        case .spiral, .custom:
+            // Kette: jede Kachel teilt den Rest. Spirale (bspwm) abwechselnd senkrecht und waagerecht. Frei (i3/bspwm-Insert):
+            // Kachel i+1 teilt Feld i rechts oder unten, ohne Vorgabe entlang der längeren Seite.
             // ponytail: geteilt wird immer der Rest (Kette), kein Baum; 2×2 geht so nicht, dafür gibt es das Grid.
             let dirs = Array(splits)
             var area = b, frames: [CGRect] = []
             for i in 0..<(n - 1) {
-                let vertical = dirs.indices.contains(i) && dirs[i] != "a" ? dirs[i] == "r" : area.width >= area.height
-                let parts = split(area, vertical: vertical, key: "custom.\(i)", count: 2)
+                let vertical = mode == .spiral ? i % 2 == 0 : dirs.indices.contains(i) && dirs[i] != "a" ? dirs[i] == "r" : area.width >= area.height
+                let parts = split(area, vertical: vertical, key: "\(mode.rawValue).\(i)", count: 2)
                 frames.append(parts[0])
                 area = parts[1]
             }
