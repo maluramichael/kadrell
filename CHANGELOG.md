@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.48.1 (2026-09-17)
+
+- Fix: In den Eingabefeldern steht der Text jetzt senkrecht mittig statt am oberen Rand.
+- Änderung: Die Pfadzeilen in den Einstellungen sind genauso hoch wie die Auswahlfelder daneben.
+
 ## 1.48.0 (2026-09-17)
 
 - Feature: Claude-Sessions melden Status, Titel, erste Eingabe und letzte Antwort per Hook an Kadrell, automatisch für jeden gestarteten Prozess. Kadrell liest deren Dateien nicht mehr im Sekundentakt.
