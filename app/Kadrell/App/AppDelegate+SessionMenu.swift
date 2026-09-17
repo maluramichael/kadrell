@@ -71,8 +71,7 @@ extension AppDelegate {
 
     @objc private func menuContextCopyPath(_ sender: NSMenuItem) {
         guard let s = contextSession(sender), !s.cwd.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(s.cwd, forType: .string)
+        NSPasteboard.general.copy(s.cwd)
     }
 
     @objc private func menuContextShowInFinder(_ sender: NSMenuItem) {
@@ -95,5 +94,13 @@ extension AppDelegate: NSMenuItemValidation {
             return contextSession(menuItem) != nil
         default: return true
         }
+    }
+}
+
+extension NSPasteboard {
+    /// Inhalt ersetzen durch reinen Text.
+    func copy(_ text: String) {
+        clearContents()
+        setString(text, forType: .string)
     }
 }

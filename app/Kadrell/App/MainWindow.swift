@@ -1,7 +1,7 @@
 import AppKit
 
-/// Ein Hauptfenster: Baum, Arbeitsfläche und Leiste mit eigener Auswahl, eigenem Layout und Fokus. Sessions, Gruppen,
-/// Marke „neu“, Hooks und Sounds hält der AppDelegate für alle Fenster gemeinsam. Fenster 0 speichert unter den
+/// Ein Hauptfenster: Baum, Arbeitsfläche und Leiste mit eigener Auswahl, eigenem Layout und Fokus. Sessions und Gruppen
+/// hält der AppDelegate, Marke „neu“, Hooks und Sounds der `AttentionTracker`, beide für alle Fenster gemeinsam. Fenster 0 speichert unter den
 /// bisherigen Schlüsseln, weitere mit Suffix („workspace.selected.2“).
 @MainActor
 final class MainWindowController: NSObject {
