@@ -1,19 +1,30 @@
 import Foundation
+import os
 
 /// Die Sessions, die Kadrell verwaltet, persistiert als JSON unter Application Support. Liest alle 2 s (versteckt/
 /// inaktiv seltener, siehe `setBackground`) die Session-Dateien der eigenen Claude-Prozesse (Status, Name, aktuelle
 /// sessionId) und meldet nur echte Änderungen.
 @MainActor
 final class SessionRegistry {
+    private static let log = Logger(subsystem: "de.malura.kadrell", category: "registry")
+    private static let schemaVersion = 1
     let cli: ClaudeCLI
     let url: URL
     private(set) var sessions: [Session] = []
     /// Letzte Textantwort von Claude je Session (`Session.id`), nur wenn in den Einstellungen eingeschaltet.
     private(set) var lastMessages: [String: String] = [:]
-    /// Binary nicht gefunden oder `claude agents` schlägt fehl. Von außen über `fail(_:)` gesetzt, kein Poll räumt es wieder ab.
+    /// Binary nicht gefunden, `claude agents` schlägt fehl, sessions.json ist kaputt oder Speichern schlägt fehl.
+    /// Von außen (oder aus `save`/`init`) über `fail(_:)` gesetzt, kein Poll räumt es wieder ab.
     private(set) var lastError: String?
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     private(set) var polled = false
+    /// Umschlag nennt eine höhere Version als diese Kadrell-Version kennt: nur lesen, nie überschreiben.
+    private var readOnly = false
+    /// Zuletzt geschlossene Sessions (neueste zuerst, höchstens `maxClosed`): der Schließen-Dialog verspricht
+    /// "Konversation bleibt erhalten", `remove` löschte die sessionId bisher trotzdem restlos aus Kadrells Daten.
+    private(set) var closed: [ClosedSession] = []
+    private let closedURL: URL
+    private static let maxClosed = 50
     private var transcripts: [String: Transcript.Entry] = [:]
     /// `git worktree list` je Root-Ordner (`cwd`), neu geholt nur wenn sich der oberste Transcript-Kandidat
     /// einer Session in diesem Ordner ändert (siehe `applyActiveWorktree`), nicht bei jedem 2-s-Poll.
@@ -34,7 +45,20 @@ final class SessionRegistry {
     init(cli: ClaudeCLI, url: URL = SessionRegistry.defaultURL) {
         self.cli = cli
         self.url = url
-        if let data = try? Data(contentsOf: url), let s = try? JSONDecoder().decode([Session].self, from: data) { sessions = s }
+        self.closedURL = url.deletingLastPathComponent().appendingPathComponent("closed.json")
+        let result = JSONFile.loadArray(Session.self, from: url, currentVersion: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
+        readOnly = result.newerThanKnown
+        sessions = SessionRegistry.dedupedById(result.items)
+        closed = JSONFile.loadArray(ClosedSession.self, from: closedURL, currentVersion: Self.schemaVersion).items
+    }
+
+    /// Erste gewinnt: eine doppelte Id (Handbearbeitung, `offerAdopt` mit einer schon vorhandenen Kurz-Id) würde
+    /// `WorkspaceView.reload` sonst bei jedem Start abstürzen lassen.
+    private static func dedupedById(_ sessions: [Session]) -> [Session] {
+        var seen = Set<String>()
+        let result = sessions.filter { seen.insert($0.id).inserted }
+        if result.count != sessions.count { log.warning("sessions.json: \(sessions.count - result.count) doppelte Id(s) bereinigt") }
+        return result
     }
 
     /// `backgroundInterval` bleibt bewusst nah an `interval`: Sound und Marke „neu“ bei Statuswechseln
@@ -59,6 +83,10 @@ final class SessionRegistry {
     }
 
     func add(_ session: Session) {
+        guard !sessions.contains(where: { $0.id == session.id }) else {
+            Self.log.warning("add: Id '\(session.id, privacy: .public)' existiert schon, ignoriert")
+            return
+        }
         sessions.append(session)
         save()
         onChange?(sessions)
@@ -75,10 +103,22 @@ final class SessionRegistry {
     }
 
     func remove(_ ids: Set<String>) {
-        for s in sessions where ids.contains(s.id) { Hooks.fire(.sessionRemove, s, environment: cli.environment) }
+        let removed = sessions.filter { ids.contains($0.id) }
+        for s in removed { Hooks.fire(.sessionRemove, s, environment: cli.environment) }
         sessions.removeAll { ids.contains($0.id) }
         save()
+        archive(removed)
         onChange?(sessions)
+    }
+
+    /// Merkt sich die sessionId geschlossener Sessions, neueste zuerst, gedeckelt auf `maxClosed`.
+    private func archive(_ removed: [Session]) {
+        guard !removed.isEmpty else { return }
+        let now = Date().timeIntervalSince1970
+        closed.insert(contentsOf: removed.map { ClosedSession(session: $0, closedAt: now) }, at: 0)
+        closed = Array(closed.prefix(Self.maxClosed))
+        guard !readOnly else { return }
+        JSONFile.saveArray(closed, to: closedURL, version: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
     }
 
     /// Binary fehlt oder `claude agents` schlägt fehl: vom Aufrufer gesetzt, kein Poll räumt es automatisch wieder ab.
@@ -183,13 +223,20 @@ final class SessionRegistry {
     }
 
     private func save() {
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let enc = JSONEncoder()
-        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try? enc.encode(sessions).write(to: url, options: .atomic)
+        guard !readOnly else {
+            Self.log.error("sessions.json hat eine neuere Schema-Version, wird nicht überschrieben")
+            return
+        }
+        JSONFile.saveArray(sessions, to: url, version: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
     }
 }
 
 private extension Session {
     var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? ""] }
+}
+
+/// Eintrag in `closed.json`: die Session, wie sie beim Schließen zuletzt aussah, plus Zeitpunkt.
+struct ClosedSession: Codable, Sendable {
+    var session: Session
+    var closedAt: Double
 }

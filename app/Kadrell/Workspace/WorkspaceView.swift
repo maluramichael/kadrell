@@ -103,7 +103,9 @@ final class WorkspaceView: NSView {
 
     func reload(groups: [Group], sessions: [Session]) {
         self.groups = groups
-        self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        // uniquingKeysWith statt uniqueKeysWithValues: eine doppelte Id (kaputte sessions.json, Handbearbeitung)
+        // soll nicht bei jedem Start dasselbe Trap auslösen, siehe AppDelegate+Control.swift:161.
+        self.sessions = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         selected.removeAll { self.sessions[$0] == nil }
         if let p = preview, self.sessions[p] == nil { preview = nil }
         sortSelected()

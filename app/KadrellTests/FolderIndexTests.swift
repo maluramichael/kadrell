@@ -30,4 +30,31 @@ final class FolderIndexTests: XCTestCase {
         XCTAssertEqual(FolderIndex.expandAbbreviated(root + "/d/pr/kdrl"), [root + "/development/projects/kadrell"])
         XCTAssertEqual(FolderIndex.scanRepos(roots: [root]), [root + "/development/projects/kadrell", root + "/development/projects/kalender"])
     }
+
+    /// Rang 84: `folders-uses.json` statt eines UserDefaults-Blobs, und wächst nicht unbegrenzt weiter.
+    @MainActor
+    func testRecordUsePersistsAndPrunesMissingAndOldPaths() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-folders-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let existingDir = dir.appendingPathComponent("existing").path
+        try FileManager.default.createDirectory(atPath: existingDir, withIntermediateDirectories: true)
+
+        // Vorbelegte folders-uses.json: ein längst gelöschter Ordner, dazu der (noch existierende) Testordner.
+        let usesURL = dir.appendingPathComponent("folders-uses.json")
+        let gone = FolderIndex.Use(count: 9, last: Date().timeIntervalSince1970)
+        let existing = FolderIndex.Use(count: 5, last: Date().timeIntervalSince1970 - 100 * 86400)
+        try JSONEncoder().encode(["\(dir.path)/gone": gone, existingDir: existing]).write(to: usesURL, options: .atomic)
+
+        let index = FolderIndex(directory: dir)
+        XCTAssertEqual(index.uses.count, 2)
+        index.recordUse(existingDir)
+        // Gelöschter Ordner fliegt raus, der existierende bleibt (recordUse aktualisiert `last`, damit
+        // übersteht er den 90-Tage-Filter trotz des alten Zeitstempels aus der Datei).
+        XCTAssertNil(index.uses["\(dir.path)/gone"])
+        XCTAssertEqual(index.uses[existingDir]?.count, 6)
+
+        let reloaded = FolderIndex(directory: dir)
+        XCTAssertEqual(reloaded.uses.keys.sorted(), [existingDir])
+    }
 }

@@ -17,7 +17,7 @@ final class MultiWindowTests: XCTestCase {
     func testTerminalHangsInOneWindow() {
         let id = Session.shellPrefix + "multiwindow-test"
         let s = Session(id: id, cwd: NSTemporaryDirectory(), startedAt: 0, sessionId: id, name: "Shell")
-        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: NSTemporaryDirectory(), sessionIds: [id], favorite: nil)
+        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: NSTemporaryDirectory(), sessionIds: [id], favorite: false)
         let attach = AttachManager(cli: ClaudeCLI(binary: "/usr/bin/false", environment: ProcessInfo.processInfo.environment))
         let a = WorkspaceView(frame: .zero, defaultsSuffix: ".test-a"), b = WorkspaceView(frame: .zero, defaultsSuffix: ".test-b")
         let wa = window(a), wb = window(b)

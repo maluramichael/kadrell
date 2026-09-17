@@ -13,12 +13,16 @@ final class FolderIndex {
     private(set) var uses: [String: Use] = [:]
     private var scanning = false
     private let reposURL: URL
-    private static let usesKey = "folders.uses"
+    private let usesURL: URL
+    /// Ungenutzte Einträge (Ordner gelöscht, Repo umbenannt) verfallen nach dieser Zeit, siehe `pruneUses`.
+    private static let usesMaxAge: TimeInterval = 90 * 86400
+    private static let usesLimit = 500
 
     init(directory: URL = SessionRegistry.defaultURL.deletingLastPathComponent()) {
         reposURL = directory.appendingPathComponent("folders.json")
+        usesURL = directory.appendingPathComponent("folders-uses.json")
         if let d = try? Data(contentsOf: reposURL), let r = try? JSONDecoder().decode([String].self, from: d) { repos = r }
-        if let d = Profile.defaults.data(forKey: Self.usesKey), let u = try? JSONDecoder().decode([String: Use].self, from: d) { uses = u }
+        uses = JSONFile.loadDict(Use.self, from: usesURL)
     }
 
     func recordUse(_ path: String) {
@@ -27,7 +31,18 @@ final class FolderIndex {
         u.count += 1
         u.last = Date().timeIntervalSince1970
         uses[p] = u
-        if let d = try? JSONEncoder().encode(uses) { Profile.defaults.set(d, forKey: Self.usesKey) }
+        pruneUses()
+        JSONFile.saveDict(uses, to: usesURL)
+    }
+
+    /// Verworfene und umbenannte Ordner sammeln sich sonst für immer: älter als 90 Tage oder der Pfad existiert
+    /// nicht mehr fliegt raus, danach bleiben höchstens `usesLimit` Einträge, die mit der besten Frecency zuerst.
+    private func pruneUses() {
+        let now = Date().timeIntervalSince1970
+        uses = uses.filter { now - $0.value.last < Self.usesMaxAge && FileManager.default.fileExists(atPath: $0.key) }
+        guard uses.count > Self.usesLimit else { return }
+        let keep = uses.sorted { frecency($0.key, now: now) > frecency($1.key, now: now) }.prefix(Self.usesLimit)
+        uses = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
     }
 
     /// Neu einlesen, ohne zu warten: bis der Scan fertig ist, gilt der gespeicherte Stand. `then` läuft danach.
@@ -39,7 +54,7 @@ final class FolderIndex {
         Task.detached(priority: .utility) {
             let found = FolderIndex.scanRepos(roots: roots)
             try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let d = try? JSONEncoder().encode(found) { try? d.write(to: url) }
+            if let d = try? JSONEncoder().encode(found) { try? d.write(to: url, options: .atomic) }
             await MainActor.run {
                 self.repos = found
                 self.scanning = false
