@@ -12,6 +12,7 @@ final class WorkspaceView: NSView {
         didSet {
             guard oldValue != focused else { return }
             if let o = oldValue { lastFocused = o }
+            revealFocus = true
             if let f = focused { onFocusChange?(f) }
         }
     }
@@ -35,6 +36,9 @@ final class WorkspaceView: NSView {
     private var dividers: [SplitLine] = []
     private var tileFrames: [String: CGRect] = [:]
     private var draggedDivider: SplitLine?
+    /// Scrollen: seitlicher Versatz der Spalten; nach Fokuswechsel oder neuer Breite rückt die Fokus-Kachel ins Bild.
+    private var scrollX: CGFloat = 0
+    private var revealFocus = true
     private var loaded = false
     private var stackRows: [(CGRect, String)] = []
     private var hoveredCell: String?
@@ -69,6 +73,7 @@ final class WorkspaceView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        clipsToBounds = true
         selected = Profile.defaults.stringArray(forKey: "workspace.selected") ?? []
         focused = selected.first
         pulseTask = Task { [weak self] in
@@ -191,6 +196,19 @@ final class WorkspaceView: NSView {
     /// Bevorzugt die Linie auf der Seite des Pfeils, sonst die gegenüberliegende.
     func resizeFocused(_ d: Tiling.Direction) {
         guard let f = focused, let frame = tileFrames[f], !zen, preview == nil else { NSSound.beep(); return }
+        if mode == .scroll {
+            // Scrollen: ← / → schaltet die Breite der Fokus-Spalte eine Stufe (⅓ ½ ⅔) schmaler bzw. breiter.
+            guard d == .left || d == .right, let i = tiles.firstIndex(of: f) else { NSSound.beep(); return }
+            var v = Settings.layoutRatios("scroll.widths", 0) ?? []
+            while v.count <= i { v.append(0.5) }
+            let w = Tiling.scrollWidths, cur = w.indices.min { abs(w[$0] - v[i]) < abs(w[$1] - v[i]) }!, next = cur + (d == .right ? 1 : -1)
+            guard w.indices.contains(next) else { NSSound.beep(); return }
+            v[i] = w[next]
+            Settings.setLayoutRatios("scroll.widths", v)
+            revealFocus = true
+            relayout()
+            return
+        }
         let vertical = d == .left || d == .right, forward = d == .right || d == .down
         let near = dividers.filter { div in
             guard div.vertical == vertical else { return false }
@@ -208,6 +226,31 @@ final class WorkspaceView: NSView {
 
     private func moveDivider(_ d: SplitLine, to p: CGPoint) {
         Settings.setLayoutRatios(d.key, Tiling.drag(d, to: p, gap: CGFloat(Settings.tileGap), ratios: Settings.layoutRatios(d.key, d.count) ?? []))
+        relayout()
+    }
+
+    /// Frei (i3 `split h/v`): wo die Kachel nach der fokussierten entsteht, „r“ rechts, „d“ unten, „a“ längere Seite.
+    /// Schaltet auf Frei um. An der letzten Kachel gilt es für die nächste, sonst ordnet es sofort neu.
+    func setSplit(_ c: Character) {
+        guard let f = focused, let i = tiles.firstIndex(of: f), !zen, preview == nil else { NSSound.beep(); return }
+        var s = Array(Settings.customSplits)
+        while s.count <= i { s.append("a") }
+        s[i] = c
+        Settings.customSplits = String(s)
+        if mode != .custom { setMode(.custom) } else { relayout() }
+    }
+
+    /// Teilungsrichtung an der Fokus-Kachel für die Leiste.
+    var focusedSplit: Character {
+        let s = Array(Settings.customSplits)
+        guard let f = focused, let i = tiles.firstIndex(of: f), s.indices.contains(i) else { return "a" }
+        return s[i]
+    }
+
+    /// Mausrad oder Trackpad seitlich im Layout Scrollen.
+    func scrollBy(_ dx: CGFloat) {
+        guard mode == .scroll, !zen, preview == nil else { return }
+        scrollX += dx
         relayout()
     }
 
@@ -298,6 +341,7 @@ final class WorkspaceView: NSView {
 
     func setMode(_ m: LayoutMode) {
         mode = m
+        revealFocus = true
         Profile.defaults.set(m.rawValue, forKey: "workspace.mode")
         relayout()
         focusTerminal()
@@ -357,8 +401,14 @@ final class WorkspaceView: NSView {
             frames[f] = inset
         } else if mode != .stack {
             visible = tiles
-            let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, ratios: Settings.layoutRatios)
-            for (id, r) in zip(tiles, t.frames) { frames[id] = r }
+            let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, splits: Settings.customSplits, ratios: Settings.layoutRatios)
+            var laid = t.frames
+            if mode == .scroll {
+                let reveal = revealFocus ? focused.flatMap { tiles.firstIndex(of: $0) }.map { laid[$0] } : nil
+                scrollX = Tiling.scrollOffset(scrollX, reveal: reveal, contentMaxX: laid.last?.maxX ?? 0, in: inset)
+                laid = laid.map { $0.offsetBy(dx: -scrollX, dy: 0) }
+            }
+            for (id, r) in zip(tiles, laid) { frames[id] = r }
             dividers = t.dividers
         } else {
             let active = focused.flatMap { tiles.firstIndex(of: $0) } ?? 0
@@ -367,7 +417,10 @@ final class WorkspaceView: NSView {
             visible = tiles.isEmpty ? [] : [tiles[active]]
             if !tiles.isEmpty { frames[tiles[active]] = body }
         }
+        revealFocus = false
         tileFrames = frames
+        // Scrollen: Kacheln ganz außerhalb verstecken und ihre Terminals aushängen, Nachbarn per Pfeil finden sie trotzdem.
+        if mode == .scroll { frames = frames.filter { $0.value.intersects(bounds) } }
         for (key, v) in cells {
             guard let f = frames[key], let s = sessions[key] else {
                 v.isHidden = true

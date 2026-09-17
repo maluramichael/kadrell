@@ -21,10 +21,13 @@ Einstellungen und eigenem Socket (`~/Library/Application Support/de.malura.kadre
 gilt das Standardprofil am bisherigen Ort. `--profile tmp` ist ein Wegwerfprofil im Temp-Ordner, das beim Beenden
 verschwindet (auch im Menü: „Neue Instanz mit temporärem Profil“). Jedes Profil läuft höchstens einmal.
 
-Layouts (Symbol links in der Leiste, ⌘L reihum): Grid, Haupt + Spalte, Spirale (bspwm), Stack. Jedes Layout ist eine
+Layouts (Symbol links in der Leiste, ⌘L reihum): Grid, Haupt + Spalte, Spirale (bspwm), Frei (i3), Scrollen (niri), Stack. Jedes Layout ist eine
 Vorlage aus Feldern, die Terminals füllen sie in Baumreihenfolge. Trennlinien lassen sich ziehen (Doppelklick verteilt
 gleich) oder per ⌃⌥-Pfeil um 5 % verschieben, die Verhältnisse gehören der Vorlage, nicht den Sessions. Im Grid legt
-‹ SP › in der Leiste die Spaltenzahl fest.
+‹ SP › in der Leiste die Spaltenzahl fest. Frei: jede Kachel teilt das Feld der vorigen rechts oder unten, gesetzt per
+⌃⌥⇧→ / ⌃⌥⇧↓ an der Fokus-Kachel oder über „TEILT“ in der Leiste (ohne Vorgabe entlang der längeren Seite); die
+Richtungen gehören der Position, nicht der Session. Scrollen: Spalten mit fester Breite (⌃⌥←/→ schaltet ⅓ ½ ⅔),
+die Fläche scrollt seitlich (Wischen, ⇧ + Mausrad), die Fokus-Kachel rückt von selbst ins Bild.
 
 Bedienung: Klick im Baum zeigt nur diese Session, ⌘-Klick nimmt sie dazu oder weg, ⇧-Klick markiert den
 Bereich seit dem letzten Klick, Klick auf eine Gruppe zeigt alle ihre Sessions. Ziehen im Baum oder an der Titelzeile

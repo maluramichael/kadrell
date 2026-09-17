@@ -26,6 +26,9 @@ final class StatusBarView: NSView {
     /// Spalten im Grid, 0 = automatisch. Nur im Grid sichtbar: ‹ weniger, › mehr.
     var gridColumns = 0
     var onGridColumns: ((Int) -> Void)?
+    /// Frei: Teilung an der Fokus-Kachel, „r“ → , „d“ ↓, „a“ längere Seite. Klick schaltet reihum.
+    var split: Character = "a"
+    var onSplit: ((Character) -> Void)?
     /// Auto-Modus: nur Sessions, die etwas wollen. An = gefülltes Badge.
     var auto = false { didSet { toggled(auto != oldValue, "auto") } }
     var onToggleAuto: (() -> Void)?
@@ -121,6 +124,15 @@ final class StatusBarView: NSView {
             hitRects.append((moreRect, { [weak self] in self?.onGridColumns?(min(12, cols + 1)) }))
             Theme.line.setFill(); CGRect(x: moreRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
             x = moreRect.maxX + 1
+        }
+        if layoutMode == .custom {
+            let label = NSAttributedString(string: split == "r" ? "TEILT →" : split == "d" ? "TEILT ↓" : "TEILT AUTO", attributes: Theme.attrs(10, split == "a" ? Theme.muted : Theme.fg, bold: true))
+            let r = CGRect(x: x, y: 0, width: label.size().width + 20, height: b.height - 1)
+            label.draw(at: CGPoint(x: r.minX + 10, y: midY - 7))
+            let next: Character = split == "a" ? "r" : split == "r" ? "d" : "a"
+            hitRects.append((r, { [weak self] in self?.onSplit?(next) }))
+            Theme.line.setFill(); CGRect(x: r.maxX, y: 0, width: 1, height: b.height - 1).fill()
+            x = r.maxX + 1
         }
         let at = NSAttributedString(string: "AUTO", attributes: Theme.attrs(10, auto ? Theme.bg : Theme.muted, bold: true))
         let autoRect = CGRect(x: x, y: 0, width: at.size().width + 20, height: b.height - 1)

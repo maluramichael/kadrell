@@ -134,6 +134,18 @@ enum Icons {
             p.move(to: CGPoint(x: i.midX, y: i.midY)); p.line(to: CGPoint(x: i.maxX, y: i.midY))
             let q = i.midX + i.width / 4
             p.move(to: CGPoint(x: q, y: i.midY)); p.line(to: CGPoint(x: q, y: i.maxY))
+        case .custom:
+            p.appendRect(i)
+            let x = i.minX + i.width * 0.4
+            p.move(to: CGPoint(x: x, y: i.minY)); p.line(to: CGPoint(x: x, y: i.maxY))
+            p.move(to: CGPoint(x: i.minX, y: i.midY)); p.line(to: CGPoint(x: x, y: i.midY))
+        case .scroll:
+            // Zwei Spalten, die dritte ragt rechts hinaus.
+            let w = (i.width - 2) * 0.42
+            p.appendRect(CGRect(x: i.minX, y: i.minY, width: w, height: i.height))
+            p.appendRect(CGRect(x: i.minX + w + 2, y: i.minY, width: w, height: i.height))
+            let x = i.minX + 2 * w + 4
+            p.move(to: CGPoint(x: i.maxX, y: i.minY)); p.line(to: CGPoint(x: x, y: i.minY)); p.line(to: CGPoint(x: x, y: i.maxY)); p.line(to: CGPoint(x: i.maxX, y: i.maxY))
         }
         color.setStroke()
         p.stroke()

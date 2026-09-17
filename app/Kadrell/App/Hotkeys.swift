@@ -6,6 +6,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case focusLeft, focusRight, focusUp, focusDown
     case swapLeft, swapRight, swapUp, swapDown
     case resizeLeft, resizeRight, resizeUp, resizeDown
+    case splitRight, splitDown
     case nextSession, prevSession, lastSession
     case previewNext, previewPrev
     case nextWaiting
@@ -31,6 +32,8 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .resizeRight: return "Trennlinie nach rechts"
         case .resizeUp: return "Trennlinie nach oben"
         case .resizeDown: return "Trennlinie nach unten"
+        case .splitRight: return "Frei: nächste Kachel rechts"
+        case .splitDown: return "Frei: nächste Kachel unten"
         case .nextSession: return "Nächste Kachel"
         case .prevSession: return "Vorige Kachel"
         case .lastSession: return "Zuletzt fokussierte Kachel"
@@ -38,7 +41,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .previewPrev: return "Vorschau: vorige Session im Baum"
         case .nextWaiting: return "Nächste wartende Session"
         case .zoom: return "Zoom: Fokus-Kachel allein"
-        case .nextLayout: return "Layout wechseln: Grid → Haupt + Spalte → Spirale → Stack"
+        case .nextLayout: return "Layout wechseln: Grid → Haupt + Spalte → Spirale → Frei → Scrollen → Stack"
         case .focusSidebar: return "Baum: Tastatur hierher, ↑↓ wählt Session"
         case .focusWorkspace: return "Arbeitsfläche: Tastatur an Claude"
         case .openEditor: return "Ordner im externen Editor öffnen"
@@ -55,7 +58,8 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         switch self {
         case .focusLeft, .focusRight, .focusUp, .focusDown: return "Fokus bewegen · im Stack auf- und zuklappen"
         case .swapLeft, .swapRight, .swapUp, .swapDown: return "Fokus-Kachel mit Nachbar tauschen"
-        case .resizeLeft, .resizeRight, .resizeUp, .resizeDown: return "Trennlinie an der Fokus-Kachel um 5 % verschieben"
+        case .resizeLeft, .resizeRight, .resizeUp, .resizeDown: return "Trennlinie an der Fokus-Kachel um 5 % verschieben · Scrollen: Spalte ⅓ ½ ⅔ breit"
+        case .splitRight, .splitDown: return "Layout Frei (wie i3): die Kachel nach der fokussierten entsteht rechts bzw. unten"
         case .nextSession, .prevSession: return "Nächste / vorige Kachel"
         case .previewNext, .previewPrev: return "Baum als Vorschau durchblättern, Auswahl bleibt · ⏎ übernimmt, Esc zurück"
         case .nextWaiting: return "Springt zur nächsten Session, die auf dich wartet"
@@ -82,6 +86,8 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .resizeRight: return Hotkey([.control, .option], "→")
         case .resizeUp: return Hotkey([.control, .option], "↑")
         case .resizeDown: return Hotkey([.control, .option], "↓")
+        case .splitRight: return Hotkey([.control, .option, .shift], "→")
+        case .splitDown: return Hotkey([.control, .option, .shift], "↓")
         case .nextSession: return Hotkey(.option, "n")
         case .prevSession: return Hotkey(.option, "p")
         case .lastSession: return Hotkey(.option, "⇥")

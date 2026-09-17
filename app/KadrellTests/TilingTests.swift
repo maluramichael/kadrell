@@ -62,6 +62,41 @@ final class TilingTests: XCTestCase {
         XCTAssertEqual(bad.frames.map(\.width), [500, 500])
     }
 
+    func testCustomSplitsPerPosition() {
+        // Ohne Vorgabe entlang der längeren Seite: 1000×600 erst rechts, der Rest 500×600 dann unten.
+        let auto = Tiling.layout(.custom, count: 3, in: b, gap: 0).frames
+        XCTAssertEqual(auto, [CGRect(x: 0, y: 0, width: 500, height: 600), CGRect(x: 500, y: 0, width: 500, height: 300), CGRect(x: 500, y: 300, width: 500, height: 300)])
+        // „d“ an Position 0: Kachel 1 unter Kachel 0; Position 1 „r“; zu lange oder kurze Listen stören nicht.
+        let f = Tiling.layout(.custom, count: 3, in: b, gap: 0, splits: "dr").frames
+        XCTAssertEqual(f[0], CGRect(x: 0, y: 0, width: 1000, height: 300))
+        XCTAssertEqual(f[1], CGRect(x: 0, y: 300, width: 500, height: 300))
+        XCTAssertEqual(f[2], CGRect(x: 500, y: 300, width: 500, height: 300))
+        XCTAssertEqual(Tiling.layout(.custom, count: 1, in: b, gap: 0, splits: "dr").frames, [b])
+        XCTAssertEqual(Tiling.layout(.custom, count: 4, in: b, gap: 0, splits: "d").frames.count, 4)
+        let r = Tiling.layout(.custom, count: 2, in: b, gap: 0, splits: "r", ratios: { k, _ in k == "custom.0" ? [0.3, 0.7] : nil })
+        XCTAssertEqual(r.frames[0].width, 300)
+        XCTAssertEqual(r.dividers.map(\.key), ["custom.0"])
+    }
+
+    func testScrollColumnsAndOffset() {
+        // ½ ist Standard: zwei Spalten füllen die Fläche, die dritte liegt rechts außerhalb.
+        let gap: CGFloat = 10
+        let f = Tiling.layout(.scroll, count: 3, in: b, gap: gap, ratios: { k, _ in k == "scroll.widths" ? [0.5, 0.5, 2.0 / 3] : nil })
+        XCTAssertEqual(f.frames[0], CGRect(x: 0, y: 0, width: 495, height: 600))
+        XCTAssertEqual(f.frames[1].minX, 505); XCTAssertEqual(f.frames[1].maxX, 1000)
+        XCTAssertEqual(f.frames[2].minX, 1010); XCTAssertEqual(f.frames[2].width, ((1010.0 * 2 / 3) - 10).rounded())
+        XCTAssertTrue(f.dividers.isEmpty)
+        let content = f.frames[2].maxX
+        // Fokus rechts außerhalb: so weit schieben, dass er ganz rechts sitzt; zurück nach links wieder bis 0.
+        let x = Tiling.scrollOffset(0, reveal: f.frames[2], contentMaxX: content, in: b)
+        XCTAssertEqual(x, content - 1000)
+        XCTAssertEqual(Tiling.scrollOffset(x, reveal: f.frames[0], contentMaxX: content, in: b), 0)
+        // Ohne Fokus nur begrenzen: nicht über den Inhalt hinaus, nicht unter 0.
+        XCTAssertEqual(Tiling.scrollOffset(5000, reveal: nil, contentMaxX: content, in: b), content - 1000)
+        XCTAssertEqual(Tiling.scrollOffset(-50, reveal: nil, contentMaxX: content, in: b), 0)
+        XCTAssertEqual(Tiling.scrollOffset(300, reveal: nil, contentMaxX: 800, in: b), 0)
+    }
+
     func testDragMovesBoundaryAndClamps() {
         let d = Tiling.layout(.main, count: 2, in: b, gap: 10).dividers[0]
         XCTAssertTrue(d.vertical)

@@ -1,7 +1,7 @@
 import Foundation
 
 enum LayoutMode: String, CaseIterable, Sendable {
-    case grid, main, spiral, stack
+    case grid, main, spiral, custom, scroll, stack
     /// Reihum wie tmux `next-layout`.
     var next: LayoutMode { Self.allCases[(Self.allCases.firstIndex(of: self)! + 1) % Self.allCases.count] }
     var title: String {
@@ -9,6 +9,8 @@ enum LayoutMode: String, CaseIterable, Sendable {
         case .grid: "Grid"
         case .main: "Haupt + Spalte"
         case .spiral: "Spirale"
+        case .custom: "Frei"
+        case .scroll: "Scrollen"
         case .stack: "Stack"
         }
     }
@@ -47,8 +49,8 @@ enum Tiling {
 
     /// Die Vorlage des Layouts für n Kacheln: Felder in Reihenfolge und ihre ziehbaren Grenzen. Die Terminals werden
     /// nur eingefüllt, die Größen gehören der Vorlage (`ratios`), nicht einzelnen Sessions. Stack hat keine Vorlage.
-    /// `columns` 0 = Grid wählt ⌈√n⌉ Spalten.
-    static func layout(_ mode: LayoutMode, count n: Int, in b: CGRect, gap: CGFloat, columns fixed: Int = 0,
+    /// `columns` 0 = Grid wählt ⌈√n⌉ Spalten. `splits`: Frei, Zeichen i teilt Feld i „r“ rechts oder „d“ unten.
+    static func layout(_ mode: LayoutMode, count n: Int, in b: CGRect, gap: CGFloat, columns fixed: Int = 0, splits: String = "",
                        ratios: Ratios = { _, _ in nil }) -> (frames: [CGRect], dividers: [SplitLine]) {
         guard n > 0 else { return ([], []) }
         func r(_ key: String, _ count: Int) -> [Double] {
@@ -89,7 +91,42 @@ enum Tiling {
                 area = parts[1]
             }
             return (frames + [area], dividers)
+        case .custom:
+            // i3/bspwm-Insert: Kachel i+1 teilt Feld i rechts oder unten, ohne Vorgabe entlang der längeren Seite.
+            // ponytail: geteilt wird immer der Rest (Kette), kein Baum; 2×2 geht so nicht, dafür gibt es das Grid.
+            let dirs = Array(splits)
+            var area = b, frames: [CGRect] = []
+            for i in 0..<(n - 1) {
+                let vertical = dirs.indices.contains(i) && dirs[i] != "a" ? dirs[i] == "r" : area.width >= area.height
+                let parts = split(area, vertical: vertical, key: "custom.\(i)", count: 2)
+                frames.append(parts[0])
+                area = parts[1]
+            }
+            return (frames + [area], dividers)
+        case .scroll:
+            // niri: Spalten fester Breite (Anteil der Fläche) nebeneinander, was nicht passt, ragt rechts hinaus.
+            let v = ratios("scroll.widths", n) ?? []
+            var x = b.minX, frames: [CGRect] = []
+            for i in 0..<n {
+                let w = ((b.width + gap) * CGFloat(min(max(v.indices.contains(i) ? v[i] : 0.5, 0.1), 1)) - gap).rounded()
+                frames.append(CGRect(x: x, y: b.minY, width: w, height: b.height))
+                x += w + gap
+            }
+            return (frames, [])
         }
+    }
+
+    /// Spaltenbreiten beim Scrollen, ⌃⌥←/→ schaltet eine Stufe weiter.
+    static let scrollWidths: [Double] = [1.0 / 3, 0.5, 2.0 / 3]
+
+    /// Neuer Versatz der scrollenden Fläche: `reveal` (Fokus-Feld ohne Versatz) wird ganz sichtbar, der Rand bleibt im Inhalt.
+    static func scrollOffset(_ current: CGFloat, reveal: CGRect?, contentMaxX: CGFloat, in b: CGRect) -> CGFloat {
+        var x = current
+        if let r = reveal {
+            if r.maxX - x > b.maxX { x = r.maxX - b.maxX }
+            if r.minX - x < b.minX { x = r.minX - b.minX }
+        }
+        return min(max(0, x), max(0, contentMaxX - b.maxX))
     }
 
     /// Abschnitte auf einer Achse nach Verhältnissen, dazwischen `gap`; Kanten auf ganze Punkte, das letzte Ende sitzt genau am Rand.
