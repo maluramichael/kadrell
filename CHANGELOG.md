@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.41.0 (2026-09-17)
+
+- Feature: In der Modellauswahl steht jetzt auch Opus 4.8 mit 1M-Kontext.
+
 ## 1.40.3 (2026-09-17)
 
 - Änderung: Ein Klick auf eine schon ausgewählte Session in der Seitenleiste nimmt sie wieder aus der Auswahl.
