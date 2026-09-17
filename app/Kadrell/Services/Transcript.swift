@@ -20,18 +20,48 @@ enum Transcript {
         return dirs.lazy.map { "\(root)/\($0)/\(sessionId).jsonl" }.first { fm.fileExists(atPath: $0) }
     }
 
-    /// Liest nur Transcripts neu, deren Größe sich geändert hat. Schlüssel ist die `sessionId`.
-    static func refresh(_ sessionIds: [String], cache: [String: Entry]) -> [String: Entry] {
+    /// Kein Treffer bei der Pfadsuche: Zeitpunkt, ab dem wieder gesucht werden darf, statt bei jedem Poll erneut
+    /// den ganzen Ordner zu scannen (z. B. eine brandneue Session, deren Transcript noch nicht geschrieben ist).
+    nonisolated(unsafe) private static var notFoundUntil: [String: Date] = [:]
+
+    /// Liest nur Transcripts neu, deren Größe sich geändert hat, gewachsene nur ab der alten Größe statt komplett.
+    /// `wantText`: `lastText` kostet eine eigene JSON-Passage, nötig nur wenn `Settings.showLastMessage` an ist.
+    static func refresh(_ sessionIds: [String], cache: [String: Entry], wantText: Bool = true) -> [String: Entry] {
         var out: [String: Entry] = [:]
+        let now = Date()
         for id in sessionIds {
-            guard let path = cache[id]?.path ?? path(sessionId: id) else { continue }
+            let resolved: String?
+            if let p = cache[id]?.path { resolved = p }
+            else if let until = notFoundUntil[id], until > now { continue }
+            else if let p = path(sessionId: id) { notFoundUntil[id] = nil; resolved = p }
+            else { notFoundUntil[id] = now.addingTimeInterval(30); continue }
+            guard let path = resolved else { continue }
             let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? UInt64) ?? 0
-            if let old = cache[id], old.size == size { out[id] = old; continue }
-            let data = tailData(path: path)
-            out[id] = Entry(path: path, size: size, text: data.flatMap { lastText(jsonl: $0) },
-                             toolCandidates: data.map { toolCandidates(jsonl: $0) } ?? [])
+            if let old = cache[id] {
+                if old.size == size { out[id] = old; continue }
+                if size > old.size { out[id] = grow(path: path, size: size, from: old, wantText: wantText); continue }
+            }
+            // Erstes Lesen oder geschrumpft (z. B. `/clear`, neue Datei unter altem Pfad): voller Tail.
+            out[id] = readFull(path: path, size: size, wantText: wantText)
         }
         return out
+    }
+
+    /// Nur die seit `old.size` neu geschriebenen Bytes lesen und parsen; wo nichts Neueres trifft, gilt der alte Wert.
+    private static func grow(path: String, size: UInt64, from old: Entry, wantText: Bool) -> Entry {
+        guard let h = FileHandle(forReadingAtPath: path) else { return readFull(path: path, size: size, wantText: wantText) }
+        defer { try? h.close() }
+        try? h.seek(toOffset: old.size)
+        let data = try? h.readToEnd()
+        let newCandidates = data.map { toolCandidates(jsonl: $0) } ?? []
+        return Entry(path: path, size: size, text: (wantText ? data.flatMap { lastText(jsonl: $0) } : nil) ?? old.text,
+                     toolCandidates: newCandidates.isEmpty ? old.toolCandidates : Array((newCandidates + old.toolCandidates).prefix(20)))
+    }
+
+    private static func readFull(path: String, size: UInt64, wantText: Bool) -> Entry {
+        let data = tailData(path: path)
+        return Entry(path: path, size: size, text: wantText ? data.flatMap { lastText(jsonl: $0) } : nil,
+                     toolCandidates: data.map { toolCandidates(jsonl: $0) } ?? [])
     }
 
     /// Erste echte Eingabe des Nutzers, gekürzt. Slash-Commands und ihre Ausgabe (`<command-name>` …) zählen nicht.

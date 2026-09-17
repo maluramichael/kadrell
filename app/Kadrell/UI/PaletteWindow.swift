@@ -20,12 +20,14 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         var commands: [(String, () -> Void)] = []
         var onFocusSession: (String) -> Void = { _ in }
         var onFitGroup: (String) -> Void = { _ in }
-        /// Verlauf je laufendem Terminal, beim Öffnen einmal gelesen.
-        var buffers: [(Session, group: Group?, lines: [String])] = []
+        /// Verlauf je laufendem Terminal: `getBufferAsData` plus UTF-8-Dekodierung kostet über alle Terminals
+        /// hinweg spürbar, deshalb erst geholt, wenn `/`-Suche tatsächlich läuft, nicht schon beim Öffnen.
+        var buffers: () -> [(Session, group: Group?, lines: [String])] = { [] }
         /// Session, Suchbegriff, wievielter Treffer in ihrem Verlauf (ab 0).
         var onFindInSession: (String, String, Int) -> Void = { _, _, _ in }
         /// `@`: ssh-Hosts, zuletzt benutzte vorn. `@host:` listet dessen tmux-Sessions, geholt über `remoteSessions`.
-        var hosts: [String] = []
+        /// Liest `~/.ssh/config`, deshalb erst bei tatsächlichem `@`-Modus statt bei jedem Öffnen.
+        var hosts: () -> [String] = { [] }
         var onConnect: (String, String?) -> Void = { _, _ in }
         var remoteSessions: (String, @escaping ([String]?) -> Void) -> Void = { _, done in done(nil) }
     }
@@ -40,6 +42,10 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
     private var selected = 0
     /// tmux-Sessions je Host, einmal pro Öffnen geholt; nil = Abfrage läuft, leeres Ergebnis = kein tmux-Server.
     private var remoteCache: [String: [String]?] = [:]
+    /// `source.buffers()`/`source.hosts()`: teuer, deshalb erst bei tatsächlichem Bedarf und dann nur einmal pro Öffnen geholt.
+    private var buffersCache: [(Session, group: Group?, lines: [String])]?
+    private var hostsCache: [String]?
+    private var searchTask: Task<Void, Never>?
 
     init() {
         let s = Theme.scale, W = (640 * s).rounded(), H = (420 * s).rounded()
@@ -112,6 +118,8 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         setFrameOrigin(NSPoint(x: pf.midX - frame.width / 2, y: pf.maxY - 0.12 * pf.height - frame.height))
         field.stringValue = prefix
         remoteCache = [:]
+        buffersCache = nil
+        hostsCache = nil
         host = parent
         parent.addChildWindow(self, ordered: .above)
         makeKeyAndOrderFront(nil)
@@ -183,8 +191,10 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
     /// `@text` filtert die Hosts, ⏎ hängt sich an deren laufende tmux. `@host:text` zeigt die tmux-Sessions des
     /// Hosts (asynchron, bis dahin „lädt …“) und oben „Neu: text“, ⏎ legt sie an oder hängt sich an.
     private func remoteItems(_ q: String) -> [Item] {
+        if hostsCache == nil { hostsCache = source.hosts() }
+        let hosts = hostsCache ?? []
         guard let colon = q.firstIndex(of: ":") else {
-            return source.hosts.filter { q.isEmpty || PaletteWindow.fuzzy(q, $0) }.map { h in
+            return hosts.filter { q.isEmpty || PaletteWindow.fuzzy(q, $0) }.map { h in
                 Item(label: h, sub: String(localized: "ssh · ⏎ tmux attach · „\(h):“ wählt die Session"), group: nil, status: nil, sessionKey: nil,
                      run: { [source] in source.onConnect(h, nil) })
             }
@@ -227,8 +237,9 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
     /// in der Session springt dort per `findNext` an dieselbe Stelle.
     private func terminalMatches(_ term: String) -> [Item] {
         guard term.count >= 2 else { return [] }
+        if buffersCache == nil { buffersCache = source.buffers() }
         var list: [Item] = []
-        for (s, g, lines) in source.buffers {
+        for (s, g, lines) in buffersCache ?? [] {
             var n = 0
             for line in lines {
                 var r = line.startIndex..<line.endIndex
@@ -248,13 +259,26 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         return list
     }
 
-    func controlTextDidChange(_ obj: Notification) { refreshList() }
+    /// Leicht verzögert statt pro Tastendruck: die Buffer-Suche (`/`) läuft mit `String.range(of:)` über den
+    /// ganzen Verlauf aller Terminals, das soll nicht bei jedem Anschlag neu anlaufen.
+    func controlTextDidChange(_ obj: Notification) {
+        searchTask?.cancel()
+        searchTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled, let self else { return }
+            self.refreshList()
+        }
+    }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
         switch sel {
         case #selector(NSResponder.moveDown(_:)): move(1); return true
         case #selector(NSResponder.moveUp(_:)): move(-1); return true
-        case #selector(NSResponder.insertNewline(_:)): activate(selected); return true
+        case #selector(NSResponder.insertNewline(_:)):
+            // Ein wartender, noch nicht gelaufener Suchdurchlauf darf ⏎ nicht auf veralteten Treffern ausführen.
+            if searchTask != nil { searchTask?.cancel(); searchTask = nil; refreshList() }
+            activate(selected)
+            return true
         case #selector(NSResponder.cancelOperation(_:)): dismiss(); return true
         default: return false
         }

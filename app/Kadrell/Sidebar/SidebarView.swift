@@ -66,7 +66,7 @@ final class SidebarView: NSView {
     /// Rechtsklick auf eine Session-Zeile: liefert das Kontextmenü, oder nil (Gruppenzeile, daneben).
     var onContextMenu: ((String) -> NSMenu?)?
 
-    private enum Row {
+    private enum Row: Equatable {
         case group(Group), session(Session, Group)
         var key: String { switch self { case .group(let g): "g:" + g.id; case .session(let s, _): "s:" + s.id } }
     }
@@ -82,6 +82,8 @@ final class SidebarView: NSView {
                 // Solange etwas aufblitzt oder einfährt, flüssig zeichnen, sonst reicht der langsame Takt.
                 try? await Task.sleep(for: .milliseconds(wasAnimating ? 16 : 80))
                 guard let self else { return }
+                // Fenster verdeckt/versteckt: nichts zu zeichnen, kein Puls nötig, wieder der langsame Takt.
+                guard self.window?.occlusionState.contains(.visible) == true else { wasAnimating = false; continue }
                 let now = CACurrentMediaTime(), animating = self.pruneAnimations(now)
                 if animating || wasAnimating { wasAnimating = animating; self.needsDisplay = true; continue }
                 // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Punkte laufender Sessions.
@@ -120,16 +122,38 @@ final class SidebarView: NSView {
         knownIds = ids
         self.groups = sort.apply(groups, sessions: Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) }))
         self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        let oldRows = rows, previousHeight = frame.height
         rows = []
         for g in self.groups {
             rows.append(.group(g))
             guard !collapsed.contains(g.id) else { continue }
             for s in g.sessionIds.compactMap({ self.sessions[$0] }) { rows.append(.session(s, g)) }
         }
+        rebuildRowOffsets()
         let h = rows.reduce(renderer.topInset + 6) { $0 + rowHeight($1) } + CGFloat(max(groups.count - 1, 0)) * renderer.groupGap
         let want = max((h * Theme.scale).rounded(.up), superview?.bounds.height ?? 0)
         if frame.height != want { setFrameSize(NSSize(width: frame.width, height: want)) }
-        needsDisplay = true
+        // Höhe unverändert: nur die Zeilen neu zeichnen, deren Inhalt sich geändert hat, statt die ganze Sidebar.
+        if want != previousHeight { needsDisplay = true } else { invalidateChangedRows(old: oldRows) }
+    }
+
+    /// Zeilenhöhen sind O(1) abrufbar statt bei jedem Aufruf neu aufsummiert (Puls, Zeichnen, Maus laufen oft pro Sekunde
+    /// über alle Zeilen). Nur die Breite bleibt live: sie folgt `bounds`, auch zwischen zwei `reload`s (siehe `fitWidth`).
+    private var rowOffsets: [(y: CGFloat, height: CGFloat)] = []
+
+    private func rebuildRowOffsets() {
+        var y = renderer.topInset
+        rowOffsets = rows.enumerated().map { j, r in
+            if case .group = r, j > 0 { y += renderer.groupGap }
+            let h = rowHeight(r)
+            defer { y += h }
+            return (y, h)
+        }
+    }
+
+    private func invalidateChangedRows(old: [Row]) {
+        guard old.count == rows.count else { needsDisplay = true; return }
+        for (i, row) in rows.enumerated() where row != old[i] { setNeedsDisplay(rowRect(i).scaled(Theme.scale)) }
     }
 
     func flash(waiting: Set<String>, done: Set<String>) {
@@ -161,14 +185,9 @@ final class SidebarView: NSView {
     }
 
     private func rowRect(_ i: Int) -> CGRect {
-        var y = renderer.topInset
-        for (j, r) in rows.enumerated() {
-            if case .group = r, j > 0 { y += renderer.groupGap }
-            let h = rowHeight(r)
-            if j == i { return CGRect(x: 0, y: y, width: bounds.width / Theme.scale, height: h) }
-            y += h
-        }
-        return .zero
+        guard rowOffsets.indices.contains(i) else { return .zero }
+        let (y, h) = rowOffsets[i]
+        return CGRect(x: 0, y: y, width: bounds.width / Theme.scale, height: h)
     }
 
     private func rowIndex(at p: CGPoint) -> Int? { rows.indices.first { rowRect($0).contains(p) } }

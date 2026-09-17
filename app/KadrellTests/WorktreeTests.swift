@@ -55,4 +55,14 @@ final class WorktreeTests: XCTestCase {
         // Nur ein Worktree im Repo (kein Nebenworktree möglich): immer nil.
         XCTAssertNil(Worktree.active(candidates: ["/repo-wt-1/a"], in: [main]))
     }
+
+    /// `SessionRegistry.applyActiveWorktree` lädt `git worktree list` nur neu, wenn der neue Kandidat von der
+    /// gecachten Liste nicht mehr abgedeckt ist: `match` ist dafür kein `private` mehr, dieser Test hält die
+    /// Erwartung an dessen Verhalten fest (Datei-Präfix wie Bash-Kommando).
+    func testMatchCoversPathAndCommandCandidates() {
+        let worktrees = [Worktree.Entry(path: "/repo", branch: "master"), Worktree.Entry(path: "/repo-wt-1", branch: "feature-x")]
+        XCTAssertNotNil(Worktree.match("/repo-wt-1/src/a.swift", in: worktrees))
+        XCTAssertNotNil(Worktree.match("cd /repo-wt-1 && npm test", in: worktrees))
+        XCTAssertNil(Worktree.match("/elsewhere/a.swift", in: worktrees))
+    }
 }

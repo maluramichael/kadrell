@@ -15,11 +15,11 @@ final class SessionRegistry {
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     private(set) var polled = false
     private var transcripts: [String: Transcript.Entry] = [:]
-    /// `git worktree list` je Root-Ordner (`cwd`), neu geholt nur wenn sich der oberste Transcript-Kandidat
-    /// einer Session in diesem Ordner ändert (siehe `applyActiveWorktree`), nicht bei jedem 2-s-Poll.
+    /// `git worktree list` je Root-Ordner (`cwd`), neu geholt nur wenn der oberste Transcript-Kandidat einer
+    /// Session in diesem Ordner von der gecachten Liste nicht mehr abgedeckt ist (siehe `applyActiveWorktree`),
+    /// nicht bei jeder Kandidatenänderung: Tool-Aufrufe innerhalb desselben Worktrees ändern den Kandidaten
+    /// praktisch bei jedem Poll, ohne dass ein neuer Worktree entstanden sein kann.
     private var worktreeCache: [String: [Worktree.Entry]] = [:]
-    /// Oberster Transcript-Kandidat je Session beim letzten Abgleich, löst bei Änderung einen `worktreeCache`-Refresh aus.
-    private var lastCandidate: [String: String] = [:]
     /// Ersatztitel je sessionId. Die erste Nachricht ändert sich nicht, einmal gefunden wird nie wieder gelesen.
     private var firstPrompts: [String: String] = [:]
     /// Schlüssel der Session je pid des eigenen Claude-Prozesses, liefert der AttachManager.
@@ -88,10 +88,16 @@ final class SessionRegistry {
     }
 
     func pollNow() async {
-        let pids = pids()
-        let agents = Agent.local(pids: Array(pids.keys), configDir: cli.configDir)
-        var merged = SessionRegistry.merge(sessions, agents: agents, pids: pids)
-        applyShellCwd(&merged, pids: pids)
+        let pids = pids(), priorSessions = sessions, configDir = cli.configDir
+        // Agent.local liest je pid eine Datei, merge() je Session `.git/HEAD` (Git.branch), applyShellCwd() je
+        // Shell-pid /proc: reines I/O ohne UI-Zugriff, deshalb abseits des Main-Threads statt bei jedem Poll
+        // Tastatureingaben in allen Terminals zu blockieren.
+        var merged = await Task.detached {
+            let agents = Agent.local(pids: Array(pids.keys), configDir: configDir)
+            var merged = SessionRegistry.merge(priorSessions, agents: agents, pids: pids)
+            SessionRegistry.applyShellCwd(&merged, pids: pids)
+            return merged
+        }.value
         await fillFirstPrompts(&merged)
         let messages = await refreshTranscripts(merged)
         await applyActiveWorktree(&merged)
@@ -107,7 +113,7 @@ final class SessionRegistry {
     }
 
     /// Bei Terminals ohne Claude folgt der Ordner dem `cd` der Shell.
-    private func applyShellCwd(_ merged: inout [Session], pids: [Int: String]) {
+    private nonisolated static func applyShellCwd(_ merged: inout [Session], pids: [Int: String]) {
         for (pid, key) in pids {
             guard let i = merged.firstIndex(where: { $0.id == key && $0.isShell }), let dir = SessionRegistry.cwd(pid: pid_t(pid)) else { continue }
             merged[i].cwd = dir
@@ -115,20 +121,26 @@ final class SessionRegistry {
     }
 
     private func fillFirstPrompts(_ merged: inout [Session]) async {
-        let missing = merged.filter { $0.name.isEmpty && !$0.isShell && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
+        // Shell- und Remote-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich scannen.
+        let missing = merged.filter { $0.name.isEmpty && !$0.isShell && !$0.isRemote && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
         if !missing.isEmpty {
             let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
-                if let p = Transcript.path(sessionId: id), let t = Transcript.firstPrompt(path: p) { r[id] = t }
+                guard let p = Transcript.path(sessionId: id) else { return }
+                // Kein Treffer trotz vorhandenem Transcript (nur Slash-Commands, oder die Eingabe liegt hinter dem
+                // gelesenen Kopf): als Sentinel merken, sonst läse jeder Poll dieselben 256 KB erneut ein.
+                r[id] = Transcript.firstPrompt(path: p) ?? ""
             } }.value
             firstPrompts.merge(found) { a, _ in a }
         }
-        for i in merged.indices { merged[i].firstPrompt = firstPrompts[merged[i].sessionId] }
+        for i in merged.indices { merged[i].firstPrompt = firstPrompts[merged[i].sessionId].flatMap { $0.isEmpty ? nil : $0 } }
     }
 
     /// Liest nur gewachsene Transcripts neu und leitet daraus die Nachrichtenzeile ab (falls eingeschaltet).
     private func refreshTranscripts(_ merged: [Session]) async -> [String: String] {
-        let ids = merged.map(\.sessionId), cache = transcripts
-        transcripts = await Task.detached { Transcript.refresh(ids, cache: cache) }.value
+        // Shell- und Remote-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich den ganzen
+        // Projektordner scannen (siehe `Transcript.path`).
+        let ids = merged.filter { !$0.isShell && !$0.isRemote }.map(\.sessionId), cache = transcripts, wantText = Settings.showLastMessage
+        transcripts = await Task.detached { Transcript.refresh(ids, cache: cache, wantText: wantText) }.value
         var messages: [String: String] = [:]
         if Settings.showLastMessage {
             for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
@@ -144,10 +156,10 @@ final class SessionRegistry {
             let sessionId = merged[i].sessionId
             guard let candidates = transcripts[sessionId]?.toolCandidates, let top = candidates.first else { continue }
             let cwd = merged[i].cwd
-            if lastCandidate[sessionId] != top || worktreeCache[cwd] == nil {
-                lastCandidate[sessionId] = top
-                worktreeCache[cwd] = await Worktree.list(at: cwd)
-            }
+            // Nur neu laden, wenn der Kandidat von der gecachten Liste nicht mehr abgedeckt ist: nur dann kann
+            // ein Worktree entstanden oder verschwunden sein. Mehrere Sessions im selben `cwd` teilen sich den Cache.
+            let covered = worktreeCache[cwd].map { Worktree.match(top, in: $0) != nil } ?? false
+            if !covered { worktreeCache[cwd] = await Worktree.list(at: cwd) }
             guard let list = worktreeCache[cwd] else { continue }
             guard let active = Worktree.active(candidates: candidates, in: list) else { merged[i].activeWorktree = nil; continue }
             merged[i].activeWorktree = active.path
@@ -157,7 +169,8 @@ final class SessionRegistry {
 
     /// Live-Werte nur über die pid des eigenen Prozesses: eine fremde Session mit derselben sessionId
     /// (z. B. der gestoppte Hintergrund-Eintrag) ist nicht diese Kachel, und `/clear` wechselt die sessionId.
-    static func merge(_ sessions: [Session], agents: [Agent], pids: [Int: String]) -> [Session] {
+    /// `nonisolated`: liest nur `.git/HEAD` (`Git.branch`), läuft in `pollNow` abseits des Main-Threads.
+    nonisolated static func merge(_ sessions: [Session], agents: [Agent], pids: [Int: String]) -> [Session] {
         var live: [String: Agent] = [:]
         for a in agents { if let pid = a.pid, let key = pids[pid] { live[key] = a } }
         return sessions.map { s in
@@ -174,7 +187,7 @@ final class SessionRegistry {
     }
 
     /// Aktueller Ordner eines Prozesses, wie `lsof -d cwd`.
-    static func cwd(pid: pid_t) -> String? {
+    nonisolated static func cwd(pid: pid_t) -> String? {
         var info = proc_vnodepathinfo()
         let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
         guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }

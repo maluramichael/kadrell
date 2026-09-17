@@ -85,6 +85,8 @@ final class StatusBarView: NSView {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
+                // Fenster verdeckt/versteckt: die Uhr darf ruhig eine Sekunde nachhängen, sie zeichnet niemand.
+                guard self.window?.occlusionState.contains(.visible) == true else { continue }
                 self.needsDisplay = true
             }
         }

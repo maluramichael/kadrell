@@ -76,14 +76,18 @@ final class AttachManager {
     /// Schlüssel der Session je pid ihres Claude-Prozesses.
     var pids: [Int: String] { Dictionary(terminals.map { (Int($0.value.process.shellPid), $0.key) }, uniquingKeysWith: { a, _ in a }) }
 
-    /// Ersetzt die Warteschlange; Reihenfolge wie übergeben (sichtbare zuerst), eine Session alle 500 ms.
+    /// Sessions je Welle, statt strikt eine alle 500 ms: bei vielen sichtbaren Kacheln (Grid, Auto-Modus) lebt
+    /// sonst die letzte erst nach mehreren Sekunden, ohne dass das an CPU oder Prozessstart läge.
+    private static let batchSize = 4
+
+    /// Ersetzt die Warteschlange; Reihenfolge wie übergeben (sichtbare zuerst), eine Welle von `batchSize` alle 500 ms.
     func enqueue(_ sessions: [Session]) {
         queue = sessions.filter { terminals[$0.id] == nil && !ended.contains($0.id) }
         guard queueTask == nil, !queue.isEmpty else { return }
         queueTask = Task { [weak self] in
             while let self, !self.queue.isEmpty, !Task.isCancelled {
-                let next = self.queue.removeFirst()
-                self.attachNow(next)
+                for _ in 0..<min(AttachManager.batchSize, self.queue.count) { self.attachNow(self.queue.removeFirst()) }
+                guard !self.queue.isEmpty else { break }
                 try? await Task.sleep(for: .milliseconds(500))
             }
             self?.queueTask = nil
@@ -224,7 +228,8 @@ final class AttachManager {
     /// beides seltene, gezielte Momente statt ein Polling mehrmals pro Sekunde.
     func refreshSnapshots() {
         var changed = false
-        for (key, t) in terminals {
+        // Ein eingehängtes Terminal zeichnet sich selbst; nur ausgehängte brauchen den Snapshot überhaupt.
+        for (key, t) in terminals where t.superview == nil {
             var rows = t.terminalStateSnapshot().visibleRows.map { row -> String in
                 var s = row.text
                 while let last = s.last, last.isWhitespace { s.removeLast() }
@@ -233,8 +238,7 @@ final class AttachManager {
             while rows.last?.isEmpty == true { rows.removeLast() }
             guard snapshots[key] != rows else { continue }
             snapshots[key] = rows
-            // Nur Kacheln ohne eingehängtes Terminal zeigen den Snapshot; eingehängte zeichnen sich selbst.
-            if t.superview == nil { changed = true }
+            changed = true
         }
         if changed { onChange?() }
     }
