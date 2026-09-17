@@ -1,5 +1,11 @@
 # Kadrell: native Mac-App, One-Shot-Auftrag
 
+> **Veraltet:** Dies ist der ursprüngliche Auftrag mit dem zuerst geplanten Konzept (zoombare Karte mit
+> semantischem Zoom, Architektur auf `claude --bg`/`claude attach`). Gebaut wurde stattdessen Baum links plus
+> Grid/Stack rechts, Claude läuft als eigener Kindprozess statt über `claude --bg`, siehe die Begründung in
+> `kadrell-verifikation.md`. Aktueller Stand: `../app/README.md` und `../CHANGELOG.md`. Der hier referenzierte
+> Prototyp `prototype/index.html` zeigt die verworfene UI, nicht die gebaute App.
+
 > **Für den ausführenden Agenten:** Dies ist ein vollständiger Auftrag. Lies ihn ganz, dann den Prototyp `prototype/index.html` (Design-Referenz, 540 Zeilen) und die Screenshots unter `~/.claude/screenshots/claude-agent-overview/10-*.png` bis `17-*.png`. Baue die App komplett, ohne Rückfragen, in diesem Repo unter `app/`. Am Ende muss `xcodebuild` durchlaufen, die App starten und die Abnahmekriterien in Abschnitt 8 erfüllen. Verifiziere jeden Punkt real, nicht per Annahme.
 
 **Ziel:** Eine schnelle native macOS-App (AppKit, Swift), die alle laufenden Claude-Code-Sessions als zoombare Karte zeigt: Projektgruppen als Grids aus Session-Kacheln, semantischer Zoom (weit weg nur Farbe und Status, näher Titel, dann die letzten Terminalzeilen, im Fokus ein echtes Terminal zum Lesen und Tippen). Sessions überleben Absturz oder Beenden der App, weil sie außerhalb der App als Claude-Code-Hintergrund-Sessions laufen.

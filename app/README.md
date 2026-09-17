@@ -60,4 +60,24 @@ sie nicht läuft. Befehle: `ls [--json]`, `new-group`, `new [-t gruppe] [-c ordn
 läuft: jede Kachel hat `KADRELL_SESSION_KEY`, `KADRELL_SOCKET` und `KADRELL` (Pfad zum Binary) in der Umgebung.
 Per CLI angelegte Gruppen sind Favoriten, sonst räumt der Abgleich sie leer wieder weg. Rückfragen entfallen.
 
+## Warum Kadrell statt Terminal-Tabs oder tmux allein
+
+- **Startet und hält Claude selbst.** Kein `claude --bg`, kein separates Attach-Kommando: jede Kachel ist eine echte PTY mit einem Claude-Kindprozess, neue Sessions per `--session-id`, bekannte per `--resume`. Beendet sich Kadrell, enden die Prozesse mit; beim nächsten Start läuft jede angezeigte Session mit ihrem Verlauf weiter.
+- **Baum mit Gruppen statt flacher Tab-Leiste.** Gruppe = Projektordner, darunter ihre Sessions mit Status, Laufzeit und Marke „neu“ für ungesehen fertige oder wartende Sessions. Bei fünf, acht, zwölf offenen Sessions bleibt sichtbar, wer arbeitet, wer wartet und wer fertig ist, ohne jede Kachel einzeln durchzuklicken.
+
+  ![Baum mit Gruppen und Marke „neu“](../docs/images/baum-marke-neu.png)
+
+- **Kachel-Layouts wie i3/bspwm statt starrem Grid.** Neben Grid und Stack gibt es Haupt + Spalte und Spirale (jede Kachel halbiert den Rest, wie bspwm), mit ziehbaren Trennlinien oder ⌃⌥-Pfeiltasten. Die Aufteilung gehört zum Layout, nicht zur einzelnen Session.
+
+  ![Spirale-Layout: jede Kachel halbiert den verbleibenden Platz](../docs/images/layout-spirale.png)
+
+- **tmux-Kürzel statt neuer Bedienung.** Fokus, Kachel tauschen, Zoom, Sync, Rename: die Standardbelegung folgt tmux, jedes Kürzel lässt sich umbelegen. Wer tmux im Muskelgedächtnis hat, muss nichts Neues lernen.
+- **Remote genauso wie lokal.** ⌘⇧N verbindet per ssh mit einem Host aus der ssh-Konfiguration und hängt sich an dessen tmux, in derselben Oberfläche wie lokale Sessions.
+- **Profile statt einer Instanz für alles.** `--profile <name>` startet eine weitere Kadrell-Instanz mit eigenen Sessions, Gruppen und Einstellungen, `--profile tmp` ein Wegwerfprofil zum Testen. Mehrere Kadrell-Instanzen laufen nebeneinander, ohne sich zu stören.
+- **Anpassbare Darstellung statt fixer Optik.** Terminal-Schrift, Schriftgröße, Zeilenabstand, Innen- und Außenabstand der Kacheln, UI-Größe, Hintergrundbild mit einstellbarer Deckkraft.
+
+  ![Einstellungen: Schieberegler für Terminal- und Kachel-Darstellung](../docs/images/darstellung-einstellungen.png)
+
+- **Alles in einem Fenster.** Kein zweites Tool für Status, keine separate Übersicht: Baum und Terminals sitzen im selben Fenster, das Menüleisten-Icon holt es bei Bedarf zurück.
+
 Details, verifizierte CLI-Fakten und Abweichungen vom Brief: `../docs/kadrell-verifikation.md`.

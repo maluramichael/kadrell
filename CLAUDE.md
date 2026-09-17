@@ -2,6 +2,15 @@
 
 Mac-App, Aufbau und Build: `app/README.md`.
 
+## Positionierung (für Agenten, vor Feature-Entscheidungen lesen)
+
+Kadrell hält alle parallel laufenden Claude-Code-Sessions eines Nutzers in einem Fenster sichtbar und bedienbar,
+für Leute mit sehr vielen gleichzeitigen Sessions über mehrere Projekte. Nicht-Ziele: keine zoombare Karte (das
+war der verworfene erste Entwurf, siehe `prototype/`), kein eigener Daemon oder Server, keine App-Store-Sandbox
+(würde Claude Code den Zugriff auf Projektordner und Schlüsselbund nehmen). Maßstab für neue Features: komplett
+tastaturbedienbar, alles bleibt in diesem einen Fenster, Bedienung folgt tmux-Gewohnheiten statt eigener
+Erfindungen. Passt ein Vorschlag da nicht rein, erst nachfragen statt bauen.
+
 ## Changelog und Version bei jedem Commit/Merge
 
 1. Nutzersichtbare Änderungen oben in `CHANGELOG.md` unter `## Unreleased` eintragen (Abschnitt anlegen,
