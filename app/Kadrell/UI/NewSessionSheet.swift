@@ -27,7 +27,7 @@ final class NewSessionModel {
         self.groups = groups
         self.counts = counts
         self.index = index
-        if let c = FolderIndex.clipboardFolder() { context.append((c, "Zwischenablage")) }
+        if let c = FolderIndex.clipboardFolder() { context.append((c, String(localized: "Zwischenablage"))) }
         update()
         guard askFinder else { return }
         Task { [weak self] in
@@ -127,12 +127,12 @@ struct NewSessionView: View {
         VStack(spacing: 0) {
             Text("NEUE SESSION").font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
-            PathField(text: $model.query, placeholder: "Projekt suchen oder Pfad tippen (~/d/p/kad)",
+            PathField(text: $model.query, placeholder: String(localized: "Projekt suchen oder Pfad tippen (~/d/p/kad)"),
                       onTab: model.tab, onSubmit: model.start, onMove: model.move)
                 .frame(height: 22 * Theme.scale).padding(14)
             Divider().overlay(Theme.lineColor)
             list
-            DialogFoot(hint: "⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen", button: "Starten") { model.start() }
+            DialogFoot(hint: String(localized: "⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen"), button: String(localized: "Starten")) { model.start() }
         }
         .font(Theme.ui(12))
         .foregroundStyle(Theme.fgColor)
@@ -169,7 +169,7 @@ struct NewSessionView: View {
                 Text(Theme.shortPath(c.path)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).lineLimit(1).truncationMode(.head)
             }
             Spacer()
-            Text(c.group.map { "\(model.counts[$0.id] ?? 0) Sessions" } ?? c.tag).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+            Text(c.group.map { String(localized: "\(model.counts[$0.id] ?? 0) Sessions") } ?? c.tag).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
         }
         .padding(.vertical, 8).padding(.horizontal, 16)
         .frame(height: 46 * Theme.scale)

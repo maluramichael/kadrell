@@ -193,10 +193,10 @@ extension AppDelegate {
                 throw ControlError("\(link) existiert schon und ist kein Symlink")
             }
             if (try? fm.destinationOfSymbolicLink(atPath: link)) == nil { try fm.createSymbolicLink(atPath: link, withDestinationPath: target) }
-            confirm("Kommandozeilen-Tool installiert", "\(link) zeigt auf diese App. `kadrell help` listet die Befehle. "
-                    + "In Sessions dieser App steht der Pfad zusätzlich in $KADRELL.", button: "OK", destructive: false) {}
+            confirm(String(localized: "Kommandozeilen-Tool installiert"), String(localized: "\(link) zeigt auf diese App. `kadrell help` listet die Befehle. In Sessions dieser App steht der Pfad zusätzlich in $KADRELL."),
+                    button: String(localized: "OK"), destructive: false) {}
         } catch {
-            confirm("Installation fehlgeschlagen", (error as? ControlError)?.message ?? String(describing: error), button: "OK", destructive: false) {}
+            confirm(String(localized: "Installation fehlgeschlagen"), (error as? ControlError)?.message ?? String(describing: error), button: String(localized: "OK"), destructive: false) {}
         }
     }
 }

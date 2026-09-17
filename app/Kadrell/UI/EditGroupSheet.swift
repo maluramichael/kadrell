@@ -47,7 +47,7 @@ struct EditGroupView: View {
             if showPalettes { palettes }
             Text(Theme.shortPath(model.group.cwd)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
-            DialogFoot(hint: "Esc abbrechen", button: "Speichern") { model.save() }
+            DialogFoot(hint: String(localized: "Esc abbrechen"), button: String(localized: "Speichern")) { model.save() }
         }
         .font(Theme.ui(12))
         .foregroundStyle(Theme.fgColor)
@@ -111,7 +111,7 @@ struct RenameSessionView: View {
                 .padding(14)
             Text("Leer lassen: wieder der Titel von Claude Code (\(model.session.autoTitle))").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
-            DialogFoot(hint: "Esc abbrechen", button: "Speichern") { model.save() }
+            DialogFoot(hint: String(localized: "Esc abbrechen"), button: String(localized: "Speichern")) { model.save() }
         }
         .font(Theme.ui(12))
         .foregroundStyle(Theme.fgColor)

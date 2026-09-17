@@ -10,7 +10,7 @@ final class StatusBarView: NSView {
     var errorText: String?
     var sessionCount = 0
     var openCount = 0
-    var attachText = "läuft 0/0"
+    var attachText = String(localized: "läuft \(0)/\(0)")
     /// Sessions, die gerade auf dich warten (Status waiting, angehängt). Modul „N warten“ nur bei > 0.
     var waitingCount = 0
     var onSelectWaiting: (() -> Void)?
@@ -110,11 +110,11 @@ final class StatusBarView: NSView {
         let toggle = CGRect(x: 0, y: 0, width: 36, height: b.height - 1)
         Icons.layout(layoutMode, in: CGRect(x: 11, y: midY - 7, width: 14, height: 14), color: Theme.sub)
         Theme.line.setFill(); CGRect(x: toggle.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((toggle, "Layout", layoutMode.title, { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) }))
+        hitRects.append((toggle, String(localized: "Layout"), layoutMode.title, { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) }))
         var x = toggle.maxX + 1
         if layoutMode == .grid {
             // ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl, unter 1 wird es wieder automatisch.
-            let value = NSAttributedString(string: gridColumns == 0 ? "AUTO SP" : "\(gridColumns) SP", attributes: Theme.attrs(10, gridColumns == 0 ? Theme.muted : Theme.fg, bold: true))
+            let value = NSAttributedString(string: gridColumns == 0 ? String(localized: "AUTO SP") : String(localized: "\(gridColumns) SP"), attributes: Theme.attrs(10, gridColumns == 0 ? Theme.muted : Theme.fg, bold: true))
             let less = NSAttributedString(string: "‹", attributes: Theme.attrs(12, Theme.sub, bold: true))
             let more = NSAttributedString(string: "›", attributes: Theme.attrs(12, Theme.sub, bold: true))
             let lessRect = CGRect(x: x, y: 0, width: less.size().width + 14, height: b.height - 1)
@@ -123,17 +123,17 @@ final class StatusBarView: NSView {
             let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
             more.draw(at: CGPoint(x: moreRect.minX + 7, y: midY - 9))
             let cols = gridColumns
-            hitRects.append((lessRect, "Weniger Spalten", gridColumns == 0 ? "automatisch" : "\(gridColumns)", { [weak self] in self?.onGridColumns?(max(0, cols - 1)) }))
-            hitRects.append((moreRect, "Mehr Spalten", gridColumns == 0 ? "automatisch" : "\(gridColumns)", { [weak self] in self?.onGridColumns?(min(12, cols + 1)) }))
+            hitRects.append((lessRect, String(localized: "Weniger Spalten"), gridColumns == 0 ? String(localized: "automatisch") : "\(gridColumns)", { [weak self] in self?.onGridColumns?(max(0, cols - 1)) }))
+            hitRects.append((moreRect, String(localized: "Mehr Spalten"), gridColumns == 0 ? String(localized: "automatisch") : "\(gridColumns)", { [weak self] in self?.onGridColumns?(min(12, cols + 1)) }))
             Theme.line.setFill(); CGRect(x: moreRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
             x = moreRect.maxX + 1
         }
         if layoutMode == .custom {
-            let label = NSAttributedString(string: split == "r" ? "TEILT →" : split == "d" ? "TEILT ↓" : "TEILT AUTO", attributes: Theme.attrs(10, split == "a" ? Theme.muted : Theme.fg, bold: true))
+            let label = NSAttributedString(string: split == "r" ? String(localized: "TEILT →") : split == "d" ? String(localized: "TEILT ↓") : String(localized: "TEILT AUTO"), attributes: Theme.attrs(10, split == "a" ? Theme.muted : Theme.fg, bold: true))
             let r = CGRect(x: x, y: 0, width: label.size().width + 20, height: b.height - 1)
             label.draw(at: CGPoint(x: r.minX + 10, y: midY - 7))
             let next: Character = split == "a" ? "r" : split == "r" ? "d" : "a"
-            hitRects.append((r, "Nächste Kachel teilt", split == "r" ? "rechts" : split == "d" ? "unten" : "automatisch", { [weak self] in self?.onSplit?(next) }))
+            hitRects.append((r, String(localized: "Nächste Kachel teilt"), split == "r" ? String(localized: "rechts") : split == "d" ? String(localized: "unten") : String(localized: "automatisch"), { [weak self] in self?.onSplit?(next) }))
             Theme.line.setFill(); CGRect(x: r.maxX, y: 0, width: 1, height: b.height - 1).fill()
             x = r.maxX + 1
         }
@@ -142,27 +142,27 @@ final class StatusBarView: NSView {
         if auto { Theme.waiting.setFill(); badge(autoRect, "auto").fill() }
         at.draw(at: CGPoint(x: autoRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: autoRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((autoRect, "Auto-Modus", auto ? "an" : "aus", { [weak self] in self?.onToggleAuto?() }))
+        hitRects.append((autoRect, String(localized: "Auto-Modus"), auto ? String(localized: "an") : String(localized: "aus"), { [weak self] in self?.onToggleAuto?() }))
         let syt = NSAttributedString(string: "SYNC", attributes: Theme.attrs(10, sync ? Theme.bg : Theme.muted, bold: true))
         let syncRect = CGRect(x: autoRect.maxX + 1, y: 0, width: syt.size().width + 20, height: b.height - 1)
         if sync { Theme.error.setFill(); badge(syncRect, "sync").fill() }
         syt.draw(at: CGPoint(x: syncRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: syncRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((syncRect, "Sync", sync ? "an" : "aus", { [weak self] in self?.onToggleSync?() }))
+        hitRects.append((syncRect, "Sync", sync ? String(localized: "an") : String(localized: "aus"), { [weak self] in self?.onToggleSync?() }))
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
         let st = NSAttributedString(string: sortLabel, attributes: Theme.attrs(10, sort == .off ? Theme.muted : Theme.bg, bold: true))
         let sortRect = CGRect(x: syncRect.maxX + 1, y: 0, width: st.size().width + 20, height: b.height - 1)
         if sort != .off { Theme.sub.setFill(); badge(sortRect, "sort").fill() }
         st.draw(at: CGPoint(x: sortRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: sortRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((sortRect, "Sortierung", sort == .off ? "aus" : sortLabel, { [weak self] in self?.onCycleSort?() }))
+        hitRects.append((sortRect, String(localized: "Sortierung"), sort == .off ? String(localized: "aus") : sortLabel, { [weak self] in self?.onCycleSort?() }))
         var leftEnd = sortRect.maxX + 8
         if zoomed {
             let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.bg, bold: true))
             let z = CGRect(x: leftEnd, y: midY - 9, width: zt.size().width + 12, height: 18)
             Theme.waiting.setFill(); z.fill()
             zt.draw(at: CGPoint(x: z.minX + 6, y: midY - 8))
-            hitRects.append((z, "Zoom aufheben", nil, { [weak self] in self?.onToggleZoom?() }))
+            hitRects.append((z, String(localized: "Zoom aufheben"), nil, { [weak self] in self?.onToggleZoom?() }))
             leftEnd = z.maxX + 8
         }
 
@@ -182,14 +182,14 @@ final class StatusBarView: NSView {
         let df = DateFormatter(); df.dateFormat = "HH:mm"
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         if waitingCount > 0 {
-            let wt = NSAttributedString(string: "\(waitingCount) warten", attributes: Theme.attrs(11, Theme.bg, bold: true))
+            let wt = NSAttributedString(string: String(localized: "\(waitingCount) warten"), attributes: Theme.attrs(11, Theme.bg, bold: true))
             let ww = wt.size().width + 20
             rx -= ww
             Theme.line.setFill(); CGRect(x: rx, y: 0, width: 1, height: b.height - 1).fill()
             let wr = CGRect(x: rx + 4, y: midY - 9, width: ww - 8, height: 18)
             Theme.waiting.setFill(); wr.fill()
             wt.draw(at: CGPoint(x: wr.minX + 10, y: midY - 8))
-            hitRects.append((wr, "Wartende Sessions", "\(waitingCount)", { [weak self] in self?.onSelectWaiting?() }))
+            hitRects.append((wr, String(localized: "Wartende Sessions"), "\(waitingCount)", { [weak self] in self?.onSelectWaiting?() }))
         }
         module([NSAttributedString(string: attachText, attributes: f)])
         // Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
@@ -210,7 +210,7 @@ final class StatusBarView: NSView {
         if let c = crumb {
             let m = NSMutableAttributedString(string: c.group + " › ", attributes: crumbGroupAttrs ?? fMuted)
             m.append(NSAttributedString(string: c.session, attributes: fFg))
-            if openCount > 1 { m.append(NSAttributedString(string: " · \(openCount) offen", attributes: fMuted)) }
+            if openCount > 1 { m.append(NSAttributedString(string: String(localized: " · \(openCount) offen"), attributes: fMuted)) }
             mid = m
         } else if let e = errorText {
             mid = NSAttributedString(string: "kadrell · \(e)", attributes: Theme.attrs(11.5, Theme.error))
@@ -241,7 +241,7 @@ final class StatusBarView: NSView {
 
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .toolbar }
-    override func accessibilityLabel() -> String? { "Statusleiste" }
+    override func accessibilityLabel() -> String? { String(localized: "Statusleiste") }
 
     /// Knöpfe aus den Trefferflächen des letzten Zeichnens.
     override func accessibilityChildren() -> [Any]? {

@@ -203,11 +203,11 @@ enum Settings {
         case closeSession, closeGroup, stopSession, quit, adoptBackground
         var title: String {
             switch self {
-            case .closeSession: "Session beenden und entfernen"
-            case .closeGroup: "Gruppe schließen"
-            case .stopSession: "Session stoppen"
-            case .quit: "Kadrell beenden, während Claude läuft"
-            case .adoptBackground: "Hintergrund-Sessions übernehmen"
+            case .closeSession: String(localized: "Session beenden und entfernen")
+            case .closeGroup: String(localized: "Gruppe schließen")
+            case .stopSession: String(localized: "Session stoppen")
+            case .quit: String(localized: "Kadrell beenden, während Claude läuft")
+            case .adoptBackground: String(localized: "Hintergrund-Sessions übernehmen")
             }
         }
         var key: String { "ask.\(rawValue)" }
@@ -345,7 +345,7 @@ struct SettingsView: View {
     private var hotkeyGroups: [(String, [HotkeyAction])] {
         let nav: [HotkeyAction] = [.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
             + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace]
-        return [("Navigation", nav), ("Kacheln verwalten", HotkeyAction.allCases.filter { !nav.contains($0) })]
+        return [(String(localized: "Navigation"), nav), (String(localized: "Kacheln verwalten"), HotkeyAction.allCases.filter { !nav.contains($0) })]
     }
 
     var body: some View {
@@ -359,9 +359,9 @@ struct SettingsView: View {
             .padding(.horizontal, 16).padding(.top, 12)
             Divider().overlay(Theme.lineColor).padding(.top, 12)
 
-            heading("Sessions", first: true)
+            heading(String(localized: "Sessions"), first: true)
             table {
-                setting("Projektordner für ⌘N (nach Git-Repos durchsucht)") {
+                setting(String(localized: "Projektordner für ⌘N (nach Git-Repos durchsucht)")) {
                     HStack(spacing: 4) {
                         PathField(text: Binding(get: { Theme.shortPath(model.startFolder) }, set: { model.startFolder = $0 }), autofocus: false,
                                   onTab: { if let p = FolderIndex.expandAbbreviated(model.startFolder).first { model.startFolder = p } },
@@ -379,42 +379,42 @@ struct SettingsView: View {
                         .buttonStyle(.plain).help("Im Finder wählen")
                     }
                 }
-                setting("Externer Editor (Kommando wie im Terminal)") {
+                setting(String(localized: "Externer Editor (Kommando wie im Terminal)")) {
                     TextField("z. B. code", text: $model.editorCommand)
                         .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
                         .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
                 }
-                setting("Wenn Claude endet (zweimal ⌃C, /exit)") {
-                    menu($model.closeTileOnExit, [(false, "Kachel bleibt, Klick setzt fort"), (true, "Kachel schließen")])
+                setting(String(localized: "Wenn Claude endet (zweimal ⌃C, /exit)")) {
+                    menu($model.closeTileOnExit, [(false, String(localized: "Kachel bleibt, Klick setzt fort")), (true, String(localized: "Kachel schließen"))])
                 }
             }
 
-            heading("Claude", note: "gilt für neu gestartete Claude-Prozesse")
+            heading(String(localized: "Claude"), note: String(localized: "gilt für neu gestartete Claude-Prozesse"))
             table {
-                setting("Bypass-Modus erlauben (--allow-dangerously-skip-permissions)") { onOff($model.claudeAllowBypass) }
-                setting("Startmodus") { options(Settings.claudeModes, $model.claudeMode) }
-                setting("Modell") { options(Settings.claudeModels, $model.claudeModel) }
-                setting("Effort") { options(Settings.claudeEfforts, $model.claudeEffort) }
+                setting(String(localized: "Bypass-Modus erlauben (--allow-dangerously-skip-permissions)")) { onOff($model.claudeAllowBypass) }
+                setting(String(localized: "Startmodus")) { options(Settings.claudeModes, $model.claudeMode) }
+                setting(String(localized: "Modell")) { options(Settings.claudeModels, $model.claudeModel) }
+                setting(String(localized: "Effort")) { options(Settings.claudeEfforts, $model.claudeEffort) }
             }
 
-            heading("Darstellung")
+            heading(String(localized: "Darstellung"))
             table {
-                setting("Farbschema") { menu($model.colorTheme, ColorTheme.all.map { ($0.id, $0.name) }) }
-                setting("UI-Größe") { slider($model.uiScale, Settings.uiScalePercent, step: 5, factor: 100, unit: "%", live: false) }
-                setting("Terminal-Schrift") { menu($model.fontName, model.fonts.map { ($0.name, $0.display) }) }
-                setting("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad") { slider($model.fontSize, Settings.fontSizes, step: 1, unit: "pt") }
-                setting("Zeilenabstand") { slider($model.lineSpacing, Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
-                setting("Innenabstand der Kacheln") { slider($model.padding, Settings.pixelRange, step: 1, unit: "px") }
-                setting("Abstand zwischen Kacheln") { slider($model.tileGap, Settings.pixelRange, step: 1, unit: "px") }
-                setting("Terminal auf der GPU zeichnen (Metal)") { onOff($model.metal) }
+                setting(String(localized: "Farbschema")) { menu($model.colorTheme, ColorTheme.all.map { ($0.id, $0.name) }) }
+                setting(String(localized: "UI-Größe")) { slider($model.uiScale, Settings.uiScalePercent, step: 5, factor: 100, unit: "%", live: false) }
+                setting(String(localized: "Terminal-Schrift")) { menu($model.fontName, model.fonts.map { ($0.name, $0.display) }) }
+                setting(String(localized: "Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad")) { slider($model.fontSize, Settings.fontSizes, step: 1, unit: "pt") }
+                setting(String(localized: "Zeilenabstand")) { slider($model.lineSpacing, Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
+                setting(String(localized: "Innenabstand der Kacheln")) { slider($model.padding, Settings.pixelRange, step: 1, unit: "px") }
+                setting(String(localized: "Abstand zwischen Kacheln")) { slider($model.tileGap, Settings.pixelRange, step: 1, unit: "px") }
+                setting(String(localized: "Terminal auf der GPU zeichnen (Metal)")) { onOff($model.metal) }
             }
 
-            heading("Anpassen", note: "Bild nur hinter den Kacheln")
+            heading(String(localized: "Anpassen"), note: String(localized: "Bild nur hinter den Kacheln"))
             table {
-                setting("Hintergrundbild") {
+                setting(String(localized: "Hintergrundbild")) {
                     HStack(spacing: 4) {
                         PathField(text: Binding(get: { Theme.shortPath(model.backgroundImage) }, set: { model.backgroundImage = FolderIndex.normalize($0) }),
-                                  placeholder: "kein Bild · Datei hineinziehen", autofocus: false, onTab: {}, onSubmit: {}, onMove: { _ in })
+                                  placeholder: String(localized: "kein Bild · Datei hineinziehen"), autofocus: false, onTab: {}, onSubmit: {}, onMove: { _ in })
                             .frame(height: 18 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 2)
                             .background(Theme.bgColor)
                             .dropDestination(for: URL.self) { urls, _ in
@@ -432,44 +432,44 @@ struct SettingsView: View {
                         .buttonStyle(.plain).help("Kein Bild")
                     }
                 }
-                setting("Deckkraft der Kacheln") { slider($model.tileOpacity, 0...100, step: 1, factor: 100, unit: "%") }
+                setting(String(localized: "Deckkraft der Kacheln")) { slider($model.tileOpacity, 0...100, step: 1, factor: 100, unit: "%") }
             }
 
-            heading("Baum und Kacheln")
+            heading(String(localized: "Baum und Kacheln"))
             table {
-                setting("Design des Baums") { menu($model.sidebarStyle, SidebarStyle.allCases.map { ($0, $0.title) }) }
-                setting("Laufzeit im Baum") { onOff($model.sidebarShowAge) }
-                setting("Pfad in Stack-Zeilen") { onOff($model.stackShowPath) }
-                setting("Letzte Antwort von Claude im Baum") { onOff($model.showLastMessage) }
-                setting("Sounds") { menu($model.sounds, Feedback.Level.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Design des Baums")) { menu($model.sidebarStyle, SidebarStyle.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Laufzeit im Baum")) { onOff($model.sidebarShowAge) }
+                setting(String(localized: "Pfad in Stack-Zeilen")) { onOff($model.stackShowPath) }
+                setting(String(localized: "Letzte Antwort von Claude im Baum")) { onOff($model.showLastMessage) }
+                setting(String(localized: "Sounds")) { menu($model.sounds, Feedback.Level.allCases.map { ($0, $0.title) }) }
             }
 
-            heading("Auto-Modus", note: "AUTO in der Leiste")
+            heading(String(localized: "Auto-Modus"), note: String(localized: "AUTO in der Leiste"))
             table {
-                setting("Gilt für") { menu($model.autoAllSessions, [(true, "alle Sessions"), (false, "nur die Auswahl im Baum")]) }
-                setting("Zeigt") {
+                setting(String(localized: "Gilt für")) { menu($model.autoAllSessions, [(true, String(localized: "alle Sessions")), (false, String(localized: "nur die Auswahl im Baum"))]) }
+                setting(String(localized: "Zeigt")) {
                     menu(Binding(get: { AutoShow(waiting: model.autoWaiting, running: model.autoRunning) },
                                  set: { model.autoWaiting = $0.waiting; model.autoRunning = $0.running }),
-                         [(AutoShow(waiting: true, running: false), "wartende"), (AutoShow(waiting: false, running: true), "arbeitende"),
-                          (AutoShow(waiting: true, running: true), "wartende und arbeitende"), (AutoShow(waiting: false, running: false), "keine")])
+                         [(AutoShow(waiting: true, running: false), String(localized: "wartende")), (AutoShow(waiting: false, running: true), String(localized: "arbeitende")),
+                          (AutoShow(waiting: true, running: true), String(localized: "wartende und arbeitende")), (AutoShow(waiting: false, running: false), String(localized: "keine"))])
                 }
             }
 
-            heading("Rückfragen", note: "aus = ohne Nachfrage ausführen")
+            heading(String(localized: "Rückfragen"), note: String(localized: "aus = ohne Nachfrage ausführen"))
             table {
                 ForEach(Settings.Ask.allCases, id: \.self) { a in
                     setting(a.title) { onOff(Binding(get: { model.ask[a] ?? true }, set: { model.ask[a] = $0 })) }
                 }
             }
 
-            heading("Tastenkürzel", note: "Kürzel anklicken, Tasten drücken · ⌫ entfernt")
+            heading(String(localized: "Tastenkürzel"), note: String(localized: "Kürzel anklicken, Tasten drücken · ⌫ entfernt"))
             ForEach(hotkeyGroups, id: \.0) { title, actions in
                 Text(title).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.mutedColor)
                     .padding(.horizontal, 16).padding(.top, title == hotkeyGroups.first?.0 ? 0 : 12).padding(.bottom, 4)
                 table { ForEach(actions, id: \.self) { a in row(a) } }
             }
             Color.clear.frame(height: 12)
-            DialogFoot(hint: "Änderungen gelten sofort · Esc schließt", button: "Fertig") { model.stopRecording(); model.onClose?() }
+            DialogFoot(hint: String(localized: "Änderungen gelten sofort · Esc schließt"), button: String(localized: "Fertig")) { model.stopRecording(); model.onClose?() }
         }
         .frame(width: 900 * Theme.scale, alignment: .leading)
         .background(Theme.panelColor)
@@ -529,11 +529,11 @@ struct SettingsView: View {
         IntSlider(value: value, range: range, step: step, factor: factor, unit: unit, live: live)
     }
 
-    private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, "an"), (false, "aus")]) }
+    private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, String(localized: "an")), (false, String(localized: "aus"))]) }
 
     /// Texte als Dropdown. "" heißt Claude-Default.
     private func options(_ values: [String], _ value: Binding<String>) -> some View {
-        menu(value, values.map { ($0, $0.isEmpty ? "Standard" : $0) })
+        menu(value, values.map { ($0, $0.isEmpty ? String(localized: "Standard") : $0) })
     }
 
     private func row(_ a: HotkeyAction) -> some View {
@@ -547,7 +547,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain).help("Zurück auf \(a.defaultKey.display)")
             }
             Button { isRecording ? model.stopRecording() : model.record(a) } label: {
-                Text(isRecording ? "Tasten drücken …" : key?.display ?? "–")
+                Text(isRecording ? String(localized: "Tasten drücken …") : key?.display ?? "–")
                     .font(Theme.ui(12, bold: true))
                     .foregroundStyle(isRecording ? Theme.bgColor : Theme.fgColor)
                     .padding(.horizontal, 8).padding(.vertical, 3).frame(width: controlWidth, alignment: .leading)

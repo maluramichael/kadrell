@@ -4,28 +4,28 @@ import SwiftUI
 struct AboutView: View {
     private var sections: [(String, [(String, String)])] {
         [
-            ("Sessions öffnen", [
-                ("Klick", "nur diese Session zeigen · auf Gruppe: alle ihre Sessions"), ("⌘ Klick", "Session dazu oder weg"),
-                ("⇧ Klick", "Bereich seit dem letzten Klick dazu"), ("⌘A", "ganze Gruppen der Auswahl, nochmal: zurück"), ("⌘⇧A", "alle Sessions, nochmal: zurück"),
-                ("⌘N", "Neue Session: Projekt suchen, ~/d/p abkürzen, ⌘O Finder, Ordner hineinziehen"), ("⌘⏎", "Neue Session im Ordner der fokussierten"), ("⌘T", "Terminal ohne Claude im Ordner der fokussierten"),
-                ("+ an Gruppe", "neue Session in der Gruppe · mit ⌘: Terminal ohne Claude"),
-            ] + rows([.openEditor, .renameSession]) + [("Stift", "an Kachel und Baum-Zeile: umbenennen")]),
-            ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
+            (String(localized: "Sessions öffnen"), [
+                (String(localized: "Klick"), String(localized: "nur diese Session zeigen · auf Gruppe: alle ihre Sessions")), (String(localized: "⌘ Klick"), String(localized: "Session dazu oder weg")),
+                (String(localized: "⇧ Klick"), String(localized: "Bereich seit dem letzten Klick dazu")), ("⌘A", String(localized: "ganze Gruppen der Auswahl, nochmal: zurück")), ("⌘⇧A", String(localized: "alle Sessions, nochmal: zurück")),
+                ("⌘N", String(localized: "Neue Session: Projekt suchen, ~/d/p abkürzen, ⌘O Finder, Ordner hineinziehen")), ("⌘⏎", String(localized: "Neue Session im Ordner der fokussierten")), ("⌘T", String(localized: "Terminal ohne Claude im Ordner der fokussierten")),
+                (String(localized: "+ an Gruppe"), String(localized: "neue Session in der Gruppe · mit ⌘: Terminal ohne Claude")),
+            ] + rows([.openEditor, .renameSession]) + [(String(localized: "Stift"), String(localized: "an Kachel und Baum-Zeile: umbenennen"))]),
+            (String(localized: "Navigation"), rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
                                 + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace])
-                + [("⌘P", "Suche, mit > Kommandos"), ("⌘F", "Im Terminal suchen, ⌘G weiter"), ("⌘⇧F", "In allen Terminals suchen")]),
-            ("Kacheln verwalten", rows([.swapLeft, .swapRight, .swapUp, .swapDown, .resizeLeft, .resizeRight, .resizeUp, .resizeDown, .splitRight, .splitDown, .zoom, .nextLayout, .syncInput, .closeFocused]) + [
-                ("Trennlinie ziehen", "Größen des Layouts ändern, Doppelklick verteilt gleich · Terminals füllen die Felder der Reihe nach"),
-                ("‹ SP › in der Leiste", "Spalten im Grid, unter 1 wieder automatisch"),
-                ("TEILT in der Leiste", "Frei: Teilung an der Fokus-Kachel, Klick schaltet → ↓ AUTO (längere Seite)"),
-                ("Seitlich wischen", "Scrollen: Spalten verschieben (Maus: ⇧ + Rad), der Fokus rückt von selbst ins Bild"),
-                ("Ziehen", "Session oder Gruppe umsortieren, Baum und Kacheln gleich"),
-                ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌥ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"), ("⌘⇧B", "Alle Gruppen auf- oder zuklappen"),
+                + [("⌘P", String(localized: "Suche, mit > Kommandos")), ("⌘F", String(localized: "Im Terminal suchen, ⌘G weiter")), ("⌘⇧F", String(localized: "In allen Terminals suchen"))]),
+            (String(localized: "Kacheln verwalten"), rows([.swapLeft, .swapRight, .swapUp, .swapDown, .resizeLeft, .resizeRight, .resizeUp, .resizeDown, .splitRight, .splitDown, .zoom, .nextLayout, .syncInput, .closeFocused]) + [
+                (String(localized: "Trennlinie ziehen"), String(localized: "Größen des Layouts ändern, Doppelklick verteilt gleich · Terminals füllen die Felder der Reihe nach")),
+                (String(localized: "‹ SP › in der Leiste"), String(localized: "Spalten im Grid, unter 1 wieder automatisch")),
+                (String(localized: "TEILT in der Leiste"), String(localized: "Frei: Teilung an der Fokus-Kachel, Klick schaltet → ↓ AUTO (längere Seite)")),
+                (String(localized: "Seitlich wischen"), String(localized: "Scrollen: Spalten verschieben (Maus: ⇧ + Rad), der Fokus rückt von selbst ins Bild")),
+                (String(localized: "Ziehen"), String(localized: "Session oder Gruppe umsortieren, Baum und Kacheln gleich")),
+                ("⌘W", String(localized: "Fokus-Session beenden und entfernen, mit Rückfrage")), (String(localized: "⌥ + Klick auf X"), String(localized: "Schließen ohne Rückfrage")), ("⌘B", String(localized: "Baum ein/aus")), ("⌘⇧B", String(localized: "Alle Gruppen auf- oder zuklappen")),
             ] + rows([.cycleSort])),
-            ("Fenster und App", [
-                ("Rundes X", "Fenster nur verstecken, Sessions laufen weiter"), ("Menüleisten-Icon / Dock", "Fenster zurückholen"),
-                ("⌘⇧T", "Neues Fenster: eigene Auswahl und eigenes Layout, dieselben Sessions"), ("⌘⇧W", "Fenster schließen, Sessions laufen weiter"),
-                ("⌘M", "Im Dock ablegen"), ("⌘ Mausrad", "Terminal-Schrift aller Sessions größer/kleiner"),
-                ("⌘,", "Einstellungen: Projektordner, Darstellung, Tastenkürzel"), ("F1", "diese Hilfe"),
+            (String(localized: "Fenster und App"), [
+                (String(localized: "Rundes X"), String(localized: "Fenster nur verstecken, Sessions laufen weiter")), (String(localized: "Menüleisten-Icon / Dock"), String(localized: "Fenster zurückholen")),
+                ("⌘⇧T", String(localized: "Neues Fenster: eigene Auswahl und eigenes Layout, dieselben Sessions")), ("⌘⇧W", String(localized: "Fenster schließen, Sessions laufen weiter")),
+                ("⌘M", String(localized: "Im Dock ablegen")), (String(localized: "⌘ Mausrad"), String(localized: "Terminal-Schrift aller Sessions größer/kleiner")),
+                ("⌘,", String(localized: "Einstellungen: Projektordner, Darstellung, Tastenkürzel")), ("F1", String(localized: "diese Hilfe")),
             ]),
         ]
     }

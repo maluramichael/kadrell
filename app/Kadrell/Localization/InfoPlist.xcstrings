@@ -1,0 +1,40 @@
+{
+  "sourceLanguage" : "de",
+  "strings" : {
+    "NSAppleEventsUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kadrell schlägt bei ⌘N den Ordner des vordersten Finder-Fensters vor."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kadrell suggests the folder of the frontmost Finder window when you press ⌘N."
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude-Sessions im Terminal nutzen das Mikrofon für die Spracheingabe."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude sessions in the terminal use the microphone for voice input."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

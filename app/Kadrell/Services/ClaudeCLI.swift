@@ -115,14 +115,14 @@ final class ClaudeCLI: Sendable {
     func checkVersion() async -> String? {
         let out: String
         do { out = try await run(["--version"]) } catch {
-            return "\(binary): claude --version fehlgeschlagen: \(CLIError.firstLine(of: error))"
+            return String(localized: "\(binary): claude --version fehlgeschlagen: \(CLIError.firstLine(of: error))")
         }
         guard let v = ClaudeCLI.parseVersion(out) else {
-            return "\(binary): claude --version liefert kein erkennbares Versionsformat: \(out.trimmingCharacters(in: .whitespacesAndNewlines))"
+            return String(localized: "\(binary): claude --version liefert kein erkennbares Versionsformat: \(out.trimmingCharacters(in: .whitespacesAndNewlines))")
         }
         guard v < ClaudeCLI.minVersion else { return nil }
-        return "claude \(v.major).\(v.minor).\(v.patch): älter als die von Kadrell getestete Version " +
-            "\(ClaudeCLI.minVersion.major).\(ClaudeCLI.minVersion.minor).\(ClaudeCLI.minVersion.patch), bitte aktualisieren"
+        let found = "\(v.major).\(v.minor).\(v.patch)", tested = "\(ClaudeCLI.minVersion.major).\(ClaudeCLI.minVersion.minor).\(ClaudeCLI.minVersion.patch)"
+        return String(localized: "claude \(found): älter als die von Kadrell getestete Version \(tested), bitte aktualisieren")
     }
 
     static func parseVersion(_ output: String) -> (major: Int, minor: Int, patch: Int)? {

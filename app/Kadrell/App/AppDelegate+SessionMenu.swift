@@ -19,16 +19,16 @@ extension AppDelegate {
             return i
         }
         return [
-            item("Fortsetzen", #selector(menuContextResume(_:)), key: "r"),
-            item("Stoppen", #selector(menuContextStop(_:)), key: "."),
-            item("Entfernen …", #selector(menuContextClose(_:))),
+            item(String(localized: "Fortsetzen"), #selector(menuContextResume(_:)), key: "r"),
+            item(String(localized: "Stoppen"), #selector(menuContextStop(_:)), key: "."),
+            item(String(localized: "Entfernen …"), #selector(menuContextClose(_:))),
             .separator(),
-            item("Nur diese zeigen", #selector(menuContextIsolate(_:))),
-            item("Aus Ansicht nehmen", #selector(menuContextRemoveFromView(_:))),
-            item("Neue Session hier", #selector(menuContextNewHere(_:))),
+            item(String(localized: "Nur diese zeigen"), #selector(menuContextIsolate(_:))),
+            item(String(localized: "Aus Ansicht nehmen"), #selector(menuContextRemoveFromView(_:))),
+            item(String(localized: "Neue Session hier"), #selector(menuContextNewHere(_:))),
             .separator(),
-            item("Pfad kopieren", #selector(menuContextCopyPath(_:))),
-            item("Im Finder zeigen", #selector(menuContextShowInFinder(_:))),
+            item(String(localized: "Pfad kopieren"), #selector(menuContextCopyPath(_:))),
+            item(String(localized: "Im Finder zeigen"), #selector(menuContextShowInFinder(_:))),
         ]
     }
 

@@ -18,55 +18,55 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     var tileIndex: Int? { rawValue.hasPrefix("focus") ? Int(rawValue.dropFirst(5)).map { $0 - 1 } : nil }
 
     var title: String {
-        if let i = tileIndex { return "Kachel \(i + 1)" }
+        if let i = tileIndex { return String(localized: "Kachel \(i + 1)") }
         switch self {
-        case .focusLeft: return "Fokus links"
-        case .focusRight: return "Fokus rechts"
-        case .focusUp: return "Fokus oben"
-        case .focusDown: return "Fokus unten"
-        case .swapLeft: return "Kachel nach links tauschen"
-        case .swapRight: return "Kachel nach rechts tauschen"
-        case .swapUp: return "Kachel nach oben tauschen"
-        case .swapDown: return "Kachel nach unten tauschen"
-        case .resizeLeft: return "Trennlinie nach links"
-        case .resizeRight: return "Trennlinie nach rechts"
-        case .resizeUp: return "Trennlinie nach oben"
-        case .resizeDown: return "Trennlinie nach unten"
-        case .splitRight: return "Frei: nächste Kachel rechts"
-        case .splitDown: return "Frei: nächste Kachel unten"
-        case .nextSession: return "Nächste Kachel"
-        case .prevSession: return "Vorige Kachel"
-        case .lastSession: return "Zuletzt fokussierte Kachel"
-        case .previewNext: return "Vorschau: nächste Session im Baum"
-        case .previewPrev: return "Vorschau: vorige Session im Baum"
-        case .nextWaiting: return "Nächste wartende Session"
-        case .zoom: return "Zoom: Fokus-Kachel allein"
-        case .nextLayout: return "Layout wechseln: Grid → Haupt + Spalte → Spirale → Frei → Scrollen → Stack"
-        case .focusSidebar: return "Baum: Tastatur hierher, ↑↓ wählt Session"
-        case .focusWorkspace: return "Arbeitsfläche: Tastatur an Claude"
-        case .openEditor: return "Ordner im externen Editor öffnen"
-        case .renameSession: return "Session umbenennen"
-        case .cycleSort: return "Baum sortieren: aus → A–Z → Status"
-        case .syncInput: return "Sync: Eingabe an alle Kacheln"
-        default: return "Fokus-Kachel schließen"
+        case .focusLeft: return String(localized: "Fokus links")
+        case .focusRight: return String(localized: "Fokus rechts")
+        case .focusUp: return String(localized: "Fokus oben")
+        case .focusDown: return String(localized: "Fokus unten")
+        case .swapLeft: return String(localized: "Kachel nach links tauschen")
+        case .swapRight: return String(localized: "Kachel nach rechts tauschen")
+        case .swapUp: return String(localized: "Kachel nach oben tauschen")
+        case .swapDown: return String(localized: "Kachel nach unten tauschen")
+        case .resizeLeft: return String(localized: "Trennlinie nach links")
+        case .resizeRight: return String(localized: "Trennlinie nach rechts")
+        case .resizeUp: return String(localized: "Trennlinie nach oben")
+        case .resizeDown: return String(localized: "Trennlinie nach unten")
+        case .splitRight: return String(localized: "Frei: nächste Kachel rechts")
+        case .splitDown: return String(localized: "Frei: nächste Kachel unten")
+        case .nextSession: return String(localized: "Nächste Kachel")
+        case .prevSession: return String(localized: "Vorige Kachel")
+        case .lastSession: return String(localized: "Zuletzt fokussierte Kachel")
+        case .previewNext: return String(localized: "Vorschau: nächste Session im Baum")
+        case .previewPrev: return String(localized: "Vorschau: vorige Session im Baum")
+        case .nextWaiting: return String(localized: "Nächste wartende Session")
+        case .zoom: return String(localized: "Zoom: Fokus-Kachel allein")
+        case .nextLayout: return String(localized: "Layout wechseln: Grid → Haupt + Spalte → Spirale → Frei → Scrollen → Stack")
+        case .focusSidebar: return String(localized: "Baum: Tastatur hierher, ↑↓ wählt Session")
+        case .focusWorkspace: return String(localized: "Arbeitsfläche: Tastatur an Claude")
+        case .openEditor: return String(localized: "Ordner im externen Editor öffnen")
+        case .renameSession: return String(localized: "Session umbenennen")
+        case .cycleSort: return String(localized: "Baum sortieren: aus → A–Z → Status")
+        case .syncInput: return String(localized: "Sync: Eingabe an alle Kacheln")
+        default: return String(localized: "Fokus-Kachel schließen")
         }
     }
 
     /// Zeile in der Hilfe; Aktionen mit gleichem Text teilen sich eine Zeile.
     var helpText: String {
-        if tileIndex != nil { return "Kachel 1–9 fokussieren" }
+        if tileIndex != nil { return String(localized: "Kachel 1–9 fokussieren") }
         switch self {
-        case .focusLeft, .focusRight, .focusUp, .focusDown: return "Fokus bewegen · im Stack auf- und zuklappen"
-        case .swapLeft, .swapRight, .swapUp, .swapDown: return "Fokus-Kachel mit Nachbar tauschen"
-        case .resizeLeft, .resizeRight, .resizeUp, .resizeDown: return "Trennlinie an der Fokus-Kachel um 5 % verschieben · Scrollen: Spalte ⅓ ½ ⅔ breit"
-        case .splitRight, .splitDown: return "Layout Frei (wie i3): die Kachel nach der fokussierten entsteht rechts bzw. unten"
-        case .nextSession, .prevSession: return "Nächste / vorige Kachel"
-        case .previewNext, .previewPrev: return "Baum als Vorschau durchblättern, Auswahl bleibt · ⏎ übernimmt, Esc zurück"
-        case .nextWaiting: return "Springt zur nächsten Session, die auf dich wartet"
-        case .closeFocused: return "Fokus-Kachel schließen (Esc selbst geht an Claude)"
-        case .openEditor: return "Ordner der Fokus-Session im Editor aus den Einstellungen öffnen"
-        case .renameSession: return "Fokus-Session umbenennen, auch im Baum · Claude überschreibt den Namen danach nicht mehr"
-        case .syncInput: return "Sync: Tippen und ⌘V gehen an alle offenen Kacheln gleichzeitig · Badge „SYNC“"
+        case .focusLeft, .focusRight, .focusUp, .focusDown: return String(localized: "Fokus bewegen · im Stack auf- und zuklappen")
+        case .swapLeft, .swapRight, .swapUp, .swapDown: return String(localized: "Fokus-Kachel mit Nachbar tauschen")
+        case .resizeLeft, .resizeRight, .resizeUp, .resizeDown: return String(localized: "Trennlinie an der Fokus-Kachel um 5 % verschieben · Scrollen: Spalte ⅓ ½ ⅔ breit")
+        case .splitRight, .splitDown: return String(localized: "Layout Frei (wie i3): die Kachel nach der fokussierten entsteht rechts bzw. unten")
+        case .nextSession, .prevSession: return String(localized: "Nächste / vorige Kachel")
+        case .previewNext, .previewPrev: return String(localized: "Baum als Vorschau durchblättern, Auswahl bleibt · ⏎ übernimmt, Esc zurück")
+        case .nextWaiting: return String(localized: "Springt zur nächsten Session, die auf dich wartet")
+        case .closeFocused: return String(localized: "Fokus-Kachel schließen (Esc selbst geht an Claude)")
+        case .openEditor: return String(localized: "Ordner der Fokus-Session im Editor aus den Einstellungen öffnen")
+        case .renameSession: return String(localized: "Fokus-Session umbenennen, auch im Baum · Claude überschreibt den Namen danach nicht mehr")
+        case .syncInput: return String(localized: "Sync: Tippen und ⌘V gehen an alle offenen Kacheln gleichzeitig · Badge „SYNC“")
         default: return title
         }
     }

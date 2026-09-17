@@ -51,7 +51,7 @@ extension Array where Element == A11yElement {
 extension SessionStatus {
     /// Vorgelesener Status.
     var spoken: String {
-        switch self { case .running: "arbeitet"; case .waiting: "wartet"; case .idle: "fertig"; case .error: "Fehler" }
+        switch self { case .running: String(localized: "arbeitet"); case .waiting: String(localized: "wartet"); case .idle: String(localized: "fertig"); case .error: String(localized: "Fehler") }
     }
 }
 

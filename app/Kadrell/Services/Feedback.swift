@@ -7,9 +7,9 @@ enum Feedback {
         case off, important, all
         var title: String {
             switch self {
-            case .off: "aus"
-            case .important: "nur wartet und fertig"
-            case .all: "alle"
+            case .off: String(localized: "aus")
+            case .important: String(localized: "nur wartet und fertig")
+            case .all: String(localized: "alle")
             }
         }
     }

@@ -142,14 +142,14 @@ final class CellView: NSView {
         let terminal = super.accessibilityChildren() ?? []
         guard !headerHidden, let ws = superview as? WorkspaceView else { return terminal }
         let key = session.id
-        let label = [session.title, attached ? session.status.spoken : ended ? "beendet" : "nicht gestartet",
+        let label = [session.title, attached ? session.status.spoken : ended ? String(localized: "beendet") : String(localized: "nicht gestartet"),
                      groupName.isEmpty ? nil : groupName, session.branch]
         a11y = [
             a11y.reuse("header").update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: headerRect,
                                         press: { [weak ws] in ws?.activate(key) }),
-            a11y.reuse("rename").update(parent: self, role: .button, label: "Umbenennen", frame: penRect,
+            a11y.reuse("rename").update(parent: self, role: .button, label: String(localized: "Umbenennen"), frame: penRect,
                                         press: { [weak ws] in ws?.onRenameSession?(key) }),
-            a11y.reuse("close").update(parent: self, role: .button, label: "Schließen", frame: xRect,
+            a11y.reuse("close").update(parent: self, role: .button, label: String(localized: "Schließen"), frame: xRect,
                                        press: { [weak ws] in ws?.onCloseSession?(key, false) }),
         ]
         return a11y + terminal
@@ -160,14 +160,14 @@ final class CellView: NSView {
         if ended {
             drawHatch(in: body)
             if !lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
-            drawLabel("BEENDET · KLICK SETZT FORT", in: body)
+            drawLabel(String(localized: "BEENDET · KLICK SETZT FORT"), in: body)
         } else if !attached, previewing {
-            drawLabel("VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET", in: body)
+            drawLabel(String(localized: "VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET"), in: body)
         } else if !attached {
             Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
-            drawLabel("STARTET …", in: body)
+            drawLabel(String(localized: "STARTET …"), in: body)
         } else if !terminalMounted, elsewhere {
-            drawLabel("IN ANDEREM FENSTER · KLICK HOLT HIERHER", in: body)
+            drawLabel(String(localized: "IN ANDEREM FENSTER · KLICK HOLT HIERHER"), in: body)
         } else if !terminalMounted {
             drawLines(in: body.insetBy(dx: 10, dy: 8))
         }

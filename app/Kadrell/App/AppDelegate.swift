@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItem(_ sessions: [Session]) {
         let waiting = sessions.filter { $0.status == .waiting }.count
         let running = sessions.filter { $0.status == .running }.count
-        statusItem?.button?.title = waiting == 0 && running == 0 ? "" : "  \(waiting) warten · \(running) arbeiten"
+        statusItem?.button?.title = waiting == 0 && running == 0 ? "" : String(localized: "  \(waiting) warten · \(running) arbeiten")
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -127,12 +127,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let running = registry.sessions.filter { attach.isAttached($0.id) }
             let busy = running.filter { $0.status == .running || $0.status == .waiting }
             let list = running.map { s in
-                "· \(s.title)" + (s.status == .running ? "  ARBEITET" : s.status == .waiting ? "  WARTET AUF ANTWORT" : "")
+                "· \(s.title)" + (s.status == .running ? String(localized: "  ARBEITET") : s.status == .waiting ? String(localized: "  WARTET AUF ANTWORT") : "")
             }.joined(separator: "\n")
-            let title = busy.isEmpty ? "Kadrell beenden?" : "Kadrell beenden? \(busy.count) Session(s) arbeiten gerade!"
-            let info = "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. "
-                + "Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.\n\n\(list)"
-            confirm(title, info, button: "Beenden", ask: .quit) { [weak self] in
+            let title = busy.isEmpty ? String(localized: "Kadrell beenden?") : String(localized: "Kadrell beenden? \(busy.count) Session(s) arbeiten gerade!")
+            let info = String(localized: "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.")
+                + "\n\n\(list)"
+            confirm(title, info, button: String(localized: "Beenden"), ask: .quit) { [weak self] in
                 guard let self else { return }
                 Task {
                     await self.attach.shutdown()
@@ -341,7 +341,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.updatePollBackground() }
         }
-        if !FileManager.default.isExecutableFile(atPath: cli.binary) { registry.fail("\(cli.binary): claude nicht gefunden") }
+        if !FileManager.default.isExecutableFile(atPath: cli.binary) { registry.fail(String(localized: "\(cli.binary): claude nicht gefunden")) }
         else if let tooOld = await cli.checkVersion() { registry.fail(tooOld) }
         // Leer nicht abgleichen: das würde Gruppen alter Hintergrund-Sessions verwerfen, bevor sie übernommen sind.
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
@@ -386,8 +386,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard Profile.name == nil else { return }
         let bg = elsewhere.filter(\.isRunningBackground)
         guard !bg.isEmpty else { return }
-        let list = bg.map { "· \($0.name)\($0.status == "busy" ? " (arbeitet gerade)" : "")" }.joined(separator: "\n")
-        confirm("\(bg.count) Hintergrund-Session(s) übernehmen?", "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:\n\(list)", button: "Übernehmen", destructive: false, ask: .adoptBackground) { [weak self] in
+        let list = bg.map { "· \($0.name)\($0.status == "busy" ? String(localized: " (arbeitet gerade)") : "")" }.joined(separator: "\n")
+        confirm(String(localized: "\(bg.count) Hintergrund-Session(s) übernehmen?"), String(localized: "Kadrell startet Claude jetzt selbst statt mit claude --bg. Diese Sessions werden mit claude stop angehalten (laufende Arbeit bricht ab) und hier fortgesetzt:") + "\n\(list)", button: String(localized: "Übernehmen"), destructive: false, ask: .adoptBackground) { [weak self] in
             guard let self else { return }
             Task {
                 for a in bg {
@@ -471,7 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.auto = workspace.auto
         bar.sync = workspace.sync
         bar.sort = sidebar.sort
-        bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
+        bar.attachText = String(localized: "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)")
         bar.waitingCount = waiting
         bar.needsDisplay = true
     }
@@ -488,92 +488,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() {
         let main = NSMenu()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Über Kadrell", action: #selector(menuAbout), keyEquivalent: "")
+        appMenu.addItem(withTitle: String(localized: "Über Kadrell"), action: #selector(menuAbout), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Einstellungen …", action: #selector(menuSettings), keyEquivalent: ",")
-        appMenu.addItem(withTitle: "Kommandozeilen-Tool installieren …", action: #selector(menuInstallCLI), keyEquivalent: "")
-        appMenu.addItem(withTitle: "Neue Instanz mit temporärem Profil", action: #selector(menuTemporaryInstance), keyEquivalent: "")
+        appMenu.addItem(withTitle: String(localized: "Einstellungen …"), action: #selector(menuSettings), keyEquivalent: ",")
+        appMenu.addItem(withTitle: String(localized: "Kommandozeilen-Tool installieren …"), action: #selector(menuInstallCLI), keyEquivalent: "")
+        appMenu.addItem(withTitle: String(localized: "Neue Instanz mit temporärem Profil"), action: #selector(menuTemporaryInstance), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Kadrell ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: String(localized: "Kadrell ausblenden"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Kadrell beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: String(localized: "Kadrell beenden"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         main.addItem(withTitle: "Kadrell", action: nil, keyEquivalent: "").submenu = appMenu
 
-        let file = NSMenu(title: "Datei")
-        file.addItem(withTitle: "Neue Session", action: #selector(menuNewSession), keyEquivalent: "n")
-        file.addItem(withTitle: "Neue Session im selben Ordner", action: #selector(menuNewSessionHere), keyEquivalent: "\r")
-        file.addItem(withTitle: "Neues Terminal ohne Claude", action: #selector(menuNewShell), keyEquivalent: "t")
-        let remote = file.addItem(withTitle: "Remote verbinden …", action: #selector(menuRemote), keyEquivalent: "n")
+        let file = NSMenu(title: String(localized: "Datei"))
+        file.addItem(withTitle: String(localized: "Neue Session"), action: #selector(menuNewSession), keyEquivalent: "n")
+        file.addItem(withTitle: String(localized: "Neue Session im selben Ordner"), action: #selector(menuNewSessionHere), keyEquivalent: "\r")
+        file.addItem(withTitle: String(localized: "Neues Terminal ohne Claude"), action: #selector(menuNewShell), keyEquivalent: "t")
+        let remote = file.addItem(withTitle: String(localized: "Remote verbinden …"), action: #selector(menuRemote), keyEquivalent: "n")
         remote.keyEquivalentModifierMask = [.command, .shift]
         file.addItem(.separator())
-        let newWindow = file.addItem(withTitle: "Neues Fenster", action: #selector(menuNewWindow), keyEquivalent: "t")
+        let newWindow = file.addItem(withTitle: String(localized: "Neues Fenster"), action: #selector(menuNewWindow), keyEquivalent: "t")
         newWindow.keyEquivalentModifierMask = [.command, .shift]
-        let closeWindow = file.addItem(withTitle: "Fenster schließen", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        let closeWindow = file.addItem(withTitle: String(localized: "Fenster schließen"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         closeWindow.keyEquivalentModifierMask = [.command, .shift]
         file.addItem(.separator())
-        file.addItem(withTitle: "Session schließen", action: #selector(menuCloseSession), keyEquivalent: "w")
-        main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
+        file.addItem(withTitle: String(localized: "Session schließen"), action: #selector(menuCloseSession), keyEquivalent: "w")
+        main.addItem(withTitle: String(localized: "Datei"), action: nil, keyEquivalent: "").submenu = file
 
-        let edit = NSMenu(title: "Bearbeiten")
-        edit.addItem(withTitle: "Ausschneiden", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Kopieren", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Einsetzen", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Ganze Gruppen auswählen", action: #selector(menuSelectAll), keyEquivalent: "a")
-        let selectEverything = NSMenuItem(title: "Alle Sessions auswählen", action: #selector(menuSelectEverything), keyEquivalent: "a")
+        let edit = NSMenu(title: String(localized: "Bearbeiten"))
+        edit.addItem(withTitle: String(localized: "Ausschneiden"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: String(localized: "Kopieren"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: String(localized: "Einsetzen"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: String(localized: "Ganze Gruppen auswählen"), action: #selector(menuSelectAll), keyEquivalent: "a")
+        let selectEverything = NSMenuItem(title: String(localized: "Alle Sessions auswählen"), action: #selector(menuSelectEverything), keyEquivalent: "a")
         selectEverything.keyEquivalentModifierMask = [.command, .shift]
         edit.addItem(selectEverything)
         edit.addItem(.separator())
         // Suchleiste von SwiftTerm im Terminal mit der Tastatur, über die Responder-Kette.
-        for (title, key, shift, action) in [("Im Terminal suchen …", "f", false, NSTextFinder.Action.showFindInterface),
-                                            ("Weitersuchen", "g", false, .nextMatch), ("Rückwärts suchen", "g", true, .previousMatch)] {
+        for (title, key, shift, action) in [(String(localized: "Im Terminal suchen …"), "f", false, NSTextFinder.Action.showFindInterface),
+                                            (String(localized: "Weitersuchen"), "g", false, .nextMatch), (String(localized: "Rückwärts suchen"), "g", true, .previousMatch)] {
             let item = NSMenuItem(title: title, action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: key)
             item.keyEquivalentModifierMask = shift ? [.command, .shift] : .command
             item.tag = action.rawValue
             edit.addItem(item)
         }
-        let findAll = NSMenuItem(title: "In allen Terminals suchen …", action: #selector(menuFindAll), keyEquivalent: "f")
+        let findAll = NSMenuItem(title: String(localized: "In allen Terminals suchen …"), action: #selector(menuFindAll), keyEquivalent: "f")
         findAll.keyEquivalentModifierMask = [.command, .shift]
         edit.addItem(findAll)
-        main.addItem(withTitle: "Bearbeiten", action: nil, keyEquivalent: "").submenu = edit
+        main.addItem(withTitle: String(localized: "Bearbeiten"), action: nil, keyEquivalent: "").submenu = edit
 
-        let view = NSMenu(title: "Ansicht")
+        let view = NSMenu(title: String(localized: "Ansicht"))
         for m in LayoutMode.allCases {
             let item = NSMenuItem(title: m.title, action: #selector(menuLayout(_:)), keyEquivalent: "")
             item.representedObject = m.rawValue
             view.addItem(item)
         }
-        view.addItem(withTitle: "Auto-Modus ein/aus", action: #selector(menuAuto), keyEquivalent: "")
-        view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
-        let toggleGroups = NSMenuItem(title: "Alle Gruppen auf-/zuklappen", action: #selector(menuToggleGroups), keyEquivalent: "b")
+        view.addItem(withTitle: String(localized: "Auto-Modus ein/aus"), action: #selector(menuAuto), keyEquivalent: "")
+        view.addItem(withTitle: String(localized: "Baum ein/aus"), action: #selector(menuSidebar), keyEquivalent: "b")
+        let toggleGroups = NSMenuItem(title: String(localized: "Alle Gruppen auf-/zuklappen"), action: #selector(menuToggleGroups), keyEquivalent: "b")
         toggleGroups.keyEquivalentModifierMask = [.command, .shift]
         view.addItem(toggleGroups)
         view.addItem(.separator())
-        view.addItem(withTitle: "Terminal-Schrift größer", action: #selector(menuFontBigger), keyEquivalent: "+")
-        view.addItem(withTitle: "Terminal-Schrift kleiner", action: #selector(menuFontSmaller), keyEquivalent: "-")
-        view.addItem(withTitle: "Terminal-Schrift Standardgröße", action: #selector(menuFontReset), keyEquivalent: "0")
+        view.addItem(withTitle: String(localized: "Terminal-Schrift größer"), action: #selector(menuFontBigger), keyEquivalent: "+")
+        view.addItem(withTitle: String(localized: "Terminal-Schrift kleiner"), action: #selector(menuFontSmaller), keyEquivalent: "-")
+        view.addItem(withTitle: String(localized: "Terminal-Schrift Standardgröße"), action: #selector(menuFontReset), keyEquivalent: "0")
         view.addItem(.separator())
         // Belegbare Kürzel: das Menü zeigt die aktuelle Belegung, ausgelöst werden sie im Event-Monitor.
         let keys = Hotkeys.current
-        let tiles = NSMenu(title: "Kachel wählen")
+        let tiles = NSMenu(title: String(localized: "Kachel wählen"))
         for a in HotkeyAction.allCases {
             let item = NSMenuItem(title: a.title, action: #selector(menuHotkey(_:)), keyEquivalent: keys[a]?.menuEquivalent ?? "")
             item.keyEquivalentModifierMask = keys[a]?.flags ?? []
             item.representedObject = a.rawValue
             if a.tileIndex != nil { tiles.addItem(item) } else { view.addItem(item) }
-            if a == .lastSession { view.addItem(withTitle: "Kachel wählen", action: nil, keyEquivalent: "").submenu = tiles }
+            if a == .lastSession { view.addItem(withTitle: String(localized: "Kachel wählen"), action: nil, keyEquivalent: "").submenu = tiles }
         }
         view.addItem(.separator())
-        view.addItem(withTitle: "Suche", action: #selector(menuPalette), keyEquivalent: "p")
-        main.addItem(withTitle: "Ansicht", action: nil, keyEquivalent: "").submenu = view
+        view.addItem(withTitle: String(localized: "Suche"), action: #selector(menuPalette), keyEquivalent: "p")
+        main.addItem(withTitle: String(localized: "Ansicht"), action: nil, keyEquivalent: "").submenu = view
 
-        let session = NSMenu(title: "Session")
+        let session = NSMenu(title: String(localized: "Session"))
         for item in sessionMenuItems(for: nil, shortcuts: true) { session.addItem(item) }
-        main.addItem(withTitle: "Session", action: nil, keyEquivalent: "").submenu = session
+        main.addItem(withTitle: String(localized: "Session"), action: nil, keyEquivalent: "").submenu = session
 
-        let windows = NSMenu(title: "Fenster")
-        windows.addItem(withTitle: "Im Dock ablegen", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windows.addItem(withTitle: "Zoomen", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
-        main.addItem(withTitle: "Fenster", action: nil, keyEquivalent: "").submenu = windows
+        let windows = NSMenu(title: String(localized: "Fenster"))
+        windows.addItem(withTitle: String(localized: "Im Dock ablegen"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windows.addItem(withTitle: String(localized: "Zoomen"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        main.addItem(withTitle: String(localized: "Fenster"), action: nil, keyEquivalent: "").submenu = windows
         NSApp.windowsMenu = windows
         NSApp.mainMenu = main
     }
@@ -808,20 +808,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workspace.select(g.sessionIds, add: false)
         }
         let focusedSession = workspace.focused.flatMap { sessions[$0] }
-        src.commands = LayoutMode.allCases.map { m in ("Layout: \(m.title)", { [weak self] in self?.workspace.setMode(m) }) } + [
-            ("Trennlinien zurücksetzen (gleich verteilt)", { [weak self] in self?.workspace.resetRatios() }),
-            ("Zoom ein/aus (fokussierte)", { [weak self] in self?.workspace.toggleZen() }),
-            ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
-            ("Neues Terminal ohne Claude", { [weak self] in self?.menuNewShell() }),
-            ("Remote verbinden (ssh → tmux)", { [weak self] in self?.menuRemote() }),
-            ("Session stoppen (fokussierte)", { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
-            ("Session fortsetzen (fokussierte)", { [weak self] in if let s = focusedSession { self?.attach.attachNow(s); self?.workspace.select([s.id], add: false) } }),
-            ("Session umbenennen (fokussierte)", { [weak self] in if let s = focusedSession { self?.renameSession(s.id) } }),
-            ("Session schließen (fokussierte)", { [weak self] in if let s = focusedSession { self?.closeSession(s.id) } }),
-            ("Gruppe bearbeiten (der fokussierten Session)", { [weak self] in
+        src.commands = LayoutMode.allCases.map { m in (String(localized: "Layout: \(m.title)"), { [weak self] in self?.workspace.setMode(m) }) } + [
+            (String(localized: "Trennlinien zurücksetzen (gleich verteilt)"), { [weak self] in self?.workspace.resetRatios() }),
+            (String(localized: "Zoom ein/aus (fokussierte)"), { [weak self] in self?.workspace.toggleZen() }),
+            (String(localized: "Neue Session"), { [weak self] in self?.openNewSession(groupId: nil) }),
+            (String(localized: "Neues Terminal ohne Claude"), { [weak self] in self?.menuNewShell() }),
+            (String(localized: "Remote verbinden (ssh → tmux)"), { [weak self] in self?.menuRemote() }),
+            (String(localized: "Session stoppen (fokussierte)"), { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
+            (String(localized: "Session fortsetzen (fokussierte)"), { [weak self] in if let s = focusedSession { self?.attach.attachNow(s); self?.workspace.select([s.id], add: false) } }),
+            (String(localized: "Session umbenennen (fokussierte)"), { [weak self] in if let s = focusedSession { self?.renameSession(s.id) } }),
+            (String(localized: "Session schließen (fokussierte)"), { [weak self] in if let s = focusedSession { self?.closeSession(s.id) } }),
+            (String(localized: "Gruppe bearbeiten (der fokussierten Session)"), { [weak self] in
                 if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
-            ("Reload", { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
-        ] + store.groups.map { g in ("Alle Sessions von \(g.name)", { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
+            (String(localized: "Reload"), { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
+        ] + store.groups.map { g in (String(localized: "Alle Sessions von \(g.name)"), { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
         palette.source = src
         palette.open(over: window, prefix: prefix)
     }
@@ -860,22 +860,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func report(_ error: Error) {
         AppDelegate.log.error("\(String(describing: error), privacy: .public)")
-        confirm("Claude CLI meldet einen Fehler", String(describing: error), button: "OK", destructive: false) {}
+        confirm(String(localized: "Claude CLI meldet einen Fehler"), String(describing: error), button: String(localized: "OK"), destructive: false) {}
     }
 
     func stopSession(_ s: Session) {
         guard attach.isAttached(s.id) else { NSSound.beep(); return }
-        confirm("Session „\(s.title)“ stoppen?", "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort.", button: "Stoppen", ask: .stopSession) { [weak self] in
+        confirm(String(localized: "Session „\(s.title)“ stoppen?"), String(localized: "Claude wird beendet, die Kachel bleibt. Ein Klick setzt die Konversation fort."), button: String(localized: "Stoppen"), ask: .stopSession) { [weak self] in
             self?.attach.stop(s.id)
         }
     }
 
     func closeSession(_ key: String, force: Bool = false) {
         guard let s = workspace.session(key) else { return }
-        let info = s.isRemote ? "Die Verbindung wird getrennt, die tmux-Session auf \(s.host ?? "") läuft weiter."
-            : s.isShell ? "Die Shell und alles, was darin läuft, wird beendet."
-            : "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)"
-        confirm("„\(s.title)“ beenden und entfernen?", info, button: "Entfernen", skip: force || s.isRemote, ask: .closeSession) { [weak self] in
+        let info = s.isRemote ? String(localized: "Die Verbindung wird getrennt, die tmux-Session auf \(s.host ?? "") läuft weiter.")
+            : s.isShell ? String(localized: "Die Shell und alles, was darin läuft, wird beendet.")
+            : String(localized: "Claude wird beendet und die Kachel entfernt. Die Konversation bleibt erhalten: claude --resume \(s.sessionId)")
+        confirm(String(localized: "„\(s.title)“ beenden und entfernen?"), info, button: String(localized: "Entfernen"), skip: force || s.isRemote, ask: .closeSession) { [weak self] in
             guard let self else { return }
             Feedback.play(.close)
             attach.detach(key)
@@ -900,8 +900,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             reloadViews()
             return
         }
-        confirm("Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?",
-                "Claude wird in allen Sessions beendet und die Gruppe entfernt. Die Konversationen bleiben erhalten.", button: "Schließen", skip: force, ask: .closeGroup) { [weak self] in
+        confirm(String(localized: "Gruppe „\(g.name)“ mit \(members.count) Session(s) schließen?"),
+                String(localized: "Claude wird in allen Sessions beendet und die Gruppe entfernt. Die Konversationen bleiben erhalten."), button: String(localized: "Schließen"), skip: force, ask: .closeGroup) { [weak self] in
             guard let self else { return }
             Feedback.play(.close)
             for s in members { attach.detach(s.id) }

@@ -35,7 +35,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
     private let field = NSTextField()
     private let table = NSTableView()
     private let scroll = NSScrollView()
-    private let foot = NSTextField(labelWithString: "↑↓ wählen · ⏎ öffnen · Esc schließen")
+    private let foot = NSTextField(labelWithString: String(localized: "↑↓ wählen · ⏎ öffnen · Esc schließen"))
     private var items: [Item] = []
     private var selected = 0
     /// tmux-Sessions je Host, einmal pro Öffnen geholt; nil = Abfrage läuft, leeres Ergebnis = kein tmux-Server.
@@ -62,7 +62,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         field.focusRingType = .none
         field.font = Theme.font(15 * s)
         field.textColor = Theme.fg
-        field.placeholderAttributedString = NSAttributedString(string: "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, @ Remote )", attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
+        field.placeholderAttributedString = NSAttributedString(string: String(localized: "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, @ Remote )"), attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
         field.delegate = self
         field.frame = NSRect(x: 16 * s, y: H - 44 * s, width: W - 32 * s, height: 24 * s)
         field.autoresizingMask = [.width, .minYMargin]
@@ -149,7 +149,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         if q.hasPrefix(">") {
             let t = q.dropFirst().trimmingCharacters(in: .whitespaces)
             items = source.commands.filter { t.isEmpty || PaletteWindow.fuzzy(t, $0.0) }
-                .map { Item(label: $0.0, sub: "Kommando", group: nil, status: nil, sessionKey: nil, run: $0.1) }
+                .map { Item(label: $0.0, sub: String(localized: "Kommando"), group: nil, status: nil, sessionKey: nil, run: $0.1) }
             onHighlight?(nil)
         } else if q.hasPrefix("/") {
             items = terminalMatches(String(q.dropFirst()))
@@ -161,7 +161,7 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
             var list: [Item] = []
             if !q.isEmpty {
                 list += source.groups.filter { PaletteWindow.fuzzy(q, $0.name) }.map { g in
-                    Item(label: g.name, sub: "Gruppe · " + g.cwd, group: nil, status: nil, sessionKey: nil, run: { [source] in source.onFitGroup(g.id) })
+                    Item(label: g.name, sub: String(localized: "Gruppe · \(g.cwd)"), group: nil, status: nil, sessionKey: nil, run: { [source] in source.onFitGroup(g.id) })
                 }
             }
             var matches = source.sessions.filter { s, _, lines in
@@ -185,14 +185,14 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
     private func remoteItems(_ q: String) -> [Item] {
         guard let colon = q.firstIndex(of: ":") else {
             return source.hosts.filter { q.isEmpty || PaletteWindow.fuzzy(q, $0) }.map { h in
-                Item(label: h, sub: "ssh · ⏎ tmux attach · „\(h):“ wählt die Session", group: nil, status: nil, sessionKey: nil,
+                Item(label: h, sub: String(localized: "ssh · ⏎ tmux attach · „\(h):“ wählt die Session"), group: nil, status: nil, sessionKey: nil,
                      run: { [source] in source.onConnect(h, nil) })
             }
         }
         let host = String(q[..<colon]), text = q[q.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         var list: [Item] = []
         if !text.isEmpty {
-            list.append(Item(label: "Neu: \(text)", sub: "tmux new -As auf \(host)", group: nil, status: nil, sessionKey: nil,
+            list.append(Item(label: String(localized: "Neu: \(text)"), sub: String(localized: "tmux new -As auf \(host)"), group: nil, status: nil, sessionKey: nil,
                              run: { [source] in source.onConnect(host, text) }))
         }
         if remoteCache[host] == nil {
@@ -209,15 +209,15 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         switch remoteCache[host] {
         case .some(.some(let names)):
             if names.isEmpty {
-                let msg = remoteError[host] == true ? "\(host) nicht erreichbar" : "kein tmux-Server auf \(host)"
-                list.append(Item(label: msg, sub: "„Neu: …“ versucht es trotzdem", group: nil, status: nil, sessionKey: nil, run: {}))
+                let msg = remoteError[host] == true ? String(localized: "\(host) nicht erreichbar") : String(localized: "kein tmux-Server auf \(host)")
+                list.append(Item(label: msg, sub: String(localized: "„Neu: …“ versucht es trotzdem"), group: nil, status: nil, sessionKey: nil, run: {}))
             }
             list += names.filter { text.isEmpty || PaletteWindow.fuzzy(text, $0) }.map { n in
-                Item(label: n, sub: "tmux-Session auf \(host)", group: nil, status: nil, sessionKey: nil,
+                Item(label: n, sub: String(localized: "tmux-Session auf \(host)"), group: nil, status: nil, sessionKey: nil,
                      run: { [source] in source.onConnect(host, n) })
             }
         default:
-            list.append(Item(label: "lädt …", sub: "tmux ls auf \(host)", group: nil, status: nil, sessionKey: nil, run: {}))
+            list.append(Item(label: String(localized: "lädt …"), sub: String(localized: "tmux ls auf \(host)"), group: nil, status: nil, sessionKey: nil, run: {}))
         }
         return list
     }
@@ -296,7 +296,7 @@ final class PaletteRow: NSView {
     override func draw(_ dirtyRect: NSRect) { Theme.scaled(bounds) { drawRow($0) } }
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
-    override func accessibilityLabel() -> String? { item.map { $0.spoken } ?? "Keine Treffer" }
+    override func accessibilityLabel() -> String? { item.map { $0.spoken } ?? String(localized: "Keine Treffer") }
 
     private func drawRow(_ b: CGRect) {
         if selected {
@@ -304,7 +304,7 @@ final class PaletteRow: NSView {
             Theme.running.setFill(); CGRect(x: 0, y: 0, width: 3, height: b.height).fill()
         }
         guard let item else {
-            NSAttributedString(string: "Keine Treffer", attributes: Theme.attrs(12, Theme.muted)).draw(at: CGPoint(x: 16, y: 14))
+            NSAttributedString(string: String(localized: "Keine Treffer"), attributes: Theme.attrs(12, Theme.muted)).draw(at: CGPoint(x: 16, y: 14))
             return
         }
         var x: CGFloat = 16

@@ -319,22 +319,23 @@ final class SidebarView: NSView {
             switch row {
             case .group(let g):
                 let n = g.sessionIds.count(where: { sessions[$0] != nil })
-                let label = "Gruppe \(g.name), \(n) \(n == 1 ? "Session" : "Sessions")" + (collapsed.contains(g.id) ? ", eingeklappt" : "")
+                let label = (n == 1 ? String(localized: "Gruppe \(g.name), 1 Session") : String(localized: "Gruppe \(g.name), \(n) Sessions"))
+                    + (collapsed.contains(g.id) ? String(localized: ", eingeklappt") : "")
                 return e.update(parent: self, role: .button, label: label, frame: frame,
                                 press: { [weak self] in self?.onSelect?(g.sessionIds, .replace) },
-                                actions: [a11yAction(collapsed.contains(g.id) ? "Ausklappen" : "Einklappen") { [weak self] in self?.toggleCollapsed(g.id) },
-                                          a11yAction("Neue Session") { [weak self] in self?.onNewSession?(g.id) },
-                                          a11yAction(g.isFavorite ? "Kein Favorit" : "Favorit") { [weak self] in self?.onToggleFavorite?(g.id) },
-                                          a11yAction("Bearbeiten") { [weak self] in self?.onEditGroup?(g.id) },
-                                          a11yAction("Schließen") { [weak self] in self?.onCloseGroup?(g.id, false) }])
+                                actions: [a11yAction(collapsed.contains(g.id) ? String(localized: "Ausklappen") : String(localized: "Einklappen")) { [weak self] in self?.toggleCollapsed(g.id) },
+                                          a11yAction(String(localized: "Neue Session")) { [weak self] in self?.onNewSession?(g.id) },
+                                          a11yAction(g.isFavorite ? String(localized: "Kein Favorit") : String(localized: "Favorit")) { [weak self] in self?.onToggleFavorite?(g.id) },
+                                          a11yAction(String(localized: "Bearbeiten")) { [weak self] in self?.onEditGroup?(g.id) },
+                                          a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseGroup?(g.id, false) }])
             case .session(let s, _):
                 let attached = attach?.isAttached(s.id) ?? false
-                let parts = ["Session \(s.title)", attached ? s.status.spoken : "nicht gestartet",
-                             unread.contains(s.id) ? "neu" : nil, selected.contains(s.id) ? "ausgewählt" : nil]
+                let parts = [String(localized: "Session \(s.title)"), attached ? s.status.spoken : String(localized: "nicht gestartet"),
+                             unread.contains(s.id) ? String(localized: "neu") : nil, selected.contains(s.id) ? String(localized: "ausgewählt") : nil]
                 return e.update(parent: self, role: .button, label: parts.compactMap { $0 }.joined(separator: ", "), frame: frame,
                                 press: { [weak self] in self?.anchor = s.id; self?.onSelect?([s.id], .replace) },
-                                actions: [a11yAction("Umbenennen") { [weak self] in self?.onRenameSession?(s.id) },
-                                          a11yAction("Schließen") { [weak self] in self?.onCloseSession?(s.id, false) }])
+                                actions: [a11yAction(String(localized: "Umbenennen")) { [weak self] in self?.onRenameSession?(s.id) },
+                                          a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseSession?(s.id, false) }])
             }
         }
         return a11y

@@ -23,7 +23,7 @@ final class MainWindowController: NSObject {
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
         window.isReleasedWhenClosed = false
-        window.title = "Kadrell" + Profile.label + (index == 0 ? "" : " · Fenster \(index + 1)")
+        window.title = "Kadrell" + Profile.label + (index == 0 ? "" : String(localized: " · Fenster \(index + 1)"))
         window.appearance = Theme.appearance
         window.backgroundColor = Theme.bg
         window.minSize = NSSize(width: 800, height: 500)

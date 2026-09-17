@@ -11,7 +11,7 @@ func chooseFolder(start: String, images: Bool = false, completion: @escaping (St
     panel.canCreateDirectories = true
     panel.allowsMultipleSelection = false
     panel.directoryURL = URL(fileURLWithPath: FolderIndex.normalize(start))
-    panel.prompt = "Wählen"
+    panel.prompt = String(localized: "Wählen")
     panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)   // über dem Dialog-Overlay
     panel.begin { resp in
         completion(resp == .OK ? panel.url.map { $0.path } : nil)

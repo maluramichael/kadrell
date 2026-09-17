@@ -588,23 +588,24 @@ final class WorkspaceView: NSView {
             var c: NSAttributedString?
             switch emptyReason {
             case .error(let message):
-                a = NSAttributedString(string: "Sessions können nicht geladen werden", attributes: Theme.attrs(12, Theme.error))
+                a = NSAttributedString(string: String(localized: "Sessions können nicht geladen werden"), attributes: Theme.attrs(12, Theme.error))
                 b = NSAttributedString(string: message, attributes: Theme.attrs(11, Theme.error.withAlphaComponent(0.7)))
             case .loading:
-                a = NSAttributedString(string: "Lade Sessions …", attributes: Theme.attrs(12, Theme.muted))
+                a = NSAttributedString(string: String(localized: "Lade Sessions …"), attributes: Theme.attrs(12, Theme.muted))
                 b = NSAttributedString(string: "", attributes: Theme.attrs(11, Theme.muted))
             case .noSessions:
-                a = NSAttributedString(string: "Noch keine Session", attributes: Theme.attrs(12, Theme.muted))
-                b = NSAttributedString(string: "⌘N startet eine", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+                a = NSAttributedString(string: String(localized: "Noch keine Session"), attributes: Theme.attrs(12, Theme.muted))
+                b = NSAttributedString(string: String(localized: "⌘N startet eine"), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
                 if otherInteractiveCount > 0 {
-                    let noun = otherInteractiveCount == 1 ? "Claude-Session läuft" : "Claude-Sessions laufen"
-                    c = NSAttributedString(string: "\(otherInteractiveCount) \(noun) interaktiv in anderen Terminals · Import: tools/tmux-dump.py",
+                    let text = otherInteractiveCount == 1 ? String(localized: "1 Claude-Session läuft interaktiv in anderen Terminals · Import: tools/tmux-dump.py")
+                        : String(localized: "\(otherInteractiveCount) Claude-Sessions laufen interaktiv in anderen Terminals · Import: tools/tmux-dump.py")
+                    c = NSAttributedString(string: text,
                                            attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.55)))
                 }
             case .hint:
                 let idle = auto && !autoPool.isEmpty
-                a = NSAttributedString(string: idle ? "Gerade wartet keine Session" : "Session im Baum wählen", attributes: Theme.attrs(12, Theme.muted))
-                b = NSAttributedString(string: idle ? "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will" : "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+                a = NSAttributedString(string: idle ? String(localized: "Gerade wartet keine Session") : String(localized: "Session im Baum wählen"), attributes: Theme.attrs(12, Theme.muted))
+                b = NSAttributedString(string: idle ? String(localized: "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will") : String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe"), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
             }
             Theme.scaled(bounds) { r in
                 a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
@@ -669,17 +670,17 @@ final class WorkspaceView: NSView {
     private var a11y: [A11yElement] = []
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
-    override func accessibilityLabel() -> String? { "Arbeitsfläche" }
+    override func accessibilityLabel() -> String? { String(localized: "Arbeitsfläche") }
 
     /// Kacheln (eigene Views) plus die gezeichneten Stack-Zeilen.
     override func accessibilityChildren() -> [Any]? {
         a11y = (stackRows.isEmpty || zen || preview != nil ? [] : stackRows).compactMap { r, key in
             guard let s = sessions[key] else { return nil }
-            let label = [s.title, (attach?.isAttached(key) ?? false) ? s.status.spoken : "nicht gestartet", group(forSession: key)?.name]
+            let label = [s.title, (attach?.isAttached(key) ?? false) ? s.status.spoken : String(localized: "nicht gestartet"), group(forSession: key)?.name]
             return a11y.reuse(key).update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: r,
                                           press: { [weak self] in self?.activate(key) },
-                                          actions: [a11yAction("Umbenennen") { [weak self] in self?.onRenameSession?(key) },
-                                                    a11yAction("Schließen") { [weak self] in self?.onCloseSession?(key, false) }])
+                                          actions: [a11yAction(String(localized: "Umbenennen")) { [weak self] in self?.onRenameSession?(key) },
+                                                    a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseSession?(key, false) }])
         }
         return (super.accessibilityChildren() ?? []) + a11y
     }

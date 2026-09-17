@@ -6,12 +6,12 @@ enum LayoutMode: String, CaseIterable, Sendable {
     var next: LayoutMode { Self.allCases[(Self.allCases.firstIndex(of: self)! + 1) % Self.allCases.count] }
     var title: String {
         switch self {
-        case .grid: "Grid"
-        case .main: "Haupt + Spalte"
-        case .spiral: "Spirale"
-        case .custom: "Frei"
-        case .scroll: "Scrollen"
-        case .stack: "Stack"
+        case .grid: String(localized: "Grid")
+        case .main: String(localized: "Haupt + Spalte")
+        case .spiral: String(localized: "Spirale")
+        case .custom: String(localized: "Frei")
+        case .scroll: String(localized: "Scrollen")
+        case .stack: String(localized: "Stack")
         }
     }
 }

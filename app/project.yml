@@ -1,6 +1,7 @@
 name: Kadrell
 options:
   bundleIdPrefix: de.malura
+  developmentLanguage: de
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
@@ -15,6 +16,8 @@ settings:
     ENABLE_APP_SANDBOX: NO
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_STRICT_CONCURRENCY: complete
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
 packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
@@ -30,6 +33,7 @@ targets:
     info:
       path: Kadrell/Info.plist
       properties:
+        CFBundleDevelopmentRegion: en
         CFBundleName: Kadrell
         CFBundleDisplayName: Kadrell
         CFBundleShortVersionString: "1.37.0"
@@ -66,5 +70,6 @@ schemes:
       config: Debug
     test:
       config: Debug
+      language: de
       targets:
         - KadrellTests
