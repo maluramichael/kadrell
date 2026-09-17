@@ -34,5 +34,7 @@
 	<string>Claude-Sessions im Terminal nutzen das Mikrofon für die Spracheingabe.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Kadrell benachrichtigt dich, wenn eine Session auf dich wartet oder fertig ist.</string>
 </dict>
 </plist>

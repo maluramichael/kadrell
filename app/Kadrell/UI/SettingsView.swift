@@ -54,6 +54,18 @@ enum Settings {
         set { Profile.defaults.set(newValue.rawValue, forKey: "sounds") }
     }
 
+    /// Systembenachrichtigungen bei wartenden/fertigen Sessions, Default nur wartet.
+    static var notifications: Notifications.Level {
+        get { Profile.defaults.string(forKey: "notifications").flatMap(Notifications.Level.init) ?? .waiting }
+        set { Profile.defaults.set(newValue.rawValue, forKey: "notifications") }
+    }
+
+    /// Beim Start und danach alle 24 h ohne Tracking-Parameter auf eine neuere Version prüfen, Default an.
+    static var checkForUpdates: Bool {
+        get { Profile.defaults.object(forKey: "checkForUpdates") as? Bool ?? true }
+        set { Profile.defaults.set(newValue, forKey: "checkForUpdates") }
+    }
+
     /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default an.
     static var stackShowPath: Bool {
         get { Profile.defaults.object(forKey: "stackShowPath") as? Bool ?? true }
@@ -232,6 +244,8 @@ final class SettingsModel {
     var sidebarStyle = Settings.sidebarStyle
     var sidebarShowAge = Settings.sidebarShowAge
     var sounds = Settings.sounds
+    var notifications = Settings.notifications
+    var checkForUpdates = Settings.checkForUpdates
     var closeTileOnExit = Settings.closeTileOnExit
     var autoWaiting = Settings.autoWaiting
     var autoRunning = Settings.autoRunning
@@ -282,6 +296,8 @@ final class SettingsModel {
         Settings.sidebarStyle = sidebarStyle
         Settings.sidebarShowAge = sidebarShowAge
         Settings.sounds = sounds
+        Settings.notifications = notifications
+        Settings.checkForUpdates = checkForUpdates
         Settings.closeTileOnExit = closeTileOnExit
         Settings.autoWaiting = autoWaiting
         Settings.autoRunning = autoRunning
@@ -442,6 +458,12 @@ struct SettingsView: View {
                 setting(String(localized: "Pfad in Stack-Zeilen")) { onOff($model.stackShowPath) }
                 setting(String(localized: "Letzte Antwort von Claude im Baum")) { onOff($model.showLastMessage) }
                 setting(String(localized: "Sounds")) { menu($model.sounds, Feedback.Level.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Systembenachrichtigungen")) { menu($model.notifications, Notifications.Level.allCases.map { ($0, $0.title) }) }
+            }
+
+            heading(String(localized: "Updates"))
+            table {
+                setting(String(localized: "Nach Updates suchen")) { onOff($model.checkForUpdates) }
             }
 
             heading(String(localized: "Auto-Modus"), note: String(localized: "AUTO in der Leiste"))

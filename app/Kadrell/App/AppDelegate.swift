@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var registry: SessionRegistry!
     var attach: AttachManager!
     private let usage = UsageService()
+    private let updateChecker = UpdateChecker()
     private var palette: PaletteWindow!
     private var overlay: OverlayPanel?
     private var keyMonitor: Any?
@@ -62,19 +63,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Beim ersten Start die Hilfe zeigen: da steht alles, die Oberfläche selbst erklärt nichts.
         if !Profile.defaults.bool(forKey: "helpShown") {
             Profile.defaults.set(true, forKey: "helpShown")
+            WhatsNew.lastSeenVersion = Settings.version
             showAbout()
+        } else {
+            showWhatsNewIfNeeded()
         }
         buildStatusItem()
     }
 
-    /// Menüleisten-Icon mit Kurzstatus, holt das Fenster zurück. Bleibt sichtbar, solange Kadrell läuft,
-    /// auch wenn das Fenster versteckt ist.
+    /// Erststart zeigt „Was ist neu“ nicht (nichts davon war vorher da, siehe `helpShown`-Zweig), jeder spätere
+    /// Versionssprung einmalig schon. `WhatsNew.lastSeenVersion` übersteht einen Neustart.
+    private func showWhatsNewIfNeeded() {
+        let version = Settings.version
+        guard WhatsNew.lastSeenVersion != version else { return }
+        WhatsNew.lastSeenVersion = version
+        showWhatsNew(version: version, fallback: nil)
+    }
+
+    /// `fallback` steht, wenn die Version keine Changelog-Zeilen hat (Menüpunkt „Was ist neu“ manuell aufgerufen).
+    private func showWhatsNew(version: String, fallback: String?) {
+        let notes = WhatsNew.notes(version: version, changelog: WhatsNew.bundledChangelog())
+        guard !notes.isEmpty else { if let fallback { confirm(String(localized: "Neu in \(version)"), fallback, button: String(localized: "OK"), destructive: false) {} }; return }
+        confirm(String(localized: "Neu in \(version)"), notes.joined(separator: "\n\n"), button: String(localized: "Super"), destructive: false) {}
+    }
+
+    /// Menüleisten-Icon mit Kurzstatus. Sein Menü listet wartende und ungesehen fertige Sessions, Klick fokussiert
+    /// sie. Bleibt sichtbar, solange Kadrell läuft, auch wenn das Fenster versteckt ist.
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "Kadrell")
         item.button?.image?.isTemplate = true
-        item.button?.action = #selector(statusItemClicked)
-        item.button?.target = self
+        item.menu = buildStatusMenu(rows: (waiting: [], done: []), sessions: [:])
         statusItem = item
     }
 
@@ -83,11 +102,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
     }
 
-    /// "3 warten · 5 arbeiten" im Menüleisten-Icon, leer ohne beschäftigte Sessions.
+    /// "3 warten · 1 neu" im Menüleisten-Icon (ungesehen fertige zählen als „neu“ mit), und sein Menü.
     private func updateStatusItem(_ sessions: [Session]) {
-        let waiting = sessions.filter { $0.status == .waiting }.count
-        let running = sessions.filter { $0.status == .running }.count
-        statusItem?.button?.title = waiting == 0 && running == 0 ? "" : String(localized: "  \(waiting) warten · \(running) arbeiten")
+        let byKey = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        let waiting = Set(sessions.filter { $0.status == .waiting }.map(\.id))
+        let rows = StatusMenu.rows(order: store.groups.flatMap(\.sessionIds), waiting: waiting, unseen: unseen)
+        statusItem?.button?.title = StatusMenu.title(waiting: rows.waiting.count, done: rows.done.count)
+        statusItem?.menu = buildStatusMenu(rows: rows, sessions: byKey)
+    }
+
+    private func buildStatusMenu(rows: (waiting: [String], done: [String]), sessions: [String: Session]) -> NSMenu {
+        let menu = NSMenu()
+        func addRow(_ key: String, waiting: Bool) {
+            guard let s = sessions[key] else { return }
+            let group = store.group(forSession: key)?.name ?? ""
+            let item = NSMenuItem(title: "\(group) › \(s.title) · \(s.elapsed())", action: #selector(statusMenuSelect(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = key
+            item.image = NSImage(systemSymbolName: waiting ? "clock" : "checkmark.circle", accessibilityDescription: nil)
+            menu.addItem(item)
+        }
+        if rows.waiting.isEmpty, rows.done.isEmpty {
+            let empty = menu.addItem(withTitle: String(localized: "Keine wartenden Sessions"), action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+        } else {
+            for key in rows.waiting { addRow(key, waiting: true) }
+            for key in rows.done { addRow(key, waiting: false) }
+            menu.addItem(.separator())
+            let next = menu.addItem(withTitle: String(localized: "Nächste wartende Session"), action: #selector(statusMenuNextWaiting), keyEquivalent: "")
+            next.target = self
+            next.isEnabled = !rows.waiting.isEmpty
+        }
+        menu.addItem(.separator())
+        let open = menu.addItem(withTitle: String(localized: "Kadrell öffnen"), action: #selector(statusItemClicked), keyEquivalent: "")
+        open.target = self
+        return menu
+    }
+
+    @objc private func statusMenuSelect(_ sender: NSMenuItem) {
+        guard let key = sender.representedObject as? String else { return }
+        focusSession(key)
+    }
+    @objc private func statusMenuNextWaiting() { focusNextWaiting() }
+
+    /// Fenster nach vorn, Session fokussieren: Menüleisten-Menü und Klick auf eine Systembenachrichtigung.
+    func focusSession(_ key: String) {
+        guard workspace.sessions[key] != nil else { return }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        workspace.addMissing([key])
+        workspace.setFocus(key)
+        sidebar.reveal(key)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -253,6 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleSync = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
         bar.onSelectWaiting = { [weak self, weak workspace] in guard let self else { return }; workspace?.select(waitingIds(), add: false) }
+        bar.onShowUpdate = { [weak self] in self?.showUpdateAvailable() }
     }
 
     /// Einmal für alle Fenster: Tasten wirken im Key-Fenster, Mausrad in dem Fenster unter der Maus.
@@ -353,6 +419,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startControlServer()
         usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true }
         usage.start()
+        updateChecker.onChange = { [weak self] m in self?.bar.updateAvailable = m; self?.bar.needsDisplay = true }
+        updateChecker.start()
+        Notifications.setup()
+        Notifications.onSelect = { [weak self] key in self?.focusSession(key) }
     }
 
     /// Fenster verdeckt/versteckt oder App nicht aktiv: `SessionRegistry` seltener pollen lassen.
@@ -422,7 +492,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hookFocusWorktree = s.activeWorktree
             Hooks.fire(.sessionFocus, s, environment: cli.environment)
         }
-        NSApp.dockTile.badgeLabel = waiting.isEmpty ? nil : "\(waiting.count)"
+        // Wartend oder fertig, aber noch nicht angesehen: beides zusammen, sonst verschwinden fertige Sessions aus dem Badge.
+        let badgeCount = Set(waiting).union(unseen).count
+        NSApp.dockTile.badgeLabel = badgeCount == 0 ? nil : "\(badgeCount)"
         let waitingSet = Set(waiting)
         // Neu dazugekommene wartende Session, Fenster nicht im Vordergrund: kurz im Dock hüpfen, ohne Notification-Rechte.
         if !waitingSet.subtracting(lastWaitingIds).isEmpty, window?.isKeyWindow == false { NSApp.requestUserAttention(.informationalRequest) }
@@ -433,6 +505,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Klang und Marke „neu“ nur für das, was man gerade nicht sieht: andere Session oder Fenster im Hintergrund.
         let notLooking = { (id: String) in id != self.workspace.focused || self.window?.isKeyWindow == false }
         if changed.waiting.contains(where: notLooking) { Feedback.play(.waiting) } else if changed.done.contains(where: notLooking) { Feedback.play(.done) }
+        notify(changed.waiting.filter(notLooking), waiting: true, sessions: sessions)
+        notify(changed.done.filter(notLooking), waiting: false, sessions: sessions)
         let fresh = changed.waiting.union(changed.done).filter(notLooking)
         let before = unseen
         if !fresh.isSubset(of: unseen) { unseen.formUnion(fresh) }
@@ -476,6 +550,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.needsDisplay = true
     }
 
+    /// Systembenachrichtigung je Session in `keys`, Rest der Entscheidung (Level, Rechte) übernimmt `Notifications`.
+    private func notify(_ keys: Set<String>, waiting: Bool, sessions: [String: Session]) {
+        for key in keys {
+            guard let s = sessions[key] else { continue }
+            Notifications.notify(sessionKey: key, group: store.group(forSession: key)?.name ?? "", title: s.title, message: registry?.lastMessages[key], waiting: waiting)
+        }
+    }
+
     /// Wartende Sessions in Baumreihenfolge, unabhängig von eingeklappten Gruppen: `waitingFor` kommt nur bei
     /// laufendem eigenen Prozess (siehe `SessionRegistry.merge`), `isAttached` ist die zusätzliche Absicherung.
     private func waitingIds() -> [String] {
@@ -489,6 +571,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let main = NSMenu()
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "Über Kadrell"), action: #selector(menuAbout), keyEquivalent: "")
+        appMenu.addItem(withTitle: String(localized: "Was ist neu"), action: #selector(menuWhatsNew), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: String(localized: "Einstellungen …"), action: #selector(menuSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: String(localized: "Kommandozeilen-Tool installieren …"), action: #selector(menuInstallCLI), keyEquivalent: "")
@@ -608,6 +691,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startSession(group: nil, cwd: cwd, sessionId: Session.shellPrefix + UUID().uuidString.lowercased())
     }
     @objc private func menuAbout() { showAbout() }
+    @objc private func menuWhatsNew() { showWhatsNew(version: Settings.version, fallback: String(localized: "Keine Einträge gefunden.")) }
     @objc private func menuTemporaryInstance() { Profile.launchTemporary() }
     @objc private func menuSettings() {
         let model = SettingsModel()
@@ -616,6 +700,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             buildMenu()
             applyAppearance()
             Task { await self.registry?.pollNow() }
+            Task { await self.updateChecker.checkNow() }
         }
         model.onClose = { [weak self, weak model] in model?.stopRecording(); self?.dismissSheet() }
         present(SettingsView(model: model), onCancel: { model.onClose?() }, onPrimary: { model.onClose?() })
@@ -861,6 +946,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func report(_ error: Error) {
         AppDelegate.log.error("\(String(describing: error), privacy: .public)")
         confirm(String(localized: "Claude CLI meldet einen Fehler"), String(describing: error), button: String(localized: "OK"), destructive: false) {}
+    }
+
+    /// Klick auf die Update-Pille in der Statusleiste: Changelog-Zeilen der neuen Version, Download öffnet den Browser.
+    private func showUpdateAvailable() {
+        guard let m = updateChecker.available else { return }
+        confirm(String(localized: "Kadrell \(m.version) verfügbar"), m.notes.joined(separator: "\n"), button: String(localized: "Herunterladen"), destructive: false) {
+            guard let url = URL(string: m.url) else { return }
+            NSWorkspace.shared.open(url)
+        }
     }
 
     func stopSession(_ s: Session) {

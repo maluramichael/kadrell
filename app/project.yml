@@ -28,6 +28,8 @@ targets:
     platform: macOS
     sources:
       - path: Kadrell
+      - path: ../CHANGELOG.md
+        buildPhase: resources
     dependencies:
       - package: SwiftTerm
     info:
@@ -45,6 +47,7 @@ targets:
         CFBundleIconFile: Kadrell
         NSMicrophoneUsageDescription: "Claude-Sessions im Terminal nutzen das Mikrofon für die Spracheingabe."
         NSAppleEventsUsageDescription: "Kadrell schlägt bei ⌘N den Ordner des vordersten Finder-Fensters vor."
+        NSUserNotificationsUsageDescription: "Kadrell benachrichtigt dich, wenn eine Session auf dich wartet oder fertig ist."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.malura.kadrell
