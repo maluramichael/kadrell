@@ -23,6 +23,7 @@ struct AboutView: View {
             ] + rows([.cycleSort])),
             ("Fenster und App", [
                 ("Rundes X", "Fenster nur verstecken, Sessions laufen weiter"), ("Menüleisten-Icon / Dock", "Fenster zurückholen"),
+                ("⌘⇧T", "Neues Fenster: eigene Auswahl und eigenes Layout, dieselben Sessions"), ("⌘⇧W", "Fenster schließen, Sessions laufen weiter"),
                 ("⌘M", "Im Dock ablegen"), ("⌘ Mausrad", "Terminal-Schrift aller Sessions größer/kleiner"),
                 ("⌘,", "Einstellungen: Projektordner, Darstellung, Tastenkürzel"), ("F1", "diese Hilfe"),
             ]),

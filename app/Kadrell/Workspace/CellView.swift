@@ -19,6 +19,8 @@ final class CellView: NSView {
     var ended = false
     /// Vorschau (⌥J/⌥K) startet keinen Prozess: ohne Terminal kein „STARTET …“.
     var previewing = false
+    /// Das Terminal hängt gerade in einem anderen Fenster.
+    var elsewhere = false
     var lines: [String] = []
     var pulse: CGFloat = 1
     /// Stack: die Titelzeile zeichnet die Arbeitsfläche als Stack-Zeile, die Kachel nur den Körper.
@@ -164,6 +166,8 @@ final class CellView: NSView {
         } else if !attached {
             Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
             drawLabel("STARTET …", in: body)
+        } else if !terminalMounted, elsewhere {
+            drawLabel("IN ANDEREM FENSTER · KLICK HOLT HIERHER", in: body)
         } else if !terminalMounted {
             drawLines(in: body.insetBy(dx: 10, dy: 8))
         }

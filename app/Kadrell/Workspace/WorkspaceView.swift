@@ -18,14 +18,16 @@ final class WorkspaceView: NSView {
     }
     /// Für „zuletzt fokussierte Kachel“ (tmux M-Tab).
     private var lastFocused: String?
-    private(set) var mode: LayoutMode = LayoutMode(rawValue: Profile.defaults.string(forKey: "workspace.mode") ?? "") ?? .grid
+    private(set) var mode: LayoutMode = .grid
+    /// Weitere Fenster speichern Auswahl, Layout und Auto-Modus unter eigenen Schlüsseln („.2“), Fenster 1 ohne.
+    let defaultsSuffix: String
     /// Zoom: nur die Fokus-Kachel, bildschirmfüllend, die Auswahl bleibt.
     private(set) var zen = false
     /// ⌥J/⌥K: eine Session aus dem Baum vorübergehend allein zeigen. Auswahl und Fokus bleiben unangetastet.
     private(set) var preview: String?
     var attach: AttachManager?
     /// Auto-Modus: aus der Auswahl nur wartende bzw. arbeitende Sessions zeigen (Einstellungen).
-    private(set) var auto = Profile.defaults.bool(forKey: "workspace.auto")
+    private(set) var auto = false
     /// Passt eine Session nicht mehr, bleibt ihre Kachel bis zu diesem Zeitpunkt stehen.
     private var linger: [String: CFTimeInterval] = [:]
     private var lastMatching: Set<String> = []
@@ -72,17 +74,24 @@ final class WorkspaceView: NSView {
     var otherInteractiveCount = 0 { didSet { if otherInteractiveCount != oldValue { needsDisplay = true } } }
     /// Rechtsklick auf Kachel-Header oder Stack-Zeile: liefert das Kontextmenü der Session.
     var onContextMenu: ((String) -> NSMenu?)?
+    /// Ein Terminal wurde hier ausgehängt: ein anderes Fenster, das es gerade nur als Hinweis zeigt, kann es einhängen.
+    var onReleaseTerminal: (() -> Void)?
+    private var released = false
 
-    override init(frame: NSRect) {
+    init(frame: NSRect, defaultsSuffix: String = "") {
+        self.defaultsSuffix = defaultsSuffix
         super.init(frame: frame)
         wantsLayer = true
         clipsToBounds = true
-        selected = Profile.defaults.stringArray(forKey: "workspace.selected") ?? []
+        mode = LayoutMode(rawValue: Profile.defaults.string(forKey: "workspace.mode" + defaultsSuffix) ?? "") ?? .grid
+        auto = Profile.defaults.bool(forKey: "workspace.auto" + defaultsSuffix)
+        selected = Profile.defaults.stringArray(forKey: "workspace.selected" + defaultsSuffix) ?? []
         focused = selected.first
         pulseTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(80))
-                self?.tick()
+                guard let self else { return }
+                self.tick()
             }
         }
     }
@@ -294,7 +303,7 @@ final class WorkspaceView: NSView {
 
     func toggleAuto() {
         auto.toggle()
-        Profile.defaults.set(auto, forKey: "workspace.auto")
+        Profile.defaults.set(auto, forKey: "workspace.auto" + defaultsSuffix)
         linger = [:]
         lastMatching = []
         zen = false
@@ -345,7 +354,7 @@ final class WorkspaceView: NSView {
     func setMode(_ m: LayoutMode) {
         mode = m
         revealFocus = true
-        Profile.defaults.set(m.rawValue, forKey: "workspace.mode")
+        Profile.defaults.set(m.rawValue, forKey: "workspace.mode" + defaultsSuffix)
         relayout()
         focusTerminal()
     }
@@ -363,11 +372,26 @@ final class WorkspaceView: NSView {
         selected = selected.enumerated().sorted { (order[$0.1] ?? .max, $0.0) < (order[$1.1] ?? .max, $1.0) }.map(\.1)
     }
 
-    private func persist() { Profile.defaults.set(selected, forKey: "workspace.selected") }
+    private func persist() { Profile.defaults.set(selected, forKey: "workspace.selected" + defaultsSuffix) }
 
+    /// Die Fokus-Kachel bekommt die Tastatur. Hängt ihr Terminal in einem anderen Fenster, holt sie es hierher:
+    /// eine NSView kann nur an einer Stelle hängen, dort bleibt der Hinweis stehen.
     private func focusTerminal() {
-        guard let f = focused, let t = attach?.terminal(for: f), t.superview != nil else { window?.makeFirstResponder(self); return }
+        guard let f = focused, let t = attach?.terminal(for: f) else { window?.makeFirstResponder(self); return }
+        if let other = host(of: t), other !== self {
+            other.unmountTerminal(for: f)
+            relayout()
+            other.relayout()
+        }
+        guard t.superview != nil else { window?.makeFirstResponder(self); return }
         window?.makeFirstResponder(t)
+    }
+
+    /// Fenster geht zu: Terminals freigeben und den Takt anhalten.
+    func close() {
+        pulseTask?.cancel()
+        for key in Array(cells.keys) { unmountTerminal(for: key) }
+        onReleaseTerminal?()
     }
 
     // MARK: Layout
@@ -448,6 +472,7 @@ final class WorkspaceView: NSView {
             v.lines = attach?.lines(for: key) ?? []
             v.pulse = pulse
             mountTerminal(for: key, in: v, session: s)
+            v.elsewhere = attach?.terminal(for: key).flatMap(host).map { $0 !== self } ?? false
             v.needsDisplay = true
         }
         // Terminals nicht sichtbarer Sessions dürfen nirgends hängen.
@@ -455,11 +480,13 @@ final class WorkspaceView: NSView {
         if let w = window, w.firstResponder === w { w.makeFirstResponder(self) }
         needsDisplay = true
         if refocus { focusTerminal() }
+        if released { released = false; onReleaseTerminal?() }
         onChange?()
     }
 
     private func mountTerminal(for key: String, in cell: CellView, session: Session) {
-        guard let t = attach?.terminal(for: key) else { return }
+        // Hängt schon in einem anderen Fenster: dort lassen, die Kachel zeigt den Hinweis (siehe `focusTerminal`).
+        guard let t = attach?.terminal(for: key), host(of: t) == nil || host(of: t) === self else { return }
         if t.superview !== cell { cell.addSubview(t) }
         let bg = cell.bodyColor
         if t.nativeBackgroundColor != bg { t.nativeBackgroundColor = bg }
@@ -469,10 +496,14 @@ final class WorkspaceView: NSView {
         if t.window != nil, t.isUsingMetalRenderer != Settings.terminalMetal { try? t.setUseMetal(Settings.terminalMetal) }
     }
 
+    /// Arbeitsfläche, in der das Terminal hängt. nil: frei, auch wenn es noch in einer schon entfernten Kachel steckt.
+    private func host(of t: NSView) -> WorkspaceView? { t.superview?.superview as? WorkspaceView }
+
     private func unmountTerminal(for key: String) {
-        guard let t = attach?.terminal(for: key), t.superview != nil else { return }
+        guard let t = attach?.terminal(for: key), t.superview != nil, host(of: t) == nil || host(of: t) === self else { return }
         if window?.firstResponder === t { window?.makeFirstResponder(self) }
         t.removeFromSuperview()
+        released = true
     }
 
     override func setFrameSize(_ newSize: NSSize) {

@@ -83,8 +83,9 @@ final class StatusBarView: NSView {
         wantsLayer = true
         clockTask = Task { [weak self] in
             while !Task.isCancelled {
-                self?.needsDisplay = true
                 try? await Task.sleep(for: .seconds(1))
+                guard let self else { return }
+                self.needsDisplay = true
             }
         }
     }

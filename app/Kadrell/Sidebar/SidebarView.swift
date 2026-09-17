@@ -81,7 +81,7 @@ final class SidebarView: NSView {
             while !Task.isCancelled {
                 // Solange etwas aufblitzt oder einfährt, flüssig zeichnen, sonst reicht der langsame Takt.
                 try? await Task.sleep(for: .milliseconds(wasAnimating ? 16 : 80))
-                guard let self else { continue }
+                guard let self else { return }
                 let now = CACurrentMediaTime(), animating = self.pruneAnimations(now)
                 if animating || wasAnimating { wasAnimating = animating; self.needsDisplay = true; continue }
                 // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Punkte laufender Sessions.

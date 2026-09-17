@@ -5,12 +5,15 @@ import os
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "app")
-    private var window: NSWindow!
-    private let bar = StatusBarView(frame: .zero)
-    private let split = ThinSplitView(frame: .zero)
-    private let sidebarScroll = NSScrollView(frame: .zero)
-    private let sidebar = SidebarView(frame: .zero)
-    let workspace = WorkspaceView(frame: .zero)
+    /// Offene Hauptfenster. `current` ist das zuletzt aktive: Menü, Kürzel, Palette, Dialoge und Fernsteuerung wirken dort.
+    private var windows: [MainWindowController] = []
+    private var current: MainWindowController!
+    private var window: NSWindow! { current?.window }
+    private var bar: StatusBarView { current.bar }
+    private var split: ThinSplitView { current.split }
+    private var sidebarScroll: NSScrollView { current.sidebarScroll }
+    private var sidebar: SidebarView { current.sidebar }
+    var workspace: WorkspaceView { current.workspace }
     let store = GroupStore()
     private var cli: ClaudeCLI!
     var registry: SessionRegistry!
@@ -51,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Dock-Icon direkt aus dem Bundle: LaunchServices hält für Debug-Builds am selben Pfad gern das alte, leere Icon.
         if let url = Bundle.main.url(forResource: "Kadrell", withExtension: "icns"), let img = NSImage(contentsOf: url) { NSApp.applicationIconImage = img }
         buildMenu()
-        buildWindow()
+        buildWindows()
         // Unter XCTest nur das Fenster, kein Polling.
         guard NSClassFromString("XCTestCase") == nil else { return }
         trapSignals()
@@ -154,48 +157,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Aufbau
 
-    private func buildWindow() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1400, height: 900),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Kadrell" + Profile.label
-        window.appearance = Theme.appearance
-        window.backgroundColor = Theme.bg
-        window.minSize = NSSize(width: 800, height: 500)
-        window.setFrameAutosaveName("KadrellMain")
-        window.delegate = self
-        let root = FlippedView(frame: window.contentRect(forFrameRect: window.frame))
-        root.autoresizingMask = [.width, .height]
-        bar.frame = NSRect(x: 0, y: 0, width: root.bounds.width, height: Theme.barHeight)
-        bar.autoresizingMask = [.width, .maxYMargin]
-
-        sidebarScroll.documentView = sidebar
-        sidebarScroll.hasVerticalScroller = true
-        sidebarScroll.autohidesScrollers = true
-        sidebarScroll.drawsBackground = true
-        sidebarScroll.backgroundColor = Theme.panel
-        sidebar.autoresizingMask = [.width]
-        sidebar.frame = NSRect(x: 0, y: 0, width: 260, height: 10)
-        split.isVertical = true
-        split.dividerStyle = .thin
-        split.addArrangedSubview(sidebarScroll)
-        split.addArrangedSubview(workspace)
-        split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
-        split.autosaveName = "KadrellSplit"
-        split.delegate = self
-        split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.bounds.width, height: root.bounds.height - Theme.barHeight)
-        split.autoresizingMask = [.width, .height]
-        root.addSubview(split)
-        root.addSubview(bar)
-        window.contentView = root
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-        if split.arrangedSubviews[0].frame.width < 120 { split.setPosition(260, ofDividerAt: 0) }
-        window.makeFirstResponder(workspace)
-        NSApp.activate()
-
+    /// Beim Start die zuletzt offenen Fenster wieder aufmachen, mindestens eins.
+    private func buildWindows() {
         palette = PaletteWindow()
+        let open = (Profile.defaults.array(forKey: "windows.open") as? [Int] ?? []).sorted()
+        for i in open.isEmpty ? [0] : open { openWindow(index: i) }
+        installMonitors()
+        windows[0].show()
+        current = windows[0]
+        NSApp.activate()
+    }
+
+    /// ⌘⇧T: weiteres Fenster mit eigener Auswahl, eigenem Layout und Fokus; kleinste freie Nummer.
+    @objc private func menuNewWindow() {
+        let used = Set(windows.map(\.index))
+        openWindow(index: (1...).first { !used.contains($0) }!)
+    }
+
+    private func openWindow(index: Int) {
+        let c = MainWindowController(index: index, cascade: current?.window)
+        c.window.delegate = self
+        c.workspace.attach = attach
+        c.sidebar.attach = attach
+        c.workspace.otherInteractiveCount = current?.workspace.otherInteractiveCount ?? 0
+        windows.append(c)
+        current = c
+        persistWindows()
+        wire(c)
+        if registry != nil { reloadViews() }
+        c.show()
+    }
+
+    private func persistWindows() { Profile.defaults.set(windows.map(\.index).sorted(), forKey: "windows.open") }
+
+    private func controller(for w: NSWindow?) -> MainWindowController? { windows.first { $0.window === w } }
+
+    /// Zusatzfenster schließen: Sessions laufen weiter, seine Terminals werden frei für die anderen Fenster.
+    private func closeWindow(_ c: MainWindowController) {
+        windows.removeAll { $0 === c }
+        if current === c { current = windows.last }
+        c.workspace.close()
+        for k in ["workspace.selected", "workspace.mode", "workspace.auto"] { Profile.defaults.removeObject(forKey: k + MainWindowController.suffix(c.index)) }
+        persistWindows()
+        syncSidebar()
+    }
+
+    /// Rückrufe von Baum, Arbeitsfläche und Leiste eines Fensters. Was nur das Fenster betrifft, geht an `c`,
+    /// der Rest an Menü-Wege, die über `current` laufen (ein Klick hat das Fenster schon zum Key-Fenster gemacht).
+    private func wire(_ c: MainWindowController) {
+        let workspace = c.workspace, sidebar = c.sidebar, bar = c.bar
 
         workspace.onChange = { [weak self] in self?.syncSidebar() }
+        // Terminal hier ausgehängt: andere Fenster, die es als Hinweis zeigen, dürfen es jetzt einhängen.
+        workspace.onReleaseTerminal = { [weak self, weak c] in
+            DispatchQueue.main.async { self?.windows.filter { $0 !== c }.forEach { $0.workspace.relayout() } }
+        }
         workspace.onFocusChange = { [weak self] key in self?.unseen.remove(key); self?.syncSidebar() }
         workspace.onActivate = { [weak self] key in
             guard self?.unseen.contains(key) == true else { return }
@@ -204,8 +220,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
-        sidebar.onSelect = { [weak self] ids, mode in
-            guard let self else { return }
+        sidebar.onSelect = { [weak self, weak workspace] ids, mode in
+            guard let self, let workspace else { return }
             // Eine einzelne Session anklicken quittiert ihre Marke „neu“, eine ganze Gruppe nicht.
             if ids.count == 1, unseen.contains(ids[0]) { unseen.remove(ids[0]); syncSidebar() }
             switch mode {
@@ -229,22 +245,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         sidebar.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
-        bar.onPickLayout = { [weak self] m in self?.workspace.setMode(m) }
-        bar.onGridColumns = { [weak self] c in self?.workspace.setGridColumns(c) }
-        bar.onSplit = { [weak self] c in self?.workspace.setSplit(c) }
-        bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
-        bar.onToggleAuto = { [weak self] in Feedback.play(.toggle); self?.workspace.toggleAuto() }
-        bar.onToggleSync = { [weak self] in Feedback.play(.toggle); self?.workspace.toggleSync() }
+        bar.onPickLayout = { [weak workspace] m in workspace?.setMode(m) }
+        bar.onGridColumns = { [weak workspace] c in workspace?.setGridColumns(c) }
+        bar.onSplit = { [weak workspace] c in workspace?.setSplit(c) }
+        bar.onToggleZoom = { [weak workspace] in workspace?.toggleZen() }
+        bar.onToggleAuto = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleAuto() }
+        bar.onToggleSync = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
-        bar.onSelectWaiting = { [weak self] in guard let self else { return }; workspace.select(waitingIds(), add: false) }
+        bar.onSelectWaiting = { [weak self, weak workspace] in guard let self else { return }; workspace?.select(waitingIds(), add: false) }
+    }
 
+    /// Einmal für alle Fenster: Tasten wirken im Key-Fenster, Mausrad in dem Fenster unter der Maus.
+    private func installMonitors() {
         // Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
         // Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             // Offene Hilfe hat selbst die Tastatur: F1 schließt sie wieder.
             if event.keyCode == 122, overlayIsAbout, event.window === overlay { dismissSheet(); return nil }
-            guard event.window === self.window else { return event }
+            guard controller(for: event.window) != nil else { return event }
             // Dialog offen, aber nicht mehr Key (nach Dropdown, Klick daneben oder App-Wechsel): Esc landet am
             // Hauptfenster statt am Panel. Ohne das schließt nichts den Dialog, der Blur bleibt liegen und blockt
             // alle Klicks (Softlock). onCancel räumt den Backdrop mit ab.
@@ -271,14 +290,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ⌘ + Mausrad: Schriftgröße aller Terminals wie ⌘+/⌘-. Trackpad-Deltas sammeln, sonst springt es pro Wisch zweistellig.
         // Klick in ein Terminal quittiert die Marke „neu“, auch wenn es schon die Tastatur hatte.
         _ = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            guard let self, event.window === window, !unseen.isEmpty,
-                  var v = window.contentView?.hitTest(event.locationInWindow) else { return event }
+            guard let self, controller(for: event.window) != nil, !unseen.isEmpty,
+                  var v = event.window?.contentView?.hitTest(event.locationInWindow) else { return event }
             while !(v is KadrellTerminalView), let up = v.superview { v = up }
             if let key = attach?.terminals.first(where: { $0.value === v })?.key, unseen.contains(key) { unseen.remove(key); syncSidebar() }
             return event
         }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
+            guard let self, let workspace = controller(for: event.window)?.workspace else { return event }
             // Layout Scrollen: seitliches Wischen (bzw. ⇧ + Mausrad) über der Arbeitsfläche verschiebt die Spalten, nicht das Terminal.
             if workspace.mode == .scroll, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY),
                workspace.bounds.contains(workspace.convert(event.locationInWindow, from: nil)) {
@@ -299,16 +318,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func boot() async {
         cli = await ClaudeCLI.resolve()
         attach = AttachManager(cli: cli)
-        workspace.attach = attach
-        sidebar.attach = attach
-        attach.onChange = { [weak self] in self?.workspace.relayout() }
+        for c in windows { c.workspace.attach = attach; c.sidebar.attach = attach }
+        attach.onChange = { [weak self] in self?.windows.forEach { $0.workspace.relayout() } }
         // Einstellung: Kachel einer beendeten Session schließen statt mit „Klick setzt fort" stehen zu lassen.
         attach.onEnded = { [weak self] key in
             guard let self else { return }
             // `exit` in einem Terminal ohne Claude: nichts fortzusetzen, Kachel und Eintrag weg.
             if workspace.session(key)?.isShell == true { closeSession(key, force: true); return }
-            guard Settings.closeTileOnExit, workspace.selected.contains(key) else { return }
-            workspace.select([key], add: true)
+            guard Settings.closeTileOnExit else { return }
+            for c in windows where c.workspace.selected.contains(key) { c.workspace.select([key], add: true) }
             syncSidebar()
         }
         registry = SessionRegistry(cli: cli)
@@ -320,7 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainActor.assumeIsolated { self?.updatePollBackground() }
             }
         }
-        NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.updatePollBackground() }
         }
         if !FileManager.default.isExecutableFile(atPath: cli.binary) { registry.fail("\(cli.binary): claude nicht gefunden") }
@@ -339,14 +357,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Fenster verdeckt/versteckt oder App nicht aktiv: `SessionRegistry` seltener pollen lassen.
     private func updatePollBackground() {
-        registry?.setBackground(!NSApp.isActive || window?.isVisible != true)
+        registry?.setBackground(!NSApp.isActive || !windows.contains { $0.window.isVisible })
     }
 
     private func sessionsChanged(_ sessions: [Session]) {
         store.assign(sessions)
         attach.sync(with: sessions)
         reloadViews()
-        attach.enqueue(workspace.shownSessions())
+        attach.enqueue(([current] + windows.filter { $0 !== current }).flatMap { $0.workspace.shownSessions() })
     }
 
     /// Fremde Claude-Sessions (andere Terminals, frühere Kadrell-Versionen) beim Start erfassen. Hintergrund-Sessions
@@ -363,7 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let elsewhere = agents.filter { !owned.contains($0.sessionId) }
-        workspace.otherInteractiveCount = elsewhere.filter { $0.kind == "interactive" }.count
+        for c in windows { c.workspace.otherInteractiveCount = elsewhere.filter { $0.kind == "interactive" }.count }
         // Übernahme in die Sessions-Liste nur das Standardprofil, sonst stiehlt ein Testprofil sie.
         guard Profile.name == nil else { return }
         let bg = elsewhere.filter(\.isRunningBackground)
@@ -383,46 +401,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func reloadViews() {
-        workspace.lastError = registry?.lastError
-        workspace.polled = registry?.polled ?? false
-        workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
+        for c in windows {
+            c.workspace.lastError = registry?.lastError
+            c.workspace.polled = registry?.polled ?? false
+            c.workspace.reload(groups: store.groups, sessions: registry?.sessions ?? [])
+        }
         syncSidebar()
     }
 
-    /// Baum und Leiste folgen der Arbeitsfläche (Auswahl, Fokus, Layout).
+    /// Baum und Leiste jedes Fensters folgen seiner Arbeitsfläche (Auswahl, Fokus, Layout). Hook, Dock, Sounds und
+    /// Marke „neu“ gelten global und folgen dem Fokus des Key-Fensters.
     private func syncSidebar() {
-        sidebar.selected = Set(workspace.selected)
-        sidebar.focused = workspace.preview ?? workspace.focused
-        sidebar.showMessages = Settings.showLastMessage
-        sidebar.showAge = Settings.sidebarShowAge
-        sidebar.sort = Settings.sidebarSort
-        sidebar.renderer = Settings.sidebarStyle.renderer
-        sidebar.messages = registry?.lastMessages ?? [:]
+        guard current != nil else { return }
         unseen = unseen.filter { workspace.sessions[$0] != nil }
-        sidebar.unread = unseen
-        sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
+        let waiting = waitingIds()
+        for c in windows { syncWindow(c, waiting: waiting.count) }
         let sessions = workspace.sessions
-        let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
-        let fg = focused.flatMap { workspace.group(forSession: $0.id) }
-        bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
         if let cli, let key = workspace.focused, let s = sessions[key], key != hookFocus || s.activeWorktree != hookFocusWorktree {
             hookFocus = key
             hookFocusWorktree = s.activeWorktree
             Hooks.fire(.sessionFocus, s, environment: cli.environment)
         }
-        bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
-        bar.errorText = registry?.lastError
-        bar.sessionCount = sessions.count
-        bar.openCount = workspace.selected.count
-        bar.layoutMode = workspace.mode
-        bar.gridColumns = Settings.gridColumns
-        bar.split = workspace.focusedSplit
-        bar.zoomed = workspace.zen
-        bar.auto = workspace.auto
-        bar.sync = workspace.sync
-        bar.sort = sidebar.sort
-        bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
-        let waiting = waitingIds()
         NSApp.dockTile.badgeLabel = waiting.isEmpty ? nil : "\(waiting.count)"
         let waitingSet = Set(waiting)
         // Neu dazugekommene wartende Session, Fenster nicht im Vordergrund: kurz im Dock hüpfen, ohne Notification-Rechte.
@@ -435,14 +434,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let notLooking = { (id: String) in id != self.workspace.focused || self.window?.isKeyWindow == false }
         if changed.waiting.contains(where: notLooking) { Feedback.play(.waiting) } else if changed.done.contains(where: notLooking) { Feedback.play(.done) }
         let fresh = changed.waiting.union(changed.done).filter(notLooking)
-        if !fresh.isSubset(of: unseen) { unseen.formUnion(fresh); sidebar.unread = unseen; sidebar.needsDisplay = true }
+        let before = unseen
+        if !fresh.isSubset(of: unseen) { unseen.formUnion(fresh) }
         // Wieder am Arbeiten: die Marke gilt der letzten Antwort, nicht der laufenden.
-        let working = unseen.filter { statuses[$0] == .running }
-        if !working.isEmpty { unseen.subtract(working); sidebar.unread = unseen; sidebar.needsDisplay = true }
-        sidebar.flash(waiting: changed.waiting, done: changed.done)
-        bar.waitingCount = waiting.count
-        bar.needsDisplay = true
+        unseen.subtract(unseen.filter { statuses[$0] == .running })
+        for c in windows {
+            if unseen != before { c.sidebar.unread = unseen; c.sidebar.needsDisplay = true }
+            c.sidebar.flash(waiting: changed.waiting, done: changed.done)
+        }
         updateStatusItem(Array(sessions.values))
+    }
+
+    private func syncWindow(_ c: MainWindowController, waiting: Int) {
+        let workspace = c.workspace, sidebar = c.sidebar, bar = c.bar
+        sidebar.selected = Set(workspace.selected)
+        sidebar.focused = workspace.preview ?? workspace.focused
+        sidebar.showMessages = Settings.showLastMessage
+        sidebar.showAge = Settings.sidebarShowAge
+        sidebar.sort = Settings.sidebarSort
+        sidebar.renderer = Settings.sidebarStyle.renderer
+        sidebar.messages = registry?.lastMessages ?? [:]
+        sidebar.unread = unseen
+        sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
+        let sessions = workspace.sessions
+        let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
+        let fg = focused.flatMap { workspace.group(forSession: $0.id) }
+        bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
+        bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
+        bar.errorText = registry?.lastError
+        bar.sessionCount = sessions.count
+        bar.openCount = workspace.selected.count
+        bar.layoutMode = workspace.mode
+        bar.gridColumns = Settings.gridColumns
+        bar.split = workspace.focusedSplit
+        bar.zoomed = workspace.zen
+        bar.auto = workspace.auto
+        bar.sync = workspace.sync
+        bar.sort = sidebar.sort
+        bar.attachText = "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)"
+        bar.waitingCount = waiting
+        bar.needsDisplay = true
     }
 
     /// Wartende Sessions in Baumreihenfolge, unabhängig von eingeklappten Gruppen: `waitingFor` kommt nur bei
@@ -474,6 +505,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         file.addItem(withTitle: "Neues Terminal ohne Claude", action: #selector(menuNewShell), keyEquivalent: "t")
         let remote = file.addItem(withTitle: "Remote verbinden …", action: #selector(menuRemote), keyEquivalent: "n")
         remote.keyEquivalentModifierMask = [.command, .shift]
+        file.addItem(.separator())
+        let newWindow = file.addItem(withTitle: "Neues Fenster", action: #selector(menuNewWindow), keyEquivalent: "t")
+        newWindow.keyEquivalentModifierMask = [.command, .shift]
+        let closeWindow = file.addItem(withTitle: "Fenster schließen", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        closeWindow.keyEquivalentModifierMask = [.command, .shift]
         file.addItem(.separator())
         file.addItem(withTitle: "Session schließen", action: #selector(menuCloseSession), keyEquivalent: "w")
         main.addItem(withTitle: "Datei", action: nil, keyEquivalent: "").submenu = file
@@ -591,23 +627,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Darstellung aus den Einstellungen übernehmen, ohne Neustart: Leiste, Baum, Kacheln, Terminals, Palette.
     private func applyAppearance() {
         let themeChanged = Theme.current.id != Settings.colorTheme
-        if themeChanged {
-            Theme.current = ColorTheme.named(Settings.colorTheme)
-            window.appearance = Theme.appearance
-            window.backgroundColor = Theme.bg
-            sidebarScroll.backgroundColor = Theme.panel
-            split.needsDisplay = true
-        }
+        if themeChanged { Theme.current = ColorTheme.named(Settings.colorTheme) }
         if themeChanged || Theme.scale != CGFloat(Settings.uiScale) {
             Theme.scale = CGFloat(Settings.uiScale)
             if palette.isVisible { palette.dismiss() }
             palette = PaletteWindow()
         }
-        let root = window.contentView!.bounds
-        bar.frame = NSRect(x: 0, y: 0, width: root.width, height: Theme.barHeight)
-        split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.width, height: root.height - Theme.barHeight)
-        bar.needsDisplay = true
-        sidebar.needsDisplay = true
+        for c in windows { c.applyAppearance(themeChanged: themeChanged) }
         attach?.applyTerminalSettings()
         reloadViews()
     }
@@ -988,32 +1014,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Fenster schließen (roter Knopf) versteckt nur das Fenster, Kadrell läuft mit allen Sessions im Hintergrund
-/// weiter. Menüleisten-Icon oder Dock-Klick holen es zurück, ohne dass Sessions neu anhängen müssen.
+/// Roter Knopf: ein Zusatzfenster geht wirklich zu, das letzte Fenster wird nur versteckt. Kadrell läuft mit allen
+/// Sessions weiter; Menüleisten-Icon oder Dock-Klick holen es zurück, ohne dass Sessions neu anhängen müssen.
 extension AppDelegate: NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.orderOut(nil)
-        return false
-    }
-}
-
-/// Der Baum ist höchstens halb so breit wie das Fenster: beim Ziehen und wenn das Fenster schmaler wird.
-extension AppDelegate: NSSplitViewDelegate {
-    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        min(proposedMaximumPosition, splitView.bounds.width / 2)
+        guard windows.count > 1, let c = controller(for: sender) else { sender.orderOut(nil); return false }
+        closeWindow(c)
+        return true
     }
 
-    /// Ziehen startet nur im effektiven Rechteck, ohne das hier ist es die 1-px-Linie: so breit wie die Griffzone.
-    func splitView(_ splitView: NSSplitView, effectiveRect proposedEffectiveRect: NSRect, forDrawnRect drawnRect: NSRect, ofDividerAt dividerIndex: Int) -> NSRect {
-        drawnRect.insetBy(dx: -ThinSplitView.grabWidth / 2, dy: 0)
-    }
-
-    func splitViewDidResizeSubviews(_ notification: Notification) {
-        let half = split.bounds.width / 2
-        if !sidebarScroll.isHidden, sidebarScroll.frame.width > half + 1 { split.setPosition(half, ofDividerAt: 0) }
-        // Der Trenner ist gewandert (Ziehen, UI-Größe, Baum ein/aus): Griffzone für Cursor und Mausbewegung nachziehen.
-        split.updateTrackingAreas()
-        window.invalidateCursorRects(for: split)
+    /// Menü, Kürzel, Hook `session-focus` und Leiste folgen dem Fenster, das gerade vorn ist.
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let c = controller(for: notification.object as? NSWindow), c !== current else { return }
+        current = c
+        syncSidebar()
     }
 }
 

@@ -39,7 +39,7 @@ enum Profile {
     nonisolated(unsafe) static let defaults: UserDefaults = {
         guard let suite = suiteName, let d = UserDefaults(suiteName: suite) else { return .standard }
         if d.persistentDomain(forName: suite)?.isEmpty ?? true, var base = UserDefaults.standard.persistentDomain(forName: bundleId) {
-            for k in ["workspace.selected", "session.lastSeenSize", "folders.uses"] { base[k] = nil }
+            for k in base.keys where k.hasPrefix("workspace.selected") || ["session.lastSeenSize", "folders.uses", "windows.open"].contains(k) { base[k] = nil }
             d.setPersistentDomain(base, forName: suite)
         }
         return d
