@@ -153,6 +153,12 @@ enum Settings {
         set { Profile.defaults.set(newValue, forKey: "layout.grid.columns") }
     }
 
+    /// Layout Frei: Teilungsrichtung je Position, „r“ rechts, „d“ unten, „a“ längere Seite. Bleibt beim Zurücksetzen der Trennlinien.
+    static var customSplits: String {
+        get { Profile.defaults.string(forKey: "workspace.custom.splits") ?? "" }
+        set { Profile.defaults.set(newValue, forKey: "workspace.custom.splits") }
+    }
+
     /// Gezogene Verhältnisse einer Layout-Vorlage (`Tiling.layout`), nil = gleich verteilt.
     static func layoutRatios(_ key: String, _ count: Int) -> [Double]? { Profile.defaults.array(forKey: "layout." + key) as? [Double] }
     static func setLayoutRatios(_ key: String, _ value: [Double]?) { Profile.defaults.set(value, forKey: "layout." + key) }

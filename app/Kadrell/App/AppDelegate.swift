@@ -228,6 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         bar.onPickLayout = { [weak self] m in self?.workspace.setMode(m) }
         bar.onGridColumns = { [weak self] c in self?.workspace.setGridColumns(c) }
+        bar.onSplit = { [weak self] c in self?.workspace.setSplit(c) }
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
         bar.onToggleAuto = { [weak self] in Feedback.play(.toggle); self?.workspace.toggleAuto() }
         bar.onToggleSync = { [weak self] in Feedback.play(.toggle); self?.workspace.toggleSync() }
@@ -274,8 +275,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return event
         }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, event.window === self.window,
-                  event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command else { return event }
+            guard let self, event.window === self.window else { return event }
+            // Layout Scrollen: seitliches Wischen (bzw. ⇧ + Mausrad) über der Arbeitsfläche verschiebt die Spalten, nicht das Terminal.
+            if workspace.mode == .scroll, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY),
+               workspace.bounds.contains(workspace.convert(event.locationInWindow, from: nil)) {
+                workspace.scrollBy(-event.scrollingDeltaX * (event.hasPreciseScrollingDeltas ? 1 : 10))
+                return nil
+            }
+            guard event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command else { return event }
             fontScrollAccum += event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 20 : event.scrollingDeltaY
             let steps = Int(fontScrollAccum)
             guard steps != 0 else { return nil }
@@ -391,6 +398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
         bar.gridColumns = Settings.gridColumns
+        bar.split = workspace.focusedSplit
         bar.zoomed = workspace.zen
         bar.auto = workspace.auto
         bar.sync = workspace.sync
@@ -636,6 +644,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .resizeRight: workspace.resizeFocused(.right)
         case .resizeUp: workspace.resizeFocused(.up)
         case .resizeDown: workspace.resizeFocused(.down)
+        case .splitRight: workspace.setSplit("r")
+        case .splitDown: workspace.setSplit("d")
         case .nextSession: workspace.cycleFocus(1)
         case .prevSession: workspace.cycleFocus(-1)
         case .lastSession: workspace.focusLast()
