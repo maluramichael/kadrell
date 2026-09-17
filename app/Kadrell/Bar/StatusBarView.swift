@@ -137,20 +137,20 @@ final class StatusBarView: NSView {
             Theme.line.setFill(); CGRect(x: r.maxX, y: 0, width: 1, height: b.height - 1).fill()
             x = r.maxX + 1
         }
-        let at = NSAttributedString(string: "AUTO", attributes: Theme.attrs(10, auto ? Theme.bg : Theme.muted, bold: true))
+        let at = NSAttributedString(string: "AUTO", attributes: Theme.attrs(10, auto ? Theme.pillText(on: Theme.waiting) : Theme.muted, bold: true))
         let autoRect = CGRect(x: x, y: 0, width: at.size().width + 20, height: b.height - 1)
         if auto { Theme.waiting.setFill(); badge(autoRect, "auto").fill() }
         at.draw(at: CGPoint(x: autoRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: autoRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((autoRect, String(localized: "Auto-Modus"), auto ? String(localized: "an") : String(localized: "aus"), { [weak self] in self?.onToggleAuto?() }))
-        let syt = NSAttributedString(string: "SYNC", attributes: Theme.attrs(10, sync ? Theme.bg : Theme.muted, bold: true))
+        let syt = NSAttributedString(string: "SYNC", attributes: Theme.attrs(10, sync ? Theme.pillText(on: Theme.error) : Theme.muted, bold: true))
         let syncRect = CGRect(x: autoRect.maxX + 1, y: 0, width: syt.size().width + 20, height: b.height - 1)
         if sync { Theme.error.setFill(); badge(syncRect, "sync").fill() }
         syt.draw(at: CGPoint(x: syncRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: syncRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
         hitRects.append((syncRect, "Sync", sync ? String(localized: "an") : String(localized: "aus"), { [weak self] in self?.onToggleSync?() }))
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
-        let st = NSAttributedString(string: sortLabel, attributes: Theme.attrs(10, sort == .off ? Theme.muted : Theme.bg, bold: true))
+        let st = NSAttributedString(string: sortLabel, attributes: Theme.attrs(10, sort == .off ? Theme.muted : Theme.pillText(on: Theme.sub), bold: true))
         let sortRect = CGRect(x: syncRect.maxX + 1, y: 0, width: st.size().width + 20, height: b.height - 1)
         if sort != .off { Theme.sub.setFill(); badge(sortRect, "sort").fill() }
         st.draw(at: CGPoint(x: sortRect.minX + 10, y: midY - 7))
@@ -158,7 +158,7 @@ final class StatusBarView: NSView {
         hitRects.append((sortRect, String(localized: "Sortierung"), sort == .off ? String(localized: "aus") : sortLabel, { [weak self] in self?.onCycleSort?() }))
         var leftEnd = sortRect.maxX + 8
         if zoomed {
-            let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.bg, bold: true))
+            let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
             let z = CGRect(x: leftEnd, y: midY - 9, width: zt.size().width + 12, height: 18)
             Theme.waiting.setFill(); z.fill()
             zt.draw(at: CGPoint(x: z.minX + 6, y: midY - 8))
@@ -182,7 +182,7 @@ final class StatusBarView: NSView {
         let df = DateFormatter(); df.dateFormat = "HH:mm"
         module([NSAttributedString(string: df.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         if waitingCount > 0 {
-            let wt = NSAttributedString(string: String(localized: "\(waitingCount) warten"), attributes: Theme.attrs(11, Theme.bg, bold: true))
+            let wt = NSAttributedString(string: String(localized: "\(waitingCount) warten"), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
             let ww = wt.size().width + 20
             rx -= ww
             Theme.line.setFill(); CGRect(x: rx, y: 0, width: 1, height: b.height - 1).fill()

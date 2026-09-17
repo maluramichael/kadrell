@@ -529,7 +529,7 @@ final class WorkspaceView: NSView {
             }
         }
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
-        pulse = 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
+        pulse = Feedback.reduceMotion ? 1 : 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
         for (key, v) in cells where sessions[key]?.status == .running && !v.isHidden {
             v.pulse = pulse
             if !v.headerHidden { v.setNeedsDisplay(v.dotRect) }
@@ -635,8 +635,8 @@ final class WorkspaceView: NSView {
         CGRect(x: r.minX, y: r.minY, width: on ? 3 : 1, height: r.height).fill()
         let attached = attach?.isAttached(key) ?? false
         let c = attached ? Theme.color(for: s.status) : Theme.detached
-        (s.status == .running && attached ? c.withAlphaComponent(pulse) : c).setFill()
-        NSBezierPath(ovalIn: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8)).fill()
+        let dotColor = s.status == .running && attached ? c.withAlphaComponent(pulse) : c
+        Icons.statusDot(in: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8), status: s.status, attached: attached, color: dotColor)
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let grp = NSAttributedString(string: g?.name ?? "", attributes: Theme.attrs(10.5, color))
         var rx = r.maxX - 10

@@ -49,8 +49,22 @@ enum Feedback {
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 
-    /// Fortschritt einer Animation seit `start`, 0...1, zum Ende hin abbremsend. nil = vorbei.
+    /// „Bewegung reduzieren“ aus den Bedienungshilfen. `observeReduceMotion()` hält ihn aktuell.
+    nonisolated(unsafe) static var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    private static var reduceMotionObserver: Any?
+
+    /// Einmal beim Start aufrufen: hält `reduceMotion` aktuell, wenn die Einstellung sich ändert.
+    static func observeReduceMotion() {
+        reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        reduceMotionObserver = NotificationCenter.default.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { _ in
+            reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        }
+    }
+
+    /// Fortschritt einer Animation seit `start`, 0...1, zum Ende hin abbremsend. nil = vorbei (auch sofort bei
+    /// „Bewegung reduzieren“: der Aufrufer zeigt dann direkt den Endzustand).
     nonisolated static func progress(since start: CFTimeInterval, duration: CFTimeInterval, now: CFTimeInterval = CACurrentMediaTime()) -> CGFloat? {
+        guard !reduceMotion else { return nil }
         let p = (now - start) / duration
         guard p >= 0, p < 1 else { return nil }
         return CGFloat(1 - pow(1 - p, 3))

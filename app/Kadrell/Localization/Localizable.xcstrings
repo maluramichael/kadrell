@@ -103,6 +103,22 @@
     "%@  ⏎": {
       "shouldTranslate": false
     },
+    "%@ fertig": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fertig"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ done"
+          }
+        }
+      }
+    },
     "%@ nicht erreichbar": {
       "localizations": {
         "de": {
@@ -115,6 +131,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ not reachable"
+          }
+        }
+      }
+    },
+    "%@ wartet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wartet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ waiting"
           }
         }
       }
@@ -1086,6 +1118,22 @@
         }
       }
     },
+    "Eigene Farbe": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigene Farbe"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom color"
+          }
+        }
+      }
+    },
     "Einklappen": {
       "localizations": {
         "de": {
@@ -1242,6 +1290,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pick a color from a palette"
+          }
+        }
+      }
+    },
+    "Farbe wählen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Farbe wählen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose color"
           }
         }
       }

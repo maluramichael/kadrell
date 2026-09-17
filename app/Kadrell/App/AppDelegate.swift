@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         Profile.sweepStale()
+        Feedback.observeReduceMotion()
         // Dock-Icon direkt aus dem Bundle: LaunchServices hält für Debug-Builds am selben Pfad gern das alte, leere Icon.
         if let url = Bundle.main.url(forResource: "Kadrell", withExtension: "icns"), let img = NSImage(contentsOf: url) { NSApp.applicationIconImage = img }
         buildMenu()
@@ -430,6 +431,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statuses = sessions.filter { attach?.isAttached($0.key) ?? false }.mapValues(\.status)
         let changed = Feedback.transitions(from: lastStatuses, to: statuses)
         lastStatuses = statuses
+        // VoiceOver bekommt sonst nichts vom Kernnutzen der App mit: welche Session gerade auf einen wartet oder fertig ist.
+        for id in changed.waiting { announce(String(localized: "\(sessions[id]?.title ?? "") wartet")) }
+        for id in changed.done { announce(String(localized: "\(sessions[id]?.title ?? "") fertig")) }
         // Klang und Marke „neu“ nur für das, was man gerade nicht sieht: andere Session oder Fenster im Hintergrund.
         let notLooking = { (id: String) in id != self.workspace.focused || self.window?.isKeyWindow == false }
         if changed.waiting.contains(where: notLooking) { Feedback.play(.waiting) } else if changed.done.contains(where: notLooking) { Feedback.play(.done) }
@@ -443,6 +447,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             c.sidebar.flash(waiting: changed.waiting, done: changed.done)
         }
         updateStatusItem(Array(sessions.values))
+    }
+
+    /// VoiceOver-Ankündigung, unabhängig vom aktuellen Fokus (Muster aus PaletteWindow.move).
+    private func announce(_ text: String) {
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
     }
 
     private func syncWindow(_ c: MainWindowController, waiting: Int) {

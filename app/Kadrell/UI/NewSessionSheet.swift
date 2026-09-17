@@ -140,7 +140,7 @@ struct NewSessionView: View {
         .background(Theme.panelColor)
         .overlay { if dropping { Rectangle().stroke(Theme.runningColor, lineWidth: 2) } }
         .dropDestination(for: URL.self) { urls, _ in model.drop(urls) } isTargeted: { dropping = $0 }
-        .background { Button("", action: model.browse).keyboardShortcut("o", modifiers: .command).opacity(0) }
+        .background { Button("", action: model.browse).keyboardShortcut("o", modifiers: .command).opacity(0).accessibilityHidden(true) }
     }
 
     private var list: some View {
@@ -195,6 +195,20 @@ extension Theme {
     static var runningColor: Color { Color(nsColor: running) }
 }
 
+/// Sichtbarer Tastaturfokus für `.buttonStyle(.plain)`-Elemente (Menüs, Icon-Knöpfe, Dialog-Fuß, Farbfelder):
+/// die verstecken sonst den nativen Fokusring, Tab-Nutzer sehen dann nirgends, wo der Fokus gerade steht.
+private struct KeyboardFocusRing: ViewModifier {
+    @FocusState private var focused: Bool
+    func body(content: Content) -> some View {
+        content.focused($focused)
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.runningColor, lineWidth: focused ? 2 : 0).padding(-2))
+    }
+}
+
+extension View {
+    func kbdFocusRing() -> some View { modifier(KeyboardFocusRing()) }
+}
+
 
 /// AppKit-Textfeld für Pfade: Cursor am Ende, Tab vervollständigt, Pfeile wählen, ⏎ startet.
 struct PathField: NSViewRepresentable {
@@ -209,7 +223,11 @@ struct PathField: NSViewRepresentable {
         let f = NSTextField()
         f.isBordered = false
         f.drawsBackground = false
+        // Kein nativer Fokusring (passt nicht zum Dialog-Stil), stattdessen ein eigener Rahmen bei Tastaturfokus,
+        // siehe Coordinator.controlTextDidBeginEditing/EndEditing: sonst sieht ein Tab-Nutzer den Fokus gar nicht.
         f.focusRingType = .none
+        f.wantsLayer = true
+        f.layer?.cornerRadius = 3
         f.font = Theme.font(13 * Theme.scale)
         f.textColor = Theme.fg
         f.usesSingleLineMode = true      // lange Pfade scrollen horizontal statt umzubrechen
@@ -240,6 +258,12 @@ struct PathField: NSViewRepresentable {
         func controlTextDidChange(_ n: Notification) {
             if let f = n.object as? NSTextField { parent.text = f.stringValue }
         }
+        func controlTextDidBeginEditing(_ n: Notification) {
+            guard let f = n.object as? NSTextField else { return }
+            f.layer?.borderColor = Theme.running.cgColor
+            f.layer?.borderWidth = 1.5
+        }
+        func controlTextDidEndEditing(_ n: Notification) { (n.object as? NSTextField)?.layer?.borderWidth = 0 }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
             switch sel {
             case #selector(NSResponder.insertTab(_:)): parent.onTab(); return true

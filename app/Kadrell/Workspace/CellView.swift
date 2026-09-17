@@ -96,15 +96,14 @@ final class CellView: NSView {
         head.fill()
         Theme.line.setFill()
         CGRect(x: 0, y: head.maxY - 1, width: b.width, height: 1).fill()
-        dot.setFill()
-        NSBezierPath(ovalIn: dotRectLogical).fill()
+        Icons.statusDot(in: dotRectLogical, status: session.status, attached: attached, color: dot)
         let meta = NSAttributedString(string: session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
         var iconW: CGFloat = hovered ? 44 : 0
         if zoomed {
             let z = CGRect(x: b.width - iconW - 9 - metaW - 8 - 16, y: 5, width: 16, height: 16)
             Theme.waiting.setFill(); z.fill()
-            let zt = NSAttributedString(string: "Z", attributes: Theme.attrs(11, Theme.bg, bold: true))
+            let zt = NSAttributedString(string: "Z", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
             zt.draw(at: CGPoint(x: z.midX - zt.size().width / 2, y: z.minY + 1))
             iconW += 24
         }

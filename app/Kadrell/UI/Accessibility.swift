@@ -7,6 +7,9 @@ final class A11yElement: NSAccessibilityElement {
     var press: (@MainActor () -> Void)?
     private weak var view: NSView?
     private var rect = CGRect.zero
+    /// Letzter `value`: ändert er sich (Session wechselt von „wartet“ zu „fertig“ ...), meldet das VoiceOver auch,
+    /// ohne dass die Zeile neu angesteuert wird.
+    private var lastValue: String?
 
     init(key: String) { self.key = key; super.init() }
 
@@ -18,6 +21,7 @@ final class A11yElement: NSAccessibilityElement {
         setAccessibilityRole(role)
         setAccessibilityLabel(label)
         setAccessibilityValue(value)
+        if value != lastValue { lastValue = value; NSAccessibility.post(element: self, notification: .valueChanged) }
         view = parent
         rect = frame
         setAccessibilityCustomActions(actions.isEmpty ? nil : actions)
