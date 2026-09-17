@@ -101,7 +101,7 @@ final class SidebarView: NSView {
                 // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Punkte laufender Sessions.
                 if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true; continue }
                 for (i, row) in self.rows.enumerated() {
-                    guard case .session(let s, _) = row, s.status == .running else { continue }
+                    guard case .session(let s, _) = row, s.status == .running || s.hasRunningShell else { continue }
                     self.setNeedsDisplay(self.renderer.dotRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
                 }
             }
@@ -305,18 +305,16 @@ final class SidebarView: NSView {
 
     private func dotColor(_ s: Session) -> NSColor {
         let attached = isAttached(s.id)
-        let c = Theme.statusColor(s.status, attached: attached)
         if let f = flashes[s.id], let p = Feedback.progress(since: f.start, duration: Self.flashDuration) {
             let amount = f.waiting ? abs(sin(p * 2 * .pi)) : 1 - p
-            return NSColor.white.mixed(0.75 * amount, into: c)
+            return NSColor.white.mixed(0.75 * amount, into: Theme.statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell))
         }
-        guard s.status == .running, attached else { return c }
-        return c.withAlphaComponent(Feedback.pulse())
+        return Theme.dotColor(s, attached: attached, pulse: Feedback.pulse())
     }
 
     private func drawGroup(_ g: Group, in r: CGRect, first: Bool, hover: Bool) {
         let members = g.sessionIds.compactMap { sessions[$0] }
-        let dots = members.map { Theme.statusColor($0.status, attached: isAttached($0.id)) }
+        let dots = members.map { Theme.statusColor($0.status, attached: isAttached($0.id), shellRunning: $0.hasRunningShell) }
         let waiting = members.filter { $0.status == .waiting && isAttached($0.id) }.count
         renderer.drawGroup(SidebarGroupItem(group: g, color: Theme.group(g.color), dots: dots, open: !collapsed.contains(g.id),
                                             selected: g.sessionIds.contains { selected.contains($0) }, hover: hover, first: first,
@@ -372,7 +370,7 @@ final class SidebarView: NSView {
                 e.setAccessibilityExpanded(!collapsed.contains(g.id))
                 return e
             case .session(let s, _):
-                let status = s.status.spoken(attached: isAttached(s.id))
+                let status = s.status.spoken(attached: isAttached(s.id), shellRunning: s.hasRunningShell)
                 let extra = [unread.contains(s.id) ? String(localized: "neu", bundle: Bundle.app) : nil, selected.contains(s.id) ? String(localized: "ausgewählt", bundle: Bundle.app) : nil].compactMap { $0 }
                 let value = ([status] + extra).joined(separator: ", ")
                 e.update(parent: self, role: .row, label: String(localized: "Session \(s.title)", bundle: Bundle.app), value: value, frame: frame,

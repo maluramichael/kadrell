@@ -71,7 +71,7 @@ final class CellView: NSView {
     var xRect: CGRect { xRectLogical.scaled(Theme.scale) }
     var penRect: CGRect { penRectLogical.scaled(Theme.scale) }
     var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
-    var statusColor: NSColor { Theme.statusColor(state.session.status, attached: state.attached) }
+    var statusColor: NSColor { Theme.statusColor(state.session.status, attached: state.attached, shellRunning: state.session.hasRunningShell) }
     /// Hintergrund der Kachel, leicht in Gruppenfarbe getönt, damit Gruppen auf einen Blick auseinanderfallen.
     /// Mit Deckkraft unter 100 % scheint das Hintergrundbild der Arbeitsfläche durch, auch durchs Terminal.
     var bodyColor: NSColor { state.groupColor.mixed(0.05, into: Theme.bg).withAlphaComponent(CGFloat(Settings.tileOpacity)) }
@@ -100,8 +100,7 @@ final class CellView: NSView {
 
     private func drawHeader(_ head: CGRect) {
         let b = head
-        let c = statusColor
-        let dot = state.session.status == .running && state.attached ? c.withAlphaComponent(pulse) : c
+        let dot = Theme.dotColor(state.session, attached: state.attached, pulse: pulse)
         let headBase = state.groupColor.mixed(state.keyboardFocus || state.focused ? 0.22 : 0.12, into: Theme.surface)
         headBase.setFill()
         head.fill()
@@ -152,7 +151,7 @@ final class CellView: NSView {
         let terminal = super.accessibilityChildren() ?? []
         guard !state.headerHidden, let ws = superview as? WorkspaceView else { return terminal }
         let key = state.session.id
-        let label = [state.session.title, state.session.status.spoken(attached: state.attached, ended: state.ended),
+        let label = [state.session.title, state.session.status.spoken(attached: state.attached, ended: state.ended, shellRunning: state.session.hasRunningShell),
                      state.groupName.isEmpty ? nil : state.groupName, state.session.branch]
         a11y = [
             a11y.reuse("header").update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: headerRect,

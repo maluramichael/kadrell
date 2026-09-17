@@ -71,8 +71,23 @@ enum Theme {
         }
     }
 
-    /// Statuspunkt: ohne laufenden Prozess grau, egal was der letzte Status war.
-    static func statusColor(_ status: SessionStatus, attached: Bool) -> NSColor { attached ? color(for: status) : detached }
+    /// Noch laufendes Kommando aus dem Bash-Tool: das Blau des Schemas. In Schemata, deren Arbeitsstatus selbst
+    /// blau ist, sieht beides gleich aus, was passt: in beiden Fällen läuft in der Session noch etwas.
+    static var shell: NSColor { current.ansi[4] }
+
+    /// Statuspunkt: ohne laufenden Prozess grau, egal was der letzte Status war. Wartet Claude schon wieder, läuft
+    /// aber noch ein Kommando aus dem Bash-Tool, gilt dessen Farbe (`shell`).
+    static func statusColor(_ status: SessionStatus, attached: Bool, shellRunning: Bool = false) -> NSColor {
+        guard attached else { return detached }
+        return shellRunning && status != .running ? shell : color(for: status)
+    }
+
+    /// Farbe des Statuspunkts inklusive Puls: pulsiert, solange Claude arbeitet oder noch ein Kommando läuft.
+    static func dotColor(_ s: Session, attached: Bool, pulse: CGFloat) -> NSColor {
+        let c = statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell)
+        guard attached, s.status == .running || s.hasRunningShell else { return c }
+        return c.withAlphaComponent(pulse)
+    }
 
     static func font(_ size: CGFloat, bold: Bool = false) -> NSFont {
         NSFont(name: bold ? "JetBrainsMonoNF-Bold" : "JetBrainsMonoNF-Regular", size: size)

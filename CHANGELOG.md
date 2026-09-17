@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.49.0 (2026-09-17)
+
+- Feature: Läuft in einer Session noch ein Hintergrund-Kommando, während Claude schon wieder wartet, pulsiert ihr Punkt blau statt still zu stehen. Gilt im Baum, in der Kachelleiste und in der Stapel-Ansicht.
+
 ## 1.48.1 (2026-09-17)
 
 - Fix: In den Eingabefeldern steht der Text jetzt senkrecht mittig statt am oberen Rand.

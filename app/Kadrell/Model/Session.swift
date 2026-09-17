@@ -32,6 +32,8 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var activeWorktree: String? = nil
     /// Erste Nachricht aus dem Transcript, Ersatztitel solange Claude Code keinen vergeben hat (Haiku scheitert still).
     var firstPrompt: String? = nil
+    /// Noch läuft ein Kommando aus dem Bash-Tool, obwohl Claude selbst schon wieder wartet (`BackgroundShells`).
+    var hasRunningShell = false
     /// Remote-Session (⌘⇧N): ssh-Host aus `~/.ssh/config`, die Kachel hängt sich an dessen tmux.
     var host: String? = nil
     /// tmux-Session auf dem Host; nil hängt sich an die zuletzt benutzte (`tmux attach`).

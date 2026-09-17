@@ -75,9 +75,11 @@ extension SessionStatus {
         switch self { case .running: String(localized: "arbeitet", bundle: Bundle.app); case .waiting: String(localized: "wartet", bundle: Bundle.app); case .idle: String(localized: "fertig", bundle: Bundle.app); case .error: String(localized: "Fehler", bundle: Bundle.app) }
     }
 
-    /// Vorgelesener Status einer Session: ohne laufenden Prozess „beendet“ (`ended`) oder „nicht gestartet“.
-    func spoken(attached: Bool, ended: Bool = false) -> String {
-        attached ? spoken : ended ? String(localized: "beendet", bundle: Bundle.app) : String(localized: "nicht gestartet", bundle: Bundle.app)
+    /// Vorgelesener Status einer Session: ohne laufenden Prozess „beendet“ (`ended`) oder „nicht gestartet“,
+    /// bei noch laufendem Kommando aus dem Bash-Tool dieses statt des Leerlaufs.
+    func spoken(attached: Bool, ended: Bool = false, shellRunning: Bool = false) -> String {
+        guard attached else { return ended ? String(localized: "beendet", bundle: Bundle.app) : String(localized: "nicht gestartet", bundle: Bundle.app) }
+        return shellRunning && self != .running ? String(localized: "Kommando läuft noch", bundle: Bundle.app) : spoken
     }
 }
 
