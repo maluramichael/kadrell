@@ -3478,6 +3478,22 @@
         }
       }
     },
+    "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions may control other sessions (kadrell send, capture, kill)"
+          }
+        }
+      }
+    },
     "Session schließen": {
       "localizations": {
         "de": {

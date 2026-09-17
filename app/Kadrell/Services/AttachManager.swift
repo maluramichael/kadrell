@@ -106,7 +106,7 @@ final class AttachManager {
             if self.closing.removeValue(forKey: key) == nil {
                 self.ended.insert(key)
                 self.snapshots[key] = t.terminalStateSnapshot().visibleRows.map(\.text).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .public)")
+                AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .private)")
             }
             self.detach(key, signal: false)
             if self.ended.contains(key) { self.onEnded?(key) }
@@ -119,10 +119,11 @@ final class AttachManager {
         if let host = session.host {
             // Wie das tmux-Popup (M-h): an die laufende Remote-tmux hängen, ohne tmux dort eine Login-Shell.
             // Endet ssh (Detach, Fehler), bleibt die Kachel mit den letzten Zeilen stehen, Klick verbindet neu.
-            let remote = session.tmuxSession.map { "tmux new -As '\($0)'" } ?? "tmux attach || tmux new -As main"
+            let remote = session.tmuxSession.map { "tmux new -As " + SSHConfig.shellQuote($0) } ?? "tmux attach || tmux new -As main"
             let cmd = "command -v tmux >/dev/null 2>&1 && { \(remote); } || { echo 'kein tmux auf diesem Host, normale Shell'; exec \"$SHELL\" -l; }"
-            AttachManager.log.info("ssh \(host, privacy: .public): \(remote, privacy: .public)")
-            t.startProcess(executable: "/usr/bin/ssh", args: ["-t", "-o", "ConnectTimeout=5", host, cmd],
+            AttachManager.log.info("ssh \(host, privacy: .private): \(remote, privacy: .private)")
+            // `--`: ein Host wie `-oProxyCommand=…` bleibt Hostname und wird keine Option.
+            t.startProcess(executable: "/usr/bin/ssh", args: ["-t", "-o", "ConnectTimeout=5", "--", host, cmd],
                            environment: env.map { "\($0.key)=\($0.value)" }, execName: "ssh", currentDirectory: session.cwd)
             terminals[key] = t
             onChange?()
@@ -140,8 +141,8 @@ final class AttachManager {
         let hasTranscript = Transcript.path(sessionId: session.sessionId) != nil
         var args = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
             + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
-        AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .public) in \(session.cwd, privacy: .public)")
-        if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { args.append(prompt) }
+        AttachManager.log.info("claude \(args.joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
+        if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { args += ClaudeCLI.promptArgs(prompt) }
         t.startProcess(executable: cli.binary, args: args, environment: env.map { "\($0.key)=\($0.value)" },
                        execName: "claude", currentDirectory: session.cwd)
         terminals[key] = t

@@ -8,6 +8,7 @@ struct ControlRequest: Codable, Sendable {
     /// Arbeitsordner des Aufrufers, für relative Pfade.
     var cwd: String
     /// `KADRELL_SESSION_KEY` des Aufrufers, wenn er in einer Kadrell-Kachel läuft (wie `$TMUX_PANE`).
+    /// Frei setzbar: die App ersetzt ihn durch die Kachel, aus deren Prozessbaum der Aufruf kommt (`ControlCaller`).
     var caller: String?
 }
 
@@ -47,7 +48,8 @@ enum ControlCommand: Equatable {
     Kadrell fernsteuern (die App muss laufen, sonst wird sie gestartet).
 
     Ziele (-t): Session-Key oder dessen Anfang, sessionId, Titel; Gruppen-Id oder deren Anfang, Gruppenname.
-    Ohne -t gilt die Session, in der das Kommando läuft ($KADRELL_SESSION_KEY), sonst die fokussierte.
+    Ohne -t gilt die Session, in der das Kommando läuft, sonst die fokussierte.
+    Aus einer Session heraus nur Sessions der eigenen Gruppe, außer „Sessions dürfen andere Sessions steuern“ ist an.
 
       kadrell ls [--json]                                  Gruppen und Sessions auflisten
       kadrell new-group <ordner> [--name N] [--color #rrggbb]
@@ -99,6 +101,7 @@ enum ControlCommand: Equatable {
             let a = try Args(rest, values: ["-t", "-c", "--name", "--resume"], bools: ["-d"])
             let prompt = a.positional.joined(separator: " ")
             if a["--resume"] != nil, !prompt.isEmpty { throw ControlError("--resume und prompt schließen sich aus") }
+            if let r = a["--resume"], UUID(uuidString: r) == nil { throw ControlError("--resume braucht eine sessionId (UUID)") }
             return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt, resume: a["--resume"])
         case "select":
             let a = try Args(rest, values: ["-t"], bools: ["-a"])
@@ -190,6 +193,42 @@ enum ControlCommand: Equatable {
         func noPositional() throws {
             if let p = positional.first { throw ControlError("unerwartetes Argument „\(p)“") }
         }
+    }
+}
+
+/// Wer ruft an. `KADRELL_SESSION_KEY` kann jeder Prozess setzen, die pid am Socket (`LOCAL_PEERPID`) nicht:
+/// gehört sie zur Terminal-Session (forkpty macht die Shell zum Session-Leader) oder hängt sie im Prozessbaum
+/// unter dem Prozess einer Kachel, ist es diese Kachel.
+/// ponytail: ein Prozess, der `setsid` ruft und sich an launchd hängt, gilt als außerhalb; gleicher Benutzer ist keine harte Grenze.
+enum ControlCaller {
+    static func session(pid: pid_t, terminals: [Int: String], sid: (pid_t) -> pid_t = { getsid($0) }, parent: (pid_t) -> pid_t? = ControlCaller.parent) -> String? {
+        if let key = terminals[Int(sid(pid))] { return key }
+        var p = pid
+        for _ in 0..<64 where p > 1 {
+            if let key = terminals[Int(p)] { return key }
+            guard let next = parent(p) else { return nil }
+            p = next
+        }
+        return nil
+    }
+
+    static func parent(_ pid: pid_t) -> pid_t? {
+        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        return info.kp_eproc.e_ppid
+    }
+
+    /// Ohne Freigabe darf eine Kachel nur Sessions ihrer eigenen Gruppe (und sich selbst) steuern und lesen.
+    /// Aufrufe von außerhalb (`caller` nil) sind nicht eingeschränkt.
+    static func allowed(session: String, groups: [Group], caller: String?, othersAllowed: Bool) -> Bool {
+        guard let caller, !othersAllowed, session != caller else { return true }
+        return groups.contains { $0.sessionIds.contains(caller) && $0.sessionIds.contains(session) }
+    }
+
+    static func allowed(group: Group, caller: String?, othersAllowed: Bool) -> Bool {
+        guard let caller, !othersAllowed else { return true }
+        return group.sessionIds.contains(caller)
     }
 }
 

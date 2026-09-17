@@ -10,6 +10,10 @@ enum Hooks {
     static func fire(_ event: Event, _ s: Session, environment: [String: String]) {
         let path = dir + "/" + event.rawValue
         guard FileManager.default.isExecutableFile(atPath: path) else { return }
+        guard trusted(path), trusted(dir) else {
+            ClaudeCLI.log.error("Hook \(path, privacy: .public) ignoriert: gehört nicht dir oder ist für andere beschreibbar")
+            return
+        }
         // Bei aktivem Worktree (siehe `Session.activeWorktree`) zeigt der Hook dorthin statt auf den Repo-Root.
         let cwd = s.activeWorktree ?? s.cwd
         var env = environment
@@ -28,5 +32,11 @@ enum Hooks {
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
         do { try p.run() } catch { ClaudeCLI.log.error("Hook \(path, privacy: .public): \(String(describing: error), privacy: .public)") }
+    }
+
+    /// Wie sshd bei `authorized_keys`: nur Dateien des eigenen Benutzers, die weder Gruppe noch andere schreiben dürfen.
+    static func trusted(_ path: String) -> Bool {
+        var st = stat()
+        return stat(path, &st) == 0 && st.st_uid == getuid() && st.st_mode & (S_IWGRP | S_IWOTH) == 0
     }
 }

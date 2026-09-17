@@ -77,7 +77,7 @@ final class ClaudeCLI: Sendable {
 
     @discardableResult
     func run(_ args: [String], cwd: String? = nil) async throws -> String {
-        if args.first != "agents" { ClaudeCLI.log.info("claude \(args.joined(separator: " "), privacy: .public)") }
+        if args.first != "agents" { ClaudeCLI.log.info("claude \(args.joined(separator: " "), privacy: .private)") }
         let r = try await ClaudeCLI.runRaw(binary, args, environment: environment, cwd: cwd)
         guard r.status == 0 else { throw CLIError(command: "claude " + args.joined(separator: " "), status: r.status, output: r.output) }
         return r.output
@@ -97,6 +97,10 @@ final class ClaudeCLI: Sendable {
     static func sessionArgs(sessionId: String, hasTranscript: Bool) -> [String] {
         hasTranscript ? ["--resume", sessionId] : ["--session-id", sessionId]
     }
+
+    /// Erste Nachricht hinter `--`: sonst liest claude einen Prompt wie `--dangerously-skip-permissions` als Option
+    /// (geprüft mit claude 2.1.274, `claude --session-id x -- --version` meldet die ungültige Id statt der Version).
+    static func promptArgs(_ prompt: String) -> [String] { ["--", prompt] }
 
     /// Start-Flags aus den Einstellungen. Leerer String = Claude-Default, Flag entfällt.
     static func launchArgs(allowBypass: Bool, mode: String, model: String, effort: String) -> [String] {

@@ -10,7 +10,7 @@ und aktuelle sessionId pollt die App über `claude agents --json --all`, zugeord
 Laufende `claude --bg`-Sessions bietet sie beim Start zur Übernahme an (`claude stop`, dann `--resume`).
 
 ```bash
-/opt/homebrew/bin/xcodegen generate
+/opt/homebrew/bin/xcodegen generate   # kopiert app/Package.resolved (gepinnte Paketversionen) ins Projekt
 xcodebuild -project Kadrell.xcodeproj -scheme Kadrell -configuration Debug -derivedDataPath build \
   -skipPackagePluginValidation -skipMacroValidation build
 open build/Build/Products/Debug/Kadrell.app
@@ -53,6 +53,7 @@ Hooks (wie tmux `set-hook`): ausführbare Skripte unter `~/.config/kadrell/hooks
 `session-remove` (Session entfernt). Aufruf im Session-Ordner ohne Warten mit `$1` Ordner, `$2` sessionId von
 Claude Code, `$3` Titel; Umgebung wie Claude (Login-Shell) plus `KADRELL_EVENT`, `KADRELL_CWD`,
 `KADRELL_SESSION_ID`, `KADRELL_SESSION_KEY`, `KADRELL_TITLE`, `KADRELL_BRANCH`. Fehlt das Skript, passiert nichts.
+Skripte (und der Ordner), die nicht dem eigenen Benutzer gehören oder für Gruppe/andere beschreibbar sind, laufen nicht.
 
 Fernsteuerung (wie das `tmux`-Kommando): Menü Kadrell › „Kommandozeilen-Tool installieren …“ legt
 `~/.local/bin/kadrell` als Symlink auf das App-Binary an. `kadrell <befehl>` spricht über den Unix-Socket
@@ -62,6 +63,11 @@ sie nicht läuft. Befehle: `ls [--json]`, `new-group`, `new [-t gruppe] [-c ordn
 `kadrell help`. Ziele per `-t` (Key-Anfang, Titel, Gruppenname); ohne `-t` gilt die Session, in der das Kommando
 läuft: jede Kachel hat `KADRELL_SESSION_KEY`, `KADRELL_SOCKET` und `KADRELL` (Pfad zum Binary) in der Umgebung.
 Per CLI angelegte Gruppen sind Favoriten, sonst räumt der Abgleich sie leer wieder weg. Rückfragen entfallen.
+Welche Kachel aufruft, bestimmt die App selbst über die pid am Socket (`LOCAL_PEERPID`) und den Prozessbaum bzw. die
+Terminal-Session der Kacheln, nicht über `KADRELL_SESSION_KEY`. Einstellung „Sessions dürfen andere Sessions steuern“
+(Default an): aus, dürfen Aufrufe aus einer Kachel nur Sessions der eigenen Gruppe und diese Gruppe selbst ansprechen (`send`,
+`capture`, `stop`, `kill` …); `ls`, `select`, `layout` und `new` bleiben frei, Aufrufe von außerhalb sind nie eingeschränkt.
+Das ist Schadensbegrenzung gegen Prompt Injection, keine harte Grenze: alles läuft als derselbe Benutzer.
 
 tmux-Sessions importieren: `tools/tmux-dump.py dump -o dump.json` sammelt alle laufenden Claude-Sessions aus
 tmux-Panes (Baum Session/Window/Pane) als JSON, `tools/tmux-dump.py import dump.json` startet sie per

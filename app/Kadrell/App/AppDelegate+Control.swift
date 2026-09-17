@@ -4,8 +4,8 @@ import AppKit
 /// per Maus und Tastatur, nur ohne Rückfragen.
 extension AppDelegate {
     func startControlServer() {
-        let server = ControlServer { [weak self] req in
-            self?.handleControl(req) ?? .fail("Kadrell beendet sich")
+        let server = ControlServer { [weak self] req, pid in
+            self?.handleControl(req, peer: pid) ?? .fail("Kadrell beendet sich")
         }
         do {
             try server.start()
@@ -15,8 +15,10 @@ extension AppDelegate {
         }
     }
 
-    func handleControl(_ req: ControlRequest) -> ControlResponse {
+    func handleControl(_ req: ControlRequest, peer: pid_t) -> ControlResponse {
         guard registry != nil, attach != nil else { return .fail("Kadrell startet noch") }
+        var req = req
+        req.caller = ControlCaller.session(pid: peer, terminals: attach.pids)
         do {
             return try runControl(ControlCommand.parse(req.argv), req)
         } catch let e as ControlError {
@@ -59,12 +61,21 @@ extension AppDelegate {
         return .ok()
     }
 
+    /// Ziel einer Session-Aktion, aus einer Kachel heraus nur im erlaubten Bereich (`ControlCaller.allowed`).
     private func session(_ t: String?, _ req: ControlRequest) throws -> Session {
-        try ControlTarget.session(t, sessions: registry.sessions, caller: req.caller, focused: workspace.focused)
+        let s = try ControlTarget.session(t, sessions: registry.sessions, caller: req.caller, focused: workspace.focused)
+        guard ControlCaller.allowed(session: s.id, groups: store.groups, caller: req.caller, othersAllowed: Settings.controlOtherSessions) else {
+            throw ControlError("„\(s.title)“ gehört nicht zur Gruppe dieser Session (Einstellung „Sessions dürfen andere Sessions steuern“)")
+        }
+        return s
     }
 
-    private func group(_ t: String?, _ req: ControlRequest) throws -> Group {
-        try ControlTarget.group(t, groups: store.groups, sessions: registry.sessions, caller: req.caller, focused: workspace.focused)
+    private func group(_ t: String?, _ req: ControlRequest, restricted: Bool = true) throws -> Group {
+        let g = try ControlTarget.group(t, groups: store.groups, sessions: registry.sessions, caller: req.caller, focused: workspace.focused)
+        guard !restricted || ControlCaller.allowed(group: g, caller: req.caller, othersAllowed: Settings.controlOtherSessions) else {
+            throw ControlError("Gruppe „\(g.name)“ ist nicht die dieser Session (Einstellung „Sessions dürfen andere Sessions steuern“)")
+        }
+        return g
     }
 
     private func existingDir(_ p: String, _ req: ControlRequest) throws -> String {
@@ -87,7 +98,7 @@ extension AppDelegate {
     /// Ohne -t und -c landet die Session bei der aufrufenden: gleiche Gruppe, gleicher Ordner (wie tmux new-window).
     private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String?, _ req: ControlRequest) throws -> String {
         if let resume { try checkResumable(resume) }
-        var g = try target.map { try group($0, req) }
+        var g = try target.map { try group($0, req, restricted: false) }
         let caller = req.caller.flatMap { c in registry.sessions.first { $0.id == c } }
         if target == nil, dir == nil, let caller { g = store.group(forSession: caller.id) }
         let cwd = try dir.map { try existingDir($0, req) } ?? (target == nil ? caller?.cwd : nil) ?? g?.cwd ?? existingDir(req.cwd, req)

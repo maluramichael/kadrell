@@ -376,7 +376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let owned = Set(registry.sessions.map(\.sessionId))
         let agents: [Agent]
         do { agents = try await cli.agents() } catch {
-            AppDelegate.log.error("agents: \(String(describing: error), privacy: .public)")
+            AppDelegate.log.error("agents: \(String(describing: error), privacy: .private)")
             registry.fail("\(cli.binary): \(CLIError.firstLine(of: error))")
             return
         }
@@ -859,7 +859,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func report(_ error: Error) {
-        AppDelegate.log.error("\(String(describing: error), privacy: .public)")
+        AppDelegate.log.error("\(String(describing: error), privacy: .private)")
         confirm(String(localized: "Claude CLI meldet einen Fehler"), String(describing: error), button: String(localized: "OK"), destructive: false) {}
     }
 

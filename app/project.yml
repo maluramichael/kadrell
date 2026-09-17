@@ -6,6 +6,8 @@ options:
     macOS: "15.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
+  # Gepinnte Paketversionen (auch transitive) liegen versioniert neben dieser Datei, das xcodeproj ist gitignoriert.
+  postGenCommand: mkdir -p Kadrell.xcodeproj/project.xcworkspace/xcshareddata/swiftpm && cp Package.resolved Kadrell.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -14,14 +16,14 @@ settings:
     CODE_SIGN_STYLE: Manual
     DEVELOPMENT_TEAM: 9XCGGAFET4
     ENABLE_APP_SANDBOX: NO
-    ENABLE_HARDENED_RUNTIME: NO
+    ENABLE_HARDENED_RUNTIME: YES
     SWIFT_STRICT_CONCURRENCY: complete
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
     SWIFT_EMIT_LOC_STRINGS: YES
 packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
-    revision: 233c6ba
+    revision: 233c6ba11aa9b2b9ffbd6b90467b079402f3c264
 targets:
   Kadrell:
     type: application
@@ -48,6 +50,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.malura.kadrell
+        # Hardened Runtime auch im Debug-Build: ohne sie lädt das Binary fremde dylibs mit den TCC-Rechten der App.
+        CODE_SIGN_ENTITLEMENTS: Kadrell/Kadrell.entitlements
         PRODUCT_NAME: Kadrell
   KadrellTests:
     type: bundle.unit-test
