@@ -347,3 +347,52 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(noText["s1"]?.toolCandidates, ["pwd"])
     }
 }
+
+@MainActor
+final class UsagePlanTests: XCTestCase {
+    private func usage(resetsIn hours: Double) -> Usage {
+        var u = Usage.empty
+        u.weeklyResets = Date(timeIntervalSince1970: 1_000_000 + hours * 3600)
+        return u
+    }
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+
+    /// Der Plan-Stand kommt stundengenau aus dem Reset-Zeitpunkt, nicht aus ganzen Tagen.
+    func testPlanCountsHoursNotDays() {
+        XCTAssertEqual(usage(resetsIn: 168).weeklyPlan(now: now), 0)
+        XCTAssertEqual(usage(resetsIn: 84).weeklyPlan(now: now), 50)
+        XCTAssertEqual(usage(resetsIn: 42).weeklyPlan(now: now), 75)
+        XCTAssertEqual(usage(resetsIn: 1).weeklyPlan(now: now), 99)
+        XCTAssertNotEqual(usage(resetsIn: 83).weeklyPlan(now: now), usage(resetsIn: 84).weeklyPlan(now: now))
+    }
+
+    /// Ohne Reset-Zeitpunkt gibt es keinen Plan; ein überfälliger oder zu weiter Reset bleibt in 0…100.
+    func testPlanIsNilWithoutResetAndStaysInRange() {
+        XCTAssertNil(Usage.empty.weeklyPlan(now: now))
+        XCTAssertEqual(usage(resetsIn: -5).weeklyPlan(now: now), 100)
+        XCTAssertEqual(usage(resetsIn: 500).weeklyPlan(now: now), 0)
+    }
+
+    /// Der Tooltip mit Plan-Stand ist in beiden Sprachen übersetzt (fehlte der Eintrag, käme der deutsche Schlüssel zurück).
+    func testPlanTooltipIsTranslated() {
+        defer { Settings.language = .system }
+        let label = "7d"
+        Settings.language = .en
+        XCTAssertEqual(String(localized: "\(label): \(32) % verbraucht, \(25) % nach Plan", bundle: Bundle.app), "7d: 32% used, 25% on plan")
+        XCTAssertEqual(String(localized: "\(label): \(32) % verbraucht", bundle: Bundle.app), "7d: 32% used")
+        Settings.language = .de
+        XCTAssertEqual(String(localized: "\(label): \(32) % verbraucht, \(25) % nach Plan", bundle: Bundle.app), "7d: 32 % verbraucht, 25 % nach Plan")
+    }
+
+    /// Ampel am Plan: drüber rot, knapp darunter gelb, mit Vorsprung grün. Ohne Plan zählt der absolute Stand.
+    func testColorFollowsThePlan() {
+        XCTAssertEqual(StatusBarView.usageColor(32, plan: 25), Theme.error)
+        XCTAssertEqual(StatusBarView.usageColor(25, plan: 25), Theme.waiting)
+        XCTAssertEqual(StatusBarView.usageColor(21, plan: 25), Theme.waiting)
+        XCTAssertEqual(StatusBarView.usageColor(19, plan: 25), Theme.idle)
+        XCTAssertEqual(StatusBarView.usageColor(95, plan: 96), Theme.waiting)
+        XCTAssertEqual(StatusBarView.usageColor(95, plan: nil), Theme.error)
+        XCTAssertEqual(StatusBarView.usageColor(75, plan: nil), Theme.waiting)
+        XCTAssertEqual(StatusBarView.usageColor(10, plan: nil), Theme.idle)
+    }
+}

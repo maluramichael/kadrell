@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.50.0 (2026-09-17)
+
+- Feature: Vor dem 7-Tage-Wert in der Leiste steht jetzt der Plan-Stand: so viel dürfte zu dieser Stunde der Woche verbraucht sein. Der eigene Wert ist grün, solange er darunter liegt, gelb kurz davor, rot sobald er darüber ist.
+- Fix: Die Kurzinfos der Nutzungsanzeige blieben auf Englisch deutsch.
+
 ## 1.49.0 (2026-09-17)
 
 - Feature: Läuft in einer Session noch ein Hintergrund-Kommando, während Claude schon wieder wartet, pulsiert ihr Punkt blau statt still zu stehen. Gilt im Baum, in der Kachelleiste und in der Stapel-Ansicht.

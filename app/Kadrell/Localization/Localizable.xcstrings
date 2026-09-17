@@ -4,6 +4,22 @@
     "": {
       "shouldTranslate": false
     },
+    "  %lld warten · %lld neu": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "  %lld warten · %lld neu"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "  %lld waiting · %lld new"
+          }
+        }
+      }
+    },
     "  ARBEITET": {
       "localizations": {
         "de": {
@@ -48,6 +64,22 @@
           "stringUnit": {
             "state": "translated",
             "value": " (working right now)"
+          }
+        }
+      }
+    },
+    " · %lld Sessions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · %lld Sessions"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · %lld sessions"
           }
         }
       }
@@ -135,6 +167,22 @@
         }
       }
     },
+    "%@ verfügbar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ verfügbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ available"
+          }
+        }
+      }
+    },
     "%@ wartet": {
       "localizations": {
         "de": {
@@ -167,18 +215,50 @@
         }
       }
     },
-    "%@: %lld % verbraucht": {
+    "%@: %lld % verbraucht, %lld % nach Plan": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@: %lld % verbraucht"
+            "value": "%@: %lld % verbraucht, %lld % nach Plan"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@: %lld% used"
+            "value": "%1$@: %2$lld% used, %3$lld% on plan"
+          }
+        }
+      }
+    },
+    "%@: %lld %% verbraucht": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld %% verbraucht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld%% used"
+          }
+        }
+      }
+    },
+    "%@: %lld %% verbraucht, %lld %% nach Plan": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld %% verbraucht, %3$lld %% nach Plan"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld%% used, %3$lld%% on plan"
           }
         }
       }
@@ -394,6 +474,22 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%lld trennen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld trennen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "detach %lld"
           }
         }
       }
@@ -814,6 +910,22 @@
         }
       }
     },
+    "Baum nach Projekt gruppieren": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baum nach Projekt gruppieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group tree by project"
+          }
+        }
+      }
+    },
     "Baum sortieren: aus → A–Z → Status": {
       "localizations": {
         "de": {
@@ -1150,6 +1262,22 @@
         }
       }
     },
+    "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file dialog only opens again after restarting Kadrell. You can still type or drop paths."
+          }
+        }
+      }
+    },
     "Design des Baums": {
       "localizations": {
         "de": {
@@ -1470,6 +1598,22 @@
         }
       }
     },
+    "FLACH": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FLACH"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FLAT"
+          }
+        }
+      }
+    },
     "Fable-Kontingent": {
       "localizations": {
         "de": {
@@ -1674,6 +1818,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Done"
+          }
+        }
+      }
+    },
+    "Fertige Sessions automatisch trennen (0 = nie)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertige Sessions automatisch trennen (0 = nie)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detach finished sessions automatically (0 = never)"
+          }
+        }
+      }
+    },
+    "Fertige Sessions trennen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertige Sessions trennen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detach finished sessions"
           }
         }
       }
@@ -1918,22 +2094,6 @@
         }
       }
     },
-    "Gezählt wird, solange Kadrell läuft.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gezählt wird, solange Kadrell läuft."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Counting happens while Kadrell is running."
-          }
-        }
-      }
-    },
     "GRUPPE BEARBEITEN": {
       "localizations": {
         "de": {
@@ -2010,6 +2170,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tinted groups"
+          }
+        }
+      }
+    },
+    "Gezählt wird, solange Kadrell läuft.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gezählt wird, solange Kadrell läuft."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Counting happens while Kadrell is running."
           }
         }
       }
@@ -2164,6 +2340,38 @@
         }
       }
     },
+    "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groups off: every session in one flat list, with its own hand-sorted order"
+          }
+        }
+      }
+    },
+    "Gruppierung nach Projekt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gruppierung nach Projekt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group by project"
+          }
+        }
+      }
+    },
     "Größen des Layouts ändern, Doppelklick verteilt gleich · Terminals füllen die Felder der Reihe nach": {
       "localizations": {
         "de": {
@@ -2192,6 +2400,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Main + Column"
+          }
+        }
+      }
+    },
+    "Herunterladen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herunterladen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download"
           }
         }
       }
@@ -2583,6 +2807,22 @@
     "Kadrell": {
       "shouldTranslate": false
     },
+    "Kadrell %@ verfügbar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell %@ verfügbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell %@ available"
+          }
+        }
+      }
+    },
     "Kadrell ausblenden": {
       "localizations": {
         "de": {
@@ -2694,6 +2934,38 @@
     "Kadrell v%@": {
       "shouldTranslate": false
     },
+    "Kadrell wurde seit dem Start ersetzt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell wurde seit dem Start ersetzt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell was replaced since launch"
+          }
+        }
+      }
+    },
+    "Kadrell öffnen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Kadrell"
+          }
+        }
+      }
+    },
     "Kein Bild": {
       "localizations": {
         "de": {
@@ -2742,6 +3014,22 @@
         }
       }
     },
+    "Keine Einträge gefunden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Einträge gefunden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No entries found."
+          }
+        }
+      }
+    },
     "Keine Treffer": {
       "localizations": {
         "de": {
@@ -2754,6 +3042,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "No results"
+          }
+        }
+      }
+    },
+    "Keine wartenden Sessions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine wartenden Sessions"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No waiting sessions"
           }
         }
       }
@@ -3126,22 +3430,6 @@
         }
       }
     },
-    "Nachrichten geschickt": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nachrichten geschickt"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Messages sent"
-          }
-        }
-      }
-    },
     "NEUE SESSION": {
       "localizations": {
         "de": {
@@ -3154,6 +3442,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "NEW SESSION"
+          }
+        }
+      }
+    },
+    "Nach Updates suchen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Updates suchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check for updates"
+          }
+        }
+      }
+    },
+    "Nachrichten geschickt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten geschickt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages sent"
           }
         }
       }
@@ -3186,6 +3506,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Navigation"
+          }
+        }
+      }
+    },
+    "Neu in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu in %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New in %@"
           }
         }
       }
@@ -3718,22 +4054,6 @@
         }
       }
     },
-    "Seit": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seit"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Since"
-          }
-        }
-      }
-    },
     "SESSION UMBENENNEN": {
       "localizations": {
         "de": {
@@ -3746,22 +4066,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "RENAME SESSION"
-          }
-        }
-      }
-    },
-    "Sessions geöffnet": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sessions geöffnet"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sessions opened"
           }
         }
       }
@@ -3858,6 +4162,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scrolling: move columns (mouse: ⇧ + wheel), the focus scrolls into view by itself"
+          }
+        }
+      }
+    },
+    "Seit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Since"
           }
         }
       }
@@ -3986,22 +4306,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reorder a session or group, sidebar and tiles alike"
-          }
-        }
-      }
-    },
-    "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sessions may control other sessions (kadrell send, capture, kill)"
           }
         }
       }
@@ -4166,6 +4470,38 @@
         }
       }
     },
+    "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions may control other sessions (kadrell send, capture, kill)"
+          }
+        }
+      }
+    },
+    "Sessions geöffnet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions geöffnet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions opened"
+          }
+        }
+      }
+    },
     "Sessions können nicht geladen werden": {
       "localizations": {
         "de": {
@@ -4274,6 +4610,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spiral"
+          }
+        }
+      }
+    },
+    "Sprache": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprache"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language"
+          }
+        }
+      }
+    },
+    "Sprache des Systems": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprache des Systems"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System language"
           }
         }
       }
@@ -4518,6 +4886,22 @@
         }
       }
     },
+    "Super": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Super"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Great"
+          }
+        }
+      }
+    },
     "Sync: Eingabe an alle Kacheln": {
       "localizations": {
         "de": {
@@ -4546,6 +4930,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sync: typing and ⌘V go to all open tiles at once · badge “SYNC”"
+          }
+        }
+      }
+    },
+    "Systembenachrichtigungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Systembenachrichtigungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System notifications"
           }
         }
       }
@@ -4950,6 +5350,38 @@
         }
       }
     },
+    "Update verfügbar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update verfügbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update available"
+          }
+        }
+      }
+    },
+    "Updates": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates"
+          }
+        }
+      }
+    },
     "VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET": {
       "localizations": {
         "de": {
@@ -5042,6 +5474,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting sessions"
+          }
+        }
+      }
+    },
+    "Was ist neu": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was ist neu"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's new"
           }
         }
       }
@@ -5398,6 +5846,22 @@
         }
       }
     },
+    "arbeiten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "arbeiten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "working"
+          }
+        }
+      }
+    },
     "arbeitende": {
       "localizations": {
         "de": {
@@ -5622,6 +6086,22 @@
         }
       }
     },
+    "getrennt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "getrennt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "detached"
+          }
+        }
+      }
+    },
     "gilt für neu gestartete Claude-Prozesse": {
       "localizations": {
         "de": {
@@ -5634,6 +6114,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "applies to newly started Claude processes"
+          }
+        }
+      }
+    },
+    "ist fertig": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ist fertig"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "is done"
           }
         }
       }
@@ -5737,6 +6233,38 @@
     "malura.de": {
       "shouldTranslate": false
     },
+    "min": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "min"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "min"
+          }
+        }
+      }
+    },
+    "mit Fehler": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mit Fehler"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "with errors"
+          }
+        }
+      }
+    },
     "neu": {
       "localizations": {
         "de": {
@@ -5813,6 +6341,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "show only this session · on a group: all its sessions"
+          }
+        }
+      }
+    },
+    "nur wartet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nur wartet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "waiting only"
           }
         }
       }
@@ -5964,6 +6508,22 @@
         }
       }
     },
+    "warten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "warten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "waiting"
+          }
+        }
+      }
+    },
     "wartende": {
       "localizations": {
         "de": {
@@ -6008,6 +6568,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "waiting"
+          }
+        }
+      }
+    },
+    "wartet auf dich": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wartet auf dich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "is waiting for you"
+          }
+        }
+      }
+    },
+    "wartet und fertig": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wartet und fertig"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "waiting and done"
           }
         }
       }
@@ -6337,566 +6929,6 @@
     },
     "☑": {
       "shouldTranslate": false
-    },
-    "Super": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Super"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Great"
-          }
-        }
-      }
-    },
-    "Keine wartenden Sessions": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine wartenden Sessions"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No waiting sessions"
-          }
-        }
-      }
-    },
-    "Kadrell öffnen": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kadrell öffnen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Kadrell"
-          }
-        }
-      }
-    },
-    "Was ist neu": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Was ist neu"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "What's new"
-          }
-        }
-      }
-    },
-    "Keine Einträge gefunden.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine Einträge gefunden."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No entries found."
-          }
-        }
-      }
-    },
-    "Herunterladen": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Herunterladen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Download"
-          }
-        }
-      }
-    },
-    "Update verfügbar": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Update verfügbar"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Update available"
-          }
-        }
-      }
-    },
-    "Systembenachrichtigungen": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Systembenachrichtigungen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "System notifications"
-          }
-        }
-      }
-    },
-    "Updates": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Updates"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Updates"
-          }
-        }
-      }
-    },
-    "Nach Updates suchen": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nach Updates suchen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Check for updates"
-          }
-        }
-      }
-    },
-    "nur wartet": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "nur wartet"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "waiting only"
-          }
-        }
-      }
-    },
-    "wartet und fertig": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "wartet und fertig"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "waiting and done"
-          }
-        }
-      }
-    },
-    "wartet auf dich": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "wartet auf dich"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "is waiting for you"
-          }
-        }
-      }
-    },
-    "ist fertig": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ist fertig"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "is done"
-          }
-        }
-      }
-    },
-    "Neu in %@": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Neu in %@"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New in %@"
-          }
-        }
-      }
-    },
-    "  %lld warten · %lld neu": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "  %lld warten · %lld neu"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "  %lld waiting · %lld new"
-          }
-        }
-      }
-    },
-    "Kadrell %@ verfügbar": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kadrell %@ verfügbar"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kadrell %@ available"
-          }
-        }
-      }
-    },
-    "%@ verfügbar": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ verfügbar"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ available"
-          }
-        }
-      }
-    },
-    "Kadrell wurde seit dem Start ersetzt": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kadrell wurde seit dem Start ersetzt"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kadrell was replaced since launch"
-          }
-        }
-      }
-    },
-    "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen."
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The file dialog only opens again after restarting Kadrell. You can still type or drop paths."
-          }
-        }
-      }
-    },
-    "Sprache": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sprache"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Language"
-          }
-        }
-      }
-    },
-    "Sprache des Systems": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sprache des Systems"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "System language"
-          }
-        }
-      }
-    },
-    "Baum nach Projekt gruppieren": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Baum nach Projekt gruppieren"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Group tree by project"
-          }
-        }
-      }
-    },
-    "FLACH": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "FLACH"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "FLAT"
-          }
-        }
-      }
-    },
-    "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Groups off: every session in one flat list, with its own hand-sorted order"
-          }
-        }
-      }
-    },
-    "Gruppierung nach Projekt": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gruppierung nach Projekt"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Group by project"
-          }
-        }
-      }
-    },
-    "Fertige Sessions automatisch trennen (0 = nie)": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fertige Sessions automatisch trennen (0 = nie)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Detach finished sessions automatically (0 = never)"
-          }
-        }
-      }
-    },
-    "min": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "min"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "min"
-          }
-        }
-      }
-    },
-    "%lld trennen": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld trennen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "detach %lld"
-          }
-        }
-      }
-    },
-    "Fertige Sessions trennen": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fertige Sessions trennen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Detach finished sessions"
-          }
-        }
-      }
-    },
-    "arbeiten": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "arbeiten"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "working"
-          }
-        }
-      }
-    },
-    "warten": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "warten"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "waiting"
-          }
-        }
-      }
-    },
-    "mit Fehler": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "mit Fehler"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "with errors"
-          }
-        }
-      }
-    },
-    "getrennt": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "getrennt"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "detached"
-          }
-        }
-      }
-    },
-    " · %lld Sessions": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": " · %lld Sessions"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": " · %lld sessions"
-          }
-        }
-      }
     }
   },
   "version": "1.0"

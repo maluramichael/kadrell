@@ -11,6 +11,17 @@ struct Usage: Equatable, Sendable {
     var weeklyResets: Date?
     static let empty = Usage()
 
+    /// Der Stand, den man bei gleichmäßiger Verteilung über die Woche gerade haben dürfte: der Anteil des
+    /// 7-Tage-Fensters, der jetzt verstrichen ist. Stundengenau (auf die Sekunde) aus `weeklyResets`
+    /// zurückgerechnet; die Fensterlänge liefert der Endpunkt nicht mit, nur `resets_at`, sie ist hier 7 Tage.
+    /// Nil, solange der Reset-Zeitpunkt fehlt.
+    func weeklyPlan(now: Date = Date()) -> Int? {
+        guard let weeklyResets else { return nil }
+        let window: TimeInterval = 7 * 24 * 3600
+        let elapsed = min(max(window - weeklyResets.timeIntervalSince(now), 0), window)
+        return Int((elapsed / window * 100).rounded())
+    }
+
     /// Bevorzugt das `limits`-Array (kind session / weekly_all / weekly_scoped mit Modellname),
     /// fällt auf `five_hour` / `seven_day` zurück.
     static func parse(_ data: Data) -> Usage {

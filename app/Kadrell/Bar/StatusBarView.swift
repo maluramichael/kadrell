@@ -294,29 +294,43 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         module(b, &rx, parts, tip: tips.joined(separator: ", ") + String(localized: " · \(counts.total) Sessions", bundle: Bundle.app))
     }
 
+    /// Farbe eines Nutzungswerts. Mit Plan (7 Tage) zählt der Vorsprung: über dem Plan rot, dicht darunter gelb,
+    /// sonst grün. Ohne Plan bleibt es beim absoluten Stand.
+    static func usageColor(_ v: Int, plan: Int?) -> NSColor {
+        guard let plan else { return v >= 90 ? Theme.error : v >= 70 ? Theme.waiting : Theme.idle }
+        return v > plan ? Theme.error : v >= plan - Self.usagePlanWarning ? Theme.waiting : Theme.idle
+    }
+
+    /// So viele Punkte vor dem Plan wird aus Grün Gelb (bei 7 Tagen rund 8 Stunden Vorlauf).
+    static let usagePlanWarning = 5
+
     /// Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
+    /// Vor dem 7-Tage-Wert steht der Plan-Stand („25%/32%“): so viel dürfte bei gleichmäßiger Woche jetzt weg sein.
     private func drawUsage(_ b: CGRect, _ rx: inout CGFloat) {
         let fMuted = Theme.attrs(11.5, Theme.muted)
         let countUp = Feedback.progress(since: usageAt, duration: 0.5)
-        func pctString(_ target: Int?, from: Int?) -> NSAttributedString {
+        func pctString(_ target: Int?, from: Int?, plan: Int?) -> NSAttributedString {
             guard let target else { return NSAttributedString(string: "–%", attributes: fMuted) }
             var v = target
             if let countUp, let from { v = from + Int((CGFloat(target - from) * countUp).rounded()) }
-            let c: NSColor = v >= 90 ? Theme.error : v >= 70 ? Theme.waiting : Theme.idle
-            return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, c))
+            return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, Self.usageColor(v, plan: plan)))
         }
-        /// Tooltip: Bezeichnung plus Prozentwert, oder Hinweis, wenn er fehlt.
-        func usageTip(_ label: String, _ pct: Int?) -> String {
+        /// Tooltip: Bezeichnung plus Prozentwert, beim 7-Tage-Wert zusätzlich der Plan-Stand.
+        func usageTip(_ label: String, _ pct: Int?, _ plan: Int?) -> String {
             guard let pct else { return String(localized: "\(label): Nutzung nicht abrufbar", bundle: Bundle.app) }
-            return String(localized: "\(label): \(pct) % verbraucht", bundle: Bundle.app)
+            guard let plan else { return String(localized: "\(label): \(pct) % verbraucht", bundle: Bundle.app) }
+            return String(localized: "\(label): \(pct) % verbraucht, \(plan) % nach Plan", bundle: Bundle.app)
         }
-        let rows: [(String, Int?, Int?, String)] = [
-            ("fable", usage.fable, usageFrom.fable, String(localized: "Fable-Kontingent", bundle: Bundle.app)),
-            ("7d", usage.weekly, usageFrom.weekly, String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app)),
-            ("5h", usage.session, usageFrom.session, String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app)),
+        let rows: [(String, Int?, Int?, String, Int?)] = [
+            ("fable", usage.fable, usageFrom.fable, String(localized: "Fable-Kontingent", bundle: Bundle.app), nil),
+            ("7d", usage.weekly, usageFrom.weekly, String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app), usage.weeklyPlan()),
+            ("5h", usage.session, usageFrom.session, String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app), nil),
         ]
-        for (name, pct, from, label) in rows {
-            module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), pctString(pct, from: from)], tip: usageTip(label, pct))
+        for (name, pct, from, label, plan) in rows {
+            let value = NSMutableAttributedString()
+            if let plan, pct != nil { value.append(NSAttributedString(string: "\(plan)%/", attributes: fMuted)) }
+            value.append(pctString(pct, from: from, plan: plan))
+            module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), value], tip: usageTip(label, pct, plan))
         }
     }
 
