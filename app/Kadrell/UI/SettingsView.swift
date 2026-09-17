@@ -120,6 +120,10 @@ struct SettingsView: View {
                         .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
                         .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
                 }
+                setting(String(localized: "Fertige Sessions automatisch trennen (0 = nie)", bundle: Bundle.app)) {
+                    slider(Binding(get: { Double(model.binding(\.autoDetachMinutes).wrappedValue) }, set: { model.binding(\.autoDetachMinutes).wrappedValue = Int($0) }),
+                           Settings.autoDetachRange, step: 5, unit: String(localized: "min", bundle: Bundle.app))
+                }
                 setting(String(localized: "Wenn Claude endet (zweimal ⌃C, /exit)", bundle: Bundle.app)) {
                     menu(model.binding(\.closeTileOnExit), [(false, String(localized: "Kachel bleibt, Klick setzt fort", bundle: Bundle.app)), (true, String(localized: "Kachel schließen", bundle: Bundle.app))])
                 }

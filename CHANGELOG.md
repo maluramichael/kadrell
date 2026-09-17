@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.45.0 (2026-09-17)
+
+- Feature: Ein Knopf in der Leiste trennt alle fertigen Sessions auf einmal. Die Kacheln bleiben stehen, ein Klick setzt die Konversation fort.
+- Feature: Fertige Sessions lassen sich nach einer einstellbaren Zeit automatisch trennen (Einstellungen, 0 Minuten = nie). Die Session, in der du gerade bist, bleibt verbunden.
+- Änderung: Die Leiste zeigt statt „läuft x/y“ die Sessions je Status in den Farben der Statuspunkte: arbeitend, wartend, fertig, mit Fehler, getrennt, dahinter die Gesamtzahl.
+
 ## 1.44.0 (2026-09-17)
 
 - Feature: Die Gruppierung nach Projekt lässt sich abschalten („GRP“ in der Leiste, ⌥G). Aus stehen alle Sessions in einer Liste, mit dem Projektnamen vor dem Titel.
