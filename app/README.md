@@ -60,4 +60,12 @@ sie nicht läuft. Befehle: `ls [--json]`, `new-group`, `new [-t gruppe] [-c ordn
 läuft: jede Kachel hat `KADRELL_SESSION_KEY`, `KADRELL_SOCKET` und `KADRELL` (Pfad zum Binary) in der Umgebung.
 Per CLI angelegte Gruppen sind Favoriten, sonst räumt der Abgleich sie leer wieder weg. Rückfragen entfallen.
 
+tmux-Sessions importieren: `tools/tmux-dump.py dump -o dump.json` sammelt alle laufenden Claude-Sessions aus
+tmux-Panes (Baum Session/Window/Pane) als JSON, `tools/tmux-dump.py import dump.json` startet sie per
+`claude --bg --resume` als Hintergrund-Sessions (läuft die Original-Session noch, macht das eine Kopie statt sie
+anzufassen) und legt je tmux-Session eine Gruppe in `groups.json` an. Kadrell muss dabei beendet sein, sonst
+überschreibt der Import dessen `groups.json` unter der laufenden App weg. `--dry-run` zeigt nur, was passieren würde.
+Der Leerzustand zählt separat, wie viele Claude-Sessions gerade interaktiv in anderen Terminals laufen, und
+verweist auf dieses Skript.
+
 Details, verifizierte CLI-Fakten und Abweichungen vom Brief: `../docs/kadrell-verifikation.md`.
