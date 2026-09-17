@@ -15,12 +15,16 @@ final class NewSessionModel {
 
     let groups: [Group]
     let counts: [String: Int]
-    var query = "" { didSet { if query != oldValue { update() } } }
+    var query = "" { didSet { if query != oldValue { notFoundPath = nil; update() } } }
     private(set) var candidates: [Candidate] = []
     var selected = 0
     var onStart: ((Group?, String) -> Void)?
+    /// ⏎ auf einem getippten Pfad ohne Treffer, der auch nicht existiert: Grundlage für ⌘⏎ (anlegen und starten).
+    private(set) var notFoundPath: String?
     private var context: [(path: String, tag: String)] = []
     private let index: FolderIndex
+    /// Läuft der Repo-Scan gerade im Hintergrund (⌘N kurz nach dem Start).
+    var scanning: Bool { index.scanning }
 
     /// `askFinder: false` in Tests: sonst fragt macOS nach der Erlaubnis, den Finder zu steuern.
     init(groups: [Group], counts: [String: Int], index: FolderIndex = .shared, askFinder: Bool = true) {
@@ -92,11 +96,23 @@ final class NewSessionModel {
         onStart?(candidates[i].group, candidates[i].path)
     }
 
-    /// ⏎: markierten Treffer starten, ohne Treffer einen ausgeschrieben getippten Ordner.
+    /// ⏎: markierten Treffer starten, ohne Treffer einen ausgeschrieben getippten Ordner; existiert der nicht,
+    /// Hinweis statt stillem No-op (⌘⏎ legt ihn an).
     func start() {
         if !candidates.isEmpty { pick(selected); return }
         let dir = FolderIndex.normalize(query)
-        if FolderIndex.isDirectory(dir) { onStart?(nil, dir) }
+        guard !dir.isEmpty else { return }
+        if FolderIndex.isDirectory(dir) { onStart?(nil, dir); return }
+        notFoundPath = dir
+        NSSound.beep()
+    }
+
+    /// ⌘⏎: den zuletzt nicht gefundenen Ordner anlegen und dort starten.
+    func createAndStart() {
+        guard let dir = notFoundPath else { return }
+        guard (try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)) != nil else { return }
+        notFoundPath = nil
+        onStart?(nil, dir)
     }
 
     /// ⌘O: nativer Ordnerdialog, für alles, was die Suche nicht findet.
@@ -141,6 +157,7 @@ struct NewSessionView: View {
         .overlay { if dropping { Rectangle().stroke(Theme.runningColor, lineWidth: 2) } }
         .dropDestination(for: URL.self) { urls, _ in model.drop(urls) } isTargeted: { dropping = $0 }
         .background { Button("", action: model.browse).keyboardShortcut("o", modifiers: .command).opacity(0) }
+        .background { Button("", action: model.createAndStart).keyboardShortcut(.return, modifiers: .command).opacity(0) }
     }
 
     private var list: some View {
@@ -148,7 +165,15 @@ struct NewSessionView: View {
         return ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
-                    if items.isEmpty {
+                    if model.scanning {
+                        Text("Suche Git-Repos unter ~ …").font(Theme.ui(10)).foregroundStyle(Theme.mutedColor)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 8)
+                    }
+                    if items.isEmpty, let bad = model.notFoundPath {
+                        Text(String(localized: "\(Theme.shortPath(bad)) existiert nicht · ⌘⏎ anlegen und starten"))
+                            .foregroundStyle(Theme.errorColor)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                    } else if items.isEmpty {
                         Text("Kein Ordner gefunden. ⌘O wählt im Finder.").foregroundStyle(Theme.mutedColor)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                     }

@@ -19,6 +19,10 @@ struct ControlResponse: Codable, Sendable {
 
     static func ok(_ out: String = "") -> ControlResponse { ControlResponse(status: 0, stdout: out.isEmpty || out.hasSuffix("\n") ? out : out + "\n") }
     static func fail(_ message: String) -> ControlResponse { ControlResponse(status: 1, stderr: "kadrell: " + message + "\n") }
+
+    /// Antwort, solange `boot()` noch läuft (registry/attach fehlen): `ControlClient.run` wartet darauf weiter,
+    /// statt sie wie einen echten Fehler zu behandeln.
+    static let startingStatus: Int32 = 75
 }
 
 struct ControlError: Error, Equatable {

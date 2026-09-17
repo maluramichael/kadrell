@@ -5,7 +5,7 @@ import AppKit
 extension AppDelegate {
     func startControlServer() {
         let server = ControlServer { [weak self] req, pid in
-            self?.handleControl(req, peer: pid) ?? .fail("Kadrell beendet sich")
+            await self?.handleControl(req, peer: pid) ?? .fail("Kadrell beendet sich")
         }
         do {
             try server.start()
@@ -15,12 +15,14 @@ extension AppDelegate {
         }
     }
 
-    func handleControl(_ req: ControlRequest, peer: pid_t) -> ControlResponse {
-        guard registry != nil, attach != nil else { return .fail("Kadrell startet noch") }
+    /// `registry`/`attach` fehlen nur kurz beim Start (`boot()` läuft noch): eigener Status statt harter Fehler,
+    /// den `ControlClient.run` mit abwartet statt sofort „läuft, lauscht aber nicht“ zu melden.
+    func handleControl(_ req: ControlRequest, peer: pid_t) async -> ControlResponse {
+        guard registry != nil, attach != nil else { return ControlResponse(status: ControlResponse.startingStatus, stdout: "", stderr: "Kadrell startet noch\n") }
         var req = req
         req.caller = ControlCaller.session(pid: peer, terminals: attach.pids)
         do {
-            return try runControl(ControlCommand.parse(req.argv), req)
+            return try await runControl(ControlCommand.parse(req.argv), req)
         } catch let e as ControlError {
             return .fail(e.message)
         } catch {
@@ -28,7 +30,7 @@ extension AppDelegate {
         }
     }
 
-    private func runControl(_ cmd: ControlCommand, _ req: ControlRequest) throws -> ControlResponse {
+    private func runControl(_ cmd: ControlCommand, _ req: ControlRequest) async throws -> ControlResponse {
         switch cmd {
         case .help: return .ok(ControlCommand.usage)
         case .list(let json): return .ok(try listOutput(json: json))
@@ -55,7 +57,7 @@ extension AppDelegate {
         case .resume(let t): attach.attachNow(try session(t, req))
         case .killSession(let t): closeSession(try session(t, req).id, force: true)
         case .killGroup(let t): closeGroup(try group(t, req).id, force: true)
-        case let .send(t, text, enter, keys): try controlSend(target: t, text: text, enter: enter, keys: keys, req)
+        case let .send(t, text, enter, keys): try await controlSend(target: t, text: text, enter: enter, keys: keys, req)
         case let .capture(t, all): return .ok(try controlCapture(target: t, all: all, req))
         }
         return .ok()
@@ -139,8 +141,9 @@ extension AppDelegate {
     }
 
     /// Text geht als Einfügen (bracketed paste), wenn Claude das eingeschaltet hat; ⏎ kommt getrennt hinterher,
-    /// sonst hält die Eingabe es für einen Zeilenumbruch im eingefügten Text.
-    private func controlSend(target: String?, text: String, enter: Bool, keys: Bool, _ req: ControlRequest) throws {
+    /// sonst hält die Eingabe es für einen Zeilenumbruch im eingefügten Text. Wartet das Enter ab, bevor die
+    /// Antwort rausgeht: sonst startet ein direkt folgender `kadrell send` sein Enter noch vor diesem.
+    private func controlSend(target: String?, text: String, enter: Bool, keys: Bool, _ req: ControlRequest) async throws {
         let s = try session(target, req)
         guard let term = attach.terminal(for: s.id) else { throw ControlError("„\(s.title)“ läuft nicht, erst kadrell resume -t \(s.id.prefix(8))") }
         if keys {
@@ -150,10 +153,8 @@ extension AppDelegate {
         let clean = text.replacingOccurrences(of: "\u{1b}[201~", with: "")
         term.send(txt: term.terminalStateSnapshot().bracketedPasteMode ? "\u{1b}[200~" + clean + "\u{1b}[201~" : clean)
         guard enter else { return }
-        Task { [weak term] in
-            try? await Task.sleep(for: .milliseconds(150))
-            term?.send(txt: "\r")
-        }
+        try? await Task.sleep(for: .milliseconds(150))
+        term.send(txt: "\r")
     }
 
     private func controlCapture(target: String?, all: Bool, _ req: ControlRequest) throws -> String {
