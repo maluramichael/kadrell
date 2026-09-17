@@ -26,6 +26,7 @@ struct AboutView: View {
                 ("⌘⇧T", String(localized: "Neues Fenster: eigene Auswahl und eigenes Layout, dieselben Sessions", bundle: Bundle.app)), ("⌘⇧W", String(localized: "Fenster schließen, Sessions laufen weiter", bundle: Bundle.app)),
                 ("⌘M", String(localized: "Im Dock ablegen", bundle: Bundle.app)), (String(localized: "⌘ Mausrad", bundle: Bundle.app), String(localized: "Terminal-Schrift aller Sessions größer/kleiner", bundle: Bundle.app)),
                 ("⌘,", String(localized: "Einstellungen: Projektordner, Darstellung, Tastenkürzel", bundle: Bundle.app)), ("F1", String(localized: "diese Hilfe", bundle: Bundle.app)),
+                ("F3", String(localized: "Statistik: Nachrichten, Sessions, Kachelwechsel, Rekord", bundle: Bundle.app)),
             ]),
         ]
     }

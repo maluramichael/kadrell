@@ -1438,6 +1438,22 @@
         }
       }
     },
+    "Esc oder F3 schließen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esc oder F3 schließen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esc or F3 closes"
+          }
+        }
+      }
+    },
     "Externer Editor (Kommando wie im Terminal)": {
       "localizations": {
         "de": {
@@ -1898,6 +1914,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Free: next tile below"
+          }
+        }
+      }
+    },
+    "Gezählt wird, solange Kadrell läuft.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gezählt wird, solange Kadrell läuft."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Counting happens while Kadrell is running."
           }
         }
       }
@@ -2532,6 +2564,22 @@
         }
       }
     },
+    "Kachelwechsel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kachelwechsel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tile switches"
+          }
+        }
+      }
+    },
     "Kadrell": {
       "shouldTranslate": false
     },
@@ -2754,6 +2802,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Command"
+          }
+        }
+      }
+    },
+    "Kommando läuft noch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommando läuft noch"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "command still running"
           }
         }
       }
@@ -2998,6 +3062,22 @@
         }
       }
     },
+    "Meiste Sessions gleichzeitig": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meiste Sessions gleichzeitig"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Most sessions at once"
+          }
+        }
+      }
+    },
     "Menüleisten-Icon / Dock": {
       "localizations": {
         "de": {
@@ -3042,6 +3122,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Model"
+          }
+        }
+      }
+    },
+    "Nachrichten geschickt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten geschickt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages sent"
           }
         }
       }
@@ -3298,6 +3394,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "No sessions yet"
+          }
+        }
+      }
+    },
+    "Noch nichts gezählt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nichts gezählt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing counted yet."
           }
         }
       }
@@ -3606,6 +3718,22 @@
         }
       }
     },
+    "Seit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Since"
+          }
+        }
+      }
+    },
     "SESSION UMBENENNEN": {
       "localizations": {
         "de": {
@@ -3618,6 +3746,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "RENAME SESSION"
+          }
+        }
+      }
+    },
+    "Sessions geöffnet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions geöffnet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions opened"
           }
         }
       }
@@ -4246,6 +4390,38 @@
         }
       }
     },
+    "Statistik": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistik"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stats"
+          }
+        }
+      }
+    },
+    "Statistik: Nachrichten, Sessions, Kachelwechsel, Rekord": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistik: Nachrichten, Sessions, Kachelwechsel, Rekord"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stats: messages, sessions, tile switches, record"
+          }
+        }
+      }
+    },
     "Statusleiste": {
       "localizations": {
         "de": {
@@ -4594,6 +4770,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Terminal font size  ⌘+ ⌘- ⌘0  ⌘ scroll wheel"
+          }
+        }
+      }
+    },
+    "Terminals geöffnet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminals geöffnet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminals opened"
           }
         }
       }

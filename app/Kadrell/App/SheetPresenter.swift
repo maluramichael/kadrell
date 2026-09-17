@@ -9,10 +9,13 @@ final class SheetPresenter {
     /// Eine offene Palette macht dem Dialog Platz.
     private let palette: () -> PaletteWindow?
     private var overlay: OverlayPanel?
-    /// Offene Hilfe (F1) nicht stillschweigend verdrängen: wer gerade ⏎ drückt, um sie zu schließen, soll nicht
-    /// aus Versehen einen anderen Dialog bestätigen. Der neue Dialog kommt erst dran, wenn die Hilfe zu ist.
+    /// Offenes Panel (F1, F3) nicht stillschweigend verdrängen: wer gerade ⏎ drückt, um es zu schließen, soll nicht
+    /// aus Versehen einen anderen Dialog bestätigen. Der neue Dialog kommt erst dran, wenn das Panel zu ist.
     private var pending: (() -> Void)?
-    private var aboutOpen = false
+
+    /// Panels, die sich mit ihrer eigenen Taste wieder schließen, im Gegensatz zu Rückfragen und Sheets.
+    enum Panel { case about, stats }
+    private var openPanel: Panel?
 
     init(host: @escaping () -> MainWindowController?, palette: @escaping () -> PaletteWindow?) {
         self.host = host
@@ -21,7 +24,7 @@ final class SheetPresenter {
 
     /// Ohne `onCancel` schließt Esc einfach den Dialog.
     func present<V: View>(_ view: V, plainReturn: Bool = true, onCancel: (() -> Void)? = nil, onPrimary: @escaping () -> Void) {
-        if aboutOpen {
+        if openPanel != nil {
             pending = { [weak self] in self?.present(view, plainReturn: plainReturn, onCancel: onCancel, onPrimary: onPrimary) }
             return
         }
@@ -38,20 +41,24 @@ final class SheetPresenter {
     func dismiss() {
         overlay?.dismiss()
         overlay = nil
-        aboutOpen = false
+        openPanel = nil
         if let c = host() { c.window.makeFirstResponder(c.workspace) }
         if let pending { self.pending = nil; pending() }
     }
 
-    /// F1: Hilfe auf, bei offener Hilfe wieder zu.
-    func toggleAbout() {
-        if overlay?.isVisible == true, aboutOpen { dismiss(); return }
-        present(AboutView(), onPrimary: { [weak self] in self?.dismiss() })
-        aboutOpen = true   // erst nach present: das räumt über dismiss den alten Wert ab
+    /// F1 und F3: Panel auf, dasselbe Panel noch einmal schließt es wieder.
+    func togglePanel(_ panel: Panel) {
+        if overlay?.isVisible == true, openPanel == panel { dismiss(); return }
+        let close: () -> Void = { [weak self] in self?.dismiss() }
+        switch panel {
+        case .about: present(AboutView(), onPrimary: close)
+        case .stats: present(StatsView(), onPrimary: close)
+        }
+        openPanel = panel   // erst nach present: das räumt über dismiss den alten Wert ab
     }
 
-    /// Offene Hilfe hat selbst die Tastatur: F1 in ihrem Fenster schließt sie wieder.
-    func isAbout(_ window: NSWindow?) -> Bool { aboutOpen && window === overlay }
+    /// Ein offenes Panel hat selbst die Tastatur: seine eigene Taste im Panel-Fenster schließt es wieder.
+    func isPanel(_ panel: Panel, _ window: NSWindow?) -> Bool { openPanel == panel && window === overlay }
 
     /// Dialog offen, aber nicht mehr Key (nach Dropdown, Klick daneben oder App-Wechsel): Esc landet am
     /// Hauptfenster statt am Panel. Ohne das schließt nichts den Dialog, der Blur bleibt liegen und blockt

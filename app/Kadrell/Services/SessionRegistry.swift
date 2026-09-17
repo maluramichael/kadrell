@@ -96,6 +96,8 @@ final class SessionRegistry {
             return
         }
         sessions.append(session)
+        Stats.bump(session.isShell ? .terminals : .sessions)
+        Stats.noteConcurrent(sessions.count)
         save()
         onChange?(sessions)
         Hooks.fire(.sessionNew, session, environment: cli.environment)
@@ -183,6 +185,7 @@ final class SessionRegistry {
             let agents = Agent.local(pids: Array(pollPids.keys), configDir: configDir)
             var merged = SessionRegistry.merge(priorSessions, agents: agents, pids: pids, reported: live)
             SessionRegistry.applyShellCwd(&merged, pids: pids)
+            SessionRegistry.applyRunningShells(&merged, pids: pids)
             return merged
         }.value
         await fillFirstPrompts(&merged)
@@ -203,6 +206,13 @@ final class SessionRegistry {
     }
 
     /// Bei Terminals ohne Claude folgt der Ordner dem `cd` der Shell.
+    /// Kommandos aus dem Bash-Tool, die noch laufen, während Claude selbst schon wieder wartet.
+    private nonisolated static func applyRunningShells(_ merged: inout [Session], pids: [Int: String]) {
+        let busy = BackgroundShells.running(pids: Array(pids.keys))
+        let keys = Set(busy.compactMap { pids[$0] })
+        for i in merged.indices { merged[i].hasRunningShell = keys.contains(merged[i].id) }
+    }
+
     private nonisolated static func applyShellCwd(_ merged: inout [Session], pids: [Int: String]) {
         for (pid, key) in pids {
             guard let i = merged.firstIndex(where: { $0.id == key && $0.isShell }), let dir = SessionRegistry.cwd(pid: pid_t(pid)) else { continue }
@@ -290,7 +300,7 @@ final class SessionRegistry {
         return current.map { s in
             guard let p = byId[s.id] else { return s }
             var s = s
-            s.cwd = p.cwd; s.pid = p.pid; s.branch = p.branch; s.activeWorktree = p.activeWorktree
+            s.cwd = p.cwd; s.pid = p.pid; s.branch = p.branch; s.activeWorktree = p.activeWorktree; s.hasRunningShell = p.hasRunningShell
             // Gemeldete Sessions: was `report` inzwischen gesetzt hat, ist neuer als der Stand vom Poll-Beginn.
             guard !reported.contains(s.id) else { return s }
             s.sessionId = p.sessionId; s.name = p.name; s.rawStatus = p.rawStatus; s.waitingFor = p.waitingFor; s.firstPrompt = p.firstPrompt

@@ -300,7 +300,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         let code = event.keyCode, mods = event.modifierFlags.intersection(Hotkey.modMask)
-        if code == KeyCode.f1, sheets.isAbout(event.window) { sheets.dismiss(); return nil }
+        if code == KeyCode.f1, sheets.isPanel(.about, event.window) { sheets.dismiss(); return nil }
+        if code == KeyCode.f3, sheets.isPanel(.stats, event.window) { sheets.dismiss(); return nil }
         guard controller(for: event.window) != nil else { return event }
         if code == KeyCode.escape, sheets.cancelVisible() { return nil }
         // Vorschau offen: ⏎ übernimmt die Session als Auswahl, Esc zeigt wieder die alte.
@@ -311,7 +312,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let action = Hotkeys.action(for: event) { perform(action); return nil }
         // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
         if code == KeyCode.returnKey, mods == .command { newSessionInFocusedFolder(); return nil }
-        if code == KeyCode.f1 { sheets.toggleAbout(); return nil }
+        if code == KeyCode.f1 { sheets.togglePanel(.about); return nil }
+        if code == KeyCode.f3 { sheets.togglePanel(.stats); return nil }
         forwardSync(event, mods: mods)
         return event
     }
@@ -614,6 +616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: String(localized: "Über Kadrell", bundle: Bundle.app), action: #selector(menuAbout), keyEquivalent: "")
         appMenu.addItem(withTitle: String(localized: "Was ist neu", bundle: Bundle.app), action: #selector(menuWhatsNew), keyEquivalent: "")
+        appMenu.addItem(withTitle: String(localized: "Statistik", bundle: Bundle.app), action: #selector(menuStats), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: String(localized: "Einstellungen …", bundle: Bundle.app), action: #selector(menuSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: String(localized: "Kommandozeilen-Tool installieren …", bundle: Bundle.app), action: #selector(menuInstallCLI), keyEquivalent: "")
@@ -736,7 +739,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startShell(group: Group?, cwd: String) {
         startSession(group: group, cwd: cwd, sessionId: Session.newShellId())
     }
-    @objc private func menuAbout() { sheets.toggleAbout() }
+    @objc private func menuAbout() { sheets.togglePanel(.about) }
+    @objc private func menuStats() { sheets.togglePanel(.stats) }
     @objc private func menuWhatsNew() { showWhatsNew(version: Settings.version, fallback: String(localized: "Keine Einträge gefunden.", bundle: Bundle.app)) }
     @objc private func menuTemporaryInstance() { Profile.launchTemporary() }
     @objc private func menuSettings() {
@@ -930,6 +934,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (String(localized: "Session schließen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.closeSession(s.id) } }),
             (String(localized: "Gruppe bearbeiten (der fokussierten Session)", bundle: Bundle.app), { [weak self] in
                 if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
+            (String(localized: "Statistik", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.stats) }),
             (String(localized: "Reload", bundle: Bundle.app), { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
         ] + store.groups.map { g in (String(localized: "Alle Sessions von \(g.name)", bundle: Bundle.app), { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
         palette.source = src

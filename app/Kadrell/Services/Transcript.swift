@@ -46,11 +46,15 @@ enum Transcript {
     }
 
     /// Nur die seit `old.size` neu geschriebenen Bytes lesen und parsen; wo nichts Neueres trifft, gilt der alte Wert.
+    /// Hier und nur hier zählen die geschickten Nachrichten: der Zuwachs ist genau das, was seit dem letzten Poll
+    /// dazugekommen ist. Ein Transcript zum ersten Mal zu lesen darf den alten Verlauf nicht nachträglich einrechnen.
+    /// ponytail: lag die letzte Größe mitten in einer Zeile, geht diese eine Nachricht verloren.
     private static func grow(path: String, size: UInt64, from old: Entry, wantText: Bool) -> Entry {
         guard let h = FileHandle(forReadingAtPath: path) else { return readFull(path: path, size: size, wantText: wantText) }
         defer { try? h.close() }
         try? h.seek(toOffset: old.size)
         let data = try? h.readToEnd()
+        if let data { Stats.bump(.messages, by: userMessages(jsonl: data)) }
         let newCandidates = data.map { toolCandidates(jsonl: $0) } ?? []
         return Entry(path: path, size: size, text: (wantText ? data.flatMap { lastText(jsonl: $0) } : nil) ?? old.text,
                      toolCandidates: newCandidates.isEmpty ? old.toolCandidates : Array((newCandidates + old.toolCandidates).prefix(20)))
@@ -62,18 +66,34 @@ enum Transcript {
                      toolCandidates: data.map { toolCandidates(jsonl: $0) } ?? [])
     }
 
-    /// Erste echte Eingabe des Nutzers, gekürzt. Slash-Commands und ihre Ausgabe (`<command-name>` …) zählen nicht.
+    /// Text einer echten Eingabe des Nutzers, sonst nil. Tool-Ergebnisse kommen ebenfalls als `user`-Zeile, zählen
+    /// aber nicht, ebenso wenig Meta-Zeilen, Sidechains (Subagenten) und die Ausgabe von Slash-Commands
+    /// (`<command-name>` …). Eine angeschnittene Zeile ist kein JSON und fällt damit von selbst raus.
+    static func userText(line: Data) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+              obj["type"] as? String == "user", obj["isMeta"] as? Bool != true, obj["isSidechain"] as? Bool != true,
+              let content = (obj["message"] as? [String: Any])?["content"] else { return nil }
+        let text = (content as? String)
+            ?? (content as? [[String: Any]])?.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: " ")
+            ?? ""
+        let flat = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return flat.isEmpty || flat.hasPrefix("<") ? nil : flat
+    }
+
+    /// Zählt die Eingaben des Nutzers im gelesenen Ausschnitt (für `Stats`).
+    static func userMessages(jsonl data: Data) -> Int {
+        var n = 0
+        for line in data.split(separator: UInt8(ascii: "\n")) where userText(line: line) != nil { n += 1 }
+        return n
+    }
+
+    /// Erste echte Eingabe des Nutzers, gekürzt. Eine Nachricht aus lauter Bildern hat keinen Titel und zählt hier nicht.
     static func firstPrompt(path: String, head: Int = 1 << 18, limit: Int = 50) -> String? {
         guard let h = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? h.close() }
         guard let data = try? h.read(upToCount: head) else { return nil }
         for line in data.split(separator: UInt8(ascii: "\n")) {
-            guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                  obj["type"] as? String == "user", obj["isMeta"] as? Bool != true, obj["isSidechain"] as? Bool != true,
-                  let content = (obj["message"] as? [String: Any])?["content"] else { continue }
-            let text = (content as? String)
-                ?? (content as? [[String: Any]])?.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: " ")
-                ?? ""
+            guard let text = userText(line: line) else { continue }
             if let flat = flatPrompt(text, limit: limit) { return flat }
         }
         return nil

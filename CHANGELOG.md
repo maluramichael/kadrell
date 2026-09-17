@@ -11,6 +11,7 @@ Neueste Version oben.
 
 - Feature: Claude-Sessions melden Status, Titel, erste Eingabe und letzte Antwort per Hook an Kadrell, automatisch für jeden gestarteten Prozess. Kadrell liest deren Dateien nicht mehr im Sekundentakt.
 - Feature: `kadrell status` meldet den Zustand einer Session von außen, `kadrell hook claude` ist der Hook dazu.
+- Feature: F3 zeigt eine Statistik: geschickte Nachrichten, geöffnete Sessions und Terminals, Kachelwechsel und der Rekord gleichzeitig offener Sessions. Auch über das Kadrell-Menü und die Suche (⌘P).
 
 ## 1.47.0 (2026-09-17)
 

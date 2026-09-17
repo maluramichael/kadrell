@@ -11,7 +11,9 @@ final class WorkspaceView: NSView {
     private(set) var focused: String? {
         didSet {
             guard oldValue != focused else { return }
-            if let o = oldValue { lastFocused = o }
+            // Der erste Fokus nach dem Start ist kein Wechsel; danach zählt jeder, egal ob Tastatur,
+            // Klick auf eine Kachel oder Auswahl im Baum.
+            if let o = oldValue { lastFocused = o; Stats.bump(.focusSwitches) }
             revealFocus = true
             if let f = focused { onFocusChange?(f) }
         }
@@ -531,13 +533,13 @@ final class WorkspaceView: NSView {
         guard window?.occlusionState.contains(.visible) == true else { return }
         syncFirstResponder()
         pulse = Feedback.pulse()
-        for (key, v) in cells where sessions[key]?.status == .running && !v.isHidden {
+        for (key, v) in cells where sessions[key].map({ $0.status == .running || $0.hasRunningShell }) == true && !v.isHidden {
             v.pulse = pulse
             if !v.state.headerHidden { v.setNeedsDisplay(v.dotRect) }
         }
         // Stack-Zeilen zeichnet die Fläche selbst: nur die Punkte laufender Sessions pulsieren, nicht die ganze
         // Fläche samt Hintergrundbild (siehe `drawBackground`).
-        for (r, key) in stackRows where sessions[key]?.status == .running && (attach?.isAttached(key) ?? false) {
+        for (r, key) in stackRows where sessions[key].map({ $0.status == .running || $0.hasRunningShell }) == true && (attach?.isAttached(key) ?? false) {
             setNeedsDisplay(stackDotRect(r).insetBy(dx: -1, dy: -1))
         }
         let now = CACurrentMediaTime()
@@ -730,8 +732,7 @@ final class WorkspaceView: NSView {
         (on ? color : color.mixed(0.45, into: Theme.bg)).setFill()
         CGRect(x: r.minX, y: r.minY, width: on ? 3 : 1, height: r.height).fill()
         let attached = attach?.isAttached(key) ?? false
-        let c = Theme.statusColor(s.status, attached: attached)
-        let dotColor = s.status == .running && attached ? c.withAlphaComponent(pulse) : c
+        let dotColor = Theme.dotColor(s, attached: attached, pulse: pulse)
         Icons.statusDot(in: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8), status: s.status, attached: attached, color: dotColor)
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let grp = NSAttributedString(string: g?.name ?? "", attributes: Theme.attrs(10.5, color))
@@ -772,7 +773,7 @@ final class WorkspaceView: NSView {
     override func accessibilityChildren() -> [Any]? {
         a11y = (stackRows.isEmpty || zen || preview != nil ? [] : stackRows).compactMap { r, key in
             guard let s = sessions[key] else { return nil }
-            let label = [s.title, s.status.spoken(attached: attach?.isAttached(key) ?? false), group(forSession: key)?.name]
+            let label = [s.title, s.status.spoken(attached: attach?.isAttached(key) ?? false, shellRunning: s.hasRunningShell), group(forSession: key)?.name]
             return a11y.reuse(key).update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: r,
                                           press: { [weak self] in self?.activate(key) },
                                           actions: [a11yAction(String(localized: "Umbenennen", bundle: Bundle.app)) { [weak self] in self?.onRenameSession?(key) },
