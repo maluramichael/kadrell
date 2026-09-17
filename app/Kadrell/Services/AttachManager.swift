@@ -58,7 +58,6 @@ final class AttachManager {
     private var queueTask: Task<Void, Never>?
     /// App wird beendet: nichts mehr starten, sonst setzt das Polling die eben beendeten Sessions fort.
     private var shuttingDown = false
-    private var snapshotTask: Task<Void, Never>?
     /// Erste Nachricht für neue Sessions (`kadrell new … <prompt>`), wird beim ersten Start verbraucht.
     var initialPrompts: [String: String] = [:]
     var onChange: (() -> Void)?
@@ -67,12 +66,6 @@ final class AttachManager {
 
     init(cli: ClaudeCLI) {
         self.cli = cli
-        snapshotTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(500))
-                self?.refreshSnapshots()
-            }
-        }
     }
 
     var attachedCount: Int { terminals.count }
@@ -226,10 +219,17 @@ final class AttachManager {
         }
     }
 
-    private func refreshSnapshots() {
+    /// Textzeilen aller angehängten Terminals aktualisieren. Kein Hintergrund-Timer: einzige Verbraucher sind die
+    /// ⌘P-Suche (ruft vor dem Öffnen einmal auf) und `CellView.drawLines` für Kacheln ohne eingehängtes Terminal,
+    /// beides seltene, gezielte Momente statt ein Polling mehrmals pro Sekunde.
+    func refreshSnapshots() {
         var changed = false
         for (key, t) in terminals {
-            var rows = t.terminalStateSnapshot().visibleRows.map { $0.text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
+            var rows = t.terminalStateSnapshot().visibleRows.map { row -> String in
+                var s = row.text
+                while let last = s.last, last.isWhitespace { s.removeLast() }
+                return s
+            }
             while rows.last?.isEmpty == true { rows.removeLast() }
             guard snapshots[key] != rows else { continue }
             snapshots[key] = rows

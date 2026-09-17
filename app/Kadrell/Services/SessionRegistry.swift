@@ -1,7 +1,8 @@
 import Foundation
 
-/// Die Sessions, die Kadrell verwaltet, persistiert als JSON unter Application Support. Liest alle 2 s die
-/// Session-Dateien der eigenen Claude-Prozesse (Status, Name, aktuelle sessionId) und meldet nur echte Änderungen.
+/// Die Sessions, die Kadrell verwaltet, persistiert als JSON unter Application Support. Liest alle 2 s (versteckt/
+/// inaktiv seltener, siehe `setBackground`) die Session-Dateien der eigenen Claude-Prozesse (Status, Name, aktuelle
+/// sessionId) und meldet nur echte Änderungen.
 @MainActor
 final class SessionRegistry {
     let cli: ClaudeCLI
@@ -20,6 +21,8 @@ final class SessionRegistry {
     var pids: () -> [Int: String] = { [:] }
     var onChange: (([Session]) -> Void)?
     private var task: Task<Void, Never>?
+    /// Fenster versteckt oder App nicht aktiv (Menüleisten-Betrieb): seltener pollen, siehe `setBackground`.
+    private(set) var isBackground = false
 
     static var defaultURL: URL { Profile.directory.appendingPathComponent("sessions.json") }
 
@@ -29,14 +32,25 @@ final class SessionRegistry {
         if let data = try? Data(contentsOf: url), let s = try? JSONDecoder().decode([Session].self, from: data) { sessions = s }
     }
 
-    func start(interval: TimeInterval = 2) {
+    /// `backgroundInterval` bleibt bewusst nah an `interval`: Sound und Marke „neu“ bei Statuswechseln
+    /// (`Feedback.transitions`) sollen auch im Hintergrund zeitnah reagieren, nicht erst nach zehn Sekunden.
+    func start(interval: TimeInterval = 2, backgroundInterval: TimeInterval = 5) {
         task?.cancel()
         task = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.pollNow()
-                try? await Task.sleep(for: .seconds(interval))
+                let background = self?.isBackground ?? false
+                try? await Task.sleep(for: .seconds(background ? backgroundInterval : interval))
             }
         }
+    }
+
+    /// Fenster verdeckt/versteckt oder App im Hintergrund: seltener pollen. Kommt die App zurück, sofort neu laden,
+    /// statt bis zu `interval` auf den nächsten Tick zu warten.
+    func setBackground(_ background: Bool) {
+        guard background != isBackground else { return }
+        isBackground = background
+        if !background { Task { await self.pollNow() } }
     }
 
     func add(_ session: Session) {
