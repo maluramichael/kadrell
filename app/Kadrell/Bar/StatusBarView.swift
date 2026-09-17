@@ -132,7 +132,7 @@ final class StatusBarView: NSView {
             let r = CGRect(x: x, y: 0, width: label.size().width + 20, height: b.height - 1)
             label.draw(at: CGPoint(x: r.minX + 10, y: midY - 7))
             let next: Character = split == "a" ? "r" : split == "r" ? "d" : "a"
-            hitRects.append((r, { [weak self] in self?.onSplit?(next) }))
+            hitRects.append((r, "Nächste Kachel teilt", split == "r" ? "rechts" : split == "d" ? "unten" : "automatisch", { [weak self] in self?.onSplit?(next) }))
             Theme.line.setFill(); CGRect(x: r.maxX, y: 0, width: 1, height: b.height - 1).fill()
             x = r.maxX + 1
         }
