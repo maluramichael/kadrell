@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.46.0 (2026-09-17)
+
+- Änderung: Eine Gruppe ohne Sessions verschwindet jetzt immer, sobald sie kein Herz mehr hat. Bisher blieb sie stehen, wenn sie einmal umbenannt oder umgefärbt worden war.
+
 ## 1.45.0 (2026-09-17)
 
 - Feature: Ein Knopf in der Leiste trennt alle fertigen Sessions auf einmal. Die Kacheln bleiben stehen, ein Klick setzt die Konversation fort.

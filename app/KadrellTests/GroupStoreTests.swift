@@ -99,23 +99,32 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(GroupStore(url: url).groups, before)
     }
 
-    func testManuallyEditedEmptyGroupSurvivesPruning() throws {
+    /// Ein eigener Name hält eine leere Gruppe nicht mehr: nur das Herz tut das. Sonst bliebe jede einmal
+    /// umbenannte Gruppe für immer stehen, auch lange nachdem ihre letzte Session weg ist.
+    func testManuallyEditedEmptyGroupIsPrunedWithoutFavorite() throws {
         let store = GroupStore(url: url)
         store.assign([session("s1", cwd: "/p/a"), session("t1", cwd: "/p/b")])
         var g = store.groups.first { $0.cwd == "/p/a" }!
         g.name = "Mein Projekt"
+        g.color = "#123456"
         store.update(g)
         // Echtes Schließen statt Verschwinden aus der Sessions-Liste: removeSession leert die Gruppe sofort.
         store.removeSession("s1")
-        let kept = store.groups.first { $0.cwd == "/p/a" }!
-        XCTAssertTrue(kept.sessionIds.isEmpty)
-        XCTAssertEqual(kept.name, "Mein Projekt")
-        // Gruppe ist von Hand umbenannt: bleibt beim nächsten Abgleich leer stehen statt zu verschwinden
+        let emptied = store.groups.first { $0.cwd == "/p/a" }!
+        XCTAssertTrue(emptied.sessionIds.isEmpty)
+        XCTAssertEqual(emptied.name, "Mein Projekt")
+        XCTAssertTrue(store.assign([session("t1", cwd: "/p/b")]))
+        XCTAssertEqual(store.groups.map(\.cwd), ["/p/b"])
+        XCTAssertEqual(GroupStore(url: url).groups.map(\.cwd), ["/p/b"])
+        // Mit Herz bleibt dieselbe Gruppe stehen, samt Name und Farbe
+        store.assign([session("s2", cwd: "/p/a")])
+        var kept = store.groups.first { $0.cwd == "/p/a" }!
+        kept.name = "Mein Projekt"
+        store.update(kept)
+        store.toggleFavorite(id: kept.id)
+        store.removeSession("s2")
         XCTAssertFalse(store.assign([session("t1", cwd: "/p/b")]))
-        XCTAssertEqual(store.groups.map(\.cwd).sorted(), ["/p/a", "/p/b"])
-        // eine neue Session im selben cwd landet wieder in der alten Gruppe
-        XCTAssertTrue(store.assign([session("t1", cwd: "/p/b"), session("s2", cwd: "/p/a")]))
-        XCTAssertEqual(store.groups.first { $0.cwd == "/p/a" }!.sessionIds, ["s2"])
+        XCTAssertEqual(store.groups.first { $0.cwd == "/p/a" }!.name, "Mein Projekt")
     }
 
     func testFavoriteSurvivesEmptyGroup() throws {
