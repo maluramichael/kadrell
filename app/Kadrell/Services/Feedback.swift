@@ -70,6 +70,13 @@ enum Feedback {
         return CGFloat(1 - pow(1 - p, 3))
     }
 
+    /// Deckkraft des pulsierenden Punkts laufender Sessions, 0,3...1 im 1,2-s-Takt; 1 bei „Bewegung reduzieren“.
+    nonisolated static func pulse(now: CFTimeInterval = CACurrentMediaTime()) -> CGFloat {
+        guard !reduceMotion else { return 1 }
+        let t = now.truncatingRemainder(dividingBy: 1.2) / 1.2
+        return 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
+    }
+
     /// Sessions, die seit dem letzten Stand zu warten begonnen haben bzw. vom Arbeiten in den Leerlauf gewechselt sind.
     nonisolated static func transitions(from old: [String: SessionStatus], to new: [String: SessionStatus]) -> (waiting: Set<String>, done: Set<String>) {
         var waiting = Set<String>(), done = Set<String>()
