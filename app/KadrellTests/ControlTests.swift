@@ -187,3 +187,15 @@ final class ControlTests: XCTestCase {
         XCTAssertEqual(order, ["foo start", "foo end", "bar start", "bar end"])
     }
 }
+
+extension ControlTests {
+    func testParseStatus() throws {
+        XCTAssertEqual(try ControlCommand.parse(["status", "waiting", "--waiting-for", "Bash", "--session-id", "s1"]),
+                       .status(target: nil, state: "waiting", sessionId: "s1", title: nil, waitingFor: "Bash", message: nil, firstPrompt: nil))
+        XCTAssertEqual(try ControlCommand.parse(["status", "-t", "ab", "idle", "--title", "T", "--message", "M", "--first-prompt", "F"]),
+                       .status(target: "ab", state: "idle", sessionId: nil, title: "T", waitingFor: nil, message: "M", firstPrompt: "F"))
+        for argv in [["status"], ["status", "busy"], ["status", "idle", "extra"], ["status", "idle", "--title"]] {
+            XCTAssertThrowsError(try ControlCommand.parse(argv), argv.joined(separator: " "))
+        }
+    }
+}

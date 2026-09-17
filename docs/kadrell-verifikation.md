@@ -26,6 +26,15 @@ Dateiänderung `EnterWorktree` erzwingt. Geprüft per Python-`pty.fork` in einer
 - Interaktiv fragt Claude in einem noch nicht vertrauten Ordner erst „Is this a project you trust?“ (mit `--bg`
   nicht). Die Frage erscheint im Terminal der Kachel.
 
+## Hooks per `--settings` (17.09.2026, 2.1.274)
+
+- `claude --settings '{"hooks":{…}}' -p …` lädt die Hooks aus dem JSON-String, obwohl die Hooks-Doku nur
+  `settings.json` nennt: `UserPromptSubmit` und `Stop` feuerten, stdin-JSON mit `session_id`, `transcript_path`,
+  `cwd`, `hook_event_name`, `prompt_id`, `permission_mode`; `Stop` zusätzlich `last_assistant_message`.
+  Darauf baut `ClaudeHook.launchArgs`: kein Eintrag in `~/.claude/settings.json` nötig.
+- Der Hook-Prozess erbt die Umgebung des claude-Prozesses samt eigenen Variablen (`KADRELL_*`) und `CLAUDE_PID`;
+  `~/.claude/sessions/$CLAUDE_PID.json` hat die Felder `name`, `nameSource` (`derived` = automatischer Name), `status`.
+
 ## Spike: Attach-Client hängt sich auf, Session läuft weiter
 
 Ablauf (`/tmp/kadrell-spike/spike_attach.py`, Python `pty.fork`):

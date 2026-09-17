@@ -47,6 +47,10 @@ enum ControlCommand: Equatable {
     case killGroup(target: String?)
     case send(target: String?, text: String, enter: Bool, keys: Bool)
     case capture(target: String?, all: Bool)
+    /// Zustand einer Session von außen setzen, Quelle sind die Hooks der Agent-CLIs (`ClaudeHook`).
+    case status(target: String?, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?)
+
+    static let states = ["working", "waiting", "idle"]
 
     static let usage = """
     Kadrell fernsteuern (die App muss laufen, sonst wird sie gestartet).
@@ -76,6 +80,9 @@ enum ControlCommand: Equatable {
       kadrell send [-t session] [--no-enter] <text …>      Text eingeben und abschicken
       kadrell send [-t session] -k <taste …>               Tasten: Enter Escape Tab Up Down Left Right BSpace C-c C-d
       kadrell capture [-t session] [--all]                 Bildschirm ausgeben (--all: mit Verlauf)
+      kadrell status working|waiting|idle [-t session] [--session-id ID] [--title T] [--waiting-for TEXT]
+                     [--message TEXT] [--first-prompt TEXT]   Zustand melden (nutzen die Hooks der CLIs)
+      kadrell hook claude                                  Claude-Code-Hook: liest das Hook-JSON von stdin, meldet status
 
     Die Session-Keys stehen in `kadrell ls`. Exit-Code 1 bei Fehlern, Meldung auf stderr.
     """
@@ -137,6 +144,11 @@ enum ControlCommand: Equatable {
                 return .send(target: a["-t"], text: a.positional.joined(separator: " "), enter: !keys && !a.has("--no-enter"), keys: keys)
             },
             "capture": parser(values: ["-t"], bools: ["--all"]) { .capture(target: $0["-t"], all: $0.has("--all")) },
+            "status": parser(values: ["-t", "--session-id", "--title", "--waiting-for", "--message", "--first-prompt"], positional: true) { a in
+                guard a.positional.count == 1, states.contains(a.positional[0]) else { throw ControlError("status working|waiting|idle") }
+                return .status(target: a["-t"], state: a.positional[0], sessionId: a["--session-id"], title: a["--title"],
+                               waitingFor: a["--waiting-for"], message: a["--message"], firstPrompt: a["--first-prompt"])
+            },
         ]
         for (alias, name) in ["-h": "help", "--help": "help", "list": "ls", "new-session": "new", "kill-session": "kill",
                               "send-keys": "send", "capture-pane": "capture"] { t[alias] = t[name] }

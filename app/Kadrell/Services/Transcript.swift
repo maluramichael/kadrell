@@ -74,12 +74,24 @@ enum Transcript {
             let text = (content as? String)
                 ?? (content as? [[String: Any]])?.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: " ")
                 ?? ""
-            let flat = text.replacingOccurrences(of: "\\[Image #\\d+\\]", with: "", options: .regularExpression)
-                .split(whereSeparator: \.isWhitespace).joined(separator: " ")
-            if flat.isEmpty || flat.hasPrefix("<") { continue }
-            return flat.count > limit ? flat.prefix(limit).trimmingCharacters(in: .whitespaces) + "…" : flat
+            if let flat = flatPrompt(text, limit: limit) { return flat }
         }
         return nil
+    }
+
+    /// Eine Nutzereingabe als Ersatztitel: Bildmarker raus, eine Zeile, gekürzt; Slash-Command-Ausgaben (`<…`) sind keiner.
+    static func flatPrompt(_ text: String, limit: Int = 50) -> String? {
+        let flat = text.replacingOccurrences(of: "\\[Image #\\d+\\]", with: "", options: .regularExpression)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        if flat.isEmpty || flat.hasPrefix("<") { return nil }
+        return flat.count > limit ? flat.prefix(limit).trimmingCharacters(in: .whitespaces) + "…" : flat
+    }
+
+    /// Eine Antwort als Baumzeile: Markdown-Zeichen raus, eine Zeile.
+    static func flatAnswer(_ text: String) -> String? {
+        let flat = text.replacingOccurrences(of: "[`*#]", with: "", options: .regularExpression)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return flat.isEmpty ? nil : flat
     }
 
     /// ponytail: nur das letzte MB, reicht solange keine Tool-Ausgabe allein größer ist; sonst ganze Datei lesen.
@@ -97,10 +109,7 @@ enum Transcript {
             guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
                   obj["type"] as? String == "assistant", obj["isSidechain"] as? Bool != true,
                   let content = (obj["message"] as? [String: Any])?["content"] as? [[String: Any]] else { continue }
-            let text = content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.last ?? ""
-            let flat = text.replacingOccurrences(of: "[`*#]", with: "", options: .regularExpression)
-                .split(whereSeparator: \.isWhitespace).joined(separator: " ")
-            if !flat.isEmpty { return flat }
+            if let flat = flatAnswer(content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.last ?? "") { return flat }
         }
         return nil
     }

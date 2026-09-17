@@ -60,6 +60,15 @@ Claude Code, `$3` Titel; Umgebung wie Claude (Login-Shell) plus `KADRELL_EVENT`,
 `KADRELL_SESSION_ID`, `KADRELL_SESSION_KEY`, `KADRELL_TITLE`, `KADRELL_BRANCH`. Fehlt das Skript, passiert nichts.
 Skripte (und der Ordner), die nicht dem eigenen Benutzer gehören oder für Gruppe/andere beschreibbar sind, laufen nicht.
 
+Statusmeldung per Hook statt Polling: jeder von Kadrell gestartete Claude-Prozess bekommt per `--settings '<json>'` fünf
+Hooks mit (SessionStart, UserPromptSubmit, PermissionRequest, Notification, Stop), Kommando
+`[ -n "$KADRELL_SOCKET" ] && exec "$KADRELL" hook claude || exit 0`. `kadrell hook claude` liest das Hook-JSON von stdin
+und schickt `kadrell status working|waiting|idle [--session-id] [--title] [--waiting-for] [--message] [--first-prompt]`
+an den Socket der eigenen Kachel; ohne Socket endet der Hook sofort. Eine so gemeldete Kachel wird nicht mehr gepollt
+(kein Lesen von `sessions/<pid>.json`, kein Transcript-Scan), bis ihr Prozess endet; meldet sich ein Prozess nicht
+(ältere CLI), bleibt es beim alten Weg. Nichts wird in `~/.claude/settings.json` eingetragen.
+`kadrell status` steht auch anderen Agent-CLIs offen, siehe `docs/agenten-plan.md`.
+
 Fernsteuerung (wie das `tmux`-Kommando): Menü Kadrell › „Kommandozeilen-Tool installieren …“ legt
 `~/.local/bin/kadrell` als Symlink auf das App-Binary an. `kadrell <befehl>` spricht über den Unix-Socket
 `~/Library/Application Support/de.malura.kadrell/kadrell.sock` (0600) mit der laufenden App und startet sie, falls

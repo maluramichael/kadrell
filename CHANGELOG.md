@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.48.0 (2026-09-17)
+
+- Feature: Claude-Sessions melden Status, Titel, erste Eingabe und letzte Antwort per Hook an Kadrell, automatisch für jeden gestarteten Prozess. Kadrell liest deren Dateien nicht mehr im Sekundentakt.
+- Feature: `kadrell status` meldet den Zustand einer Session von außen, `kadrell hook claude` ist der Hook dazu.
+
 ## 1.47.0 (2026-09-17)
 
 - Feature: Mittelklick auf eine Session im Baum schließt sie, auf eine Gruppe die ganze Gruppe. Mit ⌥ ohne Rückfrage, wie beim X.

@@ -148,6 +148,7 @@ enum ControlClient {
     }
 
     static func run(_ argv: [String]) -> Int32 {
+        if argv.first == "hook" { return runHook(argv) }
         // Vor dem Verbinden prüfen: ein Tippfehler soll die App nicht starten.
         do {
             if try ControlCommand.parse(argv) == .help {
@@ -187,6 +188,21 @@ enum ControlClient {
             FileHandle.standardError.write(Data("kadrell: \(msg)\n".utf8))
             return 1
         }
+    }
+
+    /// `kadrell hook claude` aus einem Claude-Code-Hook: JSON von stdin, daraus `status …` an den Socket der Kachel.
+    /// Außerhalb von Kadrell (kein `KADRELL_SOCKET`) oder ohne Antwort: stumm und Exit 0, nie die App starten,
+    /// nie warten. Der Hook darf Claude weder bremsen noch Fehler zeigen.
+    private static func runHook(_ argv: [String]) -> Int32 {
+        guard argv == ["hook", "claude"] else {
+            FileHandle.standardError.write(Data("kadrell: hook claude (liest das Hook-JSON von stdin)\n".utf8))
+            return 1
+        }
+        let env = ProcessInfo.processInfo.environment
+        guard let path = env["KADRELL_SOCKET"], let json = try? FileHandle.standardInput.readToEnd(),
+              let status = ClaudeHook.statusArgv(json: json, env: env) else { return 0 }
+        _ = try? send(ControlRequest(argv: status, cwd: FileManager.default.currentDirectoryPath, caller: env["KADRELL_SESSION_KEY"]), path: path)
+        return 0
     }
 
     /// Startet genau das Bundle, zu dem dieses Binary gehört (auch über den Symlink), im Hintergrund.

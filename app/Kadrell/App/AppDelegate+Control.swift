@@ -60,8 +60,16 @@ extension AppDelegate {
         case .killSession(let t): closeSession(try session(t, req).id, force: true)
         case .killGroup(let t): closeGroup(try group(t, req).id, force: true)
         case let .send(t, text, enter, keys): try await controlSend(target: t, text: text, enter: enter, keys: keys, req)
+        case let .status(t, state, sessionId, title, waitingFor, message, firstPrompt):
+            try controlStatus(target: t, state: state, sessionId: sessionId, title: title, waitingFor: waitingFor, message: message, firstPrompt: firstPrompt, req)
         case .help, .list, .newGroup, .newSession, .capture: break
         }
+    }
+
+    /// Ohne -t meldet sich die aufrufende Kachel selbst; von außen muss das Ziel genannt sein.
+    private func controlStatus(target t: String?, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?, _ req: ControlRequest) throws {
+        guard t != nil || req.caller != nil else { throw ControlError("status braucht -t, wenn es nicht aus einer Session kommt") }
+        registry.report(try session(t, req).id, state: state, sessionId: sessionId, title: title, waitingFor: waitingFor, message: message, firstPrompt: firstPrompt)
     }
 
     private func controlSelect(target t: String?, add: Bool, _ req: ControlRequest) throws {

@@ -35,6 +35,12 @@ final class SessionRegistry {
     private var worktreeCache: [String: [Worktree.Entry]] = [:]
     /// Ersatztitel je sessionId. Die erste Nachricht ändert sich nicht, einmal gefunden wird nie wieder gelesen.
     private var firstPrompts: [String: String] = [:]
+    /// Kacheln, die sich per `report` selbst melden (Claude-Hooks): kein Lesen ihrer Session-Datei, kein Transcript-Scan.
+    private var reported: Set<String> = []
+    /// Letzte Antwort je gemeldeter Kachel (`Session.id`), kommt mit dem `Stop`-Hook statt aus dem Transcript.
+    private var hookMessages: [String: String] = [:]
+    /// Gemeldete Kacheln, deren Transcript nach einer Antwort einmal nachgelesen wird (Worktree-Erkennung).
+    private var transcriptDue: Set<String> = []
     /// Schlüssel der Session je pid des eigenen Claude-Prozesses, liefert der AttachManager.
     var pids: () -> [Int: String] = { [:] }
     var onChange: (([Session]) -> Void)?
@@ -138,23 +144,53 @@ final class SessionRegistry {
         onChange?(sessions)
     }
 
+    /// `kadrell status` aus einem Hook der Session (`ClaudeHook`): ab jetzt gilt für diese Kachel das Gemeldete,
+    /// der Poll lässt Status, sessionId, Name und Transcript in Ruhe, solange ihr Prozess läuft.
+    func report(_ key: String, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?) {
+        guard let i = sessions.firstIndex(where: { $0.id == key }) else { return }
+        Self.log.info("status \(state, privacy: .public) für \(key.prefix(8), privacy: .public)\(title == nil ? "" : " · Titel", privacy: .public)\(message == nil ? "" : " · Antwort", privacy: .public)")
+        var s = sessions[i]
+        s.rawStatus = state
+        s.waitingFor = state == "waiting" ? waitingFor : nil
+        s.pid = pids().first { $0.value == key }?.key ?? s.pid
+        if let sessionId, !sessionId.isEmpty { s.sessionId = sessionId }
+        if let title, !title.isEmpty { s.name = title }
+        if let firstPrompt, firstPrompts[s.sessionId] == nil { firstPrompts[s.sessionId] = firstPrompt }
+        s.firstPrompt = firstPrompts[s.sessionId].flatMap { $0.isEmpty ? nil : $0 }
+        if let message {
+            hookMessages[key] = message
+            if Settings.showLastMessage { lastMessages[key] = message }
+        }
+        // Nach jeder Antwort einmal den Transcript-Tail lesen: nur daraus kommt der aktive Worktree.
+        if state == "idle" { transcriptDue.insert(key) }
+        reported.insert(key)
+        let changed = s != sessions[i], persisted = s.stored != sessions[i].stored
+        sessions[i] = s
+        if persisted { save() }
+        if changed || message != nil { onChange?(sessions) }
+    }
+
     func pollNow() async {
         let pids = pids(), priorSessions = sessions, configDir = cli.configDir
+        // Gemeldete Kacheln, deren Prozess weg ist, fallen zurück auf den Poll.
+        reported.formIntersection(pids.values)
+        hookMessages = hookMessages.filter { reported.contains($0.key) }
+        let live = reported, pollPids = pids.filter { !live.contains($0.value) }
         // Agent.local liest je pid eine Datei, merge() je Session `.git/HEAD` (Git.branch), applyShellCwd() je
         // Shell-pid /proc: reines I/O ohne UI-Zugriff, deshalb abseits des Main-Threads statt bei jedem Poll
         // Tastatureingaben in allen Terminals zu blockieren.
         var merged = await Task.detached {
-            let agents = Agent.local(pids: Array(pids.keys), configDir: configDir)
-            var merged = SessionRegistry.merge(priorSessions, agents: agents, pids: pids)
+            let agents = Agent.local(pids: Array(pollPids.keys), configDir: configDir)
+            var merged = SessionRegistry.merge(priorSessions, agents: agents, pids: pids, reported: live)
             SessionRegistry.applyShellCwd(&merged, pids: pids)
             return merged
         }.value
         await fillFirstPrompts(&merged)
         let messages = await refreshTranscripts(merged)
         await applyActiveWorktree(&merged)
-        // Während der awaits kann `add`/`remove`/`rename` gelaufen sein: nur die Live-Felder auf den aktuellen Stand legen,
-        // sonst verschwindet eine eben angelegte Session (und `attach.sync` beendet ihren Prozess).
-        merged = SessionRegistry.applyLive(merged, to: sessions)
+        // Während der awaits kann `add`/`remove`/`rename`/`report` gelaufen sein: nur die Live-Felder auf den aktuellen
+        // Stand legen, sonst verschwindet eine eben angelegte Session (und `attach.sync` beendet ihren Prozess).
+        merged = SessionRegistry.applyLive(merged, to: sessions, reported: self.reported)
         // Erster Poll meldet sich auch ohne Änderung: Registrierte hören darauf, um den Lade-Zustand zu verlassen.
         let firstPoll = !polled
         polled = true
@@ -176,7 +212,7 @@ final class SessionRegistry {
 
     private func fillFirstPrompts(_ merged: inout [Session]) async {
         // Shell- und Remote-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich scannen.
-        let missing = merged.filter { $0.name.isEmpty && !$0.isShell && !$0.isRemote && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
+        let missing = merged.filter { $0.name.isEmpty && !$0.isShell && !$0.isRemote && !reported.contains($0.id) && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
         if !missing.isEmpty {
             let configDir = cli.configDir
             let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
@@ -194,11 +230,14 @@ final class SessionRegistry {
     private func refreshTranscripts(_ merged: [Session]) async -> [String: String] {
         // Shell- und Remote-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich den ganzen
         // Projektordner scannen (siehe `Transcript.path`).
-        let ids = merged.filter { !$0.isShell && !$0.isRemote }.map(\.sessionId), cache = transcripts, wantText = Settings.showLastMessage, configDir = cli.configDir
+        // Gemeldete Sessions (Hooks) nur nach einer Antwort (`transcriptDue`), nicht bei jedem Poll.
+        let ids = merged.filter { !$0.isShell && !$0.isRemote && (!reported.contains($0.id) || transcriptDue.contains($0.id)) }.map(\.sessionId)
+        transcriptDue.subtract(reported)
+        let cache = transcripts, wantText = Settings.showLastMessage, configDir = cli.configDir
         transcripts = await Task.detached { Transcript.refresh(ids, configDir: configDir, cache: cache, wantText: wantText) }.value
         var messages: [String: String] = [:]
         if Settings.showLastMessage {
-            for s in merged { if let t = transcripts[s.sessionId]?.text { messages[s.id] = t } }
+            for s in merged { if let t = hookMessages[s.id] ?? transcripts[s.sessionId]?.text { messages[s.id] = t } }
         }
         return messages
     }
@@ -225,12 +264,15 @@ final class SessionRegistry {
     /// Live-Werte nur über die pid des eigenen Prozesses: eine fremde Session mit derselben sessionId
     /// (z. B. der gestoppte Hintergrund-Eintrag) ist nicht diese Kachel, und `/clear` wechselt die sessionId.
     /// `nonisolated`: liest nur `.git/HEAD` (`Git.branch`), läuft in `pollNow` abseits des Main-Threads.
-    nonisolated static func merge(_ sessions: [Session], agents: [Agent], pids: [Int: String]) -> [Session] {
+    nonisolated static func merge(_ sessions: [Session], agents: [Agent], pids: [Int: String], reported: Set<String> = []) -> [Session] {
         var live: [String: Agent] = [:]
         for a in agents { if let pid = a.pid, let key = pids[pid] { live[key] = a } }
+        let pidByKey = Dictionary(pids.map { ($0.value, $0.key) }, uniquingKeysWith: { a, _ in a })
         return sessions.map { s in
             var s = s
             s.branch = Git.branch(at: s.cwd)
+            // Per Hook gemeldet: Status, sessionId und Name kommen von der Session selbst, nur die pid nachziehen.
+            if reported.contains(s.id) { s.pid = pidByKey[s.id]; return s }
             guard let a = live[s.id] else { s.rawStatus = nil; s.pid = nil; s.waitingFor = nil; return s }
             s.sessionId = a.sessionId
             if !Session.isAutoName(a.name, cwd: s.cwd) { s.name = a.name }
@@ -243,13 +285,15 @@ final class SessionRegistry {
 
     /// Überträgt die vom Poll ermittelten Felder per `id` auf `current`. Neu hinzugekommene Sessions bleiben unverändert,
     /// entfernte kommen nicht zurück, `customName` bleibt aus `current`.
-    static func applyLive(_ polled: [Session], to current: [Session]) -> [Session] {
+    static func applyLive(_ polled: [Session], to current: [Session], reported: Set<String> = []) -> [Session] {
         let byId = Dictionary(polled.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         return current.map { s in
             guard let p = byId[s.id] else { return s }
             var s = s
-            s.cwd = p.cwd; s.sessionId = p.sessionId; s.name = p.name; s.rawStatus = p.rawStatus; s.pid = p.pid
-            s.waitingFor = p.waitingFor; s.branch = p.branch; s.activeWorktree = p.activeWorktree; s.firstPrompt = p.firstPrompt
+            s.cwd = p.cwd; s.pid = p.pid; s.branch = p.branch; s.activeWorktree = p.activeWorktree
+            // Gemeldete Sessions: was `report` inzwischen gesetzt hat, ist neuer als der Stand vom Poll-Beginn.
+            guard !reported.contains(s.id) else { return s }
+            s.sessionId = p.sessionId; s.name = p.name; s.rawStatus = p.rawStatus; s.waitingFor = p.waitingFor; s.firstPrompt = p.firstPrompt
             return s
         }
     }
