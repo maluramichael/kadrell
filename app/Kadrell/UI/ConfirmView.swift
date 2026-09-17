@@ -48,7 +48,3 @@ struct ConfirmView: View {
         .background(Theme.panelColor)
     }
 }
-
-extension Theme {
-    static let errorColor = Color(nsColor: error)
-}

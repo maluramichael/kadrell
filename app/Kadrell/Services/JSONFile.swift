@@ -47,14 +47,10 @@ enum JSONFile {
     /// neben dem Debug-Build) lesen einen Umschlag als kaputt und würden die Datei sonst leer überschreiben.
     /// Erst ein echter Formatwechsel (Version ≥ 2) schreibt den Umschlag. Fehler werden geloggt und gemeldet.
     static func saveArray<T: Codable>(_ items: [T], to url: URL, version: Int, fail: ((String) -> Void)? = nil) {
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        write(url, fail) {
             let enc = JSONEncoder()
             enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = version >= 2 ? try enc.encode(Envelope(version: version, items: items)) : try enc.encode(items)
-            try data.write(to: url, options: .atomic)
-        } catch {
-            report("Speichern von \(url.lastPathComponent) fehlgeschlagen: \(error.localizedDescription)", fail)
+            return version >= 2 ? try enc.encode(Envelope(version: version, items: items)) : try enc.encode(items)
         }
     }
 
@@ -69,9 +65,14 @@ enum JSONFile {
     }
 
     static func saveDict<V: Encodable>(_ dict: [String: V], to url: URL, fail: ((String) -> Void)? = nil) {
+        write(url, fail) { try JSONEncoder().encode(dict) }
+    }
+
+    /// Ordner anlegen, atomar schreiben, Fehler loggen und melden.
+    private static func write(_ url: URL, _ fail: ((String) -> Void)?, _ encode: () throws -> Data) {
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(dict).write(to: url, options: .atomic)
+            try encode().write(to: url, options: .atomic)
         } catch {
             report("Speichern von \(url.lastPathComponent) fehlgeschlagen: \(error.localizedDescription)", fail)
         }

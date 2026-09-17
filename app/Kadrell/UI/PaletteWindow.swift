@@ -3,7 +3,7 @@ import AppKit
 /// ⌘P Omni-Leiste: Fuzzy-Suche über Sessions, Gruppen, Pfade, letzte Zeilen; `>` schaltet in den Kommandomodus,
 /// `/` durchsucht den Verlauf aller laufenden Terminals (⌘⇧F).
 @MainActor
-final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
+final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     struct Item {
         /// Vorgelesen: Titel, Status, Gruppe, Zusatzzeile.
         var spoken: String { [label, status?.spoken, group, sub].compactMap { $0 }.joined(separator: ", ") }
@@ -49,13 +49,9 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
 
     init() {
         let s = Theme.scale, W = (640 * s).rounded(), H = (420 * s).rounded()
-        super.init(contentRect: NSRect(x: 0, y: 0, width: W, height: H), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        isFloatingPanel = true
-        level = .floating
+        super.init(size: NSSize(width: W, height: H))
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
-        appearance = Theme.appearance
         let root = NSView(frame: contentRect(forFrameRect: frame))
         root.wantsLayer = true
         root.layer?.backgroundColor = Theme.panel.cgColor
@@ -109,8 +105,6 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         root.addSubview(sep2)
     }
 
-    override var canBecomeKey: Bool { true }
-
     var isCommandMode: Bool { field.stringValue.hasPrefix(">") }
 
     func open(over parent: NSWindow, prefix: String = "") {
@@ -120,25 +114,17 @@ final class PaletteWindow: NSPanel, NSTextFieldDelegate, NSTableViewDataSource, 
         remoteCache = [:]
         buffersCache = nil
         hostsCache = nil
-        host = parent
-        parent.addChildWindow(self, ordered: .above)
-        makeKeyAndOrderFront(nil)
-        Backdrop.sync(parent)
+        attach(to: parent)
         makeFirstResponder(field)
         field.currentEditor()?.moveToEndOfLine(nil)
         refreshList()
     }
 
-    func dismiss(runHighlightReset: Bool = true) {
-        host?.removeChildWindow(self)
-        orderOut(nil)
+    override func dismiss() { dismiss(runHighlightReset: true) }
+    func dismiss(runHighlightReset: Bool) {
+        super.dismiss()
         if runHighlightReset { onHighlight?(nil) }
     }
-
-    /// Wie bei OverlayPanel: `parent` ist nach orderOut/close nil, der Blur hängt am gemerkten Hauptfenster.
-    private weak var host: NSWindow?
-    override func orderOut(_ sender: Any?) { super.orderOut(sender); Backdrop.sync(host) }
-    override func close() { super.close(); Backdrop.sync(host) }
 
     func switchToCommandMode() {
         if !isCommandMode { field.stringValue = ">"; field.currentEditor()?.moveToEndOfLine(nil); refreshList() }

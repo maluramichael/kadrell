@@ -1,305 +1,28 @@
 import SwiftUI
 
-enum Settings {
-    static let startFolderKey = "startFolder"
-    /// Startordner für ⌘N. Immer mit abschließendem Slash.
-    static var startFolder: String {
-        get {
-            var p = Profile.defaults.string(forKey: startFolderKey) ?? defaultStartFolder
-            if p.hasPrefix("~") { p = NSHomeDirectory() + p.dropFirst() }
-            return p.hasSuffix("/") ? p : p + "/"
-        }
-        set { Profile.defaults.set(newValue, forKey: startFolderKey) }
-    }
-
-    /// Erster existierender Kandidat aus den üblichen Projektordnern, sonst Home. `~` selbst als Startordner scannt
-    /// beim ersten ⌘N auch Schreibtisch/Dokumente/Downloads an und löst eine Kaskade an TCC-Abfragen aus (#23).
-    private static var defaultStartFolder: String {
-        let home = NSHomeDirectory()
-        let candidates = ["development", "Development", "Projects", "projects", "code", "Code", "src",
-                           "workspace", "git", "Documents/GitHub"]
-        return candidates.map { home + "/" + $0 }.first { FolderIndex.isDirectory($0) } ?? home
-    }
-
-    /// Kommando des externen Editors, so wie im Terminal getippt (`code`, `subl`, `zed`). "" = Hotkey tut nichts.
-    static var editorCommand: String {
-        get { Profile.defaults.string(forKey: "editorCommand") ?? "" }
-        set { Profile.defaults.set(newValue, forKey: "editorCommand") }
-    }
-
-    /// Letzte Antwort von Claude als zweite Zeile unter jeder Session im Baum.
-    static var showLastMessage: Bool {
-        get { Profile.defaults.bool(forKey: "showLastMessage") }
-        set { Profile.defaults.set(newValue, forKey: "showLastMessage") }
-    }
-
-    /// Farbschema der Oberfläche und Terminals, Default Catppuccin Mocha.
-    static var colorTheme: String {
-        get { Profile.defaults.string(forKey: "colorTheme") ?? ColorTheme.all[0].id }
-        set { Profile.defaults.set(newValue, forKey: "colorTheme") }
-    }
-
-    /// Aussehen des Baums, Default getönte Gruppen.
-    static var sidebarStyle: SidebarStyle {
-        get { Profile.defaults.string(forKey: "sidebar.style").flatMap(SidebarStyle.init) ?? .tinted }
-        set { Profile.defaults.set(newValue.rawValue, forKey: "sidebar.style") }
-    }
-
-    /// Sortierung des Baums (Leiste), Default aus = Handreihenfolge.
-    static var sidebarSort: SidebarSort {
-        get { Profile.defaults.string(forKey: "sidebar.sort").flatMap(SidebarSort.init) ?? .off }
-        set { Profile.defaults.set(newValue.rawValue, forKey: "sidebar.sort") }
-    }
-
-    /// Laufzeit („12m“) in jeder Session-Zeile des Baums, Default an.
-    static var sidebarShowAge: Bool {
-        get { Profile.defaults.object(forKey: "sidebar.showAge") as? Bool ?? true }
-        set { Profile.defaults.set(newValue, forKey: "sidebar.showAge") }
-    }
-
-    /// Welche Sounds Kadrell spielt, Default alle.
-    static var sounds: Feedback.Level {
-        get { Profile.defaults.string(forKey: "sounds").flatMap(Feedback.Level.init) ?? .all }
-        set { Profile.defaults.set(newValue.rawValue, forKey: "sounds") }
-    }
-
-    /// Systembenachrichtigungen bei wartenden/fertigen Sessions, Default nur wartet.
-    static var notifications: Notifications.Level {
-        get { Profile.defaults.string(forKey: "notifications").flatMap(Notifications.Level.init) ?? .waiting }
-        set { Profile.defaults.set(newValue.rawValue, forKey: "notifications") }
-    }
-
-    /// Beim Start und danach alle 24 h ohne Tracking-Parameter auf eine neuere Version prüfen, Default an.
-    static var checkForUpdates: Bool {
-        get { Profile.defaults.object(forKey: "checkForUpdates") as? Bool ?? true }
-        set { Profile.defaults.set(newValue, forKey: "checkForUpdates") }
-    }
-
-    /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default an.
-    static var stackShowPath: Bool {
-        get { Profile.defaults.object(forKey: "stackShowPath") as? Bool ?? true }
-        set { Profile.defaults.set(newValue, forKey: "stackShowPath") }
-    }
-
-    /// Beendet sich Claude selbst (zweimal ⌃C, `/exit`), verschwindet die Kachel. Default aus: sie bleibt, Klick setzt fort.
-    static var closeTileOnExit: Bool {
-        get { Profile.defaults.bool(forKey: "closeTileOnExit") }
-        set { Profile.defaults.set(newValue, forKey: "closeTileOnExit") }
-    }
-
-    /// Auto-Modus zeigt aus der Auswahl nur Sessions in diesen Zuständen. Default: nur wartende.
-    static var autoWaiting: Bool {
-        get { Profile.defaults.object(forKey: "auto.waiting") as? Bool ?? true }
-        set { Profile.defaults.set(newValue, forKey: "auto.waiting") }
-    }
-    /// Auto-Modus filtert alle Sessions des Baums statt nur der Auswahl. Default an.
-    static var autoAllSessions: Bool {
-        get { Profile.defaults.object(forKey: "auto.allSessions") as? Bool ?? true }
-        set { Profile.defaults.set(newValue, forKey: "auto.allSessions") }
-    }
-    static var autoRunning: Bool {
-        get { Profile.defaults.bool(forKey: "auto.running") }
-        set { Profile.defaults.set(newValue, forKey: "auto.running") }
-    }
-
-    /// Start-Flags für Claude, gelten ab dem nächsten Start eines Claude-Prozesses. "" = Claude-Default.
-    static let claudeModes = ["", "acceptEdits", "auto", "plan", "dontAsk", "bypassPermissions"]
-    static let claudeModels = ["", "fable", "opus", "sonnet"]
-    static let claudeEfforts = ["", "low", "medium", "high", "xhigh", "max"]
-    static var claudeAllowBypass: Bool {
-        get { Profile.defaults.bool(forKey: "claude.allowBypass") }
-        set { Profile.defaults.set(newValue, forKey: "claude.allowBypass") }
-    }
-    /// `kadrell` aus einer Session heraus darf Sessions anderer Gruppen lesen und steuern (send, capture, kill …).
-    /// Default an: Agenten, die andere Sessions steuern, sollen ohne Umweg laufen. Aus: nur die eigene Gruppe.
-    static var controlOtherSessions: Bool {
-        get { Profile.defaults.object(forKey: "control.otherSessions") as? Bool ?? true }
-        set { Profile.defaults.set(newValue, forKey: "control.otherSessions") }
-    }
-    static var claudeMode: String {
-        get { Profile.defaults.string(forKey: "claude.mode") ?? "" }
-        set { Profile.defaults.set(newValue, forKey: "claude.mode") }
-    }
-    static var claudeModel: String {
-        get { Profile.defaults.string(forKey: "claude.model") ?? "" }
-        set { Profile.defaults.set(newValue, forKey: "claude.model") }
-    }
-    static var claudeEffort: String {
-        get { Profile.defaults.string(forKey: "claude.effort") ?? "" }
-        set { Profile.defaults.set(newValue, forKey: "claude.effort") }
-    }
-    /// Kompakte Zeile für den ⌘N-Dialog: mit welchen Start-Flags eine neue Session gleich läuft (Kanboard #75).
-    static var claudeSummary: String {
-        var parts = [claudeModel.isEmpty ? String(localized: "Standardmodell") : claudeModel,
-                     claudeMode.isEmpty ? String(localized: "fragt nach Rechten") : claudeMode]
-        if !claudeEffort.isEmpty { parts.append(claudeEffort) }
-        if claudeAllowBypass { parts.append(String(localized: "Bypass")) }
-        return parts.joined(separator: " · ")
-    }
-
-    /// Bereiche der Schieberegler, Prozentwerte in Prozent (gespeichert als Faktor).
-    static let uiScalePercent = 50.0...200.0
-    static let lineSpacingPercent = 50.0...300.0
-    static let pixelRange = 0.0...64.0
-    static let fontSizes = 6.0...72.0
-    static let defaultFontSize = 12.0
-    static let defaultFontName = "JetBrainsMonoNF-Regular"
-
-    private static func double(_ key: String, _ fallback: Double) -> Double {
-        Profile.defaults.object(forKey: key) as? Double ?? fallback
-    }
-
-    static var uiScale: Double {
-        get { double("uiScale", 1) }
-        set { Profile.defaults.set(newValue, forKey: "uiScale") }
-    }
-    static var terminalFontSize: Double {
-        get { min(max(double("terminal.fontSize", defaultFontSize), fontSizes.lowerBound), fontSizes.upperBound) }
-        set { Profile.defaults.set(min(max(newValue, fontSizes.lowerBound), fontSizes.upperBound), forKey: "terminal.fontSize") }
-    }
-    static var terminalFontName: String {
-        get { Profile.defaults.string(forKey: "terminal.fontName") ?? defaultFontName }
-        set { Profile.defaults.set(newValue, forKey: "terminal.fontName") }
-    }
-    static var terminalLineSpacing: Double {
-        get { double("terminal.lineSpacing", 1) }
-        set { Profile.defaults.set(newValue, forKey: "terminal.lineSpacing") }
-    }
-    /// Zeilen Verlauf pro Terminal (SwiftTerm hält sonst nur 500). Kostet grob 1 MB je 1000 Zeilen bei breiten Kacheln.
-    static let scrollbackRange = 1_000.0...50_000.0
-    static var terminalScrollback: Int {
-        get { Int(min(max(double("terminal.scrollback", 10_000), scrollbackRange.lowerBound), scrollbackRange.upperBound)) }
-        set { Profile.defaults.set(Double(newValue), forKey: "terminal.scrollback") }
-    }
-    /// Abstand zwischen Kachelrahmen und Terminaltext, zusätzlich zu den 2 px Rahmenschutz.
-    static var terminalPadding: Double {
-        get { double("terminal.padding", 0) }
-        set { Profile.defaults.set(newValue, forKey: "terminal.padding") }
-    }
-
-    /// Bild hinter den Kacheln, nur in der Arbeitsfläche. "" = keins.
-    static var backgroundImage: String {
-        get { Profile.defaults.string(forKey: "workspace.backgroundImage") ?? "" }
-        set { Profile.defaults.set(newValue, forKey: "workspace.backgroundImage") }
-    }
-    /// Deckkraft des Kachelkörpers samt Terminal-Hintergrund; Text bleibt voll sichtbar. 1 = undurchsichtig.
-    static var tileOpacity: Double {
-        get { double("tiles.opacity", 1) }
-        set { Profile.defaults.set(newValue, forKey: "tiles.opacity") }
-    }
-
-    /// Feste Spaltenzahl im Grid (Leiste), 0 = automatisch ⌈√n⌉.
-    static var gridColumns: Int {
-        get { Profile.defaults.integer(forKey: "layout.grid.columns") }
-        set { Profile.defaults.set(newValue, forKey: "layout.grid.columns") }
-    }
-
-    /// Layout Frei: Teilungsrichtung je Position, „r“ rechts, „d“ unten, „a“ längere Seite. Bleibt beim Zurücksetzen der Trennlinien.
-    static var customSplits: String {
-        get { Profile.defaults.string(forKey: "workspace.custom.splits") ?? "" }
-        set { Profile.defaults.set(newValue, forKey: "workspace.custom.splits") }
-    }
-
-    /// Gezogene Verhältnisse einer Layout-Vorlage (`Tiling.layout`), nil = gleich verteilt.
-    static func layoutRatios(_ key: String, _ count: Int) -> [Double]? { Profile.defaults.array(forKey: "layout." + key) as? [Double] }
-    static func setLayoutRatios(_ key: String, _ value: [Double]?) { Profile.defaults.set(value, forKey: "layout." + key) }
-    /// Alle gezogenen Verhältnisse weg, Spaltenzahl bleibt.
-    static func resetLayoutRatios() {
-        for k in Profile.defaults.dictionaryRepresentation().keys where k.hasPrefix("layout.") && k != "layout.grid.columns" { Profile.defaults.removeObject(forKey: k) }
-    }
-
-    /// Abstand zwischen den Kacheln und zum Rand der Arbeitsfläche.
-    static var tileGap: Double {
-        get { double("tiles.gap", 6) }
-        set { Profile.defaults.set(newValue, forKey: "tiles.gap") }
-    }
-
-    /// SwiftTerm zeichnet per Metal auf der GPU statt per CoreGraphics auf dem Main-Thread, Default an.
-    static var terminalMetal: Bool {
-        get { Profile.defaults.object(forKey: "terminal.metal") as? Bool ?? true }
-        set { Profile.defaults.set(newValue, forKey: "terminal.metal") }
-    }
-
-    static var terminalFont: NSFont {
-        let size = CGFloat(terminalFontSize)
-        return NSFont(name: terminalFontName, size: size) ?? Theme.font(size)
-    }
-
-    /// Installierte Monospace-Schriften, nur der normale Schnitt jeder Familie.
-    static var monospaceFonts: [(name: String, display: String)] {
-        let fm = NSFontManager.shared
-        var out: [(String, String)] = []
-        for family in fm.availableFontFamilies {
-            guard let members = fm.availableMembers(ofFontFamily: family) else { continue }
-            // Einträge: [PostScript-Name, Schnitt, Gewicht, Traits]
-            let regular = members.first { ($0[3] as? UInt).map { NSFontTraitMask(rawValue: $0).contains(.fixedPitchFontMask) } == true
-                && ($0[1] as? String) == "Regular" }
-            if let name = regular?[0] as? String { out.append((name, family)) }
-        }
-        return out
-    }
-
-    /// Rückfragen, die ein Häkchen „Nicht mehr fragen“ abschalten kann. Abgeschaltet heißt: Aktion läuft sofort.
-    enum Ask: String, CaseIterable {
-        case closeSession, closeGroup, stopSession, quit, adoptBackground
-        var title: String {
-            switch self {
-            case .closeSession: String(localized: "Session beenden und entfernen")
-            case .closeGroup: String(localized: "Gruppe schließen")
-            case .stopSession: String(localized: "Session stoppen")
-            case .quit: String(localized: "Kadrell beenden, während Claude läuft")
-            case .adoptBackground: String(localized: "Hintergrund-Sessions übernehmen")
-            }
-        }
-        var key: String { "ask.\(rawValue)" }
-        var enabled: Bool {
-            get { Profile.defaults.object(forKey: key) as? Bool ?? true }
-            nonmutating set { Profile.defaults.set(newValue, forKey: key) }
-        }
-    }
-
-    static var version: String {
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
-    }
-}
-
 @Observable
 @MainActor
 final class SettingsModel {
-    var startFolder = Settings.startFolder
-    var editorCommand = Settings.editorCommand
-    var showLastMessage = Settings.showLastMessage
-    var stackShowPath = Settings.stackShowPath
-    var sidebarStyle = Settings.sidebarStyle
-    var sidebarShowAge = Settings.sidebarShowAge
-    var sounds = Settings.sounds
-    var notifications = Settings.notifications
-    var checkForUpdates = Settings.checkForUpdates
-    var closeTileOnExit = Settings.closeTileOnExit
-    var autoWaiting = Settings.autoWaiting
-    var autoRunning = Settings.autoRunning
-    var autoAllSessions = Settings.autoAllSessions
-    var claudeAllowBypass = Settings.claudeAllowBypass
-    var controlOtherSessions = Settings.controlOtherSessions
-    var claudeMode = Settings.claudeMode
-    var claudeModel = Settings.claudeModel
-    var claudeEffort = Settings.claudeEffort
-    var hotkeys = Hotkeys.current
-    var uiScale = Settings.uiScale
-    var colorTheme = Settings.colorTheme
-    var fontName = Settings.terminalFontName
-    var fontSize = Settings.terminalFontSize
-    var lineSpacing = Settings.terminalLineSpacing
-    var padding = Settings.terminalPadding
-    var scrollback = Double(Settings.terminalScrollback)
-    var tileGap = Settings.tileGap
-    var backgroundImage = Settings.backgroundImage
-    var tileOpacity = Settings.tileOpacity
-    var metal = Settings.terminalMetal
-    var ask = Dictionary(uniqueKeysWithValues: Settings.Ask.allCases.map { ($0, $0.enabled) })
+    /// Wird bei jeder Änderung hochgezählt. Die Bindings lesen ihn mit, damit SwiftUI nach dem Schreiben neu zeichnet.
+    private var revision = 0
+    /// Textfelder halten ungetrimmte Entwürfe, sonst schluckt das Trimmen beim Tippen jedes Leerzeichen.
+    var startFolder = Settings.startFolder {
+        didSet {
+            let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !p.isEmpty { Settings.startFolder = p }
+            changed()
+        }
+    }
+    var editorCommand = Settings.editorCommand {
+        didSet { Settings.editorCommand = editorCommand.trimmingCharacters(in: .whitespacesAndNewlines); changed() }
+    }
+    var hotkeys: [HotkeyAction: Hotkey] {
+        get { _ = revision; return Hotkeys.current }
+        set { Hotkeys.current = newValue; changed() }
+    }
     @ObservationIgnored lazy var fonts: [(name: String, display: String)] = {
-        let list = Settings.monospaceFonts
-        return list.contains { $0.name == fontName } ? list : [(fontName, fontName)] + list
+        let list = Settings.monospaceFonts, current = Settings.terminalFontName
+        return list.contains { $0.name == current } ? list : [(current, current)] + list
     }()
     /// Aktion, deren Kürzel gerade aufgenommen wird.
     var recording: HotkeyAction?
@@ -308,49 +31,17 @@ final class SettingsModel {
     @ObservationIgnored var onClose: (() -> Void)?
     @ObservationIgnored private var monitor: Any?
 
-    init() { track(notify: false) }
+    /// Jede Änderung gilt sofort, ohne Speichern: das Binding schreibt direkt in `Settings`.
+    func binding<T>(_ key: ReferenceWritableKeyPath<Settings.Type, T>) -> Binding<T> { binding(Settings.self, key) }
 
-    /// Jede Änderung gilt sofort, ohne Speichern: `write` liest alle Werte, jede Änderung daran schreibt neu.
-    private func track(notify: Bool) {
-        withObservationTracking { write() } onChange: { [weak self] in
-            Task { @MainActor in self?.track(notify: true) }
-        }
-        if notify { onApply?() }
+    func binding<Root, T>(_ root: Root, _ key: ReferenceWritableKeyPath<Root, T>) -> Binding<T> {
+        Binding(get: { _ = self.revision; return root[keyPath: key] },
+                set: { root[keyPath: key] = $0; self.changed() })
     }
 
-    private func write() {
-        let p = startFolder.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !p.isEmpty { Settings.startFolder = p }
-        Settings.editorCommand = editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        Settings.showLastMessage = showLastMessage
-        Settings.stackShowPath = stackShowPath
-        Settings.sidebarStyle = sidebarStyle
-        Settings.sidebarShowAge = sidebarShowAge
-        Settings.sounds = sounds
-        Settings.notifications = notifications
-        Settings.checkForUpdates = checkForUpdates
-        Settings.closeTileOnExit = closeTileOnExit
-        Settings.autoWaiting = autoWaiting
-        Settings.autoRunning = autoRunning
-        Settings.autoAllSessions = autoAllSessions
-        Settings.claudeAllowBypass = claudeAllowBypass
-        Settings.controlOtherSessions = controlOtherSessions
-        Settings.claudeMode = claudeMode
-        Settings.claudeModel = claudeModel
-        Settings.claudeEffort = claudeEffort
-        Hotkeys.current = hotkeys
-        Settings.uiScale = uiScale
-        Settings.colorTheme = colorTheme
-        Settings.terminalFontName = fontName
-        Settings.terminalFontSize = fontSize
-        Settings.terminalLineSpacing = lineSpacing
-        Settings.terminalPadding = padding
-        Settings.terminalScrollback = Int(scrollback)
-        Settings.tileGap = tileGap
-        Settings.backgroundImage = backgroundImage.trimmingCharacters(in: .whitespacesAndNewlines)
-        Settings.tileOpacity = tileOpacity
-        Settings.terminalMetal = metal
-        for (a, on) in ask { a.enabled = on }
+    private func changed() {
+        revision += 1
+        Task { @MainActor [weak self] in self?.onApply?() }
     }
 
     /// Nächster Tastendruck wird das Kürzel. Esc bricht ab, ⌫ entfernt es. Läuft vor OverlayPanel und Terminal.
@@ -412,20 +103,13 @@ struct SettingsView: View {
             table {
                 setting(String(localized: "Projektordner für ⌘N (nach Git-Repos durchsucht)")) {
                     HStack(spacing: 4) {
-                        PathField(text: Binding(get: { Theme.shortPath(model.startFolder) }, set: { model.startFolder = $0 }), autofocus: false,
-                                  onTab: { if let p = FolderIndex.expandAbbreviated(model.startFolder).first { model.startFolder = p } },
-                                  onSubmit: {}, onMove: { _ in })
-                            .frame(height: 18 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 2)
-                            .background(Theme.bgColor)
-                            .dropDestination(for: URL.self) { urls, _ in
-                                guard let d = urls.lazy.compactMap({ FolderIndex.folder(for: $0.path) }).first else { return false }
-                                model.startFolder = d
-                                return true
-                            }
-                        Button { chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } } } label: {
-                            Image(systemName: "folder").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
+                        pathField(Binding(get: { Theme.shortPath(model.startFolder) }, set: { model.startFolder = $0 }),
+                                  onTab: { if let p = FolderIndex.expandAbbreviated(model.startFolder).first { model.startFolder = p } }) { urls in
+                            guard let d = urls.lazy.compactMap({ FolderIndex.folder(for: $0.path) }).first else { return false }
+                            model.startFolder = d
+                            return true
                         }
-                        .buttonStyle(.plain).kbdFocusRing().help("Im Finder wählen")
+                        iconButton("folder") { chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } } }.help("Im Finder wählen")
                     }
                 }
                 setting(String(localized: "Externer Editor (Kommando wie im Terminal)")) {
@@ -434,79 +118,74 @@ struct SettingsView: View {
                         .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
                 }
                 setting(String(localized: "Wenn Claude endet (zweimal ⌃C, /exit)")) {
-                    menu($model.closeTileOnExit, [(false, String(localized: "Kachel bleibt, Klick setzt fort")), (true, String(localized: "Kachel schließen"))])
+                    menu(model.binding(\.closeTileOnExit), [(false, String(localized: "Kachel bleibt, Klick setzt fort")), (true, String(localized: "Kachel schließen"))])
                 }
             }
 
             heading(String(localized: "Claude"), note: String(localized: "gilt für neu gestartete Claude-Prozesse"))
             table {
-                setting(String(localized: "Bypass-Modus erlauben (--allow-dangerously-skip-permissions)")) { onOff($model.claudeAllowBypass) }
-                setting(String(localized: "Startmodus")) { options(Settings.claudeModes, $model.claudeMode) }
-                setting(String(localized: "Modell")) { options(Settings.claudeModels, $model.claudeModel) }
-                setting(String(localized: "Effort")) { options(Settings.claudeEfforts, $model.claudeEffort) }
-                setting(String(localized: "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)")) { onOff($model.controlOtherSessions) }
+                setting(String(localized: "Bypass-Modus erlauben (--allow-dangerously-skip-permissions)")) { onOff(model.binding(\.claudeAllowBypass)) }
+                setting(String(localized: "Startmodus")) { options(Settings.claudeModes, model.binding(\.claudeMode)) }
+                setting(String(localized: "Modell")) { options(Settings.claudeModels, model.binding(\.claudeModel)) }
+                setting(String(localized: "Effort")) { options(Settings.claudeEfforts, model.binding(\.claudeEffort)) }
+                setting(String(localized: "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)")) { onOff(model.binding(\.controlOtherSessions)) }
             }
 
             heading(String(localized: "Darstellung"))
             table {
-                setting(String(localized: "Farbschema")) { menu($model.colorTheme, ColorTheme.all.map { ($0.id, $0.name) }) }
-                setting(String(localized: "UI-Größe")) { slider($model.uiScale, Settings.uiScalePercent, step: 5, factor: 100, unit: "%", live: false) }
-                setting(String(localized: "Terminal-Schrift")) { menu($model.fontName, model.fonts.map { ($0.name, $0.display) }) }
-                setting(String(localized: "Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad")) { slider($model.fontSize, Settings.fontSizes, step: 1, unit: "pt") }
-                setting(String(localized: "Zeilenabstand")) { slider($model.lineSpacing, Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
-                setting(String(localized: "Innenabstand der Kacheln")) { slider($model.padding, Settings.pixelRange, step: 1, unit: "px") }
-                setting(String(localized: "Verlauf zum Zurückscrollen")) { slider($model.scrollback, Settings.scrollbackRange, step: 1_000, unit: String(localized: "Zeilen")) }
-                setting(String(localized: "Abstand zwischen Kacheln")) { slider($model.tileGap, Settings.pixelRange, step: 1, unit: "px") }
-                setting(String(localized: "Terminal auf der GPU zeichnen (Metal)")) { onOff($model.metal) }
+                setting(String(localized: "Farbschema")) { menu(model.binding(\.colorTheme), ColorTheme.all.map { ($0.id, $0.name) }) }
+                setting(String(localized: "UI-Größe")) { slider(model.binding(\.uiScale), Settings.uiScalePercent, step: 5, factor: 100, unit: "%", live: false) }
+                setting(String(localized: "Terminal-Schrift")) { menu(model.binding(\.terminalFontName), model.fonts.map { ($0.name, $0.display) }) }
+                setting(String(localized: "Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad")) { slider(model.binding(\.terminalFontSize), Settings.fontSizes, step: 1, unit: "pt") }
+                setting(String(localized: "Zeilenabstand")) { slider(model.binding(\.terminalLineSpacing), Settings.lineSpacingPercent, step: 5, factor: 100, unit: "%") }
+                setting(String(localized: "Innenabstand der Kacheln")) { slider(model.binding(\.terminalPadding), Settings.pixelRange, step: 1, unit: "px") }
+                setting(String(localized: "Verlauf zum Zurückscrollen")) { slider(Binding(get: { Double(model.binding(\.terminalScrollback).wrappedValue) }, set: { model.binding(\.terminalScrollback).wrappedValue = Int($0) }), Settings.scrollbackRange, step: 1_000, unit: String(localized: "Zeilen")) }
+                setting(String(localized: "Abstand zwischen Kacheln")) { slider(model.binding(\.tileGap), Settings.pixelRange, step: 1, unit: "px") }
+                setting(String(localized: "Terminal auf der GPU zeichnen (Metal)")) { onOff(model.binding(\.terminalMetal)) }
             }
 
             heading(String(localized: "Anpassen"), note: String(localized: "Bild nur hinter den Kacheln"))
             table {
                 setting(String(localized: "Hintergrundbild")) {
+                    let image = model.binding(\.backgroundImage)
                     HStack(spacing: 4) {
-                        PathField(text: Binding(get: { Theme.shortPath(model.backgroundImage) }, set: { model.backgroundImage = FolderIndex.normalize($0) }),
-                                  placeholder: String(localized: "kein Bild · Datei hineinziehen"), autofocus: false, onTab: {}, onSubmit: {}, onMove: { _ in })
-                            .frame(height: 18 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 2)
-                            .background(Theme.bgColor)
-                            .dropDestination(for: URL.self) { urls, _ in
-                                guard let u = urls.first(where: { NSImage(contentsOf: $0) != nil }) else { return false }
-                                model.backgroundImage = u.path
-                                return true
-                            }
-                        Button { chooseFolder(start: model.backgroundImage.isEmpty ? "~/Pictures" : (model.backgroundImage as NSString).deletingLastPathComponent, images: true) { if let p = $0 { model.backgroundImage = p } } } label: {
-                            Image(systemName: "photo").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
+                        pathField(Binding(get: { Theme.shortPath(image.wrappedValue) }, set: { image.wrappedValue = FolderIndex.normalize($0) }),
+                                  placeholder: String(localized: "kein Bild · Datei hineinziehen")) { urls in
+                            guard let u = urls.first(where: { NSImage(contentsOf: $0) != nil }) else { return false }
+                            image.wrappedValue = u.path
+                            return true
                         }
-                        .buttonStyle(.plain).kbdFocusRing().help("Bild wählen")
-                        Button { model.backgroundImage = "" } label: {
-                            Image(systemName: "xmark").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
-                        }
-                        .buttonStyle(.plain).kbdFocusRing().help("Kein Bild")
+                        iconButton("photo") {
+                            chooseFolder(start: image.wrappedValue.isEmpty ? "~/Pictures" : (image.wrappedValue as NSString).deletingLastPathComponent, images: true) { if let p = $0 { image.wrappedValue = p } }
+                        }.help("Bild wählen")
+                        iconButton("xmark") { image.wrappedValue = "" }.help("Kein Bild")
                     }
                 }
-                setting(String(localized: "Deckkraft der Kacheln")) { slider($model.tileOpacity, 0...100, step: 1, factor: 100, unit: "%") }
+                setting(String(localized: "Deckkraft der Kacheln")) { slider(model.binding(\.tileOpacity), 0...100, step: 1, factor: 100, unit: "%") }
             }
 
             heading(String(localized: "Baum und Kacheln"))
             table {
-                setting(String(localized: "Design des Baums")) { menu($model.sidebarStyle, SidebarStyle.allCases.map { ($0, $0.title) }) }
-                setting(String(localized: "Laufzeit im Baum")) { onOff($model.sidebarShowAge) }
-                setting(String(localized: "Pfad in Stack-Zeilen")) { onOff($model.stackShowPath) }
-                setting(String(localized: "Letzte Antwort von Claude im Baum")) { onOff($model.showLastMessage) }
-                setting(String(localized: "Sounds")) { menu($model.sounds, Feedback.Level.allCases.map { ($0, $0.title) }) }
-                setting(String(localized: "Systembenachrichtigungen")) { menu($model.notifications, Notifications.Level.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Design des Baums")) { menu(model.binding(\.sidebarStyle), SidebarStyle.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Laufzeit im Baum")) { onOff(model.binding(\.sidebarShowAge)) }
+                setting(String(localized: "Pfad in Stack-Zeilen")) { onOff(model.binding(\.stackShowPath)) }
+                setting(String(localized: "Letzte Antwort von Claude im Baum")) { onOff(model.binding(\.showLastMessage)) }
+                setting(String(localized: "Sounds")) { menu(model.binding(\.sounds), Feedback.Level.allCases.map { ($0, $0.title) }) }
+                setting(String(localized: "Systembenachrichtigungen")) { menu(model.binding(\.notifications), Notifications.Level.allCases.map { ($0, $0.title) }) }
             }
 
             heading(String(localized: "Updates"))
             table {
-                setting(String(localized: "Nach Updates suchen")) { onOff($model.checkForUpdates) }
+                setting(String(localized: "Nach Updates suchen")) { onOff(model.binding(\.checkForUpdates)) }
             }
 
             heading(String(localized: "Auto-Modus"), note: String(localized: "AUTO in der Leiste"))
             table {
-                setting(String(localized: "Gilt für")) { menu($model.autoAllSessions, [(true, String(localized: "alle Sessions")), (false, String(localized: "nur die Auswahl im Baum"))]) }
+                setting(String(localized: "Gilt für")) { menu(model.binding(\.autoAllSessions), [(true, String(localized: "alle Sessions")), (false, String(localized: "nur die Auswahl im Baum"))]) }
                 setting(String(localized: "Zeigt")) {
-                    menu(Binding(get: { AutoShow(waiting: model.autoWaiting, running: model.autoRunning) },
-                                 set: { model.autoWaiting = $0.waiting; model.autoRunning = $0.running }),
+                    let waiting = model.binding(\.autoWaiting), running = model.binding(\.autoRunning)
+                    menu(Binding(get: { AutoShow(waiting: waiting.wrappedValue, running: running.wrappedValue) },
+                                 set: { waiting.wrappedValue = $0.waiting; running.wrappedValue = $0.running }),
                          [(AutoShow(waiting: true, running: false), String(localized: "wartende")), (AutoShow(waiting: false, running: true), String(localized: "arbeitende")),
                           (AutoShow(waiting: true, running: true), String(localized: "wartende und arbeitende")), (AutoShow(waiting: false, running: false), String(localized: "keine"))])
                 }
@@ -515,7 +194,7 @@ struct SettingsView: View {
             heading(String(localized: "Rückfragen"), note: String(localized: "aus = ohne Nachfrage ausführen"))
             table {
                 ForEach(Settings.Ask.allCases, id: \.self) { a in
-                    setting(a.title) { onOff(Binding(get: { model.ask[a] ?? true }, set: { model.ask[a] = $0 })) }
+                    setting(a.title) { onOff(model.binding(a, \.enabled)) }
                 }
             }
 
@@ -584,6 +263,21 @@ struct SettingsView: View {
     /// `live: false` übernimmt erst beim Loslassen (UI-Größe: sonst skaliert der Dialog unter der Maus mit).
     private func slider(_ value: Binding<Double>, _ range: ClosedRange<Double>, step: Double, factor: Double = 1, unit: String, live: Bool = true) -> some View {
         IntSlider(value: value, range: range, step: step, factor: factor, unit: unit, live: live)
+    }
+
+    /// Pfadfeld der rechten Spalte, nimmt Dateien per Drag & Drop an.
+    private func pathField(_ text: Binding<String>, placeholder: String = "", onTab: @escaping () -> Void = {}, drop: @escaping ([URL]) -> Bool) -> some View {
+        PathField(text: text, placeholder: placeholder, autofocus: false, onTab: onTab, onSubmit: {}, onMove: { _ in })
+            .frame(height: 18 * Theme.scale).padding(.horizontal, 8).padding(.vertical, 2)
+            .background(Theme.bgColor)
+            .dropDestination(for: URL.self) { urls, _ in drop(urls) }
+    }
+
+    private func iconButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
+        }
+        .buttonStyle(.plain).kbdFocusRing()
     }
 
     private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, String(localized: "an")), (false, String(localized: "aus"))]) }

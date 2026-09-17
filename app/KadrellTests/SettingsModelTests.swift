@@ -9,10 +9,10 @@ final class SettingsModelTests: XCTestCase {
         let model = SettingsModel()
         var applied = 0
         model.onApply = { applied += 1 }
-        model.stackShowPath = !original
+        model.binding(\.stackShowPath).wrappedValue = !original
         try await Task.sleep(for: .milliseconds(50))
         XCTAssertEqual(Settings.stackShowPath, !original)
-        model.stackShowPath = original
+        model.binding(\.stackShowPath).wrappedValue = original
         try await Task.sleep(for: .milliseconds(50))
         XCTAssertEqual(Settings.stackShowPath, original)
         XCTAssertEqual(applied, 2)

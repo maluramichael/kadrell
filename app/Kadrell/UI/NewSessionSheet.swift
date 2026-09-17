@@ -144,8 +144,7 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("NEUE SESSION").font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
+            Text("NEUE SESSION").dialogTitle()
             PathField(text: $model.query, placeholder: String(localized: "Projekt suchen oder Pfad tippen (~/d/p/kad)"),
                       onTab: model.tab, onSubmit: model.start, onMove: model.move)
                 .frame(height: 22 * Theme.scale).padding(14)
@@ -161,10 +160,7 @@ struct NewSessionView: View {
             }.padding(.horizontal, 16).padding(.vertical, 6)
             DialogFoot(hint: String(localized: "⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen"), button: String(localized: "Starten")) { model.start() }
         }
-        .font(Theme.ui(12))
-        .foregroundStyle(Theme.fgColor)
-        .frame(width: 640 * Theme.scale)
-        .background(Theme.panelColor)
+        .dialogFrame()
         .overlay { if dropping { Rectangle().stroke(Theme.runningColor, lineWidth: 2) } }
         .dropDestination(for: URL.self) { urls, _ in model.drop(urls) } isTargeted: { dropping = $0 }
         .background { Button("", action: model.browse).keyboardShortcut("o", modifiers: .command).opacity(0).accessibilityHidden(true) }
@@ -215,36 +211,6 @@ struct NewSessionView: View {
         .id(c.id)
     }
 }
-
-extension Theme {
-    /// Schrift der SwiftUI-Dialoge, mit der UI-Größe skaliert.
-    static func ui(_ size: CGFloat, bold: Bool = false) -> Font {
-        .custom(bold ? "JetBrainsMonoNF-Bold" : "JetBrainsMonoNF-Regular", size: size * scale)
-    }
-
-    static var bgColor: Color { Color(nsColor: bg) }
-    static var panelColor: Color { Color(nsColor: panel) }
-    static var surfaceColor: Color { Color(nsColor: surface) }
-    static var lineColor: Color { Color(nsColor: line) }
-    static var fgColor: Color { Color(nsColor: fg) }
-    static var mutedColor: Color { Color(nsColor: muted) }
-    static var runningColor: Color { Color(nsColor: running) }
-}
-
-/// Sichtbarer Tastaturfokus für `.buttonStyle(.plain)`-Elemente (Menüs, Icon-Knöpfe, Dialog-Fuß, Farbfelder):
-/// die verstecken sonst den nativen Fokusring, Tab-Nutzer sehen dann nirgends, wo der Fokus gerade steht.
-private struct KeyboardFocusRing: ViewModifier {
-    @FocusState private var focused: Bool
-    func body(content: Content) -> some View {
-        content.focused($focused)
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.runningColor, lineWidth: focused ? 2 : 0).padding(-2))
-    }
-}
-
-extension View {
-    func kbdFocusRing() -> some View { modifier(KeyboardFocusRing()) }
-}
-
 
 /// AppKit-Textfeld für Pfade: Cursor am Ende, Tab vervollständigt, Pfeile wählen, ⏎ startet.
 struct PathField: NSViewRepresentable {

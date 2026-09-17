@@ -31,8 +31,7 @@ struct EditGroupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("GRUPPE BEARBEITEN").font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
+            Text("GRUPPE BEARBEITEN").dialogTitle()
             HStack(spacing: 12) {
                 TextField("Name", text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                     .focused($focused)
@@ -51,10 +50,7 @@ struct EditGroupView: View {
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
             DialogFoot(hint: String(localized: "Esc abbrechen"), button: String(localized: "Speichern")) { model.save() }
         }
-        .font(Theme.ui(12))
-        .foregroundStyle(Theme.fgColor)
-        .frame(width: 640 * Theme.scale)
-        .background(Theme.panelColor)
+        .dialogFrame()
         .onAppear { focused = true }
     }
 
@@ -108,8 +104,7 @@ struct RenameSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("SESSION UMBENENNEN").font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
+            Text("SESSION UMBENENNEN").dialogTitle()
             TextField(model.session.autoTitle, text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                 .focused($focused)
                 .onSubmit { model.save() }
@@ -118,10 +113,7 @@ struct RenameSessionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
             DialogFoot(hint: String(localized: "Esc abbrechen"), button: String(localized: "Speichern")) { model.save() }
         }
-        .font(Theme.ui(12))
-        .foregroundStyle(Theme.fgColor)
-        .frame(width: 640 * Theme.scale)
-        .background(Theme.panelColor)
+        .dialogFrame()
         .onAppear { focused = true }
     }
 }

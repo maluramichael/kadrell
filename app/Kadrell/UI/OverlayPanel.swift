@@ -4,7 +4,7 @@ import SwiftUI
 /// Rahmenloses Overlay über dem Hauptfenster für die SwiftUI-Dialoge: 1 px Linie, keine Rundung.
 /// Esc und ⏎ werden hier abgefangen, bevor SwiftUI sie sieht.
 @MainActor
-final class OverlayPanel: NSPanel {
+final class OverlayPanel: ChildPanel {
     var onCancel: (() -> Void)?
     var onPrimary: (() -> Void)?
     /// ⏎ bestätigt, ⌘⏎ immer. Aus nur bei destruktiven Rückfragen: dort zählt allein ⌘⏎.
@@ -18,13 +18,9 @@ final class OverlayPanel: NSPanel {
     init<V: View>(rootView: V) {
         let host = NSHostingController(rootView: OverlayScroll(limit: limit, content: rootView))
         host.sizingOptions = [.preferredContentSize]   // Fenster folgt der Inhaltsgröße, kein Zentrieren
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 640, height: 200), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        isFloatingPanel = true
-        level = .floating
+        super.init(size: NSSize(width: 640, height: 200))
         isOpaque = true
         backgroundColor = Theme.panel
-        hasShadow = true
-        appearance = Theme.appearance
         contentViewController = host
         host.view.wantsLayer = true
         host.view.layer?.borderColor = Theme.line.cgColor
@@ -33,8 +29,6 @@ final class OverlayPanel: NSPanel {
             MainActor.assumeIsolated { self?.reanchor() }
         }
     }
-
-    override var canBecomeKey: Bool { true }
 
     private func reanchor() {
         let f = frame
@@ -47,21 +41,8 @@ final class OverlayPanel: NSPanel {
         anchor = CGPoint(x: pf.midX, y: pf.midY)
         limit.maxHeight = pf.height - 2 * 24
         reanchor()
-        host = parent
-        parent.addChildWindow(self, ordered: .above)
-        makeKeyAndOrderFront(nil)
-        Backdrop.sync(parent)
+        attach(to: parent)
     }
-
-    func dismiss() {
-        host?.removeChildWindow(self)
-        orderOut(nil)
-    }
-
-    /// `parent` ist nach orderOut/close schon nil. Deshalb das Hauptfenster selbst merken, sonst bleibt der Blur liegen.
-    private weak var host: NSWindow?
-    override func orderOut(_ sender: Any?) { super.orderOut(sender); Backdrop.sync(host) }
-    override func close() { super.close(); Backdrop.sync(host) }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.keyCode == 53 { onCancel?(); return true }
@@ -101,6 +82,37 @@ struct OverlayScroll<Content: View>: View {
         }
         .onPreferenceChange(DialogFootKey.self) { foot = $0 }
     }
+}
+
+/// Rahmenloses Kindfenster über dem Hauptfenster (Dialoge, ⌘P): wird Key-Fenster und graut das Hauptfenster ab.
+@MainActor
+class ChildPanel: NSPanel {
+    init(size: NSSize) {
+        super.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        isFloatingPanel = true
+        level = .floating
+        hasShadow = true
+        appearance = Theme.appearance
+    }
+
+    override var canBecomeKey: Bool { true }
+
+    func attach(to parent: NSWindow) {
+        host = parent
+        parent.addChildWindow(self, ordered: .above)
+        makeKeyAndOrderFront(nil)
+        Backdrop.sync(parent)
+    }
+
+    func dismiss() {
+        host?.removeChildWindow(self)
+        orderOut(nil)
+    }
+
+    /// `parent` ist nach orderOut/close schon nil. Deshalb das Hauptfenster selbst merken, sonst bleibt der Blur liegen.
+    private weak var host: NSWindow?
+    override func orderOut(_ sender: Any?) { super.orderOut(sender); Backdrop.sync(host) }
+    override func close() { super.close(); Backdrop.sync(host) }
 }
 
 /// Graut und blurrt das Hauptfenster, solange ein Overlay (Dialog oder ⌘P) als Kindfenster offen ist.
