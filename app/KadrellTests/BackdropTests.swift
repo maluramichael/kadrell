@@ -10,7 +10,9 @@ final class BackdropTests: XCTestCase {
     }
 
     private func window() -> NSWindow {
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        // orderFront braucht es für isVisible, auf dem Bildschirm soll es trotzdem nicht aufblitzen. Rahmenlos, weil
+        // macOS Fenster mit Titelleiste zurück in den sichtbaren Bereich schiebt.
+        let w = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 400, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
         w.orderFront(nil)
         return w
