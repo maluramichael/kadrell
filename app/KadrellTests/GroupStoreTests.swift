@@ -61,12 +61,29 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertFalse(store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a"), session("s3", cwd: "/p/a"), session("t1", cwd: "/p/b")]))
     }
 
-    func testPrunesVanishedSessionsAndRemovesGroups() throws {
+    /// #747/#775: assign() prunt `sessionIds` nicht mehr gegen die übergebene Liste. Eine unvollständige
+    /// Sessions-Liste (Ladefehler, Teilverlust von sessions.json) darf keine Gruppen leerräumen, das
+    /// übernehmen removeSession/remove(id:) beim echten Schließen.
+    func testAssignDoesNotPruneMissingSessionIds() throws {
         let store = GroupStore(url: url)
         store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a"), session("t1", cwd: "/p/b")])
-        XCTAssertTrue(store.assign([session("s2", cwd: "/p/a"), session("t1", cwd: "/p/b")]))
+        XCTAssertEqual(store.groups[0].sessionIds, ["s1", "s2"])
+        XCTAssertFalse(store.assign([session("s2", cwd: "/p/a"), session("t1", cwd: "/p/b")]))
+        XCTAssertEqual(store.groups[0].sessionIds, ["s1", "s2"])
+        XCTAssertFalse(store.assign([session("t1", cwd: "/p/b")]))
+        XCTAssertEqual(store.groups.map(\.cwd), ["/p/a", "/p/b"])
+        XCTAssertEqual(GroupStore(url: url).groups[0].sessionIds, ["s1", "s2"])
+    }
+
+    /// Echtes Schließen (removeSession) leert die Gruppe sofort, der nächste Abgleich räumt eine dadurch
+    /// leere, unveränderte Gruppe dann wie gehabt weg.
+    func testRemoveSessionThenAssignRemovesEmptyUnmodifiedGroup() throws {
+        let store = GroupStore(url: url)
+        store.assign([session("s1", cwd: "/p/a"), session("s2", cwd: "/p/a"), session("t1", cwd: "/p/b")])
+        store.removeSession("s1")
         XCTAssertEqual(store.groups[0].sessionIds, ["s2"])
-        // letzte Session einer unveränderten Gruppe verschwindet: die Gruppe fliegt raus
+        store.removeSession("s2")
+        XCTAssertTrue(store.groups[0].sessionIds.isEmpty)
         XCTAssertTrue(store.assign([session("t1", cwd: "/p/b")]))
         XCTAssertEqual(store.groups.map(\.cwd), ["/p/b"])
         XCTAssertEqual(GroupStore(url: url).groups.map(\.cwd), ["/p/b"])
@@ -88,12 +105,14 @@ final class GroupStoreTests: XCTestCase {
         var g = store.groups.first { $0.cwd == "/p/a" }!
         g.name = "Mein Projekt"
         store.update(g)
-        // letzte Session weg, Gruppe ist aber von Hand umbenannt: bleibt leer stehen statt zu verschwinden
-        XCTAssertTrue(store.assign([session("t1", cwd: "/p/b")]))
-        XCTAssertEqual(store.groups.map(\.cwd).sorted(), ["/p/a", "/p/b"])
+        // Echtes Schließen statt Verschwinden aus der Sessions-Liste: removeSession leert die Gruppe sofort.
+        store.removeSession("s1")
         let kept = store.groups.first { $0.cwd == "/p/a" }!
         XCTAssertTrue(kept.sessionIds.isEmpty)
         XCTAssertEqual(kept.name, "Mein Projekt")
+        // Gruppe ist von Hand umbenannt: bleibt beim nächsten Abgleich leer stehen statt zu verschwinden
+        XCTAssertFalse(store.assign([session("t1", cwd: "/p/b")]))
+        XCTAssertEqual(store.groups.map(\.cwd).sorted(), ["/p/a", "/p/b"])
         // eine neue Session im selben cwd landet wieder in der alten Gruppe
         XCTAssertTrue(store.assign([session("t1", cwd: "/p/b"), session("s2", cwd: "/p/a")]))
         XCTAssertEqual(store.groups.first { $0.cwd == "/p/a" }!.sessionIds, ["s2"])
@@ -103,8 +122,10 @@ final class GroupStoreTests: XCTestCase {
         let store = GroupStore(url: url)
         store.assign([session("s1", cwd: "/p/a"), session("t1", cwd: "/p/b")])
         store.toggleFavorite(id: store.groups[0].id)
-        // s1 und t1 sind weg, nur eine Session in /p/c kommt neu rein: die favorisierte /p/a-Gruppe
-        // bleibt trotzdem leer stehen, /p/b (nicht favorisiert, unverändert) fliegt raus
+        // Echtes Schließen von s1 und t1, nur eine Session in /p/c kommt neu rein: die favorisierte
+        // /p/a-Gruppe bleibt trotzdem leer stehen, /p/b (nicht favorisiert, unverändert) fliegt raus
+        store.removeSession("s1")
+        store.removeSession("t1")
         XCTAssertTrue(store.assign([session("x1", cwd: "/p/c")]))
         XCTAssertEqual(store.groups.map(\.cwd).sorted(), ["/p/a", "/p/c"])
         XCTAssertTrue(store.group(forCwd: "/p/a")!.sessionIds.isEmpty)
@@ -133,6 +154,91 @@ final class GroupStoreTests: XCTestCase {
         tree.sort = .alpha
         tree.reload(groups: groups, sessions: Array(s.values))
         XCTAssertEqual(tree.sessionId(after: nil, step: 1), "c")
+    }
+}
+
+/// Kaputte/alte groups.json: Datenverlust und die Absicherungen dagegen.
+@MainActor
+final class GroupStorePersistenceTests: XCTestCase {
+    func dir() -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-tests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    /// Ganz kaputte Datei: leerer Start statt Absturz, Original bleibt als `.corrupt-<datum>.json` liegen und
+    /// wird nicht durchs nächste Speichern überschrieben.
+    func testCorruptFileIsQuarantinedNotOverwritten() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        try Data("{kaputt".utf8).write(to: url)
+
+        let store = GroupStore(url: url)
+        XCTAssertTrue(store.groups.isEmpty)
+        XCTAssertNotNil(store.lastError)
+        let before = try FileManager.default.contentsOfDirectory(atPath: d.path)
+        XCTAssertTrue(before.contains { $0.hasPrefix("groups.corrupt-") })
+
+        store.add(Group(id: "g", name: "n", color: "#fff", cwd: "/p", sessionIds: []))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        let after = try FileManager.default.contentsOfDirectory(atPath: d.path)
+        XCTAssertTrue(after.contains { $0.hasPrefix("groups.corrupt-") })
+    }
+
+    /// Ein einzelner kaputter Eintrag (falscher Typ) kippt nicht die ganze Liste, die anderen bleiben.
+    func testSingleBrokenEntryDoesNotLoseTheRest() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        try Data(##"[{"id":"g1","name":"gut","color":"#fff","cwd":"/p","sessionIds":[]},{"id":123}]"##.utf8).write(to: url)
+
+        let store = GroupStore(url: url)
+        XCTAssertEqual(store.groups.map(\.id), ["g1"])
+        XCTAssertNotNil(store.lastError)
+    }
+
+    /// Nacktes Array (Format vor der Schema-Version) lädt weiter wie gehabt.
+    func testLegacyBareArrayFormatLoads() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        try Data(##"[{"id":"g1","name":"alt","color":"#fff","cwd":"/p","sessionIds":["s1"]}]"##.utf8).write(to: url)
+
+        let store = GroupStore(url: url)
+        XCTAssertEqual(store.groups.map(\.id), ["g1"])
+        XCTAssertFalse(store.groups[0].isFavorite)
+    }
+
+    /// `favorite` ist kein dreiwertiger Bool mehr: fehlt der Schlüssel, gilt false, toggle setzt true/false statt nil.
+    func testFavoriteDefaultsToFalseAndTogglesCleanly() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        try Data(##"[{"id":"g1","name":"n","color":"#fff","cwd":"/p","sessionIds":[]}]"##.utf8).write(to: url)
+
+        let store = GroupStore(url: url)
+        XCTAssertFalse(store.groups[0].isFavorite)
+        store.toggleFavorite(id: "g1")
+        XCTAssertTrue(store.groups[0].isFavorite)
+        store.toggleFavorite(id: "g1")
+        XCTAssertFalse(store.groups[0].isFavorite)
+    }
+
+    /// Dieselbe sessionId in zwei Gruppen (kaputte Datei, Bug beim Schreiben): die erste Gruppe behält sie.
+    func testDuplicateSessionIdAcrossGroupsIsDeduped() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        try Data(##"""
+        [{"id":"g1","name":"eins","color":"#fff","cwd":"/p","sessionIds":["s1","s2"]},
+         {"id":"g2","name":"zwei","color":"#000","cwd":"/q","sessionIds":["s2","s3"]}]
+        """##.utf8).write(to: url)
+
+        let store = GroupStore(url: url)
+        XCTAssertEqual(store.group(id: "g1")?.sessionIds, ["s1", "s2"])
+        XCTAssertEqual(store.group(id: "g2")?.sessionIds, ["s3"])
+        XCTAssertEqual(store.group(forSession: "s2")?.id, "g1")
     }
 }
 

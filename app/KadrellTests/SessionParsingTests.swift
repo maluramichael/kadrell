@@ -153,6 +153,79 @@ final class SessionRegistryTests: XCTestCase {
         XCTAssertEqual(r.sessions.map(\.id), ["s1", "s2"])
         XCTAssertEqual(SessionRegistry(cli: cli, url: r.url).sessions.map(\.id), ["s1", "s2"])
     }
+
+    /// Rang 5/58: eine kaputte sessions.json startet leer statt abzustürzen, das Original bleibt als
+    /// `.corrupt-<datum>.json` liegen und wird vom nächsten `add` nicht überschrieben.
+    func testCorruptSessionsFileIsQuarantinedNotOverwritten() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("sessions.json")
+        try Data("{kaputt".utf8).write(to: url)
+        let cli = ClaudeCLI(binary: "/usr/bin/false", environment: [:])
+
+        let r = SessionRegistry(cli: cli, url: url)
+        XCTAssertTrue(r.sessions.isEmpty)
+        XCTAssertNotNil(r.lastError)
+        XCTAssertTrue((try FileManager.default.contentsOfDirectory(atPath: dir.path)).contains { $0.hasPrefix("sessions.corrupt-") })
+
+        r.add(Session(id: "s1", cwd: "/p", startedAt: 1, sessionId: "s1", name: ""))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertTrue((try FileManager.default.contentsOfDirectory(atPath: dir.path)).contains { $0.hasPrefix("sessions.corrupt-") })
+    }
+
+    /// Nacktes Array (Format vor der Schema-Version) lädt weiter wie gehabt.
+    func testLegacyBareArraySessionsFileLoads() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-tests-\(UUID().uuidString)/sessions.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"[{"id":"s1","cwd":"/p","startedAt":1,"sessionId":"s1","name":"alt"}]"#.utf8).write(to: url)
+        let cli = ClaudeCLI(binary: "/usr/bin/false", environment: [:])
+
+        XCTAssertEqual(SessionRegistry(cli: cli, url: url).sessions.map(\.id), ["s1"])
+    }
+
+    /// #775: eine doppelte Id in sessions.json (Handbearbeitung, Übernahme) ließ `WorkspaceView.reload` bei
+    /// jedem Start abstürzen. Erste gewinnt, `add` ignoriert eine schon vorhandene Id statt zu duplizieren.
+    func testDuplicateIdIsDedupedOnLoadAndRejectedOnAdd() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("sessions.json")
+        try Data(#"[{"id":"s1","cwd":"/p","startedAt":1,"sessionId":"s1","name":"eins"},{"id":"s1","cwd":"/q","startedAt":2,"sessionId":"s1","name":"zwei"}]"#.utf8).write(to: url)
+        let cli = ClaudeCLI(binary: "/usr/bin/false", environment: [:])
+
+        let r = SessionRegistry(cli: cli, url: url)
+        XCTAssertEqual(r.sessions.map(\.id), ["s1"])
+        XCTAssertEqual(r.sessions[0].name, "eins")
+
+        r.add(Session(id: "s1", cwd: "/x", startedAt: 3, sessionId: "s1", name: "drei"))
+        XCTAssertEqual(r.sessions.count, 1)
+        XCTAssertEqual(r.sessions[0].name, "eins")
+    }
+
+    /// #-Fund: der Schließen-Dialog verspricht "Konversation bleibt erhalten", also muss die sessionId
+    /// nach `remove` in Kadrells eigenen Daten weiter auffindbar sein.
+    func testRemoveArchivesClosedSessionsCappedAndPersisted() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-tests-\(UUID().uuidString)/sessions.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let cli = ClaudeCLI(binary: "/usr/bin/false", environment: [:])
+        let r = SessionRegistry(cli: cli, url: url)
+        r.add(Session(id: "s1", cwd: "/p", startedAt: 1, sessionId: "conv-1", name: "Eins"))
+        r.remove(["s1"])
+
+        XCTAssertEqual(r.closed.map(\.session.sessionId), ["conv-1"])
+        let reloaded = SessionRegistry(cli: cli, url: url)
+        XCTAssertEqual(reloaded.closed.map(\.session.sessionId), ["conv-1"])
+
+        // 60 weitere einzeln schließen: höchstens 50 bleiben, die neuesten zuerst
+        for i in 2...61 {
+            r.add(Session(id: "s\(i)", cwd: "/p", startedAt: 1, sessionId: "conv-\(i)", name: ""))
+            r.remove(["s\(i)"])
+        }
+        XCTAssertEqual(r.closed.count, 50)
+        XCTAssertEqual(r.closed.first?.session.sessionId, "conv-61")
+    }
 }
 
 final class UsageParsingTests: XCTestCase {

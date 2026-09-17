@@ -16,7 +16,7 @@ final class AccessibilityTests: XCTestCase {
     func testSidebarRows() {
         let a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha")
         let b = Session(id: "b", cwd: "/p", startedAt: 0, sessionId: "b", name: "Beta")
-        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a", "b"], favorite: nil)
+        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a", "b"], favorite: false)
         let sidebar = SidebarView(frame: .zero)
         let w = window(sidebar, NSSize(width: 240, height: 400))
         defer { w.close() }
@@ -74,7 +74,7 @@ final class AccessibilityTests: XCTestCase {
 
     func testCellHeader() {
         var a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha"); a.branch = "master"
-        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a"], favorite: nil)
+        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a"], favorite: false)
         let ws = WorkspaceView(frame: .zero)
         let w = window(ws, NSSize(width: 800, height: 600))
         defer { w.close() }

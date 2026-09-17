@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 struct Group: Codable, Equatable, Identifiable, Sendable {
     var id: String
@@ -6,34 +7,84 @@ struct Group: Codable, Equatable, Identifiable, Sendable {
     var color: String
     var cwd: String
     var sessionIds: [String]
-    /// Optional, damit eine groups.json ohne den Schlüssel weiter lädt.
-    var favorite: Bool?
-    /// Remote-Gruppe: ssh-Host, alle Sessions darin hängen an dessen tmux. Optional wie `favorite`.
+    /// Kein Optional mehr: der dreiwertige Bool war ein Bug (Toggle setzte `nil` statt `false`). Fehlt der
+    /// Schlüssel in einer alten groups.json, gilt `false`.
+    var favorite: Bool = false
+    /// Remote-Gruppe: ssh-Host, alle Sessions darin hängen an dessen tmux. Fehlt in alten Dateien, dann lokal.
     var host: String? = nil
 
-    var isFavorite: Bool { favorite == true }
+    var isFavorite: Bool { favorite }
+
+    enum CodingKeys: String, CodingKey { case id, name, color, cwd, sessionIds, favorite, host }
+
+    init(id: String, name: String, color: String, cwd: String, sessionIds: [String], favorite: Bool = false, host: String? = nil) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.cwd = cwd
+        self.sessionIds = sessionIds
+        self.favorite = favorite
+        self.host = host
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        color = try c.decode(String.self, forKey: .color)
+        cwd = try c.decode(String.self, forKey: .cwd)
+        sessionIds = try c.decodeIfPresent([String].self, forKey: .sessionIds) ?? []
+        favorite = try c.decodeIfPresent(Bool.self, forKey: .favorite) ?? false
+        host = try c.decodeIfPresent(String.self, forKey: .host)
+    }
 }
 
 /// Gruppen sind App-Daten, persistiert als JSON unter Application Support.
 @MainActor
 final class GroupStore {
     private(set) var groups: [Group] = []
+    /// Letzter Lade- oder Speicherfehler (kaputte Datei, Schreibfehler). Kein Poll räumt es automatisch ab.
+    private(set) var lastError: String?
     let url: URL
+    private static let schemaVersion = 1
+    private static let log = Logger(subsystem: "de.malura.kadrell", category: "groups")
+    /// Umschlag nennt eine höhere Version als diese Kadrell-Version kennt: nur lesen, nie überschreiben.
+    private var readOnly = false
 
     static var defaultURL: URL { Profile.directory.appendingPathComponent("groups.json") }
 
     init(url: URL = GroupStore.defaultURL) {
         self.url = url
-        if let data = try? Data(contentsOf: url), let g = try? JSONDecoder().decode([Group].self, from: data) {
-            groups = g
+        let result = JSONFile.loadArray(Group.self, from: url, currentVersion: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
+        groups = result.items
+        readOnly = result.newerThanKnown
+        dedupeSessionsAcrossGroups()
+    }
+
+    /// Dieselbe sessionId darf in höchstens einer Gruppe stehen: eine kaputte Datei oder ein Bug beim Schreiben
+    /// könnte sie doppelt eingetragen haben, `group(forSession:)` würde dann still die erste nehmen. Die erste
+    /// Gruppe behält die Id, aus den anderen fliegt sie raus.
+    private func dedupeSessionsAcrossGroups() {
+        var seen = Set<String>()
+        var changed = false
+        for i in groups.indices {
+            let before = groups[i].sessionIds.count
+            groups[i].sessionIds.removeAll { !seen.insert($0).inserted }
+            if groups[i].sessionIds.count != before { changed = true }
+        }
+        if changed {
+            Self.log.warning("groups.json: doppelte sessionIds über mehrere Gruppen bereinigt")
+            save()
         }
     }
 
-    func save() throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let enc = JSONEncoder()
-        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try enc.encode(groups).write(to: url, options: .atomic)
+    /// Loggt und meldet Schreibfehler (voller Volume, gesperrter Ordner), statt sie mit `try?` zu verschlucken.
+    func save() {
+        guard !readOnly else {
+            Self.log.error("groups.json hat eine neuere Schema-Version, wird nicht überschrieben")
+            return
+        }
+        JSONFile.saveArray(groups, to: url, version: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
     }
 
     func group(id: String) -> Group? { groups.first { $0.id == id } }
@@ -69,16 +120,18 @@ final class GroupStore {
         g.name == GroupStore.defaultName(cwd: g.cwd, host: g.host) && Theme.palette.contains(g.color)
     }
 
-    /// Ordnet Sessions ohne Gruppe der Gruppe mit gleichem `cwd` zu, legt sonst eine neue an,
-    /// entfernt Ids, die es nicht mehr gibt, und unveränderte leere Gruppen. Gibt zurück, ob sich etwas geändert hat.
+    /// Ordnet Sessions ohne Gruppe der Gruppe mit gleichem `cwd` zu, legt sonst eine neue an, und räumt
+    /// unveränderte leere Gruppen weg. Gibt zurück, ob sich etwas geändert hat.
+    ///
+    /// Prunt absichtlich keine `sessionIds` mehr gegen `sessions`: das übernehmen `removeSession`/`remove(id:)`
+    /// beim echten Schließen. Ein Poll mit einer unvollständigen Liste (Ladefehler, Teilverlust von
+    /// sessions.json) hätte sonst ganze Gruppen leergeräumt, siehe #747 und #775.
     @discardableResult
     func assign(_ sessions: [Session]) -> Bool {
         // Eine leere Liste ist eher ein Aussetzer (CLI-Update, Daemon kurz weg, umbenanntes Feld) als
-        // "alle Sessions weg": nicht prunen, nichts speichern, sonst reißt ein einziger Fehlpoll alle Gruppen weg.
+        // "alle Sessions weg": nichts speichern, sonst reißt ein einziger Fehlpoll alle Gruppen weg.
         guard !sessions.isEmpty else { return false }
         let before = groups
-        let known = Set(sessions.map(\.id))
-        for i in groups.indices { groups[i].sessionIds.removeAll { !known.contains($0) } }
         for s in sessions where group(forSession: s.id) == nil {
             if let idx = groups.firstIndex(where: { s.host != nil ? $0.host == s.host : $0.cwd == s.cwd && $0.host == nil }) {
                 groups[idx].sessionIds.append(s.id)
@@ -94,31 +147,31 @@ final class GroupStore {
         // damit die nächste Session desselben cwd wieder dort landet.
         groups.removeAll { $0.sessionIds.isEmpty && !$0.isFavorite && isUnmodified($0) }
         let changed = groups != before
-        if changed { try? save() }
+        if changed { save() }
         return changed
     }
 
-    func add(_ group: Group) { groups.append(group); try? save() }
+    func add(_ group: Group) { groups.append(group); save() }
     func update(_ group: Group) {
         guard let i = groups.firstIndex(where: { $0.id == group.id }) else { return }
         groups[i] = group
-        try? save()
+        save()
     }
-    func remove(id: String) { groups.removeAll { $0.id == id }; try? save() }
+    func remove(id: String) { groups.removeAll { $0.id == id }; save() }
     func toggleFavorite(id: String) {
         guard let i = groups.firstIndex(where: { $0.id == id }) else { return }
-        groups[i].favorite = groups[i].isFavorite ? nil : true
-        try? save()
+        groups[i].favorite.toggle()
+        save()
     }
     func removeSession(_ sessionId: String) {
         for i in groups.indices { groups[i].sessionIds.removeAll { $0 == sessionId } }
-        try? save()
+        save()
     }
     func attach(sessionId: String, to groupId: String) {
         for i in groups.indices { groups[i].sessionIds.removeAll { $0 == sessionId } }
         guard let i = groups.firstIndex(where: { $0.id == groupId }) else { return }
         groups[i].sessionIds.append(sessionId)
-        try? save()
+        save()
     }
 
     /// Sortieren per Ziehen: die Session nimmt den Platz von `target` in derselben Gruppe ein.
@@ -126,14 +179,14 @@ final class GroupStore {
         guard let g = groups.firstIndex(where: { $0.sessionIds.contains(id) }),
               let from = groups[g].sessionIds.firstIndex(of: id), let to = groups[g].sessionIds.firstIndex(of: target), from != to else { return }
         groups[g].sessionIds.insert(groups[g].sessionIds.remove(at: from), at: to)
-        try? save()
+        save()
     }
 
     /// Die Gruppe nimmt den Platz von `target` ein.
     func moveGroup(_ id: String, to target: String) {
         guard let from = groups.firstIndex(where: { $0.id == id }), let to = groups.firstIndex(where: { $0.id == target }), from != to else { return }
         groups.insert(groups.remove(at: from), at: to)
-        try? save()
+        save()
     }
 }
 

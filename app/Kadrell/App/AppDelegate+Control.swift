@@ -125,7 +125,7 @@ extension AppDelegate {
         var g = try group(target, req)
         g.name = name ?? g.name
         g.color = color ?? g.color
-        if let favorite { g.favorite = favorite ? true : nil }
+        if let favorite { g.favorite = favorite }
         store.update(g)
         reloadViews()
     }
