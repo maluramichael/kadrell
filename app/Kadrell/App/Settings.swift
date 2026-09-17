@@ -45,6 +45,11 @@ enum Settings {
     static var sidebarStyle: SidebarStyle { get { enumValue("sidebar.style", .tinted) } set { store("sidebar.style", newValue.rawValue) } }
     /// Sortierung des Baums (Leiste), Default aus = Handreihenfolge.
     static var sidebarSort: SidebarSort { get { enumValue("sidebar.sort", .off) } set { store("sidebar.sort", newValue.rawValue) } }
+    /// Gruppierung nach Projekt im Baum (Leiste). Aus = eine flache Liste aller Sessions.
+    static var sidebarGrouped: Bool { get { value("sidebar.grouped", true) } set { store("sidebar.grouped", newValue) } }
+    /// Von Hand gezogene Reihenfolge der flachen Liste. Eigene Ordnung neben der aus `groups.json`: das
+    /// Umschalten der Gruppierung lässt beide Seiten unberührt.
+    static var sidebarFlatOrder: [String] { get { value("sidebar.flatOrder", []) } set { store("sidebar.flatOrder", newValue) } }
     /// Laufzeit („12m“) in jeder Session-Zeile des Baums, Default an.
     static var sidebarShowAge: Bool { get { value("sidebar.showAge", true) } set { store("sidebar.showAge", newValue) } }
     /// Welche Sounds Kadrell spielt, Default alle.
@@ -57,6 +62,13 @@ enum Settings {
     static var stackShowPath: Bool { get { value("stackShowPath", true) } set { store("stackShowPath", newValue) } }
     /// Beendet sich Claude selbst (zweimal ⌃C, `/exit`), verschwindet die Kachel. Default aus: sie bleibt, Klick setzt fort.
     static var closeTileOnExit: Bool { get { value("closeTileOnExit", false) } set { store("closeTileOnExit", newValue) } }
+    /// Minuten, die eine fertige (grüne) Session ohne Arbeit bleiben darf, bevor Kadrell ihren Claude-Prozess trennt.
+    /// 0 = nie. Spart Speicher und CPU bei vielen Sessions; ein Klick auf die Kachel setzt die Konversation fort.
+    static let autoDetachRange = 0.0...240.0
+    static var autoDetachMinutes: Int {
+        get { Int(min(max(value("autoDetachMinutes", 0.0), autoDetachRange.lowerBound), autoDetachRange.upperBound)) }
+        set { store("autoDetachMinutes", Double(newValue)) }
+    }
 
     /// Auto-Modus zeigt aus der Auswahl nur Sessions in diesen Zuständen. Default: nur wartende.
     static var autoWaiting: Bool { get { value("auto.waiting", true) } set { store("auto.waiting", newValue) } }

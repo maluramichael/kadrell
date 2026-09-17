@@ -10,6 +10,10 @@ final class SidebarView: NSView {
     var showAge = true
     /// Sortiert nur die Anzeige. Ziehen ist dann aus, weil die Handreihenfolge unsichtbar bliebe.
     var sort: SidebarSort = .off
+    /// Aus: keine Gruppenzeilen, alle Sessions in einer flachen Liste quer über die Projekte.
+    var grouped = true
+    /// Handreihenfolge der flachen Liste, eigene Ordnung neben der aus `groups.json`.
+    var flatOrder: [String] = []
 
     private(set) var groups: [Group] = []
     private(set) var sessions: [String: Session] = [:]
@@ -64,6 +68,8 @@ final class SidebarView: NSView {
     /// Ziehen: (gezogen, Ziel), Session innerhalb ihrer Gruppe bzw. Gruppe vor/hinter eine andere.
     var onMoveSession: ((String, String) -> Void)?
     var onMoveGroup: ((String, String) -> Void)?
+    /// Ziehen in der flachen Liste: die ganze neue Reihenfolge, zum Speichern als `flatOrder`.
+    var onReorderFlat: (([String]) -> Void)?
     /// Rechtsklick auf eine Session-Zeile: liefert das Kontextmenü, oder nil (Gruppenzeile, daneben).
     var onContextMenu: ((String) -> NSMenu?)?
 
@@ -73,6 +79,7 @@ final class SidebarView: NSView {
         var key: String { switch self { case .group(let g): "g:" + g.id; case .session(let s, _): Row.key(session: s.id) } }
         static func key(session id: String) -> String { "s:" + id }
     }
+    var rowCount: Int { rows.count }
     private func index(of r: Row) -> Int? { rows.firstIndex { $0.key == r.key } }
     private func sessionRow(_ id: String) -> Int? { rows.firstIndex { $0.key == Row.key(session: id) } }
     private func isAttached(_ id: String) -> Bool { attach?.isAttached(id) ?? false }
@@ -127,20 +134,23 @@ final class SidebarView: NSView {
         knownIds = ids
         // uniquingKeysWith wie in WorkspaceView: eine doppelte Id darf nicht abstürzen.
         self.sessions = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        self.groups = sort.apply(groups, sessions: self.sessions)
+        // Flach bleibt `groups` ungerührt: die Zeilen brauchen die Gruppe nur noch für Farbe und Projektnamen.
+        self.groups = grouped ? sort.apply(groups, sessions: self.sessions) : groups
         let oldRows = rows, previousHeight = frame.height
-        rows = []
-        for g in self.groups {
-            rows.append(.group(g))
-            guard !collapsed.contains(g.id) else { continue }
-            for s in g.sessionIds.compactMap({ self.sessions[$0] }) { rows.append(.session(s, g)) }
-        }
+        rows = grouped ? groupedRows() : SidebarFlat.rows(groups, sessions: self.sessions, sort: sort, order: flatOrder).map { .session($0.session, $0.group) }
         rebuildRowOffsets()
-        let h = rows.reduce(renderer.topInset + 6) { $0 + rowHeight($1) } + CGFloat(max(groups.count - 1, 0)) * renderer.groupGap
+        let h = (rowOffsets.last.map { $0.y + $0.height } ?? renderer.topInset) + 6
         let want = max((h * Theme.scale).rounded(.up), superview?.bounds.height ?? 0)
         if frame.height != want { setFrameSize(NSSize(width: frame.width, height: want)) }
         // Höhe unverändert: nur die Zeilen neu zeichnen, deren Inhalt sich geändert hat, statt die ganze Sidebar.
         if want != previousHeight { needsDisplay = true } else { invalidateChangedRows(old: oldRows) }
+    }
+
+    private func groupedRows() -> [Row] {
+        groups.flatMap { g -> [Row] in
+            guard !collapsed.contains(g.id) else { return [.group(g)] }
+            return [.group(g)] + g.sessionIds.compactMap { sessions[$0] }.map { .session($0, g) }
+        }
     }
 
     /// Zeilenhöhen sind O(1) abrufbar statt bei jedem Aufruf neu aufsummiert (Puls, Zeichnen, Maus laufen oft pro Sekunde
@@ -198,7 +208,7 @@ final class SidebarView: NSView {
 
     private func rowIndex(at p: CGPoint) -> Int? { rows.indices.first { rowRect($0).contains(p) } }
     /// Sichtbare Sessions in Baumreihenfolge (Bereichsauswahl läuft über Gruppen hinweg).
-    private var sessionIds: [String] { rows.compactMap { if case .session(let s, _) = $0 { s.id } else { nil } } }
+    var sessionIds: [String] { rows.compactMap { if case .session(let s, _) = $0 { s.id } else { nil } } }
     private func sessionIndex(_ id: String) -> Int? { sessionIds.firstIndex(of: id) }
 
     // MARK: Schwebende Toolbar
@@ -322,6 +332,7 @@ final class SidebarView: NSView {
         }
         defer { if slide != nil { NSGraphicsContext.restoreGraphicsState() } }
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
+                                                project: grouped ? nil : g.name,
                                                 attached: isAttached(s.id),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,
@@ -367,7 +378,7 @@ final class SidebarView: NSView {
                 e.update(parent: self, role: .row, label: String(localized: "Session \(s.title)", bundle: Bundle.app), value: value, frame: frame,
                         press: { [weak self] in self?.anchor = s.id; self?.onSelect?([s.id], .replace) },
                         actions: tools)
-                e.setAccessibilityDisclosureLevel(1)
+                e.setAccessibilityDisclosureLevel(grouped ? 1 : 0)
                 e.setAccessibilitySelected(selected.contains(s.id))
                 return e
             }
@@ -425,11 +436,25 @@ final class SidebarView: NSView {
         if let id = focused { reveal(id) }
     }
 
-    /// Nachbar der fokussierten Session innerhalb ihrer eigenen Gruppe (nicht baumweit): ⌥⌘↑/↓ tauscht damit.
+    /// Nachbar der fokussierten Session innerhalb ihrer eigenen Gruppe (flach: baumweit): ⌥⌘↑/↓ tauscht damit.
     private func moveFocused(step: Int) {
-        guard let id = focused, let g = groupOfFocused(), let i = g.sessionIds.firstIndex(of: id),
-              g.sessionIds.indices.contains(i + step) else { return }
-        onMoveSession?(id, g.sessionIds[i + step])
+        guard let id = focused else { return }
+        let ids = grouped ? groupOfFocused()?.sessionIds ?? [] : sessionIds
+        guard let i = ids.firstIndex(of: id), ids.indices.contains(i + step) else { return }
+        moveSession(id, to: ids[i + step])
+    }
+
+    /// Gruppiert wandert die Session in `groups.json`, flach in der eigenen Ordnung der flachen Liste.
+    private func moveSession(_ id: String, to target: String) {
+        grouped ? onMoveSession?(id, target) : moveFlat(id, to: target)
+    }
+
+    /// Setzt `id` in der flachen Liste an den Platz von `target` und meldet die ganze neue Reihenfolge.
+    func moveFlat(_ id: String, to target: String) {
+        var ids = sessionIds
+        guard let from = ids.firstIndex(of: id), let to = ids.firstIndex(of: target), from != to else { return }
+        ids.insert(ids.remove(at: from), at: to)
+        onReorderFlat?(ids)
     }
 
     private func showContextMenu(for id: String) {
@@ -548,7 +573,7 @@ final class SidebarView: NSView {
     private func target(for src: Row, at p: CGPoint) -> Row? {
         guard let j = rowIndex(at: p), rows[j].key != src.key else { return nil }
         switch (src, rows[j]) {
-        case (.session(_, let g), .session(_, let h)): return g.id == h.id ? rows[j] : nil
+        case (.session(_, let g), .session(_, let h)): return !grouped || g.id == h.id ? rows[j] : nil
         case (.group(let g), _):
             guard let head = rows[...j].last(where: { if case .group = $0 { true } else { false } }),
                   case .group(let h) = head, h.id != g.id else { return nil }
@@ -566,7 +591,7 @@ final class SidebarView: NSView {
             NSCursor.arrow.set()
             guard let t else { return }
             switch (press.row, t) {
-            case (.session(let s, _), .session(let u, _)): onMoveSession?(s.id, u.id)
+            case (.session(let s, _), .session(let u, _)): moveSession(s.id, to: u.id)
             case (.group(let g), .group(let h)): onMoveGroup?(g.id, h.id)
             default: break
             }

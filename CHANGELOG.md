@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.44.0 (2026-09-17)
+
+- Feature: Die Gruppierung nach Projekt lässt sich abschalten („GRP“ in der Leiste, ⌥G). Aus stehen alle Sessions in einer Liste, mit dem Projektnamen vor dem Titel.
+- Feature: Die flache Liste hat ihre eigene Reihenfolge zum Ziehen. Umschalten zwischen gruppiert und flach sortiert nichts um, beide Reihenfolgen bleiben gespeichert.
+- Änderung: Beim Sortieren nach Status steht bei gleichem Stand jetzt die neuere Session oben. Frisch gestartete tauchen oben auf und rutschen nach unten, sobald sie fertig sind.
+
 ## 1.43.0 (2026-09-17)
 
 - Feature: Die Sprache lässt sich in den Einstellungen zwischen Deutsch, Englisch und der Sprache des Systems umschalten, sofort und ohne Neustart.

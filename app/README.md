@@ -32,6 +32,10 @@ die Fläche scrollt seitlich (Wischen, ⇧ + Mausrad), die Fokus-Kachel rückt v
 Bedienung: Klick im Baum zeigt nur diese Session, ⌘-Klick nimmt sie dazu oder weg, ⇧-Klick markiert den
 Bereich seit dem letzten Klick, Klick auf eine Gruppe zeigt alle ihre Sessions. Ziehen im Baum oder an der Titelzeile
 einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf eine fremde Gruppe zieht die ganze Gruppe mit).
+Zwei Schalter in der Leiste ordnen den Baum: „GRP“ (⌥G) gruppiert nach Projekt, aus („FLACH“) stehen alle Sessions
+in einer Liste mit dem Projektnamen vor dem Titel; „SORT“ (⌥O) schaltet aus → A–Z → Status weiter. Status heißt:
+wartet vor Fehler vor arbeitet vor fertig, bei gleichem Stand die neuere Session zuerst. Die beiden Handreihenfolgen
+(gruppiert in `groups.json`, flach in den Einstellungen des Profils) sind getrennt: Umschalten sortiert nichts um.
 ⌘B blendet den Baum aus, ⌘N neue Session (Suchfeld über Gruppen, benutzte Ordner und Git-Repos unter dem Projektordner; `~/d/p/kad` kürzt Pfade ab, ⌘O Finder, Ordner aus dem Finder in Dialog oder Baum ziehen), ⌘⏎ neue Session im Ordner der fokussierten, ⌘T Terminal ohne Claude im selben Ordner, ⌘P Suche
 (`>` Kommandos, `/` Text in allen laufenden Terminals, direkt per ⌘⇧F), ⌘F Suchleiste im fokussierten Terminal (⌘G / ⌘⇧G weiter), ⌘W beendet die fokussierte Session. Der rote Knopf versteckt nur das Fenster, Kadrell und alle Sessions laufen weiter; das Menüleisten-Icon (Kurzstatus wartend/arbeitend) oder ein Klick aufs Dock-Icon holen es zurück. ⌘⇧T öffnet ein weiteres Fenster mit denselben Sessions, aber eigener Auswahl, eigenem Layout und Fokus (z. B. für einen zweiten Monitor); ein Terminal hängt nur in einem Fenster, die Kachel im anderen zeigt „IN ANDEREM FENSTER“ und holt es per Klick oder Fokus. Zusatzfenster schließen (⌘⇧W, roter Knopf) beendet keine Session, offene Fenster kommen beim Neustart wieder. F1 zeigt die Hilfe, beim ersten Start automatisch.
 

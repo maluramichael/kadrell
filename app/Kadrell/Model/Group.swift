@@ -114,14 +114,8 @@ final class GroupStore {
         Group(id: UUID().uuidString.lowercased(), name: host, color: nextColor(), cwd: NSHomeDirectory(), sessionIds: [], host: host)
     }
 
-    /// Gruppe hat weder umbenannten Namen noch eine von Hand gewählte Farbe, entspricht also noch
-    /// dem, was `makeGroup` frisch vergeben hätte.
-    private func isUnmodified(_ g: Group) -> Bool {
-        g.name == GroupStore.defaultName(cwd: g.cwd, host: g.host) && Theme.palette.contains(g.color)
-    }
-
     /// Ordnet Sessions ohne Gruppe der Gruppe mit gleichem `cwd` zu, legt sonst eine neue an, und räumt
-    /// unveränderte leere Gruppen weg. Gibt zurück, ob sich etwas geändert hat.
+    /// leere Gruppen ohne Herz weg. Gibt zurück, ob sich etwas geändert hat.
     ///
     /// Prunt absichtlich keine `sessionIds` mehr gegen `sessions`: das übernehmen `removeSession`/`remove(id:)`
     /// beim echten Schließen. Ein Poll mit einer unvollständigen Liste (Ladefehler, Teilverlust von
@@ -141,11 +135,10 @@ final class GroupStore {
                 groups.append(g)
             }
         }
-        // Leere Gruppen fliegen nur raus, wenn sie noch unverändert sind: ohne Sessions und ohne
-        // eigenen Namen/eigene Farbe hat eine Gruppe keinen Zweck, und die Datei sammelt sonst Ordner
-        // von längst beendeten Sessions. Favoriten und von Hand gepflegte Gruppen bleiben leer stehen,
-        // damit die nächste Session desselben cwd wieder dort landet.
-        groups.removeAll { $0.sessionIds.isEmpty && !$0.isFavorite && isUnmodified($0) }
+        // Ohne Sessions hat eine Gruppe keinen Zweck, sonst sammelt die Datei Ordner von längst beendeten
+        // Sessions. Das Herz ist das einzige, was eine leere Gruppe hält: ein eigener Name oder eine eigene
+        // Farbe reicht nicht, sonst bliebe jede einmal umbenannte Gruppe für immer stehen.
+        groups.removeAll { $0.sessionIds.isEmpty && !$0.isFavorite }
         let changed = groups != before
         if changed { save() }
         return changed
@@ -196,29 +189,63 @@ enum SidebarSort: String, CaseIterable {
 
     var next: SidebarSort { Self.allCases[(Self.allCases.firstIndex(of: self)! + 1) % Self.allCases.count] }
 
-    /// Wartet auf Antwort vor Fehler vor arbeitet vor fertig. Gleichstand behält die Handreihenfolge.
+    /// Wartet auf Antwort vor Fehler vor arbeitet vor fertig.
     private static func rank(_ s: SessionStatus) -> Int {
         switch s { case .waiting: 0; case .error: 1; case .running: 2; case .idle: 3 }
+    }
+
+    /// Reihenfolge stabil halten: bei Gleichstand entscheidet die bisherige Position.
+    static func stable<T>(_ items: [T], _ less: (T, T) -> Bool) -> [T] {
+        items.enumerated().sorted { less($0.1, $1.1) || (!less($1.1, $0.1) && $0.0 < $1.0) }.map(\.1)
+    }
+
+    /// Zwei Sessions nach Status, bei gleichem Status die neuere zuerst: frisch Gestartetes taucht oben auf
+    /// und rutscht nach unten, sobald es fertig ist.
+    static func less(_ x: Session, _ y: Session, sort: SidebarSort) -> Bool {
+        guard sort != .alpha else { return x.title.localizedStandardCompare(y.title) == .orderedAscending }
+        return rank(x.status) == rank(y.status) ? x.startedAt > y.startedAt : rank(x.status) < rank(y.status)
     }
 
     /// Sortiert Gruppen und die Sessions darin, ohne `groups.json` anzufassen.
     func apply(_ groups: [Group], sessions: [String: Session]) -> [Group] {
         guard self != .off else { return groups }
-        func stable<T>(_ items: [T], _ less: (T, T) -> Bool) -> [T] {
-            items.enumerated().sorted { less($0.1, $1.1) || (!less($1.1, $0.1) && $0.0 < $1.0) }.map(\.1)
-        }
         let sorted = groups.map { g -> Group in
             var g = g
-            g.sessionIds = stable(g.sessionIds) { a, b in
+            g.sessionIds = Self.stable(g.sessionIds) { a, b in
                 guard let x = sessions[a], let y = sessions[b] else { return false }
-                return self == .alpha ? x.title.localizedStandardCompare(y.title) == .orderedAscending
-                                      : Self.rank(x.status) < Self.rank(y.status)
+                return Self.less(x, y, sort: self)
             }
             return g
         }
-        let groupRank = { (g: Group) in g.sessionIds.compactMap { sessions[$0] }.map { Self.rank($0.status) }.min() ?? 4 }
-        return stable(sorted) { a, b in
-            self == .alpha ? a.name.localizedStandardCompare(b.name) == .orderedAscending : groupRank(a) < groupRank(b)
+        // Eine Gruppe erbt den Rang ihrer dringendsten Session; bei Gleichstand zählt ihre jüngste.
+        let key = { (g: Group) -> (Int, Double) in
+            let members = g.sessionIds.compactMap { sessions[$0] }
+            return (members.map { Self.rank($0.status) }.min() ?? 4, members.map(\.startedAt).max() ?? 0)
+        }
+        return Self.stable(sorted) { a, b in
+            guard self != .alpha else { return a.name.localizedStandardCompare(b.name) == .orderedAscending }
+            let (x, y) = (key(a), key(b))
+            return x.0 == y.0 ? x.1 > y.1 : x.0 < y.0
+        }
+    }
+}
+
+/// Gruppierung aus: alle Sessions in einer flachen Liste, quer über die Gruppen. Die Gruppe bleibt an jeder
+/// Zeile hängen, sie liefert Farbe und Projektnamen.
+enum SidebarFlat {
+    /// `order` ist die von Hand gezogene Reihenfolge, gespeichert neben der aus `groups.json` und nur bei
+    /// `.off` maßgeblich. Sessions, die noch nicht darin stehen, kommen oben dazu, die neueste zuerst.
+    static func rows(_ groups: [Group], sessions: [String: Session], sort: SidebarSort, order: [String]) -> [(session: Session, group: Group)] {
+        let all = groups.flatMap { g in g.sessionIds.compactMap { sessions[$0].map { (session: $0, group: g) } } }
+        guard sort == .off else { return SidebarSort.stable(all) { SidebarSort.less($0.session, $1.session, sort: sort) } }
+        let rank = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($0.element, $0.offset) })
+        return SidebarSort.stable(all) { a, b in
+            switch (rank[a.session.id], rank[b.session.id]) {
+            case let (x?, y?): return x < y
+            case (nil, nil): return a.session.startedAt > b.session.startedAt
+            case (nil, _): return true
+            case (_, nil): return false
+            }
         }
     }
 }

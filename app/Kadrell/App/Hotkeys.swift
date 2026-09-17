@@ -18,7 +18,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case nextWaiting
     case focus1, focus2, focus3, focus4, focus5, focus6, focus7, focus8, focus9
     case zoom, nextLayout, closeFocused, openEditor, renameSession, syncInput
-    case focusSidebar, focusWorkspace, cycleSort
+    case focusSidebar, focusWorkspace, cycleSort, toggleGrouping
 
     /// 0-basiert für focus1…focus9.
     var tileIndex: Int? { rawValue.hasPrefix("focus") ? Int(rawValue.dropFirst(5)).map { $0 - 1 } : nil }
@@ -53,6 +53,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .openEditor: return String(localized: "Ordner im externen Editor öffnen", bundle: Bundle.app)
         case .renameSession: return String(localized: "Session umbenennen", bundle: Bundle.app)
         case .cycleSort: return String(localized: "Baum sortieren: aus → A–Z → Status", bundle: Bundle.app)
+        case .toggleGrouping: return String(localized: "Baum nach Projekt gruppieren", bundle: Bundle.app)
         case .syncInput: return String(localized: "Sync: Eingabe an alle Kacheln", bundle: Bundle.app)
         default: return String(localized: "Fokus-Kachel schließen", bundle: Bundle.app)
         }
@@ -73,6 +74,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .openEditor: return String(localized: "Ordner der Fokus-Session im Editor aus den Einstellungen öffnen", bundle: Bundle.app)
         case .renameSession: return String(localized: "Fokus-Session umbenennen, auch im Baum · Claude überschreibt den Namen danach nicht mehr", bundle: Bundle.app)
         case .syncInput: return String(localized: "Sync: Tippen und ⌘V gehen an alle offenen Kacheln gleichzeitig · Badge „SYNC“", bundle: Bundle.app)
+        case .toggleGrouping: return String(localized: "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge", bundle: Bundle.app)
         default: return title
         }
     }
@@ -107,6 +109,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .openEditor: return Hotkey(.option, "e")
         case .renameSession: return Hotkey([], "F2")
         case .cycleSort: return Hotkey(.option, "o")
+        case .toggleGrouping: return Hotkey(.option, "g")
         case .syncInput: return Hotkey(.option, "i")
         default: return Hotkey(.command, "Esc")
         }

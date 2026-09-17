@@ -33,6 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var controlServer: ControlServer?
     /// claude läuft, ist aber älter als `ClaudeCLI.minVersion`: nicht blockierend, nur die Leiste warnt (`recheckCLI`).
     private var versionWarning: String?
+    /// Seit wann eine Session fertig (grün) ist, für das automatische Trennen. Kein Eintrag = arbeitet oder ist getrennt.
+    private var idleSince: [String: Date] = [:]
+    private var autoDetachTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = AppBinary.atLaunch
@@ -131,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        autoDetachTask?.cancel()
         // Nur noch Reste (z. B. Abmelden ohne Prozesse): SIGHUP, beim nächsten Start setzt `--resume` fort.
         attach?.detachAll()
         controlServer?.stop()
@@ -260,6 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.onRenameSession = { [weak self] key in self?.renameSession(key) }
         workspace.onRenameSession = { [weak self] key in self?.renameSession(key) }
         sidebar.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
+        sidebar.onReorderFlat = { [weak self] order in Settings.sidebarFlatOrder = order; self?.reloadViews() }
         sidebar.onMoveGroup = { [weak self] gid, target in self?.store.moveGroup(gid, to: target); self?.reloadViews() }
         workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         sidebar.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
@@ -276,9 +281,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onToggleAuto = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleAuto() }
         bar.onToggleSync = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleSync() }
         bar.onCycleSort = { [weak self] in self?.cycleSort() }
+        bar.onToggleGrouping = { [weak self] in self?.toggleGrouping() }
         bar.onDismissTip = { [weak self] in self?.attention.tip = nil }
         bar.onSelectWaiting = { [weak self, weak workspace] in guard let self else { return }; workspace?.select(waitingIds(), add: false) }
         bar.onShowUpdate = { [weak self] in self?.showUpdateAvailable() }
+        bar.onDetachIdle = { [weak self] in self?.detachIdleSessions() }
     }
 
     /// Einmal für alle Fenster: Tasten wirken im Key-Fenster, Mausrad in dem Fenster unter der Maus.
@@ -392,6 +399,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateChecker.start()
         Notifications.setup()
         Notifications.onSelect = { [weak self] key in self?.focusSession(key) }
+        // Minutengenau reicht; die Einstellung liest jeder Durchlauf neu, ein Wechsel wirkt also ohne Neustart.
+        autoDetachTask = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.autoDetachIdleSessions()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
     }
 
     /// Fenster verdeckt/versteckt oder App nicht aktiv: `SessionRegistry` seltener pollen lassen.
@@ -506,6 +520,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.showMessages = Settings.showLastMessage
         sidebar.showAge = Settings.sidebarShowAge
         sidebar.sort = Settings.sidebarSort
+        sidebar.grouped = Settings.sidebarGrouped
+        sidebar.flatOrder = Settings.sidebarFlatOrder
         sidebar.renderer = Settings.sidebarStyle.renderer
         sidebar.messages = registry?.lastMessages ?? [:]
         sidebar.unread = attention.unseen
@@ -527,7 +543,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.auto = workspace.auto
         bar.sync = workspace.sync
         bar.sort = sidebar.sort
-        bar.attachText = String(localized: "läuft \(attach?.attachedCount ?? 0)/\(sessions.count)", bundle: Bundle.app)
+        bar.grouped = sidebar.grouped
+        bar.counts = statusCounts(sessions)
+        bar.detachableCount = detachableIdleIds().count
         bar.waitingCount = waiting
         bar.needsDisplay = true
     }
@@ -537,6 +555,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func waitingIds() -> [String] {
         let sessions = workspace.sessions
         return store.groups.flatMap(\.sessionIds).filter { sessions[$0]?.status == .waiting && (attach?.isAttached($0) ?? false) }
+    }
+
+    /// Zahlen für die Leiste: Sessions mit laufendem Claude-Prozess nach Status, alle anderen gelten als getrennt.
+    private func statusCounts(_ sessions: [String: Session]) -> StatusCounts {
+        var c = StatusCounts()
+        for (key, s) in sessions {
+            guard attach?.isAttached(key) == true else { c.detached += 1; continue }
+            switch s.status {
+            case .running: c.running += 1
+            case .waiting: c.waiting += 1
+            case .idle: c.idle += 1
+            case .error: c.error += 1
+            }
+        }
+        return c
+    }
+
+    /// Fertige Sessions, deren Prozess sich trennen lässt. Terminals ohne Claude bleiben außen vor (SIGHUP beendet
+    /// die Shell samt allem darin), Remote-Kacheln ebenso: deren ssh steht ohnehin fast immer auf grün.
+    private func detachableIdleIds() -> [String] {
+        workspace.sessions.values
+            .filter { $0.status == .idle && !$0.isShell && !$0.isRemote && attach?.isAttached($0.id) == true }
+            .map(\.id)
+    }
+
+    /// Grüne Pille in der Leiste: alle fertigen Sessions trennen. Die Kacheln bleiben mit ihrem letzten Bildschirm
+    /// stehen, ein Klick darauf setzt die Konversation fort.
+    private func detachIdleSessions() {
+        let ids = detachableIdleIds()
+        guard !ids.isEmpty else { NSSound.beep(); return }
+        Feedback.play(.close)
+        for id in ids { attach.stop(id) }
+        syncSidebar()
+    }
+
+    /// Einstellung „Fertige Sessions automatisch trennen“: was länger als die eingestellten Minuten grün ist,
+    /// verliert seinen Prozess. Die gerade fokussierten Sessions bleiben verbunden, in denen liest oder tippt man.
+    /// `idleSince` wird auch bei abgeschalteter Einstellung gepflegt, sonst trennt das Einschalten sofort alles.
+    private func autoDetachIdleSessions() {
+        let ids = Set(detachableIdleIds()), now = Date()
+        idleSince = idleSince.filter { ids.contains($0.key) }
+        for id in ids where idleSince[id] == nil { idleSince[id] = now }
+        let minutes = Settings.autoDetachMinutes
+        guard minutes > 0 else { return }
+        let focused = Set(windows.compactMap { $0.workspace.focused })
+        let due = ids.filter { !focused.contains($0) && now.timeIntervalSince(idleSince[$0] ?? now) >= Double(minutes) * 60 }
+        guard !due.isEmpty else { return }
+        AppDelegate.log.info("automatisch getrennt nach \(minutes) min: \(due.count, privacy: .public) Session(s)")
+        for id in due { attach.stop(id) }
+        syncSidebar()
     }
 
     // MARK: Menü
@@ -751,11 +819,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .openEditor: openEditor()
         case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
         case .cycleSort: cycleSort()
+        case .toggleGrouping: toggleGrouping()
         default: break
         }
     }
 
     private func cycleSort() { Settings.sidebarSort = Settings.sidebarSort.next; syncSidebar() }
+    private func toggleGrouping() { Settings.sidebarGrouped.toggle(); Feedback.play(.toggle); syncSidebar() }
 
     /// Springt zur nächsten Session, die wartet, egal ob ihre Gruppe eingeklappt oder ihre Kachel schon offen ist.
     private func focusNextWaiting() {

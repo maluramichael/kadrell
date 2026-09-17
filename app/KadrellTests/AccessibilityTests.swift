@@ -148,14 +148,35 @@ final class AccessibilityTests: XCTestCase {
 
         let buttons = elements(bar)
         XCTAssertEqual(buttons.map { $0.accessibilityLabel() ?? "" },
-                       ["Layout", "Weniger Spalten", "Mehr Spalten", "Auto-Modus", "Sync", "Sortierung", "Wartende Sessions"])
+                       ["Layout", "Weniger Spalten", "Mehr Spalten", "Auto-Modus", "Sync", "Gruppierung nach Projekt", "Sortierung", "Wartende Sessions"])
         let sync = buttons[4]
         XCTAssertEqual(sync.accessibilityValue() as? String, "an")
-        XCTAssertEqual(buttons[6].accessibilityValue() as? String, "2")
+        XCTAssertEqual(buttons[5].accessibilityValue() as? String, "an", "Gruppierung ist im Default an")
+        XCTAssertEqual(buttons[7].accessibilityValue() as? String, "2")
         XCTAssertTrue(sync.accessibilityPerformPress())
         XCTAssertEqual(toggled, 1)
         bar.display()
         XCTAssertTrue(elements(bar)[4] === sync)
+    }
+
+    /// Grüne Pille „N trennen“: nur bei trennbaren fertigen Sessions, Klick trennt sie.
+    func testDetachIdlePill() throws {
+        let bar = StatusBarView(frame: .zero)
+        let w = window(bar, NSSize(width: 900, height: 30))
+        defer { w.close() }
+        bar.counts = StatusCounts(running: 2, waiting: 1, idle: 3, error: 0, detached: 4)
+        bar.display()
+        XCTAssertNil(elements(bar).first { $0.accessibilityLabel() == "Fertige Sessions trennen" },
+                     "ohne trennbare Sessions keine Pille")
+
+        var detached = 0
+        bar.detachableCount = 3
+        bar.onDetachIdle = { detached += 1 }
+        bar.display()
+        let pill = try XCTUnwrap(elements(bar).first { $0.accessibilityLabel() == "Fertige Sessions trennen" })
+        XCTAssertEqual(pill.accessibilityValue() as? String, "3")
+        XCTAssertTrue(pill.accessibilityPerformPress())
+        XCTAssertEqual(detached, 1)
     }
 
     /// „Farben nicht unterscheiden“ aus: nur ein gefüllter Punkt (unverändertes Verhalten). Eingeschaltet: der

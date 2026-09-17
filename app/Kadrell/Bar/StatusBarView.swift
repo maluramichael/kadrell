@@ -2,6 +2,12 @@ import AppKit
 
 /// 30 px Leiste: Layout-Toggle links, Breadcrumb in der Mitte, rechts Nutzung, Attach und Uhr.
 /// Alles gezeichnet, Hit-Rects von Hand.
+/// Sessions je Status für die Leiste. `detached` = kein laufender Claude-Prozess, egal welcher Status zuletzt galt.
+struct StatusCounts: Equatable {
+    var running = 0, waiting = 0, idle = 0, error = 0, detached = 0
+    var total: Int { running + waiting + idle + error + detached }
+}
+
 @MainActor
 final class StatusBarView: NSView, NSViewToolTipOwner {
     var crumb: (group: String, session: String)?
@@ -15,7 +21,12 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     var onDismissTip: (() -> Void)?
     var sessionCount = 0
     var openCount = 0
-    var attachText = String(localized: "läuft \(0)/\(0)", bundle: Bundle.app)
+    /// Sessions je Status für die farbigen Zahlen rechts; alles außer `detached` hat einen laufenden Claude-Prozess.
+    var counts = StatusCounts()
+    /// Fertige Sessions, die sich trennen lassen (ohne Terminals ohne Claude und Remote-Kacheln): Zahl auf der Pille.
+    var detachableCount = 0
+    /// Klick auf die grüne Pille: alle fertigen Sessions trennen (spart Speicher und CPU).
+    var onDetachIdle: (() -> Void)?
     /// Sessions, die gerade auf dich warten (Status waiting, angehängt). Modul „N warten“ nur bei > 0.
     var waitingCount = 0
     var onSelectWaiting: (() -> Void)?
@@ -46,6 +57,9 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Sortierung des Baums: Klick schaltet aus → A–Z → Status weiter. Aktiv = gefülltes Badge.
     var sort: SidebarSort = .off { didSet { toggled(sort != oldValue, "sort") } }
     var onCycleSort: (() -> Void)?
+    /// Gruppierung nach Projekt im Baum. Aus = flache Liste, dann zeigt der Knopf „FLACH“ als gefülltes Badge.
+    var grouped = true { didSet { toggled(grouped != oldValue, "group") } }
+    var onToggleGrouping: (() -> Void)?
     /// Zoom aktiv: Badge „ZOOM“ links neben dem Breadcrumb, Klick hebt den Zoom auf.
     var zoomed = false
     var onToggleZoom: (() -> Void)?
@@ -160,6 +174,8 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let onOff = { (on: Bool) in on ? String(localized: "an", bundle: Bundle.app) : String(localized: "aus", bundle: Bundle.app) }
         segment(b, &x, "AUTO", fill: auto ? Theme.waiting : nil, key: "auto", String(localized: "Auto-Modus", bundle: Bundle.app), onOff(auto)) { [weak self] in self?.onToggleAuto?() }
         segment(b, &x, "SYNC", fill: sync ? Theme.error : nil, key: "sync", "Sync", onOff(sync)) { [weak self] in self?.onToggleSync?() }
+        segment(b, &x, grouped ? "GRP" : String(localized: "FLACH", bundle: Bundle.app), fill: grouped ? nil : Theme.sub, key: "group",
+                String(localized: "Gruppierung nach Projekt", bundle: Bundle.app), onOff(grouped)) { [weak self] in self?.onToggleGrouping?() }
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
         segment(b, &x, sortLabel, fill: sort == .off ? nil : Theme.sub, key: "sort", String(localized: "Sortierung", bundle: Bundle.app), sort == .off ? String(localized: "aus", bundle: Bundle.app) : sortLabel) { [weak self] in self?.onCycleSort?() }
         return drawZoom(b, x: x + 7)   // 8 pt hinter der letzten Trennlinie
@@ -244,7 +260,11 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             module(b, &rx, [NSAttributedString(string: String(localized: "\(waitingCount) warten", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))], pill: Theme.waiting,
                    String(localized: "Wartende Sessions", bundle: Bundle.app), value: "\(waitingCount)") { [weak self] in self?.onSelectWaiting?() }
         }
-        module(b, &rx, [NSAttributedString(string: attachText, attributes: Theme.attrs(11.5, Theme.sub))], tip: String(localized: "Laufende Claude-Prozesse / Sessions", bundle: Bundle.app))
+        if detachableCount > 0 {
+            module(b, &rx, [NSAttributedString(string: String(localized: "\(detachableCount) trennen", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.idle), bold: true))], pill: Theme.idle,
+                   String(localized: "Fertige Sessions trennen", bundle: Bundle.app), value: "\(detachableCount)") { [weak self] in self?.onDetachIdle?() }
+        }
+        drawCounts(b, &rx)
         if let tip {
             module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))], textY: -7,
                    String(localized: "Tipp", bundle: Bundle.app), value: tip) { [weak self] in self?.onDismissTip?() }
@@ -253,6 +273,25 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update", bundle: Bundle.app), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))], textY: -7,
                    String(localized: "Ältere claude-Version", bundle: Bundle.app), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
         }
+    }
+
+    /// Sessions je Status in den Farben der Statuspunkte, dahinter die Gesamtzahl. Fehler nur, wenn es welche gibt.
+    private func drawCounts(_ b: CGRect, _ rx: inout CGFloat) {
+        let rows: [(n: Int, color: NSColor, label: String, always: Bool)] = [
+            (counts.running, Theme.running, String(localized: "arbeiten", bundle: Bundle.app), true),
+            (counts.waiting, Theme.waitingText, String(localized: "warten", bundle: Bundle.app), true),
+            (counts.idle, Theme.idle, String(localized: "fertig", bundle: Bundle.app), true),
+            (counts.error, Theme.error, String(localized: "mit Fehler", bundle: Bundle.app), false),
+            // Statusfarbe für „getrennt“ ist als Text zu dunkel; `muted` ist derselbe Grauton in lesbar.
+            (counts.detached, Theme.muted, String(localized: "getrennt", bundle: Bundle.app), true),
+        ]
+        var parts: [NSAttributedString] = [], tips: [String] = []
+        for r in rows where r.n > 0 || r.always {
+            parts.append(NSAttributedString(string: "\(r.n)", attributes: Theme.attrs(11.5, r.color, bold: true)))
+            tips.append("\(r.n) \(r.label)")
+        }
+        parts.append(NSAttributedString(string: "· \(counts.total)", attributes: Theme.attrs(11.5, Theme.sub)))
+        module(b, &rx, parts, tip: tips.joined(separator: ", ") + String(localized: " · \(counts.total) Sessions", bundle: Bundle.app))
     }
 
     /// Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.

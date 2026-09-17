@@ -32,6 +32,8 @@ struct SidebarSessionItem {
     let session: Session
     let color: NSColor
     let dot: NSColor
+    /// Ohne Gruppierung steht der Projektname vor dem Titel, sonst trägt ihn die Gruppenzeile darüber.
+    var project: String? = nil
     /// Claude-Prozess läuft (angehängt): steuert die Punktform bei „Farben nicht unterscheiden“ (Ring = nicht gestartet).
     let attached: Bool
     let selected: Bool
@@ -135,8 +137,16 @@ extension SidebarRenderer {
             tag.draw(at: CGPoint(x: pill.minX + 5, y: r.midY - 7))
             right -= 8
         }
+        sessionTitle(s).draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    /// Titel der Session, ohne Gruppierung mit „projekt › “ in Gruppenfarbe davor.
+    func sessionTitle(_ s: SidebarSessionItem) -> NSAttributedString {
         let title = NSAttributedString(string: s.session.title, attributes: Theme.attrs(12, s.selected || s.hover || s.unread ? Theme.fg : Theme.sub, bold: s.unread))
-        title.draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        guard let project = s.project else { return title }
+        let line = NSMutableAttributedString(string: project + " › ", attributes: Theme.attrs(12, s.color, bold: true))
+        line.append(title)
+        return line
     }
 
     /// Favoritenherz ganz rechts in der Kopfzeile, liefert die linke Kante des belegten Platzes.
