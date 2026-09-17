@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var versionWarning: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        _ = AppBinary.atLaunch
         // Nur eine Instanz pro Profil: hält schon eine das Profil, die nach vorn holen und selbst beenden.
         if NSClassFromString("XCTestCase") == nil, let other = Profile.acquire() {
             NSRunningApplication(processIdentifier: other)?.activate()

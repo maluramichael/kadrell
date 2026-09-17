@@ -4,6 +4,7 @@ import AppKit
 /// Nativer Ordnerdialog. Liefert den gewählten Pfad oder nil. `images: true` wählt stattdessen eine Bilddatei.
 @MainActor
 func chooseFolder(start: String, images: Bool = false, completion: @escaping (String?) -> Void) {
+    guard !AppBinary.replaced else { warnReplaced(); completion(nil); return }
     let panel = NSOpenPanel()
     panel.canChooseDirectories = !images
     panel.canChooseFiles = images
@@ -16,6 +17,26 @@ func chooseFolder(start: String, images: Bool = false, completion: @escaping (St
     panel.begin { resp in
         completion(resp == .OK ? panel.url.map { $0.path } : nil)
     }
+}
+
+/// Wurde die App ersetzt, während sie läuft (Update, Neubau), verwirft macOS den Dateidialog wegen der geänderten Signatur,
+/// und AppKit hängt beim Wiederholen alle 10 s den Main-Thread auf. Stempel der Programmdatei beim Start gegen jetzt.
+@MainActor
+enum AppBinary {
+    static let atLaunch = stamp()
+    static var replaced: Bool { stamp() != atLaunch }
+    private static func stamp() -> String? {
+        guard let path = Bundle.main.executablePath, let a = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
+        return "\(a[.systemFileNumber] ?? "")/\((a[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)"
+    }
+}
+
+@MainActor
+private func warnReplaced() {
+    let alert = NSAlert()
+    alert.messageText = String(localized: "Kadrell wurde seit dem Start ersetzt")
+    alert.informativeText = String(localized: "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen.")
+    alert.runModal()
 }
 
 /// Fußleiste der Dialoge: Hinweis links, Aktion rechts als Button (⏎ löst dieselbe Aktion aus).

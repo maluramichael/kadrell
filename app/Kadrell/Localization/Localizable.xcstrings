@@ -6417,6 +6417,38 @@
           }
         }
       }
+    },
+    "Kadrell wurde seit dem Start ersetzt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell wurde seit dem Start ersetzt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell was replaced since launch"
+          }
+        }
+      }
+    },
+    "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Dateiauswahl-Dialog öffnet sich erst nach einem Neustart von Kadrell. Pfade lassen sich weiter eintippen oder hineinziehen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file dialog only opens again after restarting Kadrell. You can still type or drop paths."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
