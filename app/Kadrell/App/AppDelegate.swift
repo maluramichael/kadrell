@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        Profile.sweepStale()
         // Dock-Icon direkt aus dem Bundle: LaunchServices hält für Debug-Builds am selben Pfad gern das alte, leere Icon.
         if let url = Bundle.main.url(forResource: "Kadrell", withExtension: "icns"), let img = NSImage(contentsOf: url) { NSApp.applicationIconImage = img }
         buildMenu()
@@ -213,7 +214,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         sidebar.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
-        bar.onToggleLayout = { [weak self] in guard let self else { return }; workspace.setMode(workspace.mode.other) }
+        bar.onPickLayout = { [weak self] m in self?.workspace.setMode(m) }
+        bar.onGridColumns = { [weak self] c in self?.workspace.setGridColumns(c) }
         bar.onToggleZoom = { [weak self] in self?.workspace.toggleZen() }
         bar.onToggleAuto = { [weak self] in Feedback.play(.toggle); self?.workspace.toggleAuto() }
         bar.onToggleSync = { [weak self] in Feedback.play(.toggle); self?.workspace.toggleSync() }
@@ -367,6 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.sessionCount = sessions.count
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
+        bar.gridColumns = Settings.gridColumns
         bar.zoomed = workspace.zen
         bar.auto = workspace.auto
         bar.sync = workspace.sync
@@ -446,8 +449,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(withTitle: "Bearbeiten", action: nil, keyEquivalent: "").submenu = edit
 
         let view = NSMenu(title: "Ansicht")
-        view.addItem(withTitle: "Grid", action: #selector(menuGrid), keyEquivalent: "")
-        view.addItem(withTitle: "Stack", action: #selector(menuStack), keyEquivalent: "")
+        for m in LayoutMode.allCases {
+            let item = NSMenuItem(title: m.title, action: #selector(menuLayout(_:)), keyEquivalent: "")
+            item.representedObject = m.rawValue
+            view.addItem(item)
+        }
         view.addItem(withTitle: "Auto-Modus ein/aus", action: #selector(menuAuto), keyEquivalent: "")
         view.addItem(withTitle: "Baum ein/aus", action: #selector(menuSidebar), keyEquivalent: "b")
         let toggleGroups = NSMenuItem(title: "Alle Gruppen auf-/zuklappen", action: #selector(menuToggleGroups), keyEquivalent: "b")
@@ -575,8 +581,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.select(ids, add: false)
         selectAllUndo = (shift, before, focus, Set(workspace.selected))
     }
-    @objc private func menuGrid() { workspace.setMode(.grid) }
-    @objc private func menuStack() { workspace.setMode(.stack) }
+    @objc private func menuLayout(_ item: NSMenuItem) {
+        if let m = (item.representedObject as? String).flatMap(LayoutMode.init) { workspace.setMode(m) }
+    }
     @objc private func menuAuto() { workspace.toggleAuto() }
     @objc private func menuSidebar() {
         sidebarScroll.isHidden.toggle()
@@ -599,6 +606,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .swapRight: workspace.swapFocused(.right)
         case .swapUp: workspace.swapFocused(.up)
         case .swapDown: workspace.swapFocused(.down)
+        case .resizeLeft: workspace.resizeFocused(.left)
+        case .resizeRight: workspace.resizeFocused(.right)
+        case .resizeUp: workspace.resizeFocused(.up)
+        case .resizeDown: workspace.resizeFocused(.down)
         case .nextSession: workspace.cycleFocus(1)
         case .prevSession: workspace.cycleFocus(-1)
         case .lastSession: workspace.focusLast()
@@ -606,7 +617,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .previewPrev: stepPreview(-1)
         case .nextWaiting: focusNextWaiting()
         case .zoom: workspace.toggleZen()
-        case .nextLayout: workspace.setMode(workspace.mode.other)
+        case .nextLayout: workspace.setMode(workspace.mode.next)
         case .focusSidebar: focusSidebar()
         case .focusWorkspace: focusWorkspace()
         case .openEditor: openEditor()
@@ -715,9 +726,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workspace.select(g.sessionIds, add: false)
         }
         let focusedSession = workspace.focused.flatMap { sessions[$0] }
-        src.commands = [
-            ("Grid", { [weak self] in self?.workspace.setMode(.grid) }),
-            ("Stack", { [weak self] in self?.workspace.setMode(.stack) }),
+        src.commands = LayoutMode.allCases.map { m in ("Layout: \(m.title)", { [weak self] in self?.workspace.setMode(m) }) } + [
+            ("Trennlinien zurücksetzen (gleich verteilt)", { [weak self] in self?.workspace.resetRatios() }),
             ("Zoom ein/aus (fokussierte)", { [weak self] in self?.workspace.toggleZen() }),
             ("Neue Session", { [weak self] in self?.openNewSession(groupId: nil) }),
             ("Neues Terminal ohne Claude", { [weak self] in self?.menuNewShell() }),

@@ -2,6 +2,14 @@
 
 Neueste Version oben.
 
+## 1.34.0 (2026-09-17)
+
+- Feature: Neue Layouts „Haupt + Spalte“ (eine große Kachel links, der Rest rechts untereinander) und „Spirale“ (jede Kachel halbiert den Rest, wie bspwm). Das Layout-Symbol in der Leiste öffnet die Auswahl, ⌘L schaltet reihum.
+- Feature: Trennlinien zwischen Kacheln lassen sich mit der Maus ziehen, Doppelklick verteilt wieder gleich. ⌃⌥-Pfeiltasten verschieben die Linie an der fokussierten Kachel um 5 %. Die Aufteilung gehört zum Layout: Terminals werden der Reihe nach eingefüllt, die Größen bleiben, auch wenn andere Sessions nachrücken.
+- Feature: Im Grid legt „‹ SP ›“ in der Leiste die Spaltenzahl fest, unter 1 wählt Kadrell sie wieder automatisch.
+- Änderung: Fokus bewegen und Kacheln tauschen mit ⌥- und ⌥⇧-Pfeilen folgen jetzt der tatsächlichen Lage der Kacheln.
+- Fix: Reste von temporären Profilen werden beim nächsten Start weggeräumt.
+
 ## 1.33.0 (2026-09-17)
 
 - Feature: Profile: `--profile <name>` startet eine weitere Kadrell-Instanz mit eigenen Sessions, Gruppen und Einstellungen. Ohne Namen gilt wie bisher das Standardprofil, bestehende Daten bleiben unverändert. Ein neues Profil übernimmt die Einstellungen des Standardprofils.

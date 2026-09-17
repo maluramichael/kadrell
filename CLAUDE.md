@@ -33,6 +33,20 @@ open -n app/build/Build/Products/Debug/Kadrell.app --args --profile tmp
 - Beenden nur die eigene Testinstanz: `kill -TERM <pid>` (pid aus `/bin/ps -axo pid=,args= | grep "profile tmp"`).
 - Benannte Profile (`--profile <name>`) bleiben unter `~/Library/Application Support/de.malura.kadrell/profiles/<name>/`
   liegen, zum Testen deshalb nicht verwenden.
+- Reste abgestürzter oder beendeter Temp-Profile (plist, Temp-Ordner) räumt jeder Start weg, nichts von Hand löschen.
+- Screenshots der laufenden Instanz gehen nicht (`screencapture` hat in der Tool-Shell kein Bildschirmaufnahme-Recht).
+  Für Sichtprüfungen einen temporären Render-Test schreiben und im Temp-Profil laufen lassen, damit er Michaels
+  Einstellungen nicht anfasst: `TEST_RUNNER_KADRELL_PROFILE=tmp xcodebuild … test -only-testing:KadrellTests/<Test>`.
+
+### Parallel an mehreren Features arbeiten
+
+Weil jedes Temp-Profil eigene Sessions, Einstellungen, Socket und Lock hat, können beliebig viele Sessions gleichzeitig
+an verschiedenen Features arbeiten und testen, ohne sich oder Michaels Kadrell zu stören:
+
+1. Jede Session arbeitet in ihrem eigenen Worktree und baut dort (`app/build` liegt pro Worktree getrennt).
+2. Jede startet ihren eigenen Build mit `--profile tmp`, bekommt damit ein eigenes Profil und findet ihre Instanz über
+   die pid ihres Build-Pfads (`/bin/ps -axo pid=,args= | grep "<worktree>/app/build.*profile tmp"`).
+3. Nur die eigene Instanz beenden, nie per Name (`pkill Kadrell` trifft alle Profile und Michaels App).
 
 ## Release (kein App Store)
 

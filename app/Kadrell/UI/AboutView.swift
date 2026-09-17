@@ -13,7 +13,9 @@ struct AboutView: View {
             ("Navigation", rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
                                 + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace])
                 + [("⌘P", "Suche, mit > Kommandos"), ("⌘F", "Im Terminal suchen, ⌘G weiter"), ("⌘⇧F", "In allen Terminals suchen")]),
-            ("Kacheln verwalten", rows([.swapLeft, .swapRight, .swapUp, .swapDown, .zoom, .nextLayout, .syncInput, .closeFocused]) + [
+            ("Kacheln verwalten", rows([.swapLeft, .swapRight, .swapUp, .swapDown, .resizeLeft, .resizeRight, .resizeUp, .resizeDown, .zoom, .nextLayout, .syncInput, .closeFocused]) + [
+                ("Trennlinie ziehen", "Größen des Layouts ändern, Doppelklick verteilt gleich · Terminals füllen die Felder der Reihe nach"),
+                ("‹ SP › in der Leiste", "Spalten im Grid, unter 1 wieder automatisch"),
                 ("Ziehen", "Session oder Gruppe umsortieren, Baum und Kacheln gleich"),
                 ("⌘W", "Fokus-Session beenden und entfernen, mit Rückfrage"), ("⌥ + Klick auf X", "Schließen ohne Rückfrage"), ("⌘B", "Baum ein/aus"), ("⌘⇧B", "Alle Gruppen auf- oder zuklappen"),
             ] + rows([.cycleSort])),

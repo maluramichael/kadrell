@@ -101,19 +101,39 @@ enum Icons {
     }
 
     /// Layout-Symbol für die Leiste: Grid = vier Quadrate, Stack = Rahmen mit zwei Linien.
+    /// Layout-Symbol als Bild fürs Menü.
+    @MainActor static func layoutImage(_ mode: LayoutMode) -> NSImage {
+        NSImage(size: NSSize(width: 16, height: 16), flipped: true) { r in
+            layout(mode, in: r.insetBy(dx: 1, dy: 1), color: .labelColor)
+            return true
+        }
+    }
+
     @MainActor static func layout(_ mode: LayoutMode, in r: CGRect, color: NSColor) {
         let p = NSBezierPath()
         p.lineWidth = 1.2
         let i = r.insetBy(dx: 1, dy: 1)
-        if mode == .grid {
+        switch mode {
+        case .grid:
             let w = (i.width - 2) / 2, h = (i.height - 2) / 2
             for (c, rr) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
                 p.appendRect(CGRect(x: i.minX + CGFloat(c) * (w + 2), y: i.minY + CGFloat(rr) * (h + 2), width: w, height: h))
             }
-        } else {
+        case .stack:
             p.appendRect(i)
             p.move(to: CGPoint(x: i.minX, y: i.minY + i.height / 3)); p.line(to: CGPoint(x: i.maxX, y: i.minY + i.height / 3))
             p.move(to: CGPoint(x: i.minX, y: i.minY + 2 * i.height / 3)); p.line(to: CGPoint(x: i.maxX, y: i.minY + 2 * i.height / 3))
+        case .main:
+            p.appendRect(i)
+            let x = i.minX + i.width * 0.55
+            p.move(to: CGPoint(x: x, y: i.minY)); p.line(to: CGPoint(x: x, y: i.maxY))
+            p.move(to: CGPoint(x: x, y: i.midY)); p.line(to: CGPoint(x: i.maxX, y: i.midY))
+        case .spiral:
+            p.appendRect(i)
+            p.move(to: CGPoint(x: i.midX, y: i.minY)); p.line(to: CGPoint(x: i.midX, y: i.maxY))
+            p.move(to: CGPoint(x: i.midX, y: i.midY)); p.line(to: CGPoint(x: i.maxX, y: i.midY))
+            let q = i.midX + i.width / 4
+            p.move(to: CGPoint(x: q, y: i.midY)); p.line(to: CGPoint(x: q, y: i.maxY))
         }
         color.setStroke()
         p.stroke()

@@ -41,4 +41,41 @@ final class TilingTests: XCTestCase {
         XCTAssertNil(Tiling.neighbor(of: 0, count: 3, mode: .stack, .up))
         XCTAssertNil(Tiling.neighbor(of: 7, count: 3, mode: .grid, .up))
     }
+
+    func testTemplatesFillInOrder() {
+        // Haupt + Spalte: erste Kachel links über die volle Höhe, der Rest rechts untereinander.
+        let main = Tiling.layout(.main, count: 3, in: b, gap: 0, ratios: { k, _ in k == "main.cols" ? [0.7, 0.3] : nil })
+        XCTAssertEqual(main.frames[0], CGRect(x: 0, y: 0, width: 700, height: 600))
+        XCTAssertEqual(main.frames[1], CGRect(x: 700, y: 0, width: 300, height: 300))
+        XCTAssertEqual(main.frames[2].maxY, 600)
+        XCTAssertEqual(main.dividers.map(\.key), ["main.cols", "main.rows.2"])
+        // Spirale: halbiert abwechselnd senkrecht und waagerecht.
+        let spiral = Tiling.layout(.spiral, count: 3, in: b, gap: 0).frames
+        XCTAssertEqual(spiral[0], CGRect(x: 0, y: 0, width: 500, height: 600))
+        XCTAssertEqual(spiral[1], CGRect(x: 500, y: 0, width: 500, height: 300))
+        XCTAssertEqual(spiral[2], CGRect(x: 500, y: 300, width: 500, height: 300))
+        // Grid mit fester Spaltenzahl und gezogenen Spaltenbreiten.
+        let grid = Tiling.layout(.grid, count: 3, in: b, gap: 0, columns: 3, ratios: { k, _ in k == "grid.cols.3" ? [0.5, 0.25, 0.25] : nil })
+        XCTAssertEqual(grid.frames.map(\.width), [500, 250, 250])
+        // Falsche Länge gespeichert: gleich verteilt statt kaputt.
+        let bad = Tiling.layout(.grid, count: 2, in: b, gap: 0, ratios: { _, _ in [1] })
+        XCTAssertEqual(bad.frames.map(\.width), [500, 500])
+    }
+
+    func testDragMovesBoundaryAndClamps() {
+        let d = Tiling.layout(.main, count: 2, in: b, gap: 10).dividers[0]
+        XCTAssertTrue(d.vertical)
+        let moved = Tiling.drag(d, to: CGPoint(x: 305, y: 0), gap: 10, ratios: [])
+        XCTAssertEqual(moved[0], 300.0 / 990, accuracy: 0.001)
+        XCTAssertEqual(moved.reduce(0, +), 1, accuracy: 0.0001)
+        XCTAssertEqual(Tiling.drag(d, to: CGPoint(x: -500, y: 0), gap: 10, ratios: [])[0], 0.05, accuracy: 0.0001)
+    }
+
+    func testNeighborByFrames() {
+        let f = Tiling.layout(.main, count: 3, in: b, gap: 0).frames   // 0 links, 1 rechts oben, 2 rechts unten
+        XCTAssertEqual(Tiling.neighbor(of: 0, frames: f, .right), 1)
+        XCTAssertEqual(Tiling.neighbor(of: 2, frames: f, .left), 0)
+        XCTAssertEqual(Tiling.neighbor(of: 1, frames: f, .down), 2)
+        XCTAssertNil(Tiling.neighbor(of: 0, frames: f, .left))
+    }
 }

@@ -5,6 +5,7 @@ import AppKit
 enum HotkeyAction: String, CaseIterable, Sendable {
     case focusLeft, focusRight, focusUp, focusDown
     case swapLeft, swapRight, swapUp, swapDown
+    case resizeLeft, resizeRight, resizeUp, resizeDown
     case nextSession, prevSession, lastSession
     case previewNext, previewPrev
     case nextWaiting
@@ -26,6 +27,10 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .swapRight: return "Kachel nach rechts tauschen"
         case .swapUp: return "Kachel nach oben tauschen"
         case .swapDown: return "Kachel nach unten tauschen"
+        case .resizeLeft: return "Trennlinie nach links"
+        case .resizeRight: return "Trennlinie nach rechts"
+        case .resizeUp: return "Trennlinie nach oben"
+        case .resizeDown: return "Trennlinie nach unten"
         case .nextSession: return "Nächste Kachel"
         case .prevSession: return "Vorige Kachel"
         case .lastSession: return "Zuletzt fokussierte Kachel"
@@ -33,7 +38,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .previewPrev: return "Vorschau: vorige Session im Baum"
         case .nextWaiting: return "Nächste wartende Session"
         case .zoom: return "Zoom: Fokus-Kachel allein"
-        case .nextLayout: return "Grid ↔ Stack"
+        case .nextLayout: return "Layout wechseln: Grid → Haupt + Spalte → Spirale → Stack"
         case .focusSidebar: return "Baum: Tastatur hierher, ↑↓ wählt Session"
         case .focusWorkspace: return "Arbeitsfläche: Tastatur an Claude"
         case .openEditor: return "Ordner im externen Editor öffnen"
@@ -50,6 +55,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         switch self {
         case .focusLeft, .focusRight, .focusUp, .focusDown: return "Fokus bewegen · im Stack auf- und zuklappen"
         case .swapLeft, .swapRight, .swapUp, .swapDown: return "Fokus-Kachel mit Nachbar tauschen"
+        case .resizeLeft, .resizeRight, .resizeUp, .resizeDown: return "Trennlinie an der Fokus-Kachel um 5 % verschieben"
         case .nextSession, .prevSession: return "Nächste / vorige Kachel"
         case .previewNext, .previewPrev: return "Baum als Vorschau durchblättern, Auswahl bleibt · ⏎ übernimmt, Esc zurück"
         case .nextWaiting: return "Springt zur nächsten Session, die auf dich wartet"
@@ -72,6 +78,10 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .swapRight: return Hotkey([.option, .shift], "→")
         case .swapUp: return Hotkey([.option, .shift], "↑")
         case .swapDown: return Hotkey([.option, .shift], "↓")
+        case .resizeLeft: return Hotkey([.control, .option], "←")
+        case .resizeRight: return Hotkey([.control, .option], "→")
+        case .resizeUp: return Hotkey([.control, .option], "↑")
+        case .resizeDown: return Hotkey([.control, .option], "↓")
         case .nextSession: return Hotkey(.option, "n")
         case .prevSession: return Hotkey(.option, "p")
         case .lastSession: return Hotkey(.option, "⇥")

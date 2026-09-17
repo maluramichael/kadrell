@@ -31,6 +31,10 @@ final class WorkspaceView: NSView {
     private var lastTiles: [String] = []
 
     private var cells: [String: CellView] = [:]
+    /// Ziehbare Grenzen der aktuellen Vorlage und die Felder der Kacheln, beides aus `relayout`.
+    private var dividers: [SplitLine] = []
+    private var tileFrames: [String: CGRect] = [:]
+    private var draggedDivider: SplitLine?
     private var loaded = false
     private var stackRows: [(CGRect, String)] = []
     private var hoveredCell: String?
@@ -162,19 +166,56 @@ final class WorkspaceView: NSView {
         select([f], add: true)
     }
 
-    func moveFocus(_ d: Tiling.Direction) {
+    /// Nachbar der Fokus-Kachel: im Stack und Zoom nach Reihenfolge, sonst nach Lage der Felder.
+    private func neighbor(_ d: Tiling.Direction) -> String? {
         let tiles = tiles
-        guard let f = focused, let i = tiles.firstIndex(of: f),
-              let j = Tiling.neighbor(of: i, count: tiles.count, mode: zen ? .stack : mode, d) else { return }
-        setFocus(tiles[j])
+        guard let f = focused, let i = tiles.firstIndex(of: f) else { return nil }
+        if mode == .stack || zen { return Tiling.neighbor(of: i, count: tiles.count, mode: .stack, d).map { tiles[$0] } }
+        return Tiling.neighbor(of: i, frames: tiles.map { tileFrames[$0] ?? .zero }, d).map { tiles[$0] }
+    }
+
+    func moveFocus(_ d: Tiling.Direction) {
+        if let n = neighbor(d) { setFocus(n) }
     }
 
     /// Fokus-Kachel mit ihrem Nachbarn in Richtung `d` tauschen, wie Ziehen: die Reihenfolge gehört dem Baum.
     func swapFocused(_ d: Tiling.Direction) {
-        let tiles = tiles
-        guard let f = focused, let i = tiles.firstIndex(of: f),
-              let j = Tiling.neighbor(of: i, count: tiles.count, mode: mode, d) else { return }
-        onMoveSession?(f, tiles[j])
+        guard let f = focused, let n = neighbor(d) else { return }
+        onMoveSession?(f, n)
+    }
+
+    /// ⌃⌥-Pfeile wie tmux `resize-pane`: die Trennlinie an der Fokus-Kachel wandert 5 % in Pfeilrichtung.
+    /// Bevorzugt die Linie auf der Seite des Pfeils, sonst die gegenüberliegende.
+    func resizeFocused(_ d: Tiling.Direction) {
+        guard let f = focused, let frame = tileFrames[f], !zen, preview == nil else { NSSound.beep(); return }
+        let vertical = d == .left || d == .right, forward = d == .right || d == .down
+        let near = dividers.filter { div in
+            guard div.vertical == vertical else { return false }
+            return vertical ? div.rect.minY < frame.maxY && div.rect.maxY > frame.minY : div.rect.minX < frame.maxX && div.rect.maxX > frame.minX
+        }
+        let mid = { (div: SplitLine) in vertical ? div.rect.midX : div.rect.midY }
+        let far = vertical ? (forward ? frame.maxX : frame.minX) : (forward ? frame.maxY : frame.minY)
+        let other = vertical ? (forward ? frame.minX : frame.maxX) : (forward ? frame.minY : frame.maxY)
+        let reach = CGFloat(Settings.tileGap) + 10
+        guard let div = near.first(where: { abs(mid($0) - far) <= reach }) ?? near.first(where: { abs(mid($0) - other) <= reach }) else { NSSound.beep(); return }
+        let step = (vertical ? div.span.width : div.span.height) * 0.05 * (forward ? 1 : -1)
+        let p = vertical ? CGPoint(x: mid(div) + step, y: 0) : CGPoint(x: 0, y: mid(div) + step)
+        moveDivider(div, to: p)
+    }
+
+    private func moveDivider(_ d: SplitLine, to p: CGPoint) {
+        Settings.setLayoutRatios(d.key, Tiling.drag(d, to: p, gap: CGFloat(Settings.tileGap), ratios: Settings.layoutRatios(d.key, d.count) ?? []))
+        relayout()
+    }
+
+    func setGridColumns(_ c: Int) {
+        Settings.gridColumns = max(0, c)
+        relayout()
+    }
+
+    func resetRatios() {
+        Settings.resetLayoutRatios()
+        relayout()
     }
 
     /// Nächste (+1) oder vorige (-1) Kachel, am Ende wieder vorn.
@@ -286,6 +327,7 @@ final class WorkspaceView: NSView {
         let inset = bounds.insetBy(dx: gap, dy: gap)
         var frames: [String: CGRect] = [:]
         stackRows = []
+        dividers = []
         updateLinger()
         let tiles = tiles
         // Auto-Modus: ist die Fokus-Kachel weg, bekommt eine neu aufgetauchte (sonst die erste) den Fokus.
@@ -310,9 +352,11 @@ final class WorkspaceView: NSView {
         } else if zen, let f = focused, tiles.contains(f) {
             visible = [f]
             frames[f] = inset
-        } else if mode == .grid {
+        } else if mode != .stack {
             visible = tiles
-            for (id, r) in zip(tiles, Tiling.grid(count: tiles.count, in: inset, gap: gap)) { frames[id] = r }
+            let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, ratios: Settings.layoutRatios)
+            for (id, r) in zip(tiles, t.frames) { frames[id] = r }
+            dividers = t.dividers
         } else {
             let active = focused.flatMap { tiles.firstIndex(of: $0) } ?? 0
             let (rows, body) = Tiling.stack(count: tiles.count, active: active, in: inset, rowHeight: (Tiling.rowHeight * Theme.scale).rounded())
@@ -320,6 +364,7 @@ final class WorkspaceView: NSView {
             visible = tiles.isEmpty ? [] : [tiles[active]]
             if !tiles.isEmpty { frames[tiles[active]] = body }
         }
+        tileFrames = frames
         for (key, v) in cells {
             guard let f = frames[key], let s = sessions[key] else {
                 v.isHidden = true
@@ -531,6 +576,14 @@ final class WorkspaceView: NSView {
         return .none
     }
 
+    private func divider(at p: CGPoint) -> SplitLine? { dividers.first { $0.rect.contains(p) } }
+
+    /// Über einer Trennlinie gehört die Maus der Arbeitsfläche, nicht dem Terminal darunter (Abstand 0).
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if !isHidden, divider(at: convert(point, from: superview)) != nil { return self }
+        return super.hitTest(point)
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas { removeTrackingArea(t) }
@@ -540,6 +593,7 @@ final class WorkspaceView: NSView {
     override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         guard p.x > ThinSplitView.grabWidth / 2 else { return }   // Griffzone des Trenners: Cursor gehört dem Split
+        if let d = divider(at: p) { (d.vertical ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).set(); return }
         var cell: String?, row: String?
         switch hit(at: p) {
         case .cell(let k): cell = k; NSCursor.arrow.set()
@@ -574,6 +628,11 @@ final class WorkspaceView: NSView {
         let p = convert(event.locationInWindow, from: nil)
         let force = event.modifierFlags.contains(.option)
         pressed = nil
+        // Trennlinie: ziehen ändert die Vorlage, Doppelklick verteilt diese Liste wieder gleich.
+        if let d = divider(at: p) {
+            if event.clickCount == 2 { Settings.setLayoutRatios(d.key, nil); relayout() } else { draggedDivider = d }
+            return
+        }
         switch hit(at: p) {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
         case .cellRename(let k), .rowRename(let k): onRenameSession?(k)
@@ -589,6 +648,7 @@ final class WorkspaceView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if let d = draggedDivider { moveDivider(d, to: convert(event.locationInWindow, from: nil)); return }
         guard let press = pressed, tiles.count > 1, !zen else { return }
         let p = convert(event.locationInWindow, from: nil)
         if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true }
@@ -606,6 +666,7 @@ final class WorkspaceView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if draggedDivider != nil { draggedDivider = nil; return }
         let src = pressed?.key, t = dropTarget, wasDragging = dragging
         pressed = nil; dragging = false; dropTarget = nil
         guard wasDragging else { return }

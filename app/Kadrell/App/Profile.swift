@@ -85,6 +85,26 @@ enum Profile {
         try? FileManager.default.removeItem(at: directory)
     }
 
+    /// Reste von Temp-Profilen, deren Prozess nicht mehr läuft: Absturz, Test-Läufe, oder cfprefsd hat die plist
+    /// nach dem Löschen noch einmal geschrieben. Läuft bei jedem Start.
+    static func sweepStale() {
+        let fm = FileManager.default
+        func dead(_ name: String, prefix: String, suffix: String = "") -> Bool {
+            guard name.hasPrefix(prefix), name.hasSuffix(suffix),
+                  let p = pid_t(name.dropFirst(prefix.count).dropLast(suffix.count)), p != pid else { return false }
+            return kill(p, 0) != 0 && errno == ESRCH
+        }
+        let prefs = fm.urls(for: .libraryDirectory, in: .userDomainMask).first!.appendingPathComponent("Preferences")
+        for n in (try? fm.contentsOfDirectory(atPath: prefs.path)) ?? [] where dead(n, prefix: "de.malura.kadrell.profile.tmp-", suffix: ".plist") {
+            UserDefaults.standard.removePersistentDomain(forName: String(n.dropLast(6)))
+            try? fm.removeItem(at: prefs.appendingPathComponent(n))
+        }
+        let tmp = fm.temporaryDirectory
+        for n in (try? fm.contentsOfDirectory(atPath: tmp.path)) ?? [] where dead(n, prefix: "kadrell-tmp-") {
+            try? fm.removeItem(at: tmp.appendingPathComponent(n))
+        }
+    }
+
     /// Weitere Instanz mit frischem Temp-Profil, derselbe Build.
     static func launchTemporary() {
         let p = Process()

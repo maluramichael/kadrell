@@ -147,6 +147,20 @@ enum Settings {
         set { Profile.defaults.set(newValue, forKey: "tiles.opacity") }
     }
 
+    /// Feste Spaltenzahl im Grid (Leiste), 0 = automatisch ⌈√n⌉.
+    static var gridColumns: Int {
+        get { Profile.defaults.integer(forKey: "layout.grid.columns") }
+        set { Profile.defaults.set(newValue, forKey: "layout.grid.columns") }
+    }
+
+    /// Gezogene Verhältnisse einer Layout-Vorlage (`Tiling.layout`), nil = gleich verteilt.
+    static func layoutRatios(_ key: String, _ count: Int) -> [Double]? { Profile.defaults.array(forKey: "layout." + key) as? [Double] }
+    static func setLayoutRatios(_ key: String, _ value: [Double]?) { Profile.defaults.set(value, forKey: "layout." + key) }
+    /// Alle gezogenen Verhältnisse weg, Spaltenzahl bleibt.
+    static func resetLayoutRatios() {
+        for k in Profile.defaults.dictionaryRepresentation().keys where k.hasPrefix("layout.") && k != "layout.grid.columns" { Profile.defaults.removeObject(forKey: k) }
+    }
+
     /// Abstand zwischen den Kacheln und zum Rand der Arbeitsfläche.
     static var tileGap: Double {
         get { double("tiles.gap", 6) }

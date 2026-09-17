@@ -21,7 +21,11 @@ final class StatusBarView: NSView {
     private var usageFrom = Usage.empty
     private var usageAt: CFTimeInterval = 0
     var layoutMode: LayoutMode = .grid
-    var onToggleLayout: (() -> Void)?
+    /// Klick aufs Layout-Symbol: Auswahl aller Layouts.
+    var onPickLayout: ((LayoutMode) -> Void)?
+    /// Spalten im Grid, 0 = automatisch. Nur im Grid sichtbar: ‹ weniger, › mehr.
+    var gridColumns = 0
+    var onGridColumns: ((Int) -> Void)?
     /// Auto-Modus: nur Sessions, die etwas wollen. An = gefülltes Badge.
     var auto = false { didSet { toggled(auto != oldValue, "auto") } }
     var onToggleAuto: (() -> Void)?
@@ -100,9 +104,26 @@ final class StatusBarView: NSView {
         let toggle = CGRect(x: 0, y: 0, width: 36, height: b.height - 1)
         Icons.layout(layoutMode, in: CGRect(x: 11, y: midY - 7, width: 14, height: 14), color: Theme.sub)
         Theme.line.setFill(); CGRect(x: toggle.maxX, y: 0, width: 1, height: b.height - 1).fill()
-        hitRects.append((toggle, { [weak self] in self?.onToggleLayout?() }))
+        hitRects.append((toggle, { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) }))
+        var x = toggle.maxX + 1
+        if layoutMode == .grid {
+            // ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl, unter 1 wird es wieder automatisch.
+            let value = NSAttributedString(string: gridColumns == 0 ? "AUTO SP" : "\(gridColumns) SP", attributes: Theme.attrs(10, gridColumns == 0 ? Theme.muted : Theme.fg, bold: true))
+            let less = NSAttributedString(string: "‹", attributes: Theme.attrs(12, Theme.sub, bold: true))
+            let more = NSAttributedString(string: "›", attributes: Theme.attrs(12, Theme.sub, bold: true))
+            let lessRect = CGRect(x: x, y: 0, width: less.size().width + 14, height: b.height - 1)
+            less.draw(at: CGPoint(x: lessRect.minX + 7, y: midY - 9))
+            value.draw(at: CGPoint(x: lessRect.maxX, y: midY - 7))
+            let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
+            more.draw(at: CGPoint(x: moreRect.minX + 7, y: midY - 9))
+            let cols = gridColumns
+            hitRects.append((lessRect, { [weak self] in self?.onGridColumns?(max(0, cols - 1)) }))
+            hitRects.append((moreRect, { [weak self] in self?.onGridColumns?(min(12, cols + 1)) }))
+            Theme.line.setFill(); CGRect(x: moreRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
+            x = moreRect.maxX + 1
+        }
         let at = NSAttributedString(string: "AUTO", attributes: Theme.attrs(10, auto ? Theme.bg : Theme.muted, bold: true))
-        let autoRect = CGRect(x: toggle.maxX + 1, y: 0, width: at.size().width + 20, height: b.height - 1)
+        let autoRect = CGRect(x: x, y: 0, width: at.size().width + 20, height: b.height - 1)
         if auto { Theme.waiting.setFill(); badge(autoRect, "auto").fill() }
         at.draw(at: CGPoint(x: autoRect.minX + 10, y: midY - 7))
         Theme.line.setFill(); CGRect(x: autoRect.maxX, y: 0, width: 1, height: b.height - 1).fill()
@@ -184,6 +205,23 @@ final class StatusBarView: NSView {
         let avail = rx - leftEnd - 16
         let mw = min(mid.size().width, max(0, avail))
         mid.draw(with: CGRect(x: leftEnd + (avail - mw) / 2, y: midY - 8, width: mw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    private func showLayoutMenu(at p: CGPoint) {
+        let menu = NSMenu()
+        for m in LayoutMode.allCases {
+            let item = NSMenuItem(title: m.title, action: #selector(pickLayout(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = m.rawValue
+            item.state = m == layoutMode ? .on : .off
+            item.image = Icons.layoutImage(m)
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: CGPoint(x: p.x * Theme.scale, y: p.y * Theme.scale), in: self)
+    }
+
+    @objc private func pickLayout(_ item: NSMenuItem) {
+        if let m = (item.representedObject as? String).flatMap(LayoutMode.init) { onPickLayout?(m) }
     }
 
     override func mouseDown(with event: NSEvent) {

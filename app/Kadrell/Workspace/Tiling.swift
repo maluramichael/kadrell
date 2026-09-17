@@ -1,8 +1,30 @@
 import Foundation
 
 enum LayoutMode: String, CaseIterable, Sendable {
-    case grid, stack
-    var other: LayoutMode { self == .grid ? .stack : .grid }
+    case grid, main, spiral, stack
+    /// Reihum wie tmux `next-layout`.
+    var next: LayoutMode { Self.allCases[(Self.allCases.firstIndex(of: self)! + 1) % Self.allCases.count] }
+    var title: String {
+        switch self {
+        case .grid: "Grid"
+        case .main: "Haupt + Spalte"
+        case .spiral: "Spirale"
+        case .stack: "Stack"
+        }
+    }
+}
+
+/// Ziehbare Grenze einer Vorlage: gehört zur Verhältnisliste `key` mit `count` Feldern, liegt hinter Feld `index`.
+struct SplitLine: Equatable {
+    let key: String
+    let index: Int
+    let count: Int
+    /// Senkrechte Linie, wird waagerecht gezogen.
+    let vertical: Bool
+    /// Griffzone, mindestens 8 pt breit, auch bei Abstand 0.
+    let rect: CGRect
+    /// Fläche, die diese Liste aufteilt.
+    let span: CGRect
 }
 
 /// Reine Kachel-Mathematik der Arbeitsfläche, alles in Bildschirmpunkten.
@@ -15,18 +37,103 @@ enum Tiling {
 
     static func columns(for n: Int) -> Int { n <= 1 ? 1 : Int(Double(n).squareRoot().rounded(.up)) }
 
-    /// Grid: n Kacheln in ceil(√n) Spalten, Zeilen von oben; Kanten auf ganze Punkte gerundet.
+    /// Grid mit gleich großen Feldern und automatischer Spaltenzahl.
     static func grid(count n: Int, in b: CGRect, gap: CGFloat = Tiling.gap) -> [CGRect] {
-        guard n > 0 else { return [] }
-        let cols = columns(for: n), rows = (n + cols - 1) / cols
-        let w = (b.width - CGFloat(cols - 1) * gap) / CGFloat(cols)
-        let h = (b.height - CGFloat(rows - 1) * gap) / CGFloat(rows)
-        return (0..<n).map { i in
-            let c = CGFloat(i % cols), r = CGFloat(i / cols)
-            let x0 = (b.minX + c * (w + gap)).rounded(), x1 = (b.minX + c * (w + gap) + w).rounded()
-            let y0 = (b.minY + r * (h + gap)).rounded(), y1 = (b.minY + r * (h + gap) + h).rounded()
-            return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
+        layout(.grid, count: n, in: b, gap: gap).frames
+    }
+
+    /// Verhältnisse einer Vorlage, nil = gleich verteilt.
+    typealias Ratios = (_ key: String, _ count: Int) -> [Double]?
+
+    /// Die Vorlage des Layouts für n Kacheln: Felder in Reihenfolge und ihre ziehbaren Grenzen. Die Terminals werden
+    /// nur eingefüllt, die Größen gehören der Vorlage (`ratios`), nicht einzelnen Sessions. Stack hat keine Vorlage.
+    /// `columns` 0 = Grid wählt ⌈√n⌉ Spalten.
+    static func layout(_ mode: LayoutMode, count n: Int, in b: CGRect, gap: CGFloat, columns fixed: Int = 0,
+                       ratios: Ratios = { _, _ in nil }) -> (frames: [CGRect], dividers: [SplitLine]) {
+        guard n > 0 else { return ([], []) }
+        func r(_ key: String, _ count: Int) -> [Double] {
+            guard let v = ratios(key, count), v.count == count, v.allSatisfy({ $0 > 0 }) else { return Array(repeating: 1 / Double(count), count: count) }
+            let sum = v.reduce(0, +)
+            return v.map { $0 / sum }
         }
+        var dividers: [SplitLine] = []
+        /// Teilt `area` entlang einer Achse nach `key` und merkt sich die Grenzen.
+        func split(_ area: CGRect, vertical: Bool, key: String, count: Int) -> [CGRect] {
+            let parts = segments(start: vertical ? area.minX : area.minY, length: vertical ? area.width : area.height, gap: gap, ratios: r(key, count))
+            for i in 0..<(count - 1) {
+                let a = parts[i].end, z = parts[i + 1].start, mid = (a + z) / 2, w = max(z - a, 8)
+                let grip = vertical ? CGRect(x: mid - w / 2, y: area.minY, width: w, height: area.height)
+                                    : CGRect(x: area.minX, y: mid - w / 2, width: area.width, height: w)
+                dividers.append(SplitLine(key: key, index: i, count: count, vertical: vertical, rect: grip, span: area))
+            }
+            return parts.map { vertical ? CGRect(x: $0.start, y: area.minY, width: $0.end - $0.start, height: area.height)
+                                        : CGRect(x: area.minX, y: $0.start, width: area.width, height: $0.end - $0.start) }
+        }
+        switch mode {
+        case .grid, .stack:
+            let cols = fixed > 0 ? min(fixed, n) : columns(for: n), rows = (n + cols - 1) / cols
+            let xs = cols > 1 ? split(b, vertical: true, key: "grid.cols.\(cols)", count: cols) : [b]
+            let ys = rows > 1 ? split(b, vertical: false, key: "grid.rows.\(rows)", count: rows) : [b]
+            return ((0..<n).map { CGRect(x: xs[$0 % cols].minX, y: ys[$0 / cols].minY, width: xs[$0 % cols].width, height: ys[$0 / cols].height) }, dividers)
+        case .main:
+            guard n > 1 else { return ([b], []) }
+            let cols = split(b, vertical: true, key: "main.cols", count: 2)
+            let rest = n > 2 ? split(cols[1], vertical: false, key: "main.rows.\(n - 1)", count: n - 1) : [cols[1]]
+            return ([cols[0]] + rest, dividers)
+        case .spiral:
+            // bspwm: jede Kachel halbiert den Rest, abwechselnd senkrecht und waagerecht.
+            var area = b, frames: [CGRect] = []
+            for i in 0..<(n - 1) {
+                let parts = split(area, vertical: i % 2 == 0, key: "spiral.\(i)", count: 2)
+                frames.append(parts[0])
+                area = parts[1]
+            }
+            return (frames + [area], dividers)
+        }
+    }
+
+    /// Abschnitte auf einer Achse nach Verhältnissen, dazwischen `gap`; Kanten auf ganze Punkte, das letzte Ende sitzt genau am Rand.
+    static func segments(start: CGFloat, length: CGFloat, gap: CGFloat, ratios: [Double]) -> [(start: CGFloat, end: CGFloat)] {
+        let usable = max(0, length - gap * CGFloat(ratios.count - 1))
+        var acc = 0.0, out: [(CGFloat, CGFloat)] = []
+        for (i, v) in ratios.enumerated() {
+            let s = (start + CGFloat(acc) * usable + CGFloat(i) * gap).rounded()
+            acc += v
+            let e = i == ratios.count - 1 ? start + length : (start + CGFloat(acc) * usable + CGFloat(i) * gap).rounded()
+            out.append((s, e))
+        }
+        return out
+    }
+
+    /// Neue Verhältnisse, wenn Grenze `d` an Position `p` gezogen wird. Kein Feld wird kleiner als 5 %.
+    static func drag(_ d: SplitLine, to p: CGPoint, gap: CGFloat, ratios current: [Double]) -> [Double] {
+        var v = current.count == d.count ? current : Array(repeating: 1 / Double(d.count), count: d.count)
+        let start = d.vertical ? d.span.minX : d.span.minY, length = d.vertical ? d.span.width : d.span.height
+        let usable = length - gap * CGFloat(d.count - 1)
+        guard usable > 0 else { return v }
+        let before = v[..<d.index].reduce(0, +), pair = v[d.index] + v[d.index + 1]
+        let pos = Double(((d.vertical ? p.x : p.y) - start - CGFloat(d.index) * gap - gap / 2) / usable)
+        v[d.index] = min(max(pos - before, 0.05), pair - 0.05)
+        v[d.index + 1] = pair - v[d.index]
+        return v
+    }
+
+    /// Nachbar nach Geometrie: nächstes Feld in Richtung `d`, bevorzugt eines, das sich auf der anderen Achse überlappt.
+    static func neighbor(of i: Int, frames: [CGRect], _ d: Direction) -> Int? {
+        guard frames.indices.contains(i) else { return nil }
+        let a = frames[i]
+        func score(_ b: CGRect) -> (Bool, CGFloat, CGFloat)? {
+            let dist: CGFloat, overlap: CGFloat
+            switch d {
+            case .left: guard b.maxX <= a.minX + 1 else { return nil }; dist = a.minX - b.maxX; overlap = min(a.maxY, b.maxY) - max(a.minY, b.minY)
+            case .right: guard b.minX >= a.maxX - 1 else { return nil }; dist = b.minX - a.maxX; overlap = min(a.maxY, b.maxY) - max(a.minY, b.minY)
+            case .up: guard b.maxY <= a.minY + 1 else { return nil }; dist = a.minY - b.maxY; overlap = min(a.maxX, b.maxX) - max(a.minX, b.minX)
+            case .down: guard b.minY >= a.maxY - 1 else { return nil }; dist = b.minY - a.maxY; overlap = min(a.maxX, b.maxX) - max(a.minX, b.minX)
+            }
+            return (overlap <= 0, dist, -overlap)
+        }
+        return frames.indices.filter { $0 != i }.compactMap { j in score(frames[j]).map { (j, $0) } }
+            .min { ($0.1.0 ? 1 : 0, $0.1.1, $0.1.2) < ($1.1.0 ? 1 : 0, $1.1.1, $1.1.2) }?.0
     }
 
     /// Stack (i3-Akkordeon): jede Kachel eine Titelzeile, die aktive bekommt ihren Körper direkt darunter,

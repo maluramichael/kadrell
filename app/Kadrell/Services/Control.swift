@@ -58,7 +58,7 @@ enum ControlCommand: Equatable {
                                                            --resume: bestehende Konversation übernehmen
                                                            (Claude darf dort nicht mehr laufen, -c = ihr Ordner)
       kadrell select [-t session|gruppe] [-a]              zeigen (-a: zur Auswahl dazu/weg)
-      kadrell layout grid|stack                            Layout
+      kadrell layout grid|main|spiral|stack               Layout
       kadrell zoom [-t session]                            Zoom ein/aus
       kadrell rename [-t session] <name>                   umbenennen (leer = Titel von Claude Code)
       kadrell move [-t session] <gruppe>                   Session in eine andere Gruppe verschieben, läuft weiter
@@ -105,7 +105,7 @@ enum ControlCommand: Equatable {
             try a.noPositional()
             return .select(target: a["-t"], add: a.has("-a"))
         case "layout":
-            guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|stack") }
+            guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|main|spiral|stack") }
             return .layout(m)
         case "zoom":
             let a = try Args(rest, values: ["-t"])
