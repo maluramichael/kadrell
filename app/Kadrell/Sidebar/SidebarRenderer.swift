@@ -70,13 +70,34 @@ extension SidebarRenderer {
     func headRect(_ row: CGRect) -> CGRect { CGRect(x: row.minX, y: row.minY, width: row.width, height: sessionRow) }
     func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
 
+    /// Standard: grau hinterlegt bei Hover und Auswahl, ohne Grundfarbe.
+    func drawSession(_ s: SidebarSessionItem, in r: CGRect) {
+        drawSessionBackground(s, in: r, base: nil, highlight: Theme.surface)
+        drawSessionContent(s, in: r)
+    }
+
+    /// Balken links in Gruppenfarbe an ausgewählten Zeilen.
+    func drawSelectionBar(_ on: Bool, color: NSColor, row: CGRect) {
+        if on { color.setFill(); CGRect(x: 0, y: row.minY, width: 3, height: row.height).fill() }
+    }
+
+    /// Hohe Gruppenzeile: Auswahlbalken, Chevron, rechts Favorit, Warte-Badge und Zähler, Name, Pfad darunter.
+    func drawGroupWithPath(_ g: SidebarGroupItem, in r: CGRect, prefix: String = "") {
+        drawSelectionBar(g.selected, color: g.color, row: r)
+        let head = headRect(r)
+        drawChevron(g, head: head)
+        let right = drawCount(g, head: head, right: drawWaitingBadge(g, head: head, right: drawFavorite(g, head: head)))
+        drawGroupName(g, prefix: prefix, head: head, right: right)
+        drawPath(g, below: head)
+    }
+
     /// Hintergrund einer Session: Fokus getönt, mit Tastatur zusätzlich gerahmt, Auswahl mit Balken links.
     func drawSessionBackground(_ s: SidebarSessionItem, in row: CGRect, base: NSColor?, highlight: NSColor) {
         if let base { base.setFill(); row.fill() }
         if s.focused { s.color.mixed(0.14, into: Theme.surface).setFill(); row.fill() }
         if s.focused, s.keyFocus { s.color.setStroke(); NSBezierPath(rect: row.insetBy(dx: 0.5, dy: 0.5)).stroke() }
         else if s.selected || s.hover { highlight.setFill(); row.fill() }
-        if s.selected { s.color.setFill(); CGRect(x: 0, y: row.minY, width: 3, height: row.height).fill() }
+        drawSelectionBar(s.selected, color: s.color, row: row)
     }
 
     /// Punkt, Titel und rechtsbündige Laufzeit. Die Laufzeit sitzt immer an derselben Stelle, auch beim Hover:
@@ -143,14 +164,10 @@ extension SidebarRenderer {
         return x - 8
     }
 
-    func drawName(_ text: String, color: NSColor, head: CGRect, right: CGFloat, x: CGFloat = 26) {
-        NSAttributedString(string: text, attributes: Theme.attrs(12, color, bold: true))
-            .draw(with: CGRect(x: x, y: head.midY - 8, width: max(0, right - x), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-    }
-
     /// Gruppenname; das Server-Symbol tragen nur die Sessions einer Host-Gruppe.
     func drawGroupName(_ g: SidebarGroupItem, prefix: String = "", head: CGRect, right: CGFloat) {
-        drawName(prefix + g.group.name, color: g.color, head: head, right: right)
+        NSAttributedString(string: prefix + g.group.name, attributes: Theme.attrs(12, g.color, bold: true))
+            .draw(with: CGRect(x: 26, y: head.midY - 8, width: max(0, right - 26), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     func drawPath(_ g: SidebarGroupItem, below head: CGRect) {

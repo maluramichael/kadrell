@@ -11,7 +11,7 @@ struct CompactSidebarRenderer: SidebarRenderer {
     func drawGroup(_ g: SidebarGroupItem, in r: CGRect) {
         if g.hover { Theme.surface.setFill(); r.fill() }
         if !g.first { Theme.line.setFill(); CGRect(x: 0, y: r.minY, width: r.width, height: 1).fill() }
-        if g.selected { g.color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
+        drawSelectionBar(g.selected, color: g.color, row: r)
         drawChevron(g, head: r)
         var x = drawWaitingBadge(g, head: r, right: drawFavorite(g, head: r))
         for c in g.open ? [] : g.dots.reversed() {
@@ -21,10 +21,5 @@ struct CompactSidebarRenderer: SidebarRenderer {
             x -= 3
         }
         drawGroupName(g, head: r, right: x - 5)
-    }
-
-    func drawSession(_ s: SidebarSessionItem, in r: CGRect) {
-        drawSessionBackground(s, in: r, base: nil, highlight: Theme.surface)
-        drawSessionContent(s, in: r)
     }
 }

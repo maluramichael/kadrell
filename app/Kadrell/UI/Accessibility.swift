@@ -52,10 +52,32 @@ extension Array where Element == A11yElement {
     func reuse(_ key: String) -> A11yElement { first { $0.key == key } ?? A11yElement(key: key) }
 }
 
+/// Gezeichnete Trefferfläche in unskalierten Punkten: Klick, Tooltip und VoiceOver-Knopf aus einem Eintrag.
+struct HitRegion {
+    let rect: CGRect
+    let label: String
+    var value: String? = nil
+    let action: @MainActor () -> Void
+}
+
+extension Array where Element == HitRegion {
+    func first(at p: CGPoint) -> HitRegion? { first { $0.rect.contains(p) } }
+
+    /// VoiceOver-Knöpfe, je Label wiederverwendet aus `old`.
+    @MainActor func accessibilityElements(parent: NSView, reusing old: [A11yElement]) -> [A11yElement] {
+        map { h in old.reuse(h.label).update(parent: parent, role: .button, label: h.label, value: h.value, frame: h.rect.scaled(Theme.scale), press: h.action) }
+    }
+}
+
 extension SessionStatus {
     /// Vorgelesener Status.
     var spoken: String {
         switch self { case .running: String(localized: "arbeitet"); case .waiting: String(localized: "wartet"); case .idle: String(localized: "fertig"); case .error: String(localized: "Fehler") }
+    }
+
+    /// Vorgelesener Status einer Session: ohne laufenden Prozess „beendet“ (`ended`) oder „nicht gestartet“.
+    func spoken(attached: Bool, ended: Bool = false) -> String {
+        attached ? spoken : ended ? String(localized: "beendet") : String(localized: "nicht gestartet")
     }
 }
 

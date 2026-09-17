@@ -71,6 +71,9 @@ enum Theme {
         }
     }
 
+    /// Statuspunkt: ohne laufenden Prozess grau, egal was der letzte Status war.
+    static func statusColor(_ status: SessionStatus, attached: Bool) -> NSColor { attached ? color(for: status) : detached }
+
     static func font(_ size: CGFloat, bold: Bool = false) -> NSFont {
         NSFont(name: bold ? "JetBrainsMonoNF-Bold" : "JetBrainsMonoNF-Regular", size: size)
             ?? NSFont.monospacedSystemFont(ofSize: size, weight: bold ? .bold : .regular)

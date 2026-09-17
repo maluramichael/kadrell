@@ -1,5 +1,11 @@
 import AppKit
 
+/// Virtuelle Tastencodes (US-Layout-Position), statt nackter Zahlen in `keyDown`.
+enum KeyCode {
+    static let returnKey: UInt16 = 36, space: UInt16 = 49, delete: UInt16 = 51, escape: UInt16 = 53, keypadEnter: UInt16 = 76
+    static let f1: UInt16 = 122, f10: UInt16 = 109, left: UInt16 = 123, right: UInt16 = 124, down: UInt16 = 125, up: UInt16 = 126
+}
+
 /// Linke Seite: Baum Gruppe › Sessions, handgezeichnet wie die Leiste. Liegt in einem NSScrollView und
 /// setzt seine Höhe selbst.
 @MainActor
@@ -68,9 +74,13 @@ final class SidebarView: NSView {
 
     private enum Row: Equatable {
         case group(Group), session(Session, Group)
-        var key: String { switch self { case .group(let g): "g:" + g.id; case .session(let s, _): "s:" + s.id } }
+        /// Identität der Zeile, unabhängig vom Inhalt; zugleich Schlüssel des Accessibility-Elements.
+        var key: String { switch self { case .group(let g): "g:" + g.id; case .session(let s, _): Row.key(session: s.id) } }
+        static func key(session id: String) -> String { "s:" + id }
     }
     private func index(of r: Row) -> Int? { rows.firstIndex { $0.key == r.key } }
+    private func sessionRow(_ id: String) -> Int? { rows.firstIndex { $0.key == Row.key(session: id) } }
+    private func isAttached(_ id: String) -> Bool { attach?.isAttached(id) ?? false }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -120,8 +130,9 @@ final class SidebarView: NSView {
         let ids = Set(sessions.map(\.id)), now = CACurrentMediaTime()
         if let known = knownIds { for id in ids.subtracting(known) { appeared[id] = now } }
         knownIds = ids
-        self.groups = sort.apply(groups, sessions: Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) }))
-        self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        // uniquingKeysWith wie in WorkspaceView: eine doppelte Id darf nicht abstürzen.
+        self.sessions = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        self.groups = sort.apply(groups, sessions: self.sessions)
         let oldRows = rows, previousHeight = frame.height
         rows = []
         for g in self.groups {
@@ -197,28 +208,39 @@ final class SidebarView: NSView {
 
     // MARK: Schwebende Toolbar
 
-    /// Gruppe: Favorit, neue Session, bearbeiten, schließen. Session: umbenennen, schließen.
-    private func buttonCount(_ row: Row) -> Int { if case .group = row { 4 } else { 2 } }
+    private typealias ToolButton = (hit: HitRegion, icon: @MainActor (CGRect, NSColor) -> Void)
 
-    /// Liegt über dem rechten Ende der Kopfzeile, verdeckt Laufzeit und Zähler statt sie zu verschieben.
-    private func toolbarRect(_ i: Int) -> CGRect {
-        let r = rowRect(i)
-        let head = min(r.height, 24)
-        let w = CGFloat(buttonCount(rows[i])) * 20 + 4
-        return CGRect(x: r.maxX - 6 - w, y: r.minY + (head - 22) / 2, width: w, height: 22)
+    /// Gruppe: Favorit, neue Session (⌘: Terminal), bearbeiten, schließen. Session: umbenennen, schließen. Zeichnen,
+    /// Klick und VoiceOver-Aktionen lesen dieselbe Liste; `flags` vom Klick: ⌘ öffnet ein Terminal, ⌥ schließt ohne Rückfrage.
+    /// Die Leiste liegt über dem rechten Ende der Kopfzeile, verdeckt Laufzeit und Zähler statt sie zu verschieben.
+    private func toolbar(_ i: Int, flags: NSEvent.ModifierFlags = []) -> (rect: CGRect, buttons: [ToolButton]) {
+        let force = flags.contains(.option)
+        let items: [(label: String, icon: @MainActor (CGRect, NSColor) -> Void, action: @MainActor () -> Void)]
+        switch rows[i] {
+        case .group(let g):
+            let cmd = cmdDown
+            items = [
+                (g.isFavorite ? String(localized: "Kein Favorit") : String(localized: "Favorit"),
+                 { Icons.heart(in: $0.insetBy(dx: 1, dy: 1), color: g.isFavorite ? Theme.group(g.color) : $1, filled: g.isFavorite) },
+                 { [weak self] in self?.onToggleFavorite?(g.id) }),
+                (String(localized: "Neue Session"),
+                 { g.host != nil ? Icons.server(in: $0, color: $1) : cmd ? Icons.computer(in: $0, color: $1) : Icons.plus(in: $0, color: $1) },
+                 { [weak self] in flags.contains(.command) ? self?.onNewTerminal?(g.id) : self?.onNewSession?(g.id) }),
+                (String(localized: "Bearbeiten"), { Icons.pen(in: $0, color: $1) }, { [weak self] in self?.onEditGroup?(g.id) }),
+                (String(localized: "Schließen"), { Icons.x(in: $0, color: $1) }, { [weak self] in self?.onCloseGroup?(g.id, force) }),
+            ]
+        case .session(let s, _):
+            items = [(String(localized: "Umbenennen"), { Icons.pen(in: $0, color: $1) }, { [weak self] in self?.onRenameSession?(s.id) }),
+                     (String(localized: "Schließen"), { Icons.x(in: $0, color: $1) }, { [weak self] in self?.onCloseSession?(s.id, force) })]
+        }
+        let r = rowRect(i), head = min(r.height, 24), w = CGFloat(items.count) * 20 + 4
+        let t = CGRect(x: r.maxX - 6 - w, y: r.minY + (head - 22) / 2, width: w, height: 22)
+        return (t, items.enumerated().map { k, b in
+            (HitRegion(rect: CGRect(x: t.minX + 2 + CGFloat(k) * 20, y: t.minY + 1, width: 20, height: 20), label: b.label, action: b.action), b.icon)
+        })
     }
 
-    private func buttonRect(_ i: Int, _ k: Int) -> CGRect {
-        let t = toolbarRect(i)
-        return CGRect(x: t.minX + 2 + CGFloat(k) * 20, y: t.minY + 1, width: 20, height: 20)
-    }
-
-    private func button(at p: CGPoint, row i: Int) -> Int? {
-        (0..<buttonCount(rows[i])).first { buttonRect(i, $0).contains(p) }
-    }
-
-    private func drawToolbar(_ i: Int) {
-        let t = toolbarRect(i)
+    private func drawToolbar(_ t: CGRect, _ buttons: [ToolButton]) {
         let path = NSBezierPath(roundedRect: t.insetBy(dx: 0.5, dy: 0.5), xRadius: 5, yRadius: 5)
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
@@ -232,22 +254,11 @@ final class SidebarView: NSView {
         Theme.line.setStroke()
         path.lineWidth = 1
         path.stroke()
-        let n = buttonCount(rows[i])
-        for k in 0..<n {
-            let b = buttonRect(i, k)
+        for (k, b) in buttons.enumerated() {
             let hot = hoveredButton == k
-            if hot { Theme.line.setFill(); NSBezierPath(roundedRect: b, xRadius: 4, yRadius: 4).fill() }
-            let close = k == n - 1
-            let color = hot ? (close ? Theme.error : Theme.fg) : Theme.muted
-            let ic = b.insetBy(dx: 2, dy: 2)
-            switch (rows[i], k) {
-            case (.group(let g), 0):
-                Icons.heart(in: ic.insetBy(dx: 1, dy: 1), color: g.isFavorite ? Theme.group(g.color) : color, filled: g.isFavorite)
-            case (.group(let g), 1) where g.host != nil: Icons.server(in: ic, color: color)
-            case (.group, 1): cmdDown ? Icons.computer(in: ic, color: color) : Icons.plus(in: ic, color: color)
-            case (.group, 2), (.session, 0): Icons.pen(in: ic, color: color)
-            default: Icons.x(in: ic, color: color)
-            }
+            if hot { Theme.line.setFill(); NSBezierPath(roundedRect: b.hit.rect, xRadius: 4, yRadius: 4).fill() }
+            let color = hot ? (k == buttons.count - 1 ? Theme.error : Theme.fg) : Theme.muted
+            b.icon(b.hit.rect.insetBy(dx: 2, dy: 2), color)
         }
     }
 
@@ -274,7 +285,7 @@ final class SidebarView: NSView {
             case .session(let s, let g): drawSession(s, group: g, in: r, hover: hovered == i)
             }
         }
-        if let i = hovered, !dragging, i < rows.count, toolbarRect(i).intersects(dirtyRect) { drawToolbar(i) }
+        if let i = hovered, !dragging, i < rows.count, case let tb = toolbar(i), tb.rect.intersects(dirtyRect) { drawToolbar(tb.rect, tb.buttons) }
         if let y = dropLineY() { Theme.fg.setFill(); CGRect(x: 0, y: y - 1, width: bounds.width / Theme.scale, height: 2).fill() }
     }
 
@@ -288,21 +299,20 @@ final class SidebarView: NSView {
     }
 
     private func dotColor(_ s: Session) -> NSColor {
-        let attached = attach?.isAttached(s.id) ?? false
-        let c = attached ? Theme.color(for: s.status) : Theme.detached
+        let attached = isAttached(s.id)
+        let c = Theme.statusColor(s.status, attached: attached)
         if let f = flashes[s.id], let p = Feedback.progress(since: f.start, duration: Self.flashDuration) {
             let amount = f.waiting ? abs(sin(p * 2 * .pi)) : 1 - p
             return NSColor.white.mixed(0.75 * amount, into: c)
         }
-        guard s.status == .running, attached, !Feedback.reduceMotion else { return c }
-        let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
-        return c.withAlphaComponent(0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t)))
+        guard s.status == .running, attached else { return c }
+        return c.withAlphaComponent(Feedback.pulse())
     }
 
     private func drawGroup(_ g: Group, in r: CGRect, first: Bool, hover: Bool) {
         let members = g.sessionIds.compactMap { sessions[$0] }
-        let dots = members.map { attach?.isAttached($0.id) ?? false ? Theme.color(for: $0.status) : Theme.detached }
-        let waiting = members.filter { $0.status == .waiting && (attach?.isAttached($0.id) ?? false) }.count
+        let dots = members.map { Theme.statusColor($0.status, attached: isAttached($0.id)) }
+        let waiting = members.filter { $0.status == .waiting && isAttached($0.id) }.count
         renderer.drawGroup(SidebarGroupItem(group: g, color: Theme.group(g.color), dots: dots, open: !collapsed.contains(g.id),
                                             selected: g.sessionIds.contains { selected.contains($0) }, hover: hover, first: first,
                                             waitingCount: waiting), in: r)
@@ -317,7 +327,7 @@ final class SidebarView: NSView {
         }
         defer { if slide != nil { NSGraphicsContext.restoreGraphicsState() } }
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
-                                                attached: attach?.isAttached(s.id) ?? false,
+                                                attached: isAttached(s.id),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,
                                                 message: showMessages ? messages[s.id] : nil, showAge: showAge,
@@ -335,35 +345,33 @@ final class SidebarView: NSView {
 
     /// Zeilen der ausgewählten Sessions, für VO-Pfeile in einer echten Outline.
     override func accessibilitySelectedRows() -> [Any]? {
-        a11y.filter { $0.key.hasPrefix("s:") && selected.contains(String($0.key.dropFirst(2))) }
+        let keys = Set(selected.map(Row.key(session:)))
+        return a11y.filter { keys.contains($0.key) }
     }
 
     override func accessibilityChildren() -> [Any]? {
         a11y = rows.enumerated().map { i, row in
             let e = a11y.reuse(row.key), frame = rowRect(i).scaled(Theme.scale)
+            let tools = toolbar(i).buttons.map { a11yAction($0.hit.label, $0.hit.action) }
             switch row {
             case .group(let g):
                 let n = g.sessionIds.count(where: { sessions[$0] != nil })
                 let label = n == 1 ? String(localized: "Gruppe \(g.name), 1 Session") : String(localized: "Gruppe \(g.name), \(n) Sessions")
                 e.update(parent: self, role: .row, label: label, frame: frame,
                         press: { [weak self] in self?.onSelect?(g.sessionIds, .replace) },
+                        // Reihenfolge im VoiceOver-Menü wie bisher: Neue Session vor Favorit.
                         actions: [a11yAction(collapsed.contains(g.id) ? String(localized: "Ausklappen") : String(localized: "Einklappen")) { [weak self] in self?.toggleCollapsed(g.id) },
-                                  a11yAction(String(localized: "Neue Session")) { [weak self] in self?.onNewSession?(g.id) },
-                                  a11yAction(g.isFavorite ? String(localized: "Kein Favorit") : String(localized: "Favorit")) { [weak self] in self?.onToggleFavorite?(g.id) },
-                                  a11yAction(String(localized: "Bearbeiten")) { [weak self] in self?.onEditGroup?(g.id) },
-                                  a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseGroup?(g.id, false) }])
+                                  tools[1], tools[0], tools[2], tools[3]])
                 e.setAccessibilityDisclosureLevel(0)
                 e.setAccessibilityExpanded(!collapsed.contains(g.id))
                 return e
             case .session(let s, _):
-                let attached = attach?.isAttached(s.id) ?? false
-                let status = attached ? s.status.spoken : String(localized: "nicht gestartet")
+                let status = s.status.spoken(attached: isAttached(s.id))
                 let extra = [unread.contains(s.id) ? String(localized: "neu") : nil, selected.contains(s.id) ? String(localized: "ausgewählt") : nil].compactMap { $0 }
                 let value = ([status] + extra).joined(separator: ", ")
                 e.update(parent: self, role: .row, label: String(localized: "Session \(s.title)"), value: value, frame: frame,
                         press: { [weak self] in self?.anchor = s.id; self?.onSelect?([s.id], .replace) },
-                        actions: [a11yAction(String(localized: "Umbenennen")) { [weak self] in self?.onRenameSession?(s.id) },
-                                  a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseSession?(s.id, false) }])
+                        actions: tools)
                 e.setAccessibilityDisclosureLevel(1)
                 e.setAccessibilitySelected(selected.contains(s.id))
                 return e
@@ -386,15 +394,15 @@ final class SidebarView: NSView {
     override func keyDown(with event: NSEvent) {
         let mods = event.modifierFlags.intersection(Hotkey.modMask)
         switch (event.keyCode, mods) {
-        case (125, [.option, .command]): moveFocused(step: 1)
-        case (126, [.option, .command]): moveFocused(step: -1)
-        case (125, []): step(1)
-        case (126, []): step(-1)
-        case (123, []): collapseFocusedGroup()
-        case (124, []): expandFocusedGroup()
-        case (36, [.control]), (109, [.shift]): if let id = focused { showContextMenu(for: id) }
-        case (36, []), (49, []): if let id = focused { onSelect?([id], .replace) }
-        case (51, []): if let id = focused { onCloseSession?(id, false) }
+        case (KeyCode.down, [.option, .command]): moveFocused(step: 1)
+        case (KeyCode.up, [.option, .command]): moveFocused(step: -1)
+        case (KeyCode.down, []): step(1)
+        case (KeyCode.up, []): step(-1)
+        case (KeyCode.left, []): collapseFocusedGroup()
+        case (KeyCode.right, []): expandFocusedGroup()
+        case (KeyCode.returnKey, [.control]), (KeyCode.f10, [.shift]): if let id = focused { showContextMenu(for: id) }
+        case (KeyCode.returnKey, []), (KeyCode.space, []): if let id = focused { onSelect?([id], .replace) }
+        case (KeyCode.delete, []): if let id = focused { onCloseSession?(id, false) }
         default: super.keyDown(with: event)
         }
     }
@@ -430,7 +438,7 @@ final class SidebarView: NSView {
     }
 
     private func showContextMenu(for id: String) {
-        guard let menu = onContextMenu?(id), let i = rows.firstIndex(where: { $0.key == "s:" + id }) else { return }
+        guard let menu = onContextMenu?(id), let i = sessionRow(id) else { return }
         let r = rowRect(i).scaled(Theme.scale)
         menu.popUp(positioning: nil, at: CGPoint(x: r.minX + 20, y: r.midY), in: self)
     }
@@ -443,7 +451,7 @@ final class SidebarView: NSView {
     }
 
     func reveal(_ id: String) {
-        if let r = rows.firstIndex(where: { $0.key == "s:" + id }) { scrollToVisible(rowRect(r).scaled(Theme.scale)) }
+        if let r = sessionRow(id) { scrollToVisible(rowRect(r).scaled(Theme.scale)) }
     }
 
     override func updateTrackingAreas() {
@@ -492,7 +500,7 @@ final class SidebarView: NSView {
         let p = local(event)
         let i = rowIndex(at: p)
         (i == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
-        let k = i.flatMap { button(at: p, row: $0) }
+        let k = i.flatMap { toolbar($0).buttons.firstIndex { $0.hit.rect.contains(p) } }
         guard i != hovered || k != hoveredButton else { return }
         hovered = i
         hoveredButton = k
@@ -515,18 +523,9 @@ final class SidebarView: NSView {
         let p = local(event)
         pressed = nil
         guard let i = rowIndex(at: p) else { return }
-        let force = event.modifierFlags.contains(.option)
         // Toolbar nur, wo sie sichtbar ist: ohne Hover (Fenster nicht aktiv) wählt der Klick die Zeile.
-        if hovered == i, toolbarRect(i).contains(p) {
-            switch (rows[i], button(at: p, row: i)) {
-            case (.group(let g), 0): onToggleFavorite?(g.id)
-            case (.group(let g), 1): event.modifierFlags.contains(.command) ? onNewTerminal?(g.id) : onNewSession?(g.id)
-            case (.group(let g), 2): onEditGroup?(g.id)
-            case (.group(let g), 3): onCloseGroup?(g.id, force)
-            case (.session(let s, _), 0): onRenameSession?(s.id)
-            case (.session(let s, _), 1): onCloseSession?(s.id, force)
-            default: break
-            }
+        if hovered == i, case let tb = toolbar(i, flags: event.modifierFlags), tb.rect.contains(p) {
+            tb.buttons.map(\.hit).first(at: p)?.action()
             return
         }
         switch rows[i] {

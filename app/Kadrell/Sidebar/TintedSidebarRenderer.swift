@@ -10,12 +10,7 @@ struct TintedSidebarRenderer: SidebarRenderer {
     func drawGroup(_ g: SidebarGroupItem, in r: CGRect) {
         g.color.mixed(g.hover ? 0.16 : 0.11, into: Theme.panel).setFill()
         r.fill()
-        if g.selected { g.color.setFill(); CGRect(x: 0, y: r.minY, width: 3, height: r.height).fill() }
-        let head = headRect(r)
-        drawChevron(g, head: head)
-        let right = drawCount(g, head: head, right: drawWaitingBadge(g, head: head, right: drawFavorite(g, head: head)))
-        drawGroupName(g, head: head, right: right)
-        drawPath(g, below: head)
+        drawGroupWithPath(g, in: r)
     }
 
     func drawSession(_ s: SidebarSessionItem, in r: CGRect) {
