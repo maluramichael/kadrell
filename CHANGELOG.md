@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.38.0 (2026-09-17)
+
+- Feature: Kadrell gibt es jetzt auch auf Englisch. Die Sprache folgt dem System: steht Deutsch in der Sprachliste, bleibt es deutsch, sonst Englisch. Einstellbar pro App unter Systemeinstellungen › Allgemein › Sprache & Region › Apps.
+
 ## 1.37.0 (2026-09-17)
 
 - Feature: Neues Fenster (⌘⇧T) zeigt dieselben Sessions mit eigener Auswahl, eigenem Layout und Fokus, zum Beispiel für einen zweiten Monitor. Offene Fenster kommen beim Neustart wieder.
