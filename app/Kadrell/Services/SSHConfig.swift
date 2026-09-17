@@ -51,12 +51,15 @@ enum SSHConfig {
         Profile.defaults.set(Array(r.prefix(20)), forKey: recentKey)
     }
 
+    /// Ein Wort für die Remote-Shell: in `'…'`, jedes `'` als `'\''`. tmux-Namen kommen aus Palette und Remote-Ausgabe.
+    static func shellQuote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+
     /// tmux-Sessions auf dem Host. nil, wenn ssh scheitert; leer, wenn dort kein tmux-Server läuft.
     static func tmuxSessions(host: String, environment: [String: String]) async -> [String]? {
         await Task.detached(priority: .userInitiated) { () -> [String]? in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            p.arguments = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", host, "tmux list-sessions -F '#S' 2>/dev/null || true"]
+            p.arguments = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", host, "tmux list-sessions -F '#S' 2>/dev/null || true"]
             p.environment = environment
             let out = Pipe()
             p.standardOutput = out

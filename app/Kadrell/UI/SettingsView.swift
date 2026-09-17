@@ -89,6 +89,12 @@ enum Settings {
         get { Profile.defaults.bool(forKey: "claude.allowBypass") }
         set { Profile.defaults.set(newValue, forKey: "claude.allowBypass") }
     }
+    /// `kadrell` aus einer Session heraus darf Sessions anderer Gruppen lesen und steuern (send, capture, kill …).
+    /// Default an: Agenten, die andere Sessions steuern, sollen ohne Umweg laufen. Aus: nur die eigene Gruppe.
+    static var controlOtherSessions: Bool {
+        get { Profile.defaults.object(forKey: "control.otherSessions") as? Bool ?? true }
+        set { Profile.defaults.set(newValue, forKey: "control.otherSessions") }
+    }
     static var claudeMode: String {
         get { Profile.defaults.string(forKey: "claude.mode") ?? "" }
         set { Profile.defaults.set(newValue, forKey: "claude.mode") }
@@ -237,6 +243,7 @@ final class SettingsModel {
     var autoRunning = Settings.autoRunning
     var autoAllSessions = Settings.autoAllSessions
     var claudeAllowBypass = Settings.claudeAllowBypass
+    var controlOtherSessions = Settings.controlOtherSessions
     var claudeMode = Settings.claudeMode
     var claudeModel = Settings.claudeModel
     var claudeEffort = Settings.claudeEffort
@@ -287,6 +294,7 @@ final class SettingsModel {
         Settings.autoRunning = autoRunning
         Settings.autoAllSessions = autoAllSessions
         Settings.claudeAllowBypass = claudeAllowBypass
+        Settings.controlOtherSessions = controlOtherSessions
         Settings.claudeMode = claudeMode
         Settings.claudeModel = claudeModel
         Settings.claudeEffort = claudeEffort
@@ -395,6 +403,7 @@ struct SettingsView: View {
                 setting(String(localized: "Startmodus")) { options(Settings.claudeModes, $model.claudeMode) }
                 setting(String(localized: "Modell")) { options(Settings.claudeModels, $model.claudeModel) }
                 setting(String(localized: "Effort")) { options(Settings.claudeEfforts, $model.claudeEffort) }
+                setting(String(localized: "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)")) { onOff($model.controlOtherSessions) }
             }
 
             heading(String(localized: "Darstellung"))

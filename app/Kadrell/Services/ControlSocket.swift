@@ -2,7 +2,7 @@ import AppKit
 import os
 
 /// Unix-Socket der laufenden App, wie der tmux-Server: eine Zeile JSON (`ControlRequest`) hin, eine zurück.
-/// Nur der eigene Benutzer kommt durch (Dateirechte 0600 und `getpeereid`).
+/// Nur der eigene Benutzer kommt durch (Dateirechte 0600 und `getpeereid`). Der Handler bekommt die pid des Clients mit.
 enum ControlSocket {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "control")
     static let maxRequest = 1 << 20
@@ -57,12 +57,12 @@ enum ControlSocket {
 /// Lauscht auf dem Socket und reicht jede Anfrage an `handler` auf dem Main-Thread weiter.
 final class ControlServer: @unchecked Sendable {
     let path: String
-    private let handler: @MainActor @Sendable (ControlRequest) -> ControlResponse
+    private let handler: @MainActor @Sendable (ControlRequest, pid_t) -> ControlResponse
     private let queue = DispatchQueue(label: "de.malura.kadrell.control")
     private var listenFd: Int32 = -1
     private var source: DispatchSourceRead?
 
-    init(path: String = ControlSocket.defaultPath, handler: @escaping @MainActor @Sendable (ControlRequest) -> ControlResponse) {
+    init(path: String = ControlSocket.defaultPath, handler: @escaping @MainActor @Sendable (ControlRequest, pid_t) -> ControlResponse) {
         self.path = path
         self.handler = handler
     }
@@ -102,6 +102,8 @@ final class ControlServer: @unchecked Sendable {
         guard fd >= 0 else { return }
         var uid = uid_t(), gid = gid_t()
         guard getpeereid(fd, &uid, &gid) == 0, uid == getuid() else { close(fd); return }
+        var peer: pid_t = 0, len = socklen_t(MemoryLayout<pid_t>.size)
+        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &peer, &len) == 0 else { close(fd); return }
         var on: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         var tv = timeval(tv_sec: 5, tv_usec: 0)
@@ -114,7 +116,7 @@ final class ControlServer: @unchecked Sendable {
         }
         let handler = handler, queue = queue
         Task { @MainActor in
-            let out = ControlServer.encode(handler(req))
+            let out = ControlServer.encode(handler(req, peer))
             queue.async { ControlSocket.writeAll(fd, out); close(fd) }
         }
     }

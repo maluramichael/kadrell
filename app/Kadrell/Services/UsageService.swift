@@ -82,15 +82,20 @@ final class UsageService {
 
     enum Result { case ok(Usage), rateLimited(TimeInterval?), failed }
 
-    /// OAuth-Token aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (wie die CLI ihn ablegt).
+    /// OAuth-Token aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (wie die CLI ihn ablegt). Der Eintrag ist ein
+    /// einziges JSON, Teile davon liefert der Schlüsselbund nicht: nur `accessToken` wird dekodiert, der Rest verworfen.
     static func token() async -> String? {
+        struct Credentials: Decodable {
+            struct OAuth: Decodable { let accessToken: String }
+            let claudeAiOauth: OAuth
+        }
         guard let r = try? await ClaudeCLI.runRaw("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], environment: nil, cwd: nil) else {
             log.warning("usage: security nicht startbar"); return nil
         }
-        guard r.status == 0 else { log.warning("usage: security exit \(r.status, privacy: .public): \(r.output.prefix(120), privacy: .public)"); return nil }
-        guard let root = (try? JSONSerialization.jsonObject(with: Data(r.output.utf8))) as? [String: Any],
-              let oauth = root["claudeAiOauth"] as? [String: Any],
-              let t = oauth["accessToken"] as? String, !t.isEmpty else { log.warning("usage: Schlüsselbund-Eintrag ohne accessToken"); return nil }
+        guard r.status == 0 else { log.warning("usage: security exit \(r.status, privacy: .public)"); return nil }
+        guard let t = try? JSONDecoder().decode(Credentials.self, from: Data(r.output.utf8)).claudeAiOauth.accessToken, !t.isEmpty else {
+            log.warning("usage: Schlüsselbund-Eintrag ohne accessToken"); return nil
+        }
         return t
     }
 

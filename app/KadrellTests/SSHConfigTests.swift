@@ -24,6 +24,11 @@ final class SSHConfigTests: XCTestCase {
                        ["192.168.2.69", "examplehost", "vault", "peon", "dup", "zed"])
     }
 
+    func testShellQuote() {
+        XCTAssertEqual(SSHConfig.shellQuote("main"), "'main'")
+        XCTAssertEqual(SSHConfig.shellQuote("it's; rm -rf ~"), "'it'\\''s; rm -rf ~'")
+    }
+
     func testMissingConfigIsEmpty() {
         XCTAssertEqual(SSHConfig.hosts(config: URL(fileURLWithPath: "/nonexistent/config")), [])
     }
