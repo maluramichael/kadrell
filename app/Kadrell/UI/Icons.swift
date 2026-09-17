@@ -75,6 +75,35 @@ enum Icons {
         if filled { color.setFill(); p.fill() } else { color.setStroke(); p.stroke() }
     }
 
+    /// Statuspunkt: normalerweise ein gefüllter Kreis in `color`, wie bisher. Ist „Farben nicht unterscheiden“
+    /// (Bedienungshilfen › Anzeige) eingeschaltet, trägt zusätzlich die Form den Status, für Rot-Grün-Schwäche
+    /// und alle, die sich nicht auf Farbe allein verlassen wollen: Ring = nicht gestartet, zwei Balken = wartet,
+    /// Ausrufezeichen = Fehler. Fertig/arbeitet bleiben ein gefüllter Punkt (arbeitet pulsiert zusätzlich).
+    @MainActor static func statusDot(in r: CGRect, status: SessionStatus, attached: Bool, color: NSColor,
+                                     differentiate: Bool = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor) {
+        guard differentiate else {
+            color.setFill(); NSBezierPath(ovalIn: r).fill(); return
+        }
+        guard attached else {
+            let p = NSBezierPath(ovalIn: r.insetBy(dx: 1, dy: 1))
+            p.lineWidth = 1.5
+            color.setStroke(); p.stroke()
+            return
+        }
+        color.setFill()
+        NSBezierPath(ovalIn: r).fill()
+        guard status == .waiting || status == .error else { return }
+        let mark = Theme.pillText(on: color)
+        mark.setFill()
+        if status == .waiting {
+            CGRect(x: r.minX + r.width * 0.30, y: r.minY + r.height * 0.22, width: r.width * 0.16, height: r.height * 0.56).fill()
+            CGRect(x: r.minX + r.width * 0.54, y: r.minY + r.height * 0.22, width: r.width * 0.16, height: r.height * 0.56).fill()
+        } else {
+            CGRect(x: r.midX - r.width * 0.08, y: r.minY + r.height * 0.20, width: r.width * 0.16, height: r.height * 0.42).fill()
+            NSBezierPath(ovalIn: CGRect(x: r.midX - r.width * 0.08, y: r.minY + r.height * 0.68, width: r.width * 0.16, height: r.width * 0.16)).fill()
+        }
+    }
+
     /// Chevron nach unten (offen) oder rechts (zu).
     @MainActor static func chevron(in r: CGRect, open: Bool, color: NSColor) {
         let p = NSBezierPath()

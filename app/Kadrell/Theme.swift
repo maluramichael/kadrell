@@ -15,7 +15,17 @@ enum Theme {
     static var idle: NSColor { current.idle }
     static var error: NSColor { current.error }
     static var detached: NSColor { current.detached }
+    /// `waiting`, aber lesbar als Text (Warte-Badge im Baum): in hellen Schemata sonst unter 3:1 auf `panel`.
+    static var waitingText: NSColor { current.waitingText }
     static var appearance: NSAppearance? { NSAppearance(named: current.dark ? .darkAqua : .aqua) }
+
+    /// Lesbare Beschriftung auf einer Statusfarbe (Marke „neu“, Z-Badge, Leiste): `bg` reicht in dunklen Schemata,
+    /// in hellen sonst oft unter 3:1. Weiß oder Schwarz erreicht gegen jede Fläche mindestens 4,5:1.
+    static func pillText(on background: NSColor) -> NSColor {
+        let white = NSColor(hex: 0xffffff)
+        if bg.contrastRatio(with: background) >= 4.5 { return bg }
+        return white.contrastRatio(with: background) >= 4.5 ? white : NSColor(hex: 0)
+    }
 
     /// Gruppenfarbe. Die Paletten sind für dunklen Grund gemacht, auf hellem werden sie abgedunkelt, sonst ist der Name unlesbar.
     static func group(_ hex: String) -> NSColor {
@@ -92,17 +102,31 @@ enum Theme {
     }
 }
 
+/// Erst Richtung `target` (i. d. R. `fg`, behält den Charakter der Palette) auf 4,5:1 bringen, reicht das nicht,
+/// weiter Richtung `extreme` (Schwarz/Weiß). Freie Funktion statt lokal verschachtelt: eine in `ColorTheme.init`
+/// verschachtelte Funktion würde `fg` (= `self.fg`) einfangen, was der Compiler vor Abschluss der Initialisierung ablehnt.
+private func accessibleText(_ c: NSColor, against backgrounds: [NSColor], toward target: NSColor, extreme: NSColor) -> NSColor {
+    c.ensuringContrast(4.5, against: backgrounds, toward: target).ensuringContrast(4.5, against: backgrounds, toward: extreme)
+}
+
 /// Farbschema der ganzen Oberfläche. `ansi` sind die acht Terminal-Grundfarben, die hellen Varianten sind dieselben.
 struct ColorTheme {
     let id: String, name: String, dark: Bool
-    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error: NSColor
+    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText: NSColor
     let ansi: [NSColor]
 
     init(_ id: String, _ name: String, dark: Bool, _ c: [UInt32], ansi: [UInt32]) {
         self.id = id; self.name = name; self.dark = dark
         let n = c.map { NSColor(hex: $0) }
-        (bg, panel, surface, line, fg, sub, muted, detached) = (n[0], n[1], n[2], n[3], n[4], n[5], n[6], n[7])
+        (bg, panel, surface, line, fg) = (n[0], n[1], n[2], n[3], n[4])
+        detached = n[7]
         (running, waiting, idle, error) = (n[8], n[9], n[10], n[11])
+        // Sekundärtext und die Warte-Beschriftung sind in mehreren Schemata unter 4,5:1: erst Richtung `fg`
+        // mischen (behält den Charakter der Palette), reicht das nicht, weiter Richtung Schwarz/Weiß.
+        let textBGs = [panel, surface], extreme = NSColor(hex: dark ? 0xffffff : 0)
+        sub = accessibleText(n[5], against: textBGs, toward: fg, extreme: extreme)
+        muted = accessibleText(n[6], against: textBGs, toward: fg, extreme: extreme)
+        waitingText = accessibleText(waiting, against: textBGs, toward: fg, extreme: extreme)
         self.ansi = ansi.map { NSColor(hex: $0) }
     }
 
@@ -170,5 +194,35 @@ extension NSColor {
         return NSColor(srgbRed: a.redComponent * fraction + b.redComponent * (1 - fraction),
                        green: a.greenComponent * fraction + b.greenComponent * (1 - fraction),
                        blue: a.blueComponent * fraction + b.blueComponent * (1 - fraction), alpha: 1)
+    }
+
+    /// WCAG-Kontrastverhältnis zu `other` (relative Luminanz nach der W3C-Formel), 1...21.
+    func contrastRatio(with other: NSColor) -> CGFloat {
+        func luminance(_ c: NSColor) -> CGFloat {
+            let s = c.usingColorSpace(.sRGB) ?? c
+            func lin(_ v: CGFloat) -> CGFloat { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+            return 0.2126 * lin(s.redComponent) + 0.7152 * lin(s.greenComponent) + 0.0722 * lin(s.blueComponent)
+        }
+        let l1 = luminance(self), l2 = luminance(other)
+        return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+    }
+
+    /// Verschiebt sich Richtung `target` (bei Bedarf über `target` hinaus), bis der Kontrast zu jeder Fläche in
+    /// `backgrounds` mindestens `ratio` erreicht. Ist es schon so, bleibt die Farbe unverändert. Binäre Suche,
+    /// Komponenten werden dabei auf 0...1 begrenzt.
+    func ensuringContrast(_ ratio: CGFloat, against backgrounds: [NSColor], toward target: NSColor) -> NSColor {
+        guard backgrounds.contains(where: { contrastRatio(with: $0) < ratio }) else { return self }
+        let a = usingColorSpace(.sRGB) ?? self, b = target.usingColorSpace(.sRGB) ?? target
+        func at(_ t: CGFloat) -> NSColor {
+            func c(_ x: CGFloat, _ y: CGFloat) -> CGFloat { min(1, max(0, x + (y - x) * t)) }
+            return NSColor(srgbRed: c(a.redComponent, b.redComponent), green: c(a.greenComponent, b.greenComponent),
+                           blue: c(a.blueComponent, b.blueComponent), alpha: 1)
+        }
+        var lo: CGFloat = 0, hi: CGFloat = 3
+        for _ in 0..<24 {
+            let mid = (lo + hi) / 2
+            if backgrounds.allSatisfy({ at(mid).contrastRatio(with: $0) >= ratio }) { hi = mid } else { lo = mid }
+        }
+        return at(hi)
     }
 }

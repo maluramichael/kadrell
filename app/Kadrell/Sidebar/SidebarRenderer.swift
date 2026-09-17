@@ -32,6 +32,8 @@ struct SidebarSessionItem {
     let session: Session
     let color: NSColor
     let dot: NSColor
+    /// Claude-Prozess läuft (angehängt): steuert die Punktform bei „Farben nicht unterscheiden“ (Ring = nicht gestartet).
+    let attached: Bool
     let selected: Bool
     let focused: Bool
     /// Der Baum hat die Tastatur (⌘1): fokussierte Zeile bekommt einen Rahmen.
@@ -90,8 +92,7 @@ extension SidebarRenderer {
             NSAttributedString(string: String(m.suffix(300)), attributes: attrs)
                 .draw(in: CGRect(x: 42, y: r.maxY - 4, width: max(0, row.maxX - 10 - 42), height: 14))
         }
-        s.dot.setFill()
-        NSBezierPath(ovalIn: dotRect(row)).fill()
+        Icons.statusDot(in: dotRect(row), status: s.session.status, attached: s.attached, color: s.dot)
         let iconRect = CGRect(x: 12, y: r.midY - 6, width: 12, height: 12), iconColor = s.selected || s.hover ? Theme.fg : Theme.muted
         if s.session.isRemote { Icons.server(in: iconRect, color: iconColor) }
         else if s.session.isShell { Icons.computer(in: iconRect, color: iconColor) }
@@ -103,11 +104,12 @@ extension SidebarRenderer {
             right -= 8
         }
         if s.unread {
-            let tag = NSAttributedString(string: String(localized: "neu"), attributes: Theme.attrs(10, Theme.bg, bold: true))
+            let pillColor = Theme.color(for: s.session.status == .waiting ? .waiting : .running)
+            let tag = NSAttributedString(string: String(localized: "neu"), attributes: Theme.attrs(10, Theme.pillText(on: pillColor), bold: true))
             let w = tag.size().width + 10
             right -= w
             let pill = CGRect(x: right, y: r.midY - 8, width: w, height: 16)
-            Theme.color(for: s.session.status == .waiting ? .waiting : .running).setFill()
+            pillColor.setFill()
             NSBezierPath(roundedRect: pill, xRadius: 3, yRadius: 3).fill()
             tag.draw(at: CGPoint(x: pill.minX + 5, y: r.midY - 7))
             right -= 8
@@ -135,7 +137,7 @@ extension SidebarRenderer {
     /// „2 ⏳“ links vom Zähler, nur wenn etwas in der Gruppe wartet, auch bei eingeklappter Gruppe.
     func drawWaitingBadge(_ g: SidebarGroupItem, head: CGRect, right: CGFloat) -> CGFloat {
         guard g.waitingCount > 0 else { return right }
-        let t = NSAttributedString(string: "\(g.waitingCount) ⏳", attributes: Theme.attrs(10.5, Theme.waiting, bold: true))
+        let t = NSAttributedString(string: "\(g.waitingCount) ⏳", attributes: Theme.attrs(10.5, Theme.waitingText, bold: true))
         let x = right - t.size().width
         t.draw(at: CGPoint(x: x, y: head.midY - 7))
         return x - 8

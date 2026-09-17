@@ -17,4 +17,14 @@ final class FeedbackTests: XCTestCase {
         XCTAssertEqual(Feedback.progress(since: 10, duration: 1, now: 10.5)!, 0.875, accuracy: 0.001)
         XCTAssertNil(Feedback.progress(since: 10, duration: 1, now: 11))
     }
+
+    /// „Bewegung reduzieren“: laufende Animationen springen sofort zum Endzustand statt zu blenden.
+    func testProgressRespectsReduceMotion() {
+        let old = Feedback.reduceMotion
+        defer { Feedback.reduceMotion = old }
+        Feedback.reduceMotion = true
+        XCTAssertNil(Feedback.progress(since: 10, duration: 1, now: 10.5))
+        Feedback.reduceMotion = false
+        XCTAssertNotNil(Feedback.progress(since: 10, duration: 1, now: 10.5))
+    }
 }

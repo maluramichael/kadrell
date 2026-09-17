@@ -37,11 +37,13 @@ struct EditGroupView: View {
                 TextField("Name", text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                     .focused($focused)
                     .onSubmit { model.save() }
-                Capsule().fill(model.color).frame(width: 44 * Theme.scale, height: 20 * Theme.scale)
-                    .overlay(Capsule().stroke(Theme.mutedColor, lineWidth: showPalettes ? 1.5 : 0))
-                    .contentShape(Capsule())
-                    .onTapGesture { showPalettes.toggle() }
-                    .help("Farbe aus einer Palette wählen")
+                Button { showPalettes.toggle() } label: {
+                    Capsule().fill(model.color).frame(width: 44 * Theme.scale, height: 20 * Theme.scale)
+                        .overlay(Capsule().stroke(Theme.mutedColor, lineWidth: showPalettes ? 1.5 : 0))
+                }
+                .buttonStyle(.plain).kbdFocusRing()
+                .accessibilityLabel(String(localized: "Farbe wählen"))
+                .help("Farbe aus einer Palette wählen")
             }
             .padding(14)
             if showPalettes { palettes }
@@ -64,16 +66,19 @@ struct EditGroupView: View {
                 HStack(spacing: 4) {
                     Text(p.name).foregroundStyle(Color(nsColor: Theme.sub)).frame(width: 110 * Theme.scale, alignment: .leading)
                     ForEach(p.colors, id: \.self) { hex in
-                        Rectangle().fill(Color(nsColor: NSColor(hexString: hex))).frame(width: size, height: size)
-                            .overlay(Rectangle().stroke(Theme.fgColor, lineWidth: hex == current ? 2 : 0))
-                            .contentShape(Rectangle())
-                            .onTapGesture { model.color = Color(nsColor: NSColor(hexString: hex)); showPalettes = false }
+                        Button { model.color = Color(nsColor: NSColor(hexString: hex)); showPalettes = false } label: {
+                            Rectangle().fill(Color(nsColor: NSColor(hexString: hex))).frame(width: size, height: size)
+                                .overlay(Rectangle().stroke(Theme.fgColor, lineWidth: hex == current ? 2 : 0))
+                        }
+                        .buttonStyle(.plain).kbdFocusRing()
+                        .accessibilityLabel("\(p.name) \(hex)")
+                        .accessibilityAddTraits(hex == current ? .isSelected : [])
                     }
                 }
             }
             HStack(spacing: 4) {
                 Text("Eigene").foregroundStyle(Color(nsColor: Theme.sub)).frame(width: 110 * Theme.scale, alignment: .leading)
-                ColorPicker("", selection: $model.color, supportsOpacity: false).labelsHidden()
+                ColorPicker(String(localized: "Eigene Farbe"), selection: $model.color, supportsOpacity: false).labelsHidden()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -24,24 +24,23 @@ struct ConfirmView: View {
             }
             HStack(spacing: 8) {
                 if ask != nil {
-                    Button { dontAsk.toggle(); ask?.enabled = !dontAsk } label: {
-                        HStack(spacing: 6) {
-                            Text(dontAsk ? "☑" : "☐").font(Theme.ui(14))
-                            Text("Nicht mehr fragen").font(Theme.ui(12))
-                        }.foregroundStyle(dontAsk ? Theme.fgColor : Theme.mutedColor)
-                    }.buttonStyle(.plain).help("Wieder einschalten: Einstellungen (⌘,) › Rückfragen")
+                    Toggle(isOn: Binding(get: { dontAsk }, set: { dontAsk = $0; ask?.enabled = !$0 })) {
+                        Text("Nicht mehr fragen").font(Theme.ui(12)).foregroundStyle(dontAsk ? Theme.fgColor : Theme.mutedColor)
+                    }
+                    .toggleStyle(.checkbox)
+                    .help("Wieder einschalten: Einstellungen (⌘,) › Rückfragen")
                 }
                 Spacer()
                 if !infoOnly {
                     Button(action: onCancel) {
                         Text("Abbrechen").font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
                             .padding(.horizontal, 12).padding(.vertical, 6).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.plain).kbdFocusRing()
                 }
                 Button(action: onConfirm) {
                     Text(destructive ? "\(button)  ⌘⏎" : button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
                         .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.runningColor)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).kbdFocusRing()
             }
             .padding(16)
         }

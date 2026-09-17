@@ -26,9 +26,13 @@ final class AccessibilityTests: XCTestCase {
         sidebar.reload(groups: [g], sessions: [a, b])
 
         let rows = elements(sidebar)
-        XCTAssertEqual(rows.map { $0.accessibilityLabel() }, ["Gruppe Projekt, 2 Sessions",
-                                                              "Session Alpha, nicht gestartet",
-                                                              "Session Beta, nicht gestartet, neu"])
+        // Baum ist eine Outline: Status/„neu“/„ausgewählt“ stehen im Wert, nicht im (rein identifizierenden) Label.
+        XCTAssertEqual(rows.map { $0.accessibilityLabel() }, ["Gruppe Projekt, 2 Sessions", "Session Alpha", "Session Beta"])
+        XCTAssertEqual(rows.map { $0.accessibilityValue() as? String ?? "" }, ["", "nicht gestartet", "nicht gestartet, neu"])
+        XCTAssertEqual(sidebar.accessibilityRole(), .outline)
+        XCTAssertEqual(rows.map { $0.accessibilityRole() }, [.row, .row, .row])
+        XCTAssertEqual(rows.map { $0.accessibilityDisclosureLevel() }, [0, 1, 1])
+        XCTAssertTrue(rows[0].isAccessibilityExpanded())
         XCTAssertTrue(rows.allSatisfy { $0.accessibilityParent() as? NSView === sidebar })
         // Gespiegelte View: die zweite Zeile liegt auf dem Bildschirm unter der ersten, beide oben im Fenster.
         let top = rows[0].accessibilityFrame(), second = rows[1].accessibilityFrame()
@@ -38,6 +42,9 @@ final class AccessibilityTests: XCTestCase {
 
         XCTAssertTrue(rows[2].accessibilityPerformPress())
         XCTAssertEqual(picked?.0, ["b"]); XCTAssertEqual(picked?.1, .replace)
+        sidebar.selected = ["b"]
+        _ = elements(sidebar)
+        XCTAssertEqual((sidebar.accessibilitySelectedRows() as? [A11yElement])?.map(\.key), ["s:b"])
         XCTAssertTrue(rows[0].accessibilityPerformPress())
         XCTAssertEqual(picked?.0, ["a", "b"])
 
@@ -46,7 +53,60 @@ final class AccessibilityTests: XCTestCase {
         let after = elements(sidebar)
         XCTAssertEqual(after.count, 1)
         XCTAssertTrue(after[0] === rows[0])
-        XCTAssertEqual(after[0].accessibilityLabel(), "Gruppe Projekt, 2 Sessions, eingeklappt")
+        XCTAssertEqual(after[0].accessibilityLabel(), "Gruppe Projekt, 2 Sessions")
+        XCTAssertFalse(after[0].isAccessibilityExpanded())
+    }
+
+    /// ←/→ klappt die Gruppe der fokussierten Session zu/auf, auch wenn diese dadurch unsichtbar wird.
+    func testSidebarCollapseExpandKeyboard() {
+        let a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha")
+        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a"], favorite: false)
+        let sidebar = SidebarView(frame: .zero)
+        let w = window(sidebar, NSSize(width: 240, height: 400))
+        defer { w.close() }
+        sidebar.reload(groups: [g], sessions: [a])
+        sidebar.focused = "a"
+
+        func key(_ code: UInt16) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                             characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)!
+        }
+        sidebar.keyDown(with: key(123))   // ←
+        XCTAssertEqual(elements(sidebar).count, 1, "Session-Zeile ist mit eingeklappter Gruppe weg")
+        sidebar.keyDown(with: key(124))   // →
+        XCTAssertEqual(elements(sidebar).count, 2, "→ klappt die Gruppe der (weiter gemerkten) Fokus-Session wieder auf")
+    }
+
+    /// ⏎/Leertaste öffnen die fokussierte Session (nimmt die Tastatur, anders als ↑↓), ⌫ schließt sie,
+    /// ⌥⌘↓ tauscht sie mit dem Nachbarn in ihrer Gruppe.
+    func testSidebarKeyboardOpenCloseMove() {
+        let a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha")
+        let b = Session(id: "b", cwd: "/p", startedAt: 0, sessionId: "b", name: "Beta")
+        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a", "b"], favorite: false)
+        let sidebar = SidebarView(frame: .zero)
+        let w = window(sidebar, NSSize(width: 240, height: 400))
+        defer { w.close() }
+        sidebar.reload(groups: [g], sessions: [a, b])
+        sidebar.focused = "a"
+        var picked: ([String], SidebarView.SelectMode)?
+        sidebar.onSelect = { picked = ($0, $1) }
+        var closed: String?
+        sidebar.onCloseSession = { id, _ in closed = id }
+        var moved: (String, String)?
+        sidebar.onMoveSession = { moved = ($0, $1) }
+
+        func key(_ code: UInt16, _ mods: NSEvent.ModifierFlags = []) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: mods, timestamp: 0, windowNumber: 0, context: nil,
+                             characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)!
+        }
+        sidebar.keyDown(with: key(36))   // ⏎
+        XCTAssertEqual(picked?.0, ["a"]); XCTAssertEqual(picked?.1, .replace)
+
+        sidebar.keyDown(with: key(125, [.option, .command]))   // ⌥⌘↓
+        XCTAssertEqual(moved?.0, "a"); XCTAssertEqual(moved?.1, "b")
+
+        sidebar.keyDown(with: key(51))   // ⌫
+        XCTAssertEqual(closed, "a")
     }
 
     func testStatusBarButtons() {
@@ -70,6 +130,25 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertEqual(toggled, 1)
         bar.display()
         XCTAssertTrue(elements(bar)[4] === sync)
+    }
+
+    /// „Farben nicht unterscheiden“ aus: nur ein gefüllter Punkt (unverändertes Verhalten). Eingeschaltet: der
+    /// Wartend-Punkt bekommt zusätzlich einen Glyph, ist also nicht mehr einfarbig.
+    func testStatusDotShapesOnlyWithDifferentiateWithoutColor() {
+        func render(_ differentiate: Bool) -> NSBitmapImageRep {
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16, bitsPerSample: 8, samplesPerPixel: 4,
+                                       hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            Icons.statusDot(in: CGRect(x: 0, y: 0, width: 16, height: 16), status: .waiting, attached: true, color: .orange, differentiate: differentiate)
+            NSGraphicsContext.restoreGraphicsState()
+            return rep
+        }
+        func colors(_ rep: NSBitmapImageRep) -> Set<NSColor> {
+            Set((4...11).flatMap { y in (4...11).compactMap { x in rep.colorAt(x: x, y: y) } }.filter { $0.alphaComponent > 0.9 })
+        }
+        XCTAssertEqual(colors(render(false)).count, 1, "ohne die Einstellung bleibt der Punkt einfarbig")
+        XCTAssertGreaterThan(colors(render(true)).count, 1, "mit der Einstellung trägt der Glyph eine zweite Farbe")
     }
 
     func testCellHeader() {

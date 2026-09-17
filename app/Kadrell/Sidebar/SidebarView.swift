@@ -294,7 +294,7 @@ final class SidebarView: NSView {
             let amount = f.waiting ? abs(sin(p * 2 * .pi)) : 1 - p
             return NSColor.white.mixed(0.75 * amount, into: c)
         }
-        guard s.status == .running, attached else { return c }
+        guard s.status == .running, attached, !Feedback.reduceMotion else { return c }
         let t = CACurrentMediaTime().truncatingRemainder(dividingBy: 1.2) / 1.2
         return c.withAlphaComponent(0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t)))
     }
@@ -317,6 +317,7 @@ final class SidebarView: NSView {
         }
         defer { if slide != nil { NSGraphicsContext.restoreGraphicsState() } }
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
+                                                attached: attach?.isAttached(s.id) ?? false,
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,
                                                 message: showMessages ? messages[s.id] : nil, showAge: showAge,
@@ -329,8 +330,13 @@ final class SidebarView: NSView {
     /// bei jeder Abfrage neu, die Elemente selbst bleiben je Zeile dieselben.
     private var a11y: [A11yElement] = []
     override func isAccessibilityElement() -> Bool { true }
-    override func accessibilityRole() -> NSAccessibility.Role? { .list }
-    override func accessibilityLabel() -> String? { "Sessions" }
+    override func accessibilityRole() -> NSAccessibility.Role? { .outline }
+    override func accessibilityLabel() -> String? { String(localized: "Sessions") }
+
+    /// Zeilen der ausgewählten Sessions, für VO-Pfeile in einer echten Outline.
+    override func accessibilitySelectedRows() -> [Any]? {
+        a11y.filter { $0.key.hasPrefix("s:") && selected.contains(String($0.key.dropFirst(2))) }
+    }
 
     override func accessibilityChildren() -> [Any]? {
         a11y = rows.enumerated().map { i, row in
@@ -338,23 +344,29 @@ final class SidebarView: NSView {
             switch row {
             case .group(let g):
                 let n = g.sessionIds.count(where: { sessions[$0] != nil })
-                let label = (n == 1 ? String(localized: "Gruppe \(g.name), 1 Session") : String(localized: "Gruppe \(g.name), \(n) Sessions"))
-                    + (collapsed.contains(g.id) ? String(localized: ", eingeklappt") : "")
-                return e.update(parent: self, role: .button, label: label, frame: frame,
-                                press: { [weak self] in self?.onSelect?(g.sessionIds, .replace) },
-                                actions: [a11yAction(collapsed.contains(g.id) ? String(localized: "Ausklappen") : String(localized: "Einklappen")) { [weak self] in self?.toggleCollapsed(g.id) },
-                                          a11yAction(String(localized: "Neue Session")) { [weak self] in self?.onNewSession?(g.id) },
-                                          a11yAction(g.isFavorite ? String(localized: "Kein Favorit") : String(localized: "Favorit")) { [weak self] in self?.onToggleFavorite?(g.id) },
-                                          a11yAction(String(localized: "Bearbeiten")) { [weak self] in self?.onEditGroup?(g.id) },
-                                          a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseGroup?(g.id, false) }])
+                let label = n == 1 ? String(localized: "Gruppe \(g.name), 1 Session") : String(localized: "Gruppe \(g.name), \(n) Sessions")
+                e.update(parent: self, role: .row, label: label, frame: frame,
+                        press: { [weak self] in self?.onSelect?(g.sessionIds, .replace) },
+                        actions: [a11yAction(collapsed.contains(g.id) ? String(localized: "Ausklappen") : String(localized: "Einklappen")) { [weak self] in self?.toggleCollapsed(g.id) },
+                                  a11yAction(String(localized: "Neue Session")) { [weak self] in self?.onNewSession?(g.id) },
+                                  a11yAction(g.isFavorite ? String(localized: "Kein Favorit") : String(localized: "Favorit")) { [weak self] in self?.onToggleFavorite?(g.id) },
+                                  a11yAction(String(localized: "Bearbeiten")) { [weak self] in self?.onEditGroup?(g.id) },
+                                  a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseGroup?(g.id, false) }])
+                e.setAccessibilityDisclosureLevel(0)
+                e.setAccessibilityExpanded(!collapsed.contains(g.id))
+                return e
             case .session(let s, _):
                 let attached = attach?.isAttached(s.id) ?? false
-                let parts = [String(localized: "Session \(s.title)"), attached ? s.status.spoken : String(localized: "nicht gestartet"),
-                             unread.contains(s.id) ? String(localized: "neu") : nil, selected.contains(s.id) ? String(localized: "ausgewählt") : nil]
-                return e.update(parent: self, role: .button, label: parts.compactMap { $0 }.joined(separator: ", "), frame: frame,
-                                press: { [weak self] in self?.anchor = s.id; self?.onSelect?([s.id], .replace) },
-                                actions: [a11yAction(String(localized: "Umbenennen")) { [weak self] in self?.onRenameSession?(s.id) },
-                                          a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseSession?(s.id, false) }])
+                let status = attached ? s.status.spoken : String(localized: "nicht gestartet")
+                let extra = [unread.contains(s.id) ? String(localized: "neu") : nil, selected.contains(s.id) ? String(localized: "ausgewählt") : nil].compactMap { $0 }
+                let value = ([status] + extra).joined(separator: ", ")
+                e.update(parent: self, role: .row, label: String(localized: "Session \(s.title)"), value: value, frame: frame,
+                        press: { [weak self] in self?.anchor = s.id; self?.onSelect?([s.id], .replace) },
+                        actions: [a11yAction(String(localized: "Umbenennen")) { [weak self] in self?.onRenameSession?(s.id) },
+                                  a11yAction(String(localized: "Schließen")) { [weak self] in self?.onCloseSession?(s.id, false) }])
+                e.setAccessibilityDisclosureLevel(1)
+                e.setAccessibilitySelected(selected.contains(s.id))
+                return e
             }
         }
         return a11y
@@ -368,18 +380,59 @@ final class SidebarView: NSView {
     override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
     override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
 
-    /// ⌘1 gibt dem Baum die Tastatur: ↑↓ wandert über die sichtbaren Sessions, ab der fokussierten.
+    /// ⌘1 gibt dem Baum die Tastatur: ↑↓ wandert über die sichtbaren Sessions, ←/→ klappt die Gruppe der
+    /// fokussierten Session zu/auf, ⏎/Leertaste öffnet sie, ⌫ schließt sie (mit Rückfrage), ⌃⏎/⇧F10 zeigt ihr
+    /// Kontextmenü, ⌥⌘↑/↓ tauscht sie mit dem Nachbarn in der Gruppe.
     override func keyDown(with event: NSEvent) {
-        let step: Int
-        switch event.keyCode {
-        case 125: step = 1
-        case 126: step = -1
-        default: super.keyDown(with: event); return
+        let mods = event.modifierFlags.intersection(Hotkey.modMask)
+        switch (event.keyCode, mods) {
+        case (125, [.option, .command]): moveFocused(step: 1)
+        case (126, [.option, .command]): moveFocused(step: -1)
+        case (125, []): step(1)
+        case (126, []): step(-1)
+        case (123, []): collapseFocusedGroup()
+        case (124, []): expandFocusedGroup()
+        case (36, [.control]), (109, [.shift]): if let id = focused { showContextMenu(for: id) }
+        case (36, []), (49, []): if let id = focused { onSelect?([id], .replace) }
+        case (51, []): if let id = focused { onCloseSession?(id, false) }
+        default: super.keyDown(with: event)
         }
-        guard let id = sessionId(after: focused, step: step) else { return }
+    }
+
+    private func step(_ d: Int) {
+        guard let id = sessionId(after: focused, step: d) else { return }
         anchor = id
         onSelect?([id], .cursor)
         reveal(id)
+    }
+
+    /// Gruppe der fokussierten Session, auch wenn diese durch Einklappen gerade nicht sichtbar ist.
+    private func groupOfFocused() -> Group? {
+        focused.flatMap { id in groups.first { $0.sessionIds.contains(id) } }
+    }
+
+    private func collapseFocusedGroup() {
+        guard let g = groupOfFocused(), !collapsed.contains(g.id) else { return }
+        toggleCollapsed(g.id)
+    }
+
+    private func expandFocusedGroup() {
+        guard let g = groupOfFocused(), collapsed.contains(g.id) else { return }
+        toggleCollapsed(g.id)
+        if let id = focused { reveal(id) }
+    }
+
+    /// Nachbar der fokussierten Session innerhalb ihrer eigenen Gruppe (nicht baumweit): ⌥⌘↑/↓ tauscht damit.
+    private func moveFocused(step: Int) {
+        guard let id = focused, let g = groupOfFocused(), let i = g.sessionIds.firstIndex(of: id),
+              g.sessionIds.indices.contains(i + step) else { return }
+        onMoveSession?(id, g.sessionIds[i + step])
+    }
+
+    private func showContextMenu(for id: String) {
+        guard let menu = onContextMenu?(id), let i = rows.firstIndex(where: { $0.key == "s:" + id }) else { return }
+        let r = rowRect(i).scaled(Theme.scale)
+        menu.popUp(positioning: nil, at: CGPoint(x: r.minX + 20, y: r.midY), in: self)
     }
 
     /// Nachbar in Baumreihenfolge über die sichtbaren Sessions, am Rand bleibt es stehen. Ohne Start die erste.

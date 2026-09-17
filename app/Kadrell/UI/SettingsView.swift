@@ -417,7 +417,7 @@ struct SettingsView: View {
                         Button { chooseFolder(start: model.startFolder) { if let p = $0 { model.startFolder = p } } } label: {
                             Image(systemName: "folder").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
                         }
-                        .buttonStyle(.plain).help("Im Finder wählen")
+                        .buttonStyle(.plain).kbdFocusRing().help("Im Finder wählen")
                     }
                 }
                 setting(String(localized: "Externer Editor (Kommando wie im Terminal)")) {
@@ -467,11 +467,11 @@ struct SettingsView: View {
                         Button { chooseFolder(start: model.backgroundImage.isEmpty ? "~/Pictures" : (model.backgroundImage as NSString).deletingLastPathComponent, images: true) { if let p = $0 { model.backgroundImage = p } } } label: {
                             Image(systemName: "photo").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
                         }
-                        .buttonStyle(.plain).help("Bild wählen")
+                        .buttonStyle(.plain).kbdFocusRing().help("Bild wählen")
                         Button { model.backgroundImage = "" } label: {
                             Image(systemName: "xmark").foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 22 * Theme.scale)
                         }
-                        .buttonStyle(.plain).help("Kein Bild")
+                        .buttonStyle(.plain).kbdFocusRing().help("Kein Bild")
                     }
                 }
                 setting(String(localized: "Deckkraft der Kacheln")) { slider($model.tileOpacity, 0...100, step: 1, factor: 100, unit: "%") }
@@ -567,7 +567,7 @@ struct SettingsView: View {
             .padding(.horizontal, 8).padding(.vertical, 3)
             .frame(width: controlWidth).background(Theme.bgColor).contentShape(Rectangle())
         }
-        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).kbdFocusRing()
         .frame(width: controlWidth)
     }
 
@@ -592,7 +592,7 @@ struct SettingsView: View {
             Spacer(minLength: 12)
             if key != a.defaultKey, !isRecording {
                 Button { model.hotkeys[a] = a.defaultKey } label: { Text("Standard").foregroundStyle(Theme.mutedColor) }
-                    .buttonStyle(.plain).help("Zurück auf \(a.defaultKey.display)")
+                    .buttonStyle(.plain).kbdFocusRing().help("Zurück auf \(a.defaultKey.display)")
             }
             Button { isRecording ? model.stopRecording() : model.record(a) } label: {
                 Text(isRecording ? String(localized: "Tasten drücken …") : key?.display ?? "–")
@@ -601,7 +601,7 @@ struct SettingsView: View {
                     .padding(.horizontal, 8).padding(.vertical, 3).frame(width: controlWidth, alignment: .leading)
                     .background(isRecording ? Theme.runningColor : Theme.bgColor)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).kbdFocusRing()
         }
         .font(Theme.ui(12))
         .padding(.horizontal, 10).padding(.vertical, 5)
