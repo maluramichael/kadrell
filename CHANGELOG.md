@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.52.1 (2026-09-18)
+
+- Änderung: Der automatische Wechsel merkt sich jetzt auch, wann die Fenster (5 h, 7 Tage) je Account zurücksetzen. Sind beide Accounts voll, wechselt Kadrell auf den, dessen Fenster inzwischen wieder frei ist, sobald der reguläre Abgleich das erkennt. Im Konto-Menü steht bei so einem Account „5h frei“ statt des alten Prozentwerts.
+
 ## 1.52.0 (2026-09-18)
 
 - Feature: Das Konto-Menü in der Leiste zeigt zu jedem Account seinen letzten bekannten Verbrauch (5 h und 7 Tage) samt Alter, damit du vor dem Wechsel siehst, wo noch Platz ist.

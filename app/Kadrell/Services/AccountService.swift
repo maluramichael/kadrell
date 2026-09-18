@@ -9,9 +9,20 @@ struct CachedUsage: Codable, Equatable, Sendable {
     var session: Int?
     var weekly: Int?
     var fable: Int?
+    /// Wann die Fenster laut Endpoint zurücksetzen. Ist der Zeitpunkt seit der Messung vorbei, gilt die Dimension
+    /// als wieder frei, ohne dass wir den inaktiven Account extra abfragen müssen.
+    var sessionResets: Date?
+    var weeklyResets: Date?
     var at: Date
-    /// Bindender Wert für den Auto-Wechsel: der höhere von 5 h und 7 Tagen.
-    var used: Int { max(session ?? 0, weekly ?? 0) }
+
+    func session(at now: Date) -> Int? { freed(session, sessionResets, now) }
+    func weekly(at now: Date) -> Int? { freed(weekly, weeklyResets, now) }
+    /// Bindender Wert für den Auto-Wechsel: der höhere von 5 h und 7 Tagen, jeweils reset-bereinigt.
+    func used(at now: Date = Date()) -> Int { max(session(at: now) ?? 0, weekly(at: now) ?? 0) }
+    private func freed(_ v: Int?, _ resets: Date?, _ now: Date) -> Int? {
+        if let resets, resets <= now { return 0 }
+        return v
+    }
 }
 
 struct Account: Codable, Equatable, Identifiable, Sendable {
@@ -59,22 +70,29 @@ final class AccountService {
         accounts.map { ($0.id, $0.title, $0.id == activeId, Self.usageDetail($0.usage)) }
     }
 
-    /// „5h 45% · 7d 56% · vor 12 min“ aus dem gecachten Stand, leer wenn nie ein Stand gemerkt wurde.
+    /// „5h 45% · 7d 56% · vor 12 min“ aus dem gecachten Stand, leer wenn nie ein Stand gemerkt wurde. Ein Fenster,
+    /// das seit der Messung zurückgesetzt hat, steht als „frei“.
     static func usageDetail(_ u: CachedUsage?) -> String {
         guard let u else { return "" }
-        var parts: [String] = []
-        if let s = u.session { parts.append("5h \(s)%") }
-        if let w = u.weekly { parts.append("7d \(w)%") }
+        let now = Date()
+        var parts = [dim("5h", u.session, u.sessionResets, now), dim("7d", u.weekly, u.weeklyResets, now)].filter { !$0.isEmpty }
         guard !parts.isEmpty else { return "" }
-        let mins = max(0, Int(Date().timeIntervalSince(u.at) / 60))
+        let mins = max(0, Int(now.timeIntervalSince(u.at) / 60))
         parts.append(mins < 1 ? String(localized: "gerade eben", bundle: Bundle.app) : String(localized: "vor \(mins) min", bundle: Bundle.app))
         return parts.joined(separator: " · ")
+    }
+
+    private static func dim(_ label: String, _ pct: Int?, _ resets: Date?, _ now: Date) -> String {
+        guard let pct else { return "" }
+        if let resets, resets <= now { return label + " " + String(localized: "frei", bundle: Bundle.app) }
+        return "\(label) \(pct)%"
     }
 
     /// Nutzung des aktiven Accounts aus dem Poll merken, damit das Menü sie später auch für den inaktiven zeigt.
     func recordUsage(_ u: Usage) {
         guard let activeId, let i = accounts.firstIndex(where: { $0.id == activeId }) else { return }
-        accounts[i].usage = CachedUsage(session: u.session, weekly: u.weekly, fable: u.fable, at: Date())
+        accounts[i].usage = CachedUsage(session: u.session, weekly: u.weekly, fable: u.fable,
+                                        sessionResets: u.sessionResets, weeklyResets: u.weeklyResets, at: Date())
         persist()
     }
 
@@ -180,8 +198,8 @@ final class AccountService {
         return best.id
     }
 
-    /// Gecachte Auslastung; nie gesehen zählt als leer, damit ein frischer Account zuerst drankommt.
-    private func cachedUsed(_ a: Account) -> Int { a.usage?.used ?? 0 }
+    /// Gecachte Auslastung, reset-bereinigt; nie gesehen zählt als leer, damit ein frischer Account zuerst drankommt.
+    private func cachedUsed(_ a: Account) -> Int { a.usage?.used() ?? 0 }
 
     // MARK: JSON-Helfer (rein, testbar)
 
