@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.55.1 (2026-09-18)
+
+- Entfernt: Der einmalige Hinweis „⌘⏎ startet eine zweite Session im selben Ordner" nach der ersten Session erscheint nicht mehr.
+
 ## 1.55.0 (2026-09-18)
 
 - Feature: Neben dem Kreis-Knopf hat jede Kachel jetzt einen Quadrat-Knopf, der sie auf die ganze Arbeitsfläche zoomt (wie ⌥Z). Im Zoom wird der Knopf zum Minus und verkleinert wieder.

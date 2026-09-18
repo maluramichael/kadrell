@@ -1136,15 +1136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FolderIndex.shared.recordUse(cwd)
         let session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
         if let prompt { attach.initialPrompts[id] = prompt }
-        // Einmaliger Tipp nach der allerersten Session überhaupt (Kanboard #14): der Kernnutzen (mehrere Sessions,
-        // gelb = wartet) zeigt sich sonst nie, solange niemand zufällig mehrere parallel öffnet.
-        let firstEver = registry.sessions.isEmpty
         registry.add(session)
         Feedback.play(.open)
         if show { workspace.select([id], add: !workspace.selected.isEmpty) } else { attach.attachNow(session) }
-        if firstEver {
-            attention.showTipOnce("tip.secondSession.shown", String(localized: "⌘⏎ startet eine zweite Session im selben Ordner. Kadrell meldet sich, sobald eine auf dich wartet.", bundle: Bundle.app))
-        }
         return id
     }
 
