@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.50.1 (2026-09-18)
+
+- Fix: In der oberen Leiste stehen alle Texte jetzt sauber senkrecht mittig und auf einer Linie, statt leicht nach oben verrutscht.
+- Fix: Im Suchfeld (⌘N) und in den Pfadfeldern der Einstellungen sitzt der Text jetzt mittig im Feld statt am oberen Rand.
+
 ## 1.50.0 (2026-09-17)
 
 - Feature: Vor dem 7-Tage-Wert in der Leiste steht jetzt der Plan-Stand: so viel dürfte zu dieser Stunde der Woche verbraucht sein. Der eigene Wert ist grün, solange er darunter liegt, gelb kurz davor, rot sobald er darüber ist.

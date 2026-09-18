@@ -6,11 +6,11 @@ import XCTest
 /// höher als eine Zeile, der Text klebte dadurch oben statt in der Mitte. `CenteredTextFieldCell` rückt ihn mittig.
 @MainActor
 final class TextFieldCenteringTests: XCTestCase {
-    func testTitleRectIsVerticallyCentered() {
+    func testDrawingRectIsVerticallyCentered() {
         let cell = CenteredTextFieldCell(textCell: "Ag")
         cell.font = Theme.font(19.5)
         let bounds = NSRect(x: 0, y: 0, width: 300, height: 33)
-        let r = cell.titleRect(forBounds: bounds)
+        let r = cell.drawingRect(forBounds: bounds)
         XCTAssertGreaterThan(r.minY, 0, "Zeile steht immer noch an der Oberkante")
         XCTAssertEqual(r.minY, bounds.maxY - r.maxY, accuracy: 0.5, "oben und unten gleich viel Luft")
     }
@@ -20,7 +20,7 @@ final class TextFieldCenteringTests: XCTestCase {
         let cell = CenteredTextFieldCell(textCell: "Ag")
         cell.font = Theme.font(19.5)
         let bounds = NSRect(x: 0, y: 0, width: 300, height: 12)
-        XCTAssertEqual(cell.titleRect(forBounds: bounds).height, 12, accuracy: 0.01)
+        XCTAssertEqual(cell.drawingRect(forBounds: bounds).height, 12, accuracy: 0.01)
     }
 
     /// Die zentrierende Zelle ersetzt die Standardzelle des Feldes: dabei darf das Feld nicht seine

@@ -159,6 +159,14 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     private func divider(_ x: CGFloat, _ b: CGRect) { Theme.line.setFill(); CGRect(x: x, y: 0, width: 1, height: b.height - 1).fill() }
 
+    /// Zeichnet die Zeile senkrecht mittig auf `midY`, für jede Schriftgröße gleich. Die Leiste ist flipped, der
+    /// Zeichenpunkt ist also die Oberkante der Textbox. Zentriert werden die Großbuchstaben/Ziffern (capHeight über
+    /// der Grundlinie), nicht die volle JetBrains-NF-Box mit ihrem großen Unterlängen-Rand, sonst säße alles zu hoch.
+    private func drawCentered(_ s: NSAttributedString, x: CGFloat, midY: CGFloat) {
+        let f = (s.length > 0 ? s.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil) ?? Theme.font(11)
+        s.draw(at: CGPoint(x: x, y: midY - f.ascender + f.capHeight / 2))
+    }
+
     // MARK: Links
 
     /// Layout-Toggle, Spalten bzw. Teilrichtung, AUTO/SYNC/SORT und ZOOM. Gibt das Ende der linken Seite zurück.
@@ -187,7 +195,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let t = NSAttributedString(string: text, attributes: Theme.attrs(10, color ?? fill.map { Theme.pillText(on: $0) } ?? Theme.muted, bold: true))
         let r = CGRect(x: x, y: 0, width: t.size().width + 20, height: b.height - 1)
         if let fill { fill.setFill(); badge(r, key).fill() }
-        t.draw(at: CGPoint(x: r.minX + 10, y: b.midY - 7))
+        drawCentered(t, x: r.minX + 10, midY: b.midY)
         divider(r.maxX, b)
         hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
         x = r.maxX + 1
@@ -200,10 +208,10 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let less = NSAttributedString(string: "‹", attributes: Theme.attrs(12, Theme.sub, bold: true))
         let more = NSAttributedString(string: "›", attributes: Theme.attrs(12, Theme.sub, bold: true))
         let lessRect = CGRect(x: x, y: 0, width: less.size().width + 14, height: b.height - 1)
-        less.draw(at: CGPoint(x: lessRect.minX + 7, y: midY - 9))
-        value.draw(at: CGPoint(x: lessRect.maxX, y: midY - 7))
+        drawCentered(less, x: lessRect.minX + 7, midY: midY)
+        drawCentered(value, x: lessRect.maxX, midY: midY)
         let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
-        more.draw(at: CGPoint(x: moreRect.minX + 7, y: midY - 9))
+        drawCentered(more, x: moreRect.minX + 7, midY: midY)
         let spoken = cols == 0 ? String(localized: "automatisch", bundle: Bundle.app) : "\(cols)"
         hitRects.append(HitRegion(rect: lessRect, label: String(localized: "Weniger Spalten", bundle: Bundle.app), value: spoken) { [weak self] in self?.onGridColumns?(max(0, cols - 1)) })
         hitRects.append(HitRegion(rect: moreRect, label: String(localized: "Mehr Spalten", bundle: Bundle.app), value: spoken) { [weak self] in self?.onGridColumns?(min(12, cols + 1)) })
@@ -227,7 +235,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
         let z = CGRect(x: x, y: b.midY - 9, width: zt.size().width + 12, height: 18)
         Theme.waiting.setFill(); z.fill()
-        zt.draw(at: CGPoint(x: z.minX + 6, y: b.midY - 8))
+        drawCentered(zt, x: z.minX + 6, midY: b.midY)
         hitRects.append(HitRegion(rect: z, label: String(localized: "Zoom aufheben", bundle: Bundle.app)) { [weak self] in self?.onToggleZoom?() })
         return z.maxX + 8
     }
@@ -235,15 +243,15 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     // MARK: Rechts, von rechts nach links
 
     /// Modul links von `rx`. `pill`: gefüllte Fläche mit 4 pt Abstand, sonst die ganze Modulhöhe.
-    private func module(_ b: CGRect, _ rx: inout CGFloat, _ parts: [NSAttributedString], tip: String? = nil, pill: NSColor? = nil, textY: CGFloat = -8,
+    private func module(_ b: CGRect, _ rx: inout CGFloat, _ parts: [NSAttributedString], tip: String? = nil, pill: NSColor? = nil,
                         _ label: String? = nil, value: String? = nil, action: (@MainActor () -> Void)? = nil) {
         let w = parts.reduce(20) { $0 + $1.size().width } + CGFloat(max(0, parts.count - 1)) * 5
         rx -= w
         divider(rx, b)
         var rect = CGRect(x: rx, y: 0, width: w, height: b.height - 1), px = rx + 10
         if let pill { rect = CGRect(x: rx + 4, y: b.midY - 9, width: w - 8, height: 18); pill.setFill(); rect.fill(); px += 4 }
-        for (i, p) in parts.enumerated() {
-            p.draw(at: CGPoint(x: px, y: b.midY + textY + (i > 0 ? 1 : 0))); px += p.size().width + 5
+        for p in parts {
+            drawCentered(p, x: px, midY: b.midY); px += p.size().width + 5
         }
         if let tip { moduleTips.append((rect, tip)) }
         if let label, let action { hitRects.append(HitRegion(rect: rect, label: label, value: value, action: action)) }
@@ -266,11 +274,11 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         }
         drawCounts(b, &rx)
         if let tip {
-            module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))], textY: -7,
+            module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))],
                    String(localized: "Tipp", bundle: Bundle.app), value: tip) { [weak self] in self?.onDismissTip?() }
         }
         if versionWarning != nil {
-            module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update", bundle: Bundle.app), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))], textY: -7,
+            module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update", bundle: Bundle.app), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))],
                    String(localized: "Ältere claude-Version", bundle: Bundle.app), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
         }
     }
