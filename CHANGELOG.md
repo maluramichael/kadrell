@@ -2,6 +2,14 @@
 
 Neueste Version oben.
 
+## 1.54.0 (2026-09-18)
+
+- Feature: Jede Kachel hat oben rechts jetzt einen Kreis-Knopf, der sie aus der Ansicht nimmt, ohne die Session zu beenden. Die Session läuft weiter und lässt sich jederzeit wieder einblenden.
+
+## 1.53.1 (2026-09-18)
+
+- Fix: Eine Session, die gerade sichtbar auf der Arbeitsfläche liegt, bekommt kein „NEU" mehr in der Seitenleiste, auch wenn sie nicht die fokussierte Kachel ist. Holt man eine bereits als neu markierte Session in den Blick, verschwindet die Marke.
+
 ## 1.53.0 (2026-09-18)
 
 - Feature: Nach einem automatischen Account-Wechsel bei erreichtem Limit erscheint jetzt eine Meldung, welcher Account gerade aktiv ist. Sie lässt sich mit „Nicht mehr anzeigen" dauerhaft abschalten und in den Einstellungen wieder einschalten.

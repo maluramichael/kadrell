@@ -185,6 +185,13 @@ final class WorkspaceView: NSView {
         select([f], add: true)
     }
 
+    /// Kreis-Knopf der Kachel: die Kachel aus der Auswahl nehmen, ohne die Session zu schließen.
+    /// Nur was wirklich ausgewählt ist, im Auto-Modus gezeigte Kacheln bleiben unberührt.
+    func deselect(_ key: String) {
+        guard selected.contains(key) else { return }
+        select([key], add: true)
+    }
+
     /// Nachbar der Fokus-Kachel: im Stack und Zoom nach Reihenfolge, sonst nach Lage der Felder.
     private func neighbor(_ d: Tiling.Direction) -> String? {
         let tiles = tiles
@@ -328,6 +335,10 @@ final class WorkspaceView: NSView {
 
     /// Kacheln rechts: die Auswahl, im Auto-Modus gefiltert samt Nachlauf.
     private var tiles: [String] { auto ? autoPool.filter { matchesAuto($0) || linger[$0] != nil } : selected }
+
+    /// Sessions, deren Kachel gerade lesbar auf der Arbeitsfläche liegt (Grid: alle; Zen/Stack/Preview: nur die eine).
+    /// Ergebnis des letzten `relayout`, damit die Marke „neu“ genau dem folgt, was man sieht.
+    var visibleTiles: Set<String> { Set(tileFrames.keys) }
 
     /// Woraus der Auto-Modus filtert: je nach Einstellung alle Sessions in Baumreihenfolge oder nur die Auswahl.
     private var autoPool: [String] { Settings.autoAllSessions ? groups.flatMap(\.sessionIds).filter { sessions[$0] != nil } : selected }
@@ -785,11 +796,11 @@ final class WorkspaceView: NSView {
     // MARK: Events
 
     private enum Hit {
-        case cell(String), cellClose(String), cellRename(String), row(String), rowClose(String), rowRename(String), none
+        case cell(String), cellClose(String), cellRename(String), cellDeselect(String), row(String), rowClose(String), rowRename(String), none
 
         var key: String? {
             switch self {
-            case .cell(let k), .cellClose(let k), .cellRename(let k), .row(let k), .rowClose(let k), .rowRename(let k): k
+            case .cell(let k), .cellClose(let k), .cellRename(let k), .cellDeselect(let k), .row(let k), .rowClose(let k), .rowRename(let k): k
             case .none: nil
             }
         }
@@ -804,6 +815,7 @@ final class WorkspaceView: NSView {
             let local = CGPoint(x: p.x - v.frame.minX, y: p.y - v.frame.minY)
             if !v.state.headerHidden, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .cellClose(key) }
             if !v.state.headerHidden, v.penRect.insetBy(dx: -2, dy: -4).contains(local) { return .cellRename(key) }
+            if !v.state.headerHidden, v.deselectRect.insetBy(dx: -2, dy: -4).contains(local) { return .cellDeselect(key) }
             return .cell(key)
         }
         return .none
@@ -831,7 +843,7 @@ final class WorkspaceView: NSView {
         var cell: String?, row: String?
         switch hit(at: p) {
         case .cell(let k): cell = k; NSCursor.arrow.set()
-        case .cellClose(let k), .cellRename(let k): cell = k; NSCursor.pointingHand.set()
+        case .cellClose(let k), .cellRename(let k), .cellDeselect(let k): cell = k; NSCursor.pointingHand.set()
         case .row(let k), .rowClose(let k), .rowRename(let k): row = k; NSCursor.pointingHand.set()
         case .none: NSCursor.arrow.set()
         }
@@ -880,6 +892,7 @@ final class WorkspaceView: NSView {
         switch hit(at: p) {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
         case .cellRename(let k), .rowRename(let k): onRenameSession?(k)
+        case .cellDeselect(let k): deselect(k)
         case .cell(let k), .row(let k):
             pressed = (p, k)
             activate(k)

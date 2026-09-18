@@ -211,8 +211,10 @@ final class AccessibilityTests: XCTestCase {
         guard let cell = ws.subviews.compactMap({ $0 as? CellView }).first else { return XCTFail("keine Kachel") }
         cell.state.groupName = g.name
         let buttons = elements(cell)
-        XCTAssertEqual(buttons.map { $0.accessibilityLabel() ?? "" }, ["Alpha, nicht gestartet, Projekt, master", "Umbenennen", "Schließen"])
-        XCTAssertTrue(buttons[1].accessibilityPerformPress())
+        XCTAssertEqual(buttons.map { $0.accessibilityLabel() ?? "" }, ["Alpha, nicht gestartet, Projekt, master", "Aus Ansicht nehmen", "Umbenennen", "Schließen"])
+        XCTAssertTrue(buttons[2].accessibilityPerformPress())
         XCTAssertEqual(renamed, "a")
+        XCTAssertTrue(buttons[1].accessibilityPerformPress())
+        XCTAssertFalse(ws.selected.contains("a"), "Kreis-Knopf nimmt die Kachel aus der Auswahl")
     }
 }

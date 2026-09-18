@@ -35,6 +35,14 @@ enum Icons {
         p.stroke()
     }
 
+    /// Kreis-Umriss: Kachel aus der Ansicht nehmen (deselektieren), ohne die Session zu schließen.
+    @MainActor static func circle(in r: CGRect, color: NSColor) {
+        let p = NSBezierPath(ovalIn: r.insetBy(dx: 4, dy: 4))
+        p.lineWidth = 1.5
+        color.setStroke()
+        p.stroke()
+    }
+
     /// Monitor mit Fuß: Terminal ohne Claude (⌘T).
     @MainActor static func computer(in r: CGRect, color: NSColor) {
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 16 * r.width, y: r.minY + y / 16 * r.height) }

@@ -68,8 +68,10 @@ final class CellView: NSView {
     private var xRectLogical: CGRect { CGRect(x: bounds.width / Theme.scale - 24, y: 5, width: 16, height: 16) }
     private let dotRectLogical = CGRect(x: 9, y: 9, width: 8, height: 8)
     private var penRectLogical: CGRect { xRectLogical.offsetBy(dx: -20, dy: 0) }
+    private var deselectRectLogical: CGRect { penRectLogical.offsetBy(dx: -20, dy: 0) }
     var xRect: CGRect { xRectLogical.scaled(Theme.scale) }
     var penRect: CGRect { penRectLogical.scaled(Theme.scale) }
+    var deselectRect: CGRect { deselectRectLogical.scaled(Theme.scale) }
     var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
     var statusColor: NSColor { Theme.statusColor(state.session.status, attached: state.attached, shellRunning: state.session.hasRunningShell) }
     /// Hintergrund der Kachel, leicht in Gruppenfarbe getönt, damit Gruppen auf einen Blick auseinanderfallen.
@@ -109,7 +111,7 @@ final class CellView: NSView {
         Icons.statusDot(in: dotRectLogical, status: state.session.status, attached: state.attached, color: dot)
         let meta = NSAttributedString(string: state.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
-        var iconW: CGFloat = state.hovered ? 44 : 0
+        var iconW: CGFloat = state.hovered ? 64 : 0
         if state.zoomed {
             let z = CGRect(x: b.width - iconW - 9 - metaW - 8 - 16, y: 5, width: 16, height: 16)
             Theme.waiting.setFill(); z.fill()
@@ -134,8 +136,12 @@ final class CellView: NSView {
         if rest >= min(group.size().width, 40) {
             group.draw(with: CGRect(x: x, y: 6, width: rest, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
-        meta.draw(at: CGPoint(x: b.width - (state.hovered ? 44 : 0) - 9 - metaW, y: 6))
-        if state.hovered { Icons.x(in: xRectLogical, color: Theme.sub); Icons.pen(in: penRectLogical, color: Theme.sub) }
+        meta.draw(at: CGPoint(x: b.width - (state.hovered ? 64 : 0) - 9 - metaW, y: 6))
+        if state.hovered {
+            Icons.x(in: xRectLogical, color: Theme.sub)
+            Icons.pen(in: penRectLogical, color: Theme.sub)
+            Icons.circle(in: deselectRectLogical, color: Theme.sub)
+        }
     }
 
     // MARK: Accessibility
@@ -156,6 +162,8 @@ final class CellView: NSView {
         a11y = [
             a11y.reuse("header").update(parent: self, role: .button, label: label.compactMap { $0 }.joined(separator: ", "), frame: headerRect,
                                         press: { [weak ws] in ws?.activate(key) }),
+            a11y.reuse("deselect").update(parent: self, role: .button, label: String(localized: "Aus Ansicht nehmen", bundle: Bundle.app), frame: deselectRect,
+                                          press: { [weak ws] in ws?.deselect(key) }),
             a11y.reuse("rename").update(parent: self, role: .button, label: String(localized: "Umbenennen", bundle: Bundle.app), frame: penRect,
                                         press: { [weak ws] in ws?.onRenameSession?(key) }),
             a11y.reuse("close").update(parent: self, role: .button, label: String(localized: "Schließen", bundle: Bundle.app), frame: xRect,
