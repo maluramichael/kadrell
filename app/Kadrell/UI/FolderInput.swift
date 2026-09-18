@@ -87,12 +87,32 @@ struct DialogFootBar: View {
 /// Setzt den Text senkrecht in die Mitte. Ein randloses NSTextField zeichnet seine Zeile sonst oben im Rahmen:
 /// in unseren Feldern ist der Rahmen höher als die Zeile, der Text klebt dadurch an der Oberkante.
 final class CenteredTextFieldCell: NSTextFieldCell {
-    /// `drawingRect` ist die Fläche, aus der AppKit Text, Platzhalter und Feldeditor ableitet. Ihn auf eine Zeile
-    /// mittig in den Rahmen setzen zentriert alle drei zugleich; `titleRect` allein greift den Platzhalter nicht.
-    override func drawingRect(forBounds rect: NSRect) -> NSRect {
-        let base = super.drawingRect(forBounds: rect)
-        let line = cellSize(forBounds: rect).height
-        guard base.height > line else { return base }
-        return NSRect(x: base.minX, y: base.minY + (base.height - line) / 2, width: base.width, height: line)
+    /// Zeilenhöhe aus der Font-Metrik. Nicht `cellSize`, das bei scrollbaren Feldern die volle Rahmenhöhe liefert.
+    private var lineHeight: CGFloat {
+        let f = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        return ceil(f.ascender - f.descender)
+    }
+
+    private func centered(_ rect: NSRect) -> NSRect {
+        guard rect.height > lineHeight else { return rect }
+        return NSRect(x: rect.minX, y: rect.minY + (rect.height - lineHeight) / 2, width: rect.width, height: lineHeight)
+    }
+
+    /// Feldeditor (beim Tippen) senkrecht mittig platzieren.
+    override func drawingRect(forBounds rect: NSRect) -> NSRect { centered(super.drawingRect(forBounds: rect)) }
+    override func edit(withFrame rect: NSRect, in view: NSView, editor: NSText, delegate: Any?, event: NSEvent?) {
+        super.edit(withFrame: centered(rect), in: view, editor: editor, delegate: delegate, event: event)
+    }
+    override func select(withFrame rect: NSRect, in view: NSView, editor: NSText, delegate: Any?, start: Int, length: Int) {
+        super.select(withFrame: centered(rect), in: view, editor: editor, delegate: delegate, start: start, length: length)
+    }
+
+    /// Text und Platzhalter zeichnet NSTextFieldCell fest an der Oberkante und ignoriert dabei jeden Rahmen-Offset,
+    /// den man ihr gibt. Darum hier selbst zeichnen, senkrecht mittig. Gilt nur, solange nicht editiert wird
+    /// (beim Tippen übernimmt der Feldeditor, siehe oben).
+    override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) {
+        let text = attributedStringValue.length > 0 ? attributedStringValue : (placeholderAttributedString ?? NSAttributedString())
+        guard text.length > 0 else { return }
+        text.draw(at: CGPoint(x: cellFrame.minX + 2, y: cellFrame.midY - text.size().height / 2))
     }
 }

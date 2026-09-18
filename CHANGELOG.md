@@ -2,10 +2,13 @@
 
 Neueste Version oben.
 
+## 1.50.2 (2026-09-18)
+
+- Fix: Im Suchfeld (⌘N) und in den Pfadfeldern der Einstellungen sitzt der Text jetzt wirklich senkrecht mittig im Feld statt am oberen Rand.
+
 ## 1.50.1 (2026-09-18)
 
 - Fix: In der oberen Leiste stehen alle Texte jetzt sauber senkrecht mittig und auf einer Linie, statt leicht nach oben verrutscht.
-- Fix: Im Suchfeld (⌘N) und in den Pfadfeldern der Einstellungen sitzt der Text jetzt mittig im Feld statt am oberen Rand.
 
 ## 1.50.0 (2026-09-17)
 

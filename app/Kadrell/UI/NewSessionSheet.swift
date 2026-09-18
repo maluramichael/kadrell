@@ -233,9 +233,6 @@ struct PathField: NSViewRepresentable {
         // Kein nativer Fokusring (passt nicht zum Dialog-Stil), stattdessen ein eigener Rahmen bei Tastaturfokus,
         // siehe Coordinator.controlTextDidBeginEditing/EndEditing: sonst sieht ein Tab-Nutzer den Fokus gar nicht.
         f.focusRingType = .none
-        // Ohne das meldet das Feld nur seine Ein-Zeilen-Höhe, SwiftUI dockt es oben im .frame(height:) an und der
-        // Text klebt an der Oberkante. Niedrige Priorität lässt SwiftUI das Feld auf die Rahmenhöhe strecken,
-        // dann zentriert CenteredTextFieldCell die Zeile darin.
         f.setContentHuggingPriority(.init(1), for: .vertical)
         f.setContentCompressionResistancePriority(.init(1), for: .vertical)
         f.wantsLayer = true
