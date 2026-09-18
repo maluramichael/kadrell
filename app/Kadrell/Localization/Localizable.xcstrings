@@ -734,6 +734,22 @@
         }
       }
     },
+    "Angemeldeten Account hinzufügen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angemeldeten Account hinzufügen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add signed-in account"
+          }
+        }
+      }
+    },
     "Anpassen": {
       "localizations": {
         "de": {

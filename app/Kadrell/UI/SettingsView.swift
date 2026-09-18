@@ -32,12 +32,22 @@ final class SettingsModel {
     @ObservationIgnored private var monitor: Any?
 
     /// Account-Verwaltung (Global-Swap). Von der App gesetzt; nil im reinen SwiftUI-Preview.
-    @ObservationIgnored var accounts: AccountService?
-    var accountList: [Account] { _ = revision; return accounts?.accounts ?? [] }
-    var activeAccountId: String? { _ = revision; return accounts?.activeId }
-    func addAccount() { Task { [weak self] in _ = await self?.accounts?.addCurrent(); self?.changed() } }
-    func switchAccount(_ id: String) { Task { [weak self] in _ = await self?.accounts?.switchTo(id); self?.changed() } }
-    func removeAccount(_ id: String) { Task { [weak self] in await self?.accounts?.remove(id); self?.changed() } }
+    /// Stored statt computed, damit SwiftUI die Liste nach dem Hinzufügen/Wechseln sicher neu zeichnet.
+    @ObservationIgnored var accounts: AccountService? { didSet { reloadAccounts(); loadCurrentEmail() } }
+    private(set) var accountList: [Account] = []
+    private(set) var activeAccountId: String?
+    /// E-Mail des gerade angemeldeten Accounts, damit am Knopf steht, wer hinzugefügt würde. Asynchron nachgeladen.
+    private(set) var currentEmail: String?
+    private func reloadAccounts() { accountList = accounts?.accounts ?? []; activeAccountId = accounts?.activeId }
+    private func loadCurrentEmail() {
+        Task { [weak self] in
+            guard let token = await UsageService.token() else { return }
+            self?.currentEmail = await AccountService.profileEmail(token: token)
+        }
+    }
+    func addAccount() { Task { [weak self] in _ = await self?.accounts?.addCurrent(); self?.reloadAccounts() } }
+    func switchAccount(_ id: String) { Task { [weak self] in _ = await self?.accounts?.switchTo(id); self?.reloadAccounts() } }
+    func removeAccount(_ id: String) { Task { [weak self] in await self?.accounts?.remove(id); self?.reloadAccounts() } }
 
     /// Sprache der Dialoge. Liest `revision` mit: nach der Umstellung zeichnet SwiftUI sofort in der neuen Sprache.
     var locale: Locale { _ = revision; return Localization.locale }
@@ -161,10 +171,11 @@ struct SettingsView: View {
                         }.frame(width: controlWidth, alignment: .trailing)
                     }
                 }
-                setting(String(localized: "Aktuellen Account hinzufügen", bundle: Bundle.app)) {
-                    HStack {
+                setting(String(localized: "Angemeldeten Account hinzufügen", bundle: Bundle.app)) {
+                    HStack(spacing: 8) {
+                        if let e = model.currentEmail { Text(e).foregroundStyle(Theme.mutedColor).lineLimit(1) }
+                        Spacer(minLength: 8)
                         Button { model.addAccount() } label: { Text(String(localized: "Hinzufügen", bundle: Bundle.app)).foregroundStyle(Theme.runningColor) }.buttonStyle(.plain).kbdFocusRing()
-                        Spacer()
                     }.frame(width: controlWidth)
                 }
                 setting(String(localized: "Automatisch wechseln bei Limit", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchEnabled)) }
