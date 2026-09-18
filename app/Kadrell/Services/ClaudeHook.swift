@@ -20,8 +20,10 @@ enum ClaudeHook {
         let data = try? JSONSerialization.data(withJSONObject: ["hooks": hooks], options: [.sortedKeys, .withoutEscapingSlashes])
         return ["--settings", String(decoding: data ?? Data(), as: UTF8.self)]
     }()
-    /// `notification_type`-Werte, bei denen Claude auf den Nutzer wartet (Freigabe, Frage, Leerlauf).
-    static let waitingNotifications: Set = ["permission_prompt", "idle_prompt", "agent_needs_input", "elicitation_dialog"]
+    /// `notification_type`-Werte, bei denen Claude blockiert auf den Nutzer wartet (Freigabe, Frage). `idle_prompt`
+    /// gehört bewusst NICHT dazu: das feuert ~60 s nachdem Claude fertig ist und niemand tippt, die Session ist dann
+    /// untätig (idle), nicht blockiert – siehe eigener Zweig unten.
+    static let waitingNotifications: Set = ["permission_prompt", "agent_needs_input", "elicitation_dialog"]
 
     static func statusArgv(json: Data, env: [String: String], home: String = NSHomeDirectory()) -> [String]? {
         guard let obj = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
@@ -35,8 +37,10 @@ enum ClaudeHook {
             if let p = (obj["prompt"] ?? obj["user_prompt"]) as? String, let flat = Transcript.flatPrompt(p) { args += ["--first-prompt", flat] }
         case "PermissionRequest": args = ["waiting"] + flag("--waiting-for", obj["tool_name"])
         case "Notification":
-            guard let type = obj["notification_type"] as? String, waitingNotifications.contains(type) else { return nil }
-            args = ["waiting"] + flag("--waiting-for", obj["message"])
+            guard let type = obj["notification_type"] as? String else { return nil }
+            if type == "idle_prompt" { args = ["idle"] + title() }
+            else if waitingNotifications.contains(type) { args = ["waiting"] + flag("--waiting-for", obj["message"]) }
+            else { return nil }
         case "Stop":
             args = ["idle"] + title()
             if let m = obj["last_assistant_message"] as? String, let flat = Transcript.flatAnswer(m) { args += ["--message", flat] }

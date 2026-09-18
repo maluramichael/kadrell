@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.52.4 (2026-09-18)
+
+- Fix: Eine fertige Session bleibt jetzt auf „untätig" und kippt nicht mehr nach etwa einer Minute Nichtstun fälschlich auf „wartet" (Sanduhr).
+
 ## 1.52.3 (2026-09-18)
 
 - Feature: Fährt man mit der Maus über die Nutzungswerte (5 h, 7 Tage, Fable) in der Leiste, zeigt der Tooltip jetzt zusätzlich, wann das Fenster zurücksetzt (Uhrzeit und in wie lange).

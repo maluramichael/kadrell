@@ -14,6 +14,9 @@ final class ClaudeHookTests: XCTestCase {
                        ["status", "waiting", "--waiting-for", "Bash", "--session-id", "s1"])
         XCTAssertEqual(argv(#"{"hook_event_name":"Notification","session_id":"s1","notification_type":"permission_prompt","message":"Darf ich?"}"#),
                        ["status", "waiting", "--waiting-for", "Darf ich?", "--session-id", "s1"])
+        // idle_prompt (Claude ~60 s untätig): idle, nicht waiting – sonst kippt eine fertige Session zurück auf „wartet".
+        XCTAssertEqual(argv(#"{"hook_event_name":"Notification","session_id":"s1","notification_type":"idle_prompt","message":"Claude is waiting for your input"}"#),
+                       ["status", "idle", "--session-id", "s1"])
         XCTAssertEqual(argv(#"{"hook_event_name":"Stop","session_id":"s1","last_assistant_message":"**Fertig**, `x` gebaut."}"#),
                        ["status", "idle", "--message", "Fertig, x gebaut.", "--session-id", "s1"])
     }
