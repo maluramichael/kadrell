@@ -91,6 +91,16 @@ final class UsageService {
         }
     }
 
+    /// Sofort einmal abfragen, etwa direkt nach einem Account-Wechsel, ohne den laufenden Poll-Takt zu stören.
+    func refreshNow() {
+        Task { [weak self] in
+            if case .ok(let fresh) = await UsageService.fetch(), let self, fresh != self.usage {
+                self.usage = fresh
+                self.onChange?(fresh)
+            }
+        }
+    }
+
     enum Result { case ok(Usage), rateLimited(TimeInterval?), failed }
 
     /// OAuth-Token aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (wie die CLI ihn ablegt). Der Eintrag ist ein

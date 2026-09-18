@@ -303,8 +303,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.needsDisplay = true
     }
 
-    /// Auf einen anderen Account umschalten (Global-Swap).
-    private func switchAccount(_ id: String) { Task { _ = await accounts.switchTo(id) } }
+    /// Auf einen anderen Account umschalten (Global-Swap), danach die Nutzung sofort neu holen.
+    private func switchAccount(_ id: String) { Task { if await accounts.switchTo(id) { usage.refreshNow() } } }
 
     /// Den gerade angemeldeten Account als Slot aufnehmen; scheitert, wenn keiner angemeldet ist.
     private func addAccount() {

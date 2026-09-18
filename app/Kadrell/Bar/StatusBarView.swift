@@ -271,7 +271,8 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private func drawAccount(_ b: CGRect, _ rx: inout CGFloat) {
         guard !accounts.isEmpty else { return }
         let title = accounts.first { $0.active }?.title ?? String(localized: "Konto wählen", bundle: Bundle.app)
-        let parts = [NSAttributedString(string: "@ " + String(title.prefix(16)), attributes: Theme.attrs(11, Theme.fg))]
+        let shown = title.count > 26 ? String(title.prefix(25)) + "…" : title
+        let parts = [NSAttributedString(string: shown, attributes: Theme.attrs(11, Theme.fg))]
         let w = parts.reduce(20) { $0 + $1.size().width }
         accountRect = CGRect(x: rx - w + 4, y: b.midY - 9, width: w - 8, height: 18)
         module(b, &rx, parts, pill: Theme.surface, String(localized: "Aktives Konto", bundle: Bundle.app), value: title) { [weak self] in self?.showAccountMenu() }

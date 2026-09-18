@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.51.1 (2026-09-18)
+
+- Fix: Der aktive Account in der oberen Leiste wird nicht mehr mitten in der Adresse abgeschnitten.
+- Änderung: Nach einem Kontowechsel holt Kadrell die Nutzungswerte sofort neu, statt bis zur nächsten regulären Abfrage zu warten.
+
 ## 1.51.0 (2026-09-18)
 
 - Feature: Mehrere Claude-Accounts in einem Fenster. In den Einstellungen unter „Konten“ den gerade angemeldeten Account hinzufügen, danach über die Konto-Pille rechts in der Leiste oder per ⌘P zwischen den Accounts wechseln, ohne neues Login. Alle Sessions laufen auf dem gewählten Account.
