@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.52.2 (2026-09-18)
+
+- Fix: In den gefüllten Pillen der oberen Leiste (wartende und fertige Sessions, aktiver Account) sitzt der Text jetzt waagerecht mittig statt leicht nach rechts gerückt.
+
 ## 1.52.1 (2026-09-18)
 
 - Änderung: Der automatische Wechsel merkt sich jetzt auch, wann die Fenster (5 h, 7 Tage) je Account zurücksetzen. Sind beide Accounts voll, wechselt Kadrell auf den, dessen Fenster inzwischen wieder frei ist, sobald der reguläre Abgleich das erkennt. Im Konto-Menü steht bei so einem Account „5h frei“ statt des alten Prozentwerts.

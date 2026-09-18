@@ -259,7 +259,8 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         rx -= w
         divider(rx, b)
         var rect = CGRect(x: rx, y: 0, width: w, height: b.height - 1), px = rx + 10
-        if let pill { rect = CGRect(x: rx + 4, y: b.midY - 9, width: w - 8, height: 18); pill.setFill(); rect.fill(); px += 4 }
+        // Pille ist beidseitig um 4 pt eingerückt; der Text behält seine 10-pt-Basis und sitzt so mittig (6 pt je Seite).
+        if let pill { rect = CGRect(x: rx + 4, y: b.midY - 9, width: w - 8, height: 18); pill.setFill(); rect.fill() }
         for p in parts {
             drawCentered(p, x: px, midY: b.midY); px += p.size().width + 5
         }
