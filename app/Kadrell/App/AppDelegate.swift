@@ -428,7 +428,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             registry.start()
         }
         startControlServer()
-        usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true; self?.accounts.considerAutoSwitch(u) }
+        usage.onChange = { [weak self] u in
+            guard let self else { return }
+            self.bar.usage = u
+            self.bar.needsDisplay = true
+            self.accounts.recordUsage(u)
+            self.accounts.considerAutoSwitch(u)
+        }
         usage.start()
         accounts.onChange = { [weak self] in self?.refreshAccountBars() }
         updateChecker.onChange = { [weak self] m in self?.bar.updateAvailable = m; self?.bar.needsDisplay = true }

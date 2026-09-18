@@ -171,12 +171,14 @@ struct SettingsView: View {
                         }.frame(width: controlWidth, alignment: .trailing)
                     }
                 }
-                setting(String(localized: "Angemeldeten Account hinzufügen", bundle: Bundle.app)) {
-                    HStack(spacing: 8) {
-                        if let e = model.currentEmail { Text(e).foregroundStyle(Theme.mutedColor).lineLimit(1) }
-                        Spacer(minLength: 8)
-                        Button { model.addAccount() } label: { Text(String(localized: "Hinzufügen", bundle: Bundle.app)).foregroundStyle(Theme.runningColor) }.buttonStyle(.plain).kbdFocusRing()
-                    }.frame(width: controlWidth)
+                if model.currentEmail == nil || !model.accountList.contains(where: { $0.email == model.currentEmail }) {
+                    setting(String(localized: "Angemeldeten Account hinzufügen", bundle: Bundle.app)) {
+                        HStack(spacing: 8) {
+                            if let e = model.currentEmail { Text(e).foregroundStyle(Theme.mutedColor).lineLimit(1) }
+                            Spacer(minLength: 8)
+                            Button { model.addAccount() } label: { Text(String(localized: "Hinzufügen", bundle: Bundle.app)).foregroundStyle(Theme.runningColor) }.buttonStyle(.plain).kbdFocusRing()
+                        }.frame(width: controlWidth)
+                    }
                 }
                 setting(String(localized: "Automatisch wechseln bei Limit", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchEnabled)) }
                 setting(String(localized: "Umschalten ab Auslastung", bundle: Bundle.app)) {

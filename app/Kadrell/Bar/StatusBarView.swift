@@ -33,8 +33,8 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Neuere Version als die laufende gefunden (`UpdateChecker`), Klick zeigt Changelog und Download-Link.
     var updateAvailable: UpdateManifest?
     var onShowUpdate: (() -> Void)?
-    /// Hinterlegte Claude-Accounts für die Konto-Pille (Global-Swap). Leer = keine Pille.
-    var accounts: [(id: String, title: String, active: Bool)] = []
+    /// Hinterlegte Claude-Accounts für die Konto-Pille (Global-Swap). Leer = keine Pille. `detail` = gecachte Nutzung.
+    var accounts: [(id: String, title: String, active: Bool, detail: String)] = []
     /// Auto-Wechsel aktiv, Häkchen im Konto-Menü.
     var autoswitch = false
     var onSwitchAccount: ((String) -> Void)?
@@ -281,7 +281,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private func showAccountMenu() {
         let menu = NSMenu()
         for a in accounts {
-            let item = NSMenuItem(title: a.title, action: #selector(pickAccount(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: a.detail.isEmpty ? a.title : "\(a.title)   \(a.detail)", action: #selector(pickAccount(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = a.id
             item.state = a.active ? .on : .off

@@ -3,11 +3,23 @@ import os
 
 /// Ein hinterlegter Claude-Account. Das OAuth-Geheimnis (`claudeAiOauth`-Block) liegt im Schlüsselbund unter
 /// `storeService`/`id`, hier stehen nur die anzeigbaren Metadaten.
+/// Zuletzt bekannter Nutzungsstand eines Accounts, gemerkt solange er aktiv war. So zeigt das Menü auch für
+/// gerade nicht aktive Accounts den letzten Stand mit Alter, ohne jeden Account extra abzufragen.
+struct CachedUsage: Codable, Equatable, Sendable {
+    var session: Int?
+    var weekly: Int?
+    var fable: Int?
+    var at: Date
+    /// Bindender Wert für den Auto-Wechsel: der höhere von 5 h und 7 Tagen.
+    var used: Int { max(session ?? 0, weekly ?? 0) }
+}
+
 struct Account: Codable, Equatable, Identifiable, Sendable {
     let id: String
     var alias: String
     var email: String?
     var subscription: String?
+    var usage: CachedUsage?
     /// Anzeigename: eigener Alias, sonst E-Mail, sonst ein neutraler Platzhalter.
     var title: String {
         if !alias.isEmpty { return alias }
@@ -42,8 +54,29 @@ final class AccountService {
     }
 
     var active: Account? { accounts.first { $0.id == activeId } }
-    /// Für die Leiste: Kürzel je Account mit Markierung des aktiven.
-    var menuItems: [(id: String, title: String, active: Bool)] { accounts.map { ($0.id, $0.title, $0.id == activeId) } }
+    /// Für die Leiste: je Account Kürzel, Markierung des aktiven und der zwischengespeicherte Nutzungsstand.
+    var menuItems: [(id: String, title: String, active: Bool, detail: String)] {
+        accounts.map { ($0.id, $0.title, $0.id == activeId, Self.usageDetail($0.usage)) }
+    }
+
+    /// „5h 45% · 7d 56% · vor 12 min“ aus dem gecachten Stand, leer wenn nie ein Stand gemerkt wurde.
+    static func usageDetail(_ u: CachedUsage?) -> String {
+        guard let u else { return "" }
+        var parts: [String] = []
+        if let s = u.session { parts.append("5h \(s)%") }
+        if let w = u.weekly { parts.append("7d \(w)%") }
+        guard !parts.isEmpty else { return "" }
+        let mins = max(0, Int(Date().timeIntervalSince(u.at) / 60))
+        parts.append(mins < 1 ? String(localized: "gerade eben", bundle: Bundle.app) : String(localized: "vor \(mins) min", bundle: Bundle.app))
+        return parts.joined(separator: " · ")
+    }
+
+    /// Nutzung des aktiven Accounts aus dem Poll merken, damit das Menü sie später auch für den inaktiven zeigt.
+    func recordUsage(_ u: Usage) {
+        guard let activeId, let i = accounts.firstIndex(where: { $0.id == activeId }) else { return }
+        accounts[i].usage = CachedUsage(session: u.session, weekly: u.weekly, fable: u.fable, at: Date())
+        persist()
+    }
 
     private func persist() {
         Settings.accountsData = try? JSONEncoder().encode(accounts)
@@ -125,22 +158,30 @@ final class AccountService {
 
     // MARK: Auto-Wechsel
 
-    /// Nach jedem Usage-Update: ist der aktive Account über der Schwelle und die Sperrzeit vorbei, auf den nächsten
-    /// freigeschalteten Account rotieren.
+    /// Marge, um die ein Kandidat den aktiven Account unterbieten muss, damit gewechselt wird. Verhindert das
+    /// Hin-und-Her, wenn zwei Accounts ähnlich voll sind.
+    private static let hysteresis = 10
+
+    /// Nach jedem Usage-Update: ist der aktive Account über der Schwelle und die Sperrzeit vorbei, auf den Account
+    /// mit dem meisten Rest wechseln, aber nur wenn der spürbar leerer ist.
     func considerAutoSwitch(_ usage: Usage) {
         guard Settings.autoswitchEnabled, accounts.count > 1, let activeId else { return }
         let used = max(usage.session ?? 0, usage.weekly ?? 0)
         guard used >= Settings.autoswitchThreshold, Date().timeIntervalSince(lastSwitch) >= Self.cooldown,
-              let next = nextId(after: activeId) else { return }
-        // ponytail: reihum auf den nächsten, nicht auf den leersten. Nach dem Wechsel misst der Usage-Poll den
-        // neuen aktiven; ist der auch voll, rotiert der nächste Tick weiter (durch die Sperrzeit gebremst).
-        Task { if await switchTo(next) { Feedback.play(.toggle) } }
+              let target = bestTarget(excluding: activeId, activeUsed: used) else { return }
+        Task { if await switchTo(target) { Feedback.play(.toggle) } }
     }
 
-    private func nextId(after id: String) -> String? {
-        guard let i = accounts.firstIndex(where: { $0.id == id }) else { return nil }
-        return accounts[(i + 1) % accounts.count].id
+    /// Der Account mit dem meisten Rest laut gecachtem Stand, aber nur wenn er den aktiven um die Hysterese-Marge
+    /// schlägt. Sind alle etwa gleich voll, kommt nil zurück und es bleibt beim aktiven (kein Toggeln).
+    private func bestTarget(excluding id: String, activeUsed: Int) -> String? {
+        guard let best = accounts.filter({ $0.id != id }).min(by: { cachedUsed($0) < cachedUsed($1) }),
+              cachedUsed(best) <= activeUsed - Self.hysteresis else { return nil }
+        return best.id
     }
+
+    /// Gecachte Auslastung; nie gesehen zählt als leer, damit ein frischer Account zuerst drankommt.
+    private func cachedUsed(_ a: Account) -> Int { a.usage?.used ?? 0 }
 
     // MARK: JSON-Helfer (rein, testbar)
 

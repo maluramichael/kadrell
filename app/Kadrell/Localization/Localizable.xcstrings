@@ -6374,6 +6374,22 @@
         }
       }
     },
+    "gerade eben": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gerade eben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "just now"
+          }
+        }
+      }
+    },
     "getrennt": {
       "localizations": {
         "de": {
@@ -6808,6 +6824,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "by Michael Malura ·"
+          }
+        }
+      }
+    },
+    "vor %lld min": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vor %lld min"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld min ago"
           }
         }
       }

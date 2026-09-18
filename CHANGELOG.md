@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.52.0 (2026-09-18)
+
+- Feature: Das Konto-Menü in der Leiste zeigt zu jedem Account seinen letzten bekannten Verbrauch (5 h und 7 Tage) samt Alter, damit du vor dem Wechsel siehst, wo noch Platz ist.
+- Änderung: Der automatische Wechsel geht auf den Account mit dem meisten Rest und nur, wenn der spürbar leerer ist. Sind zwei Accounts ähnlich voll, bleibt es stehen, statt alle paar Minuten hin und her zu springen.
+- Fix: „Angemeldeten Account hinzufügen“ verschwindet, sobald der gerade angemeldete Account schon in der Liste steht.
+
 ## 1.51.1 (2026-09-18)
 
 - Fix: Der aktive Account in der oberen Leiste wird nicht mehr mitten in der Adresse abgeschnitten.
