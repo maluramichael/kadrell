@@ -87,6 +87,19 @@ enum Settings {
     /// `kadrell` aus einer Session heraus darf Sessions anderer Gruppen lesen und steuern (send, capture, kill …).
     /// Default an: Agenten, die andere Sessions steuern, sollen ohne Umweg laufen. Aus: nur die eigene Gruppe.
     static var controlOtherSessions: Bool { get { value("control.otherSessions", true) } set { store("control.otherSessions", newValue) } }
+
+    /// Hinterlegte Claude-Accounts (nur Metadaten, das OAuth-Geheimnis liegt im Schlüsselbund), JSON-kodiert.
+    static var accountsData: Data? { get { Profile.defaults.data(forKey: "accounts.index") } set { store("accounts.index", newValue) } }
+    /// Id des aktiven Accounts (welcher gerade im Schlüsselbund liegt).
+    static var activeAccountId: String? { get { Profile.defaults.string(forKey: "accounts.active") } set { store("accounts.active", newValue) } }
+    /// Bei erreichtem Limit automatisch auf den nächsten Account wechseln. Default aus.
+    static var autoswitchEnabled: Bool { get { value("autoswitch.enabled", false) } set { store("autoswitch.enabled", newValue) } }
+    /// Ab welcher Auslastung (5 h oder 7 Tage) der Auto-Wechsel greift.
+    static let autoswitchRange = 50.0...99.0
+    static var autoswitchThreshold: Int {
+        get { Int(min(max(value("autoswitch.threshold", 90.0), autoswitchRange.lowerBound), autoswitchRange.upperBound)) }
+        set { store("autoswitch.threshold", Double(newValue)) }
+    }
     /// Kompakte Zeile für den ⌘N-Dialog: mit welchen Start-Flags eine neue Session gleich läuft (Kanboard #75).
     static var claudeSummary: String {
         var parts = [claudeModel.isEmpty ? String(localized: "Standardmodell", bundle: Bundle.app) : claudeModel,

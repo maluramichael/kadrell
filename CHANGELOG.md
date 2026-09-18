@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.51.0 (2026-09-18)
+
+- Feature: Mehrere Claude-Accounts in einem Fenster. In den Einstellungen unter „Konten“ den gerade angemeldeten Account hinzufügen, danach über die Konto-Pille rechts in der Leiste oder per ⌘P zwischen den Accounts wechseln, ohne neues Login. Alle Sessions laufen auf dem gewählten Account.
+- Feature: Optionaler automatischer Wechsel. Auf Wunsch springt Kadrell selbst auf einen anderen Account, sobald der aktive sein 5-Stunden- oder 7-Tage-Kontingent fast aufgebraucht hat.
+
 ## 1.50.3 (2026-09-18)
 
 - Fix: Im Suchfeld (⌘N) und in den Pfadfeldern der Einstellungen sitzt der Text jetzt senkrecht mittig im Feld statt am oberen Rand, und der Platzhalter erscheint nur noch einmal statt doppelt.

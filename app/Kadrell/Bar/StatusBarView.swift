@@ -33,6 +33,16 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Neuere Version als die laufende gefunden (`UpdateChecker`), Klick zeigt Changelog und Download-Link.
     var updateAvailable: UpdateManifest?
     var onShowUpdate: (() -> Void)?
+    /// Hinterlegte Claude-Accounts für die Konto-Pille (Global-Swap). Leer = keine Pille.
+    var accounts: [(id: String, title: String, active: Bool)] = []
+    /// Auto-Wechsel aktiv, Häkchen im Konto-Menü.
+    var autoswitch = false
+    var onSwitchAccount: ((String) -> Void)?
+    var onAddAccount: (() -> Void)?
+    var onManageAccounts: (() -> Void)?
+    var onToggleAutoswitch: (() -> Void)?
+    /// Fläche der Konto-Pille beim letzten Zeichnen, damit das Menü darunter aufklappt.
+    private var accountRect: CGRect = .zero
     /// Neue Werte zählen vom alten Stand hoch bzw. herunter.
     var usage = Usage.empty {
         didSet { if usage != oldValue { usageFrom = oldValue; usageAt = CACurrentMediaTime(); animate(0.5) } }
@@ -257,8 +267,47 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         if let label, let action { hitRects.append(HitRegion(rect: rect, label: label, value: value, action: action)) }
     }
 
+    /// Konto-Pille: aktiver Account, Klick öffnet das Menü zum Wechseln, Hinzufügen und Verwalten. Ohne Accounts leer.
+    private func drawAccount(_ b: CGRect, _ rx: inout CGFloat) {
+        guard !accounts.isEmpty else { return }
+        let title = accounts.first { $0.active }?.title ?? String(localized: "Konto wählen", bundle: Bundle.app)
+        let parts = [NSAttributedString(string: "@ " + String(title.prefix(16)), attributes: Theme.attrs(11, Theme.fg))]
+        let w = parts.reduce(20) { $0 + $1.size().width }
+        accountRect = CGRect(x: rx - w + 4, y: b.midY - 9, width: w - 8, height: 18)
+        module(b, &rx, parts, pill: Theme.surface, String(localized: "Aktives Konto", bundle: Bundle.app), value: title) { [weak self] in self?.showAccountMenu() }
+    }
+
+    private func showAccountMenu() {
+        let menu = NSMenu()
+        for a in accounts {
+            let item = NSMenuItem(title: a.title, action: #selector(pickAccount(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = a.id
+            item.state = a.active ? .on : .off
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let auto = NSMenuItem(title: String(localized: "Automatisch wechseln bei Limit", bundle: Bundle.app), action: #selector(toggleAutoswitch), keyEquivalent: "")
+        auto.target = self
+        auto.state = autoswitch ? .on : .off
+        menu.addItem(auto)
+        for (title, sel) in [(String(localized: "Konto hinzufügen …", bundle: Bundle.app), #selector(addAccountItem)),
+                             (String(localized: "Konten verwalten …", bundle: Bundle.app), #selector(manageAccounts))] {
+            let item = NSMenuItem(title: title, action: sel, keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: CGPoint(x: accountRect.minX * Theme.scale, y: accountRect.maxY * Theme.scale), in: self)
+    }
+
+    @objc private func pickAccount(_ item: NSMenuItem) { if let id = item.representedObject as? String { onSwitchAccount?(id) } }
+    @objc private func toggleAutoswitch() { onToggleAutoswitch?() }
+    @objc private func addAccountItem() { onAddAccount?() }
+    @objc private func manageAccounts() { onManageAccounts?() }
+
     /// Update, wartende Sessions, laufende Prozesse, Tipp und Versionswarnung.
     private func drawNotices(_ b: CGRect, _ rx: inout CGFloat) {
+        drawAccount(b, &rx)
         if let update = updateAvailable {
             // Dezent statt der waiting-Farbe: kein Alarm, nur ein Hinweis.
             module(b, &rx, [NSAttributedString(string: String(localized: "\(update.version) verfügbar", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.fg))], pill: Theme.surface,

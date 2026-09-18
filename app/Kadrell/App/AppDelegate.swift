@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var registry: SessionRegistry!
     var attach: AttachManager!
     private let usage = UsageService()
+    let accounts = AccountService()
     private let updateChecker = UpdateChecker()
     private var palette: PaletteWindow!
     lazy var sheets = SheetPresenter(host: { [weak self] in self?.current }, palette: { [weak self] in self?.palette })
@@ -286,6 +287,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onSelectWaiting = { [weak self, weak workspace] in guard let self else { return }; workspace?.select(waitingIds(), add: false) }
         bar.onShowUpdate = { [weak self] in self?.showUpdateAvailable() }
         bar.onDetachIdle = { [weak self] in self?.detachIdleSessions() }
+        bar.onSwitchAccount = { [weak self] id in self?.switchAccount(id) }
+        bar.onAddAccount = { [weak self] in self?.addAccount() }
+        bar.onManageAccounts = { [weak self] in self?.menuSettings() }
+        bar.onToggleAutoswitch = { [weak self] in Settings.autoswitchEnabled.toggle(); self?.refreshAccountBars() }
+        applyAccounts(to: c.bar)
+    }
+
+    /// Konto-Pille aller Fenster auf den aktuellen Stand bringen.
+    private func refreshAccountBars() { for c in windows { applyAccounts(to: c.bar) } }
+
+    private func applyAccounts(to bar: StatusBarView) {
+        bar.accounts = accounts.menuItems
+        bar.autoswitch = Settings.autoswitchEnabled
+        bar.needsDisplay = true
+    }
+
+    /// Auf einen anderen Account umschalten (Global-Swap).
+    private func switchAccount(_ id: String) { Task { _ = await accounts.switchTo(id) } }
+
+    /// Den gerade angemeldeten Account als Slot aufnehmen; scheitert, wenn keiner angemeldet ist.
+    private func addAccount() {
+        Task { [weak self] in
+            guard let self else { return }
+            if await self.accounts.addCurrent() { Feedback.play(.done) } else { self.warnNoAccount() }
+        }
+    }
+
+    private func warnNoAccount() {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Kein angemeldeter Claude-Account gefunden", bundle: Bundle.app)
+        alert.informativeText = String(localized: "Melde dich zuerst in einer Session mit „claude“ an, dann versuch es erneut.", bundle: Bundle.app)
+        alert.runModal()
     }
 
     /// Einmal für alle Fenster: Tasten wirken im Key-Fenster, Mausrad in dem Fenster unter der Maus.
@@ -395,8 +428,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             registry.start()
         }
         startControlServer()
-        usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true }
+        usage.onChange = { [weak self] u in self?.bar.usage = u; self?.bar.needsDisplay = true; self?.accounts.considerAutoSwitch(u) }
         usage.start()
+        accounts.onChange = { [weak self] in self?.refreshAccountBars() }
         updateChecker.onChange = { [weak self] m in self?.bar.updateAvailable = m; self?.bar.needsDisplay = true }
         updateChecker.start()
         Notifications.setup()
@@ -549,6 +583,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.counts = statusCounts(sessions)
         bar.detachableCount = detachableIdleIds().count
         bar.waitingCount = waiting
+        applyAccounts(to: bar)
         bar.needsDisplay = true
     }
 
@@ -745,6 +780,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuTemporaryInstance() { Profile.launchTemporary() }
     @objc private func menuSettings() {
         let model = SettingsModel()
+        model.accounts = accounts
         model.onApply = { [weak self] in
             guard let self else { return }
             buildMenu()
@@ -922,7 +958,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workspace.select(g.sessionIds, add: false)
         }
         let focusedSession = workspace.focused.flatMap { sessions[$0] }
-        src.commands = LayoutMode.allCases.map { m in (String(localized: "Layout: \(m.title)", bundle: Bundle.app), { [weak self] in self?.workspace.setMode(m) }) } + [
+        var commands: [(String, () -> Void)] = LayoutMode.allCases.map { m in (String(localized: "Layout: \(m.title)", bundle: Bundle.app), { [weak self] in self?.workspace.setMode(m) }) }
+        commands += [
             (String(localized: "Trennlinien zurücksetzen (gleich verteilt)", bundle: Bundle.app), { [weak self] in self?.workspace.resetRatios() }),
             (String(localized: "Zoom ein/aus (fokussierte)", bundle: Bundle.app), { [weak self] in self?.workspace.toggleZen() }),
             (String(localized: "Neue Session", bundle: Bundle.app), { [weak self] in self?.openNewSession(groupId: nil) }),
@@ -936,7 +973,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
             (String(localized: "Statistik", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.stats) }),
             (String(localized: "Reload", bundle: Bundle.app), { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
-        ] + store.groups.map { g in (String(localized: "Alle Sessions von \(g.name)", bundle: Bundle.app), { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
+            (String(localized: "Konto hinzufügen (aktuell angemeldetes)", bundle: Bundle.app), { [weak self] in self?.addAccount() }),
+        ]
+        commands += accounts.accounts.map { a in (String(localized: "Zu Konto wechseln: \(a.title)", bundle: Bundle.app), { [weak self] in self?.switchAccount(a.id) }) }
+        commands += store.groups.map { g in (String(localized: "Alle Sessions von \(g.name)", bundle: Bundle.app), { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
+        src.commands = commands
         palette.source = src
         palette.open(over: window, prefix: prefix)
     }

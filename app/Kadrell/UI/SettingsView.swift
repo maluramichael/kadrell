@@ -31,6 +31,14 @@ final class SettingsModel {
     @ObservationIgnored var onClose: (() -> Void)?
     @ObservationIgnored private var monitor: Any?
 
+    /// Account-Verwaltung (Global-Swap). Von der App gesetzt; nil im reinen SwiftUI-Preview.
+    @ObservationIgnored var accounts: AccountService?
+    var accountList: [Account] { _ = revision; return accounts?.accounts ?? [] }
+    var activeAccountId: String? { _ = revision; return accounts?.activeId }
+    func addAccount() { Task { [weak self] in _ = await self?.accounts?.addCurrent(); self?.changed() } }
+    func switchAccount(_ id: String) { Task { [weak self] in _ = await self?.accounts?.switchTo(id); self?.changed() } }
+    func removeAccount(_ id: String) { Task { [weak self] in await self?.accounts?.remove(id); self?.changed() } }
+
     /// Sprache der Dialoge. Liest `revision` mit: nach der Umstellung zeichnet SwiftUI sofort in der neuen Sprache.
     var locale: Locale { _ = revision; return Localization.locale }
 
@@ -136,6 +144,34 @@ struct SettingsView: View {
                 setting(String(localized: "Modell", bundle: Bundle.app)) { options(Settings.claudeModels, model.binding(\.claudeModel)) }
                 setting(String(localized: "Effort", bundle: Bundle.app)) { options(Settings.claudeEfforts, model.binding(\.claudeEffort)) }
                 setting(String(localized: "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)", bundle: Bundle.app)) { onOff(model.binding(\.controlOtherSessions)) }
+            }
+
+            heading(String(localized: "Konten", bundle: Bundle.app), note: String(localized: "mehrere Claude-Accounts, Umschalten ohne neues Login", bundle: Bundle.app))
+            table {
+                ForEach(model.accountList) { a in
+                    setting(a.title + (a.subscription.map { " · \($0)" } ?? "")) {
+                        HStack(spacing: 10) {
+                            if a.id == model.activeAccountId {
+                                Text(String(localized: "aktiv", bundle: Bundle.app)).foregroundStyle(Theme.runningColor)
+                            } else {
+                                Button { model.switchAccount(a.id) } label: { Text(String(localized: "Wechseln", bundle: Bundle.app)).foregroundStyle(Theme.fgColor) }.buttonStyle(.plain).kbdFocusRing()
+                            }
+                            Spacer(minLength: 8)
+                            Button { model.removeAccount(a.id) } label: { Text(String(localized: "Entfernen", bundle: Bundle.app)).foregroundStyle(Theme.mutedColor) }.buttonStyle(.plain).kbdFocusRing()
+                        }.frame(width: controlWidth, alignment: .trailing)
+                    }
+                }
+                setting(String(localized: "Aktuellen Account hinzufügen", bundle: Bundle.app)) {
+                    HStack {
+                        Button { model.addAccount() } label: { Text(String(localized: "Hinzufügen", bundle: Bundle.app)).foregroundStyle(Theme.runningColor) }.buttonStyle(.plain).kbdFocusRing()
+                        Spacer()
+                    }.frame(width: controlWidth)
+                }
+                setting(String(localized: "Automatisch wechseln bei Limit", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchEnabled)) }
+                setting(String(localized: "Umschalten ab Auslastung", bundle: Bundle.app)) {
+                    slider(Binding(get: { Double(model.binding(\.autoswitchThreshold).wrappedValue) }, set: { model.binding(\.autoswitchThreshold).wrappedValue = Int($0) }),
+                           Settings.autoswitchRange, step: 1, unit: "%")
+                }
             }
 
             heading(String(localized: "Darstellung", bundle: Bundle.app))

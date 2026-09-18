@@ -638,6 +638,38 @@
         }
       }
     },
+    "Aktives Konto": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktives Konto"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active account"
+          }
+        }
+      }
+    },
+    "Aktuellen Account hinzufügen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktuellen Account hinzufügen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add current account"
+          }
+        }
+      }
+    },
     "Alle Gruppen auf- oder zuklappen": {
       "localizations": {
         "de": {
@@ -858,6 +890,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto mode: tiles appear as soon as Claude needs something from you"
+          }
+        }
+      }
+    },
+    "Automatisch wechseln bei Limit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch wechseln bei Limit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-switch at limit"
           }
         }
       }
@@ -2452,6 +2500,22 @@
         }
       }
     },
+    "Hinzufügen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hinzufügen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        }
+      }
+    },
     "IN ANDEREM FENSTER · KLICK HOLT HIERHER": {
       "localizations": {
         "de": {
@@ -3014,6 +3078,22 @@
         }
       }
     },
+    "Kein angemeldeter Claude-Account gefunden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein angemeldeter Claude-Account gefunden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No signed-in Claude account found"
+          }
+        }
+      }
+    },
     "Keine Einträge gefunden.": {
       "localizations": {
         "de": {
@@ -3170,6 +3250,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "Compact"
+          }
+        }
+      }
+    },
+    "Konten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accounts"
+          }
+        }
+      }
+    },
+    "Konten verwalten …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konten verwalten …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage accounts …"
+          }
+        }
+      }
+    },
+    "Konto": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
+    "Konto %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account %lld"
+          }
+        }
+      }
+    },
+    "Konto hinzufügen (aktuell angemeldetes)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto hinzufügen (aktuell angemeldetes)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add account (currently signed in)"
+          }
+        }
+      }
+    },
+    "Konto hinzufügen …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto hinzufügen …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add account …"
+          }
+        }
+      }
+    },
+    "Konto wählen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto wählen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose account"
           }
         }
       }
@@ -3378,6 +3570,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Most sessions at once"
+          }
+        }
+      }
+    },
+    "Melde dich zuerst in einer Session mit „claude“ an, dann versuch es erneut.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Melde dich zuerst in einer Session mit „claude“ an, dann versuch es erneut."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in with “claude” in a session first, then try again."
           }
         }
       }
@@ -5350,6 +5558,22 @@
         }
       }
     },
+    "Umschalten ab Auslastung": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umschalten ab Auslastung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch at usage"
+          }
+        }
+      }
+    },
     "Update verfügbar": {
       "localizations": {
         "de": {
@@ -5490,6 +5714,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "What's new"
+          }
+        }
+      }
+    },
+    "Wechseln": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wechseln"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch"
           }
         }
       }
@@ -5702,6 +5942,22 @@
         }
       }
     },
+    "Zu Konto wechseln: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu Konto wechseln: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to account: %@"
+          }
+        }
+      }
+    },
     "Zuletzt fokussierte Kachel": {
       "localizations": {
         "de": {
@@ -5746,6 +6002,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clipboard"
+          }
+        }
+      }
+    },
+    "aktiv": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktiv"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "active"
           }
         }
       }
@@ -6232,6 +6504,22 @@
     },
     "malura.de": {
       "shouldTranslate": false
+    },
+    "mehrere Claude-Accounts, Umschalten ohne neues Login": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mehrere Claude-Accounts, Umschalten ohne neues Login"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "several Claude accounts, switch without signing in again"
+          }
+        }
+      }
     },
     "min": {
       "localizations": {
