@@ -4230,6 +4230,22 @@
         }
       }
     },
+    "Reset %@ (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset %@ (%@)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resets %@ (%@)"
+          }
+        }
+      }
+    },
     "Rundes X": {
       "localizations": {
         "de": {

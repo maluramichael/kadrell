@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.52.3 (2026-09-18)
+
+- Feature: Fährt man mit der Maus über die Nutzungswerte (5 h, 7 Tage, Fable) in der Leiste, zeigt der Tooltip jetzt zusätzlich, wann das Fenster zurücksetzt (Uhrzeit und in wie lange).
+
 ## 1.52.2 (2026-09-18)
 
 - Fix: In den gefüllten Pillen der oberen Leiste (wartende und fertige Sessions, aktiver Account) sitzt der Text jetzt waagerecht mittig statt leicht nach rechts gerückt.

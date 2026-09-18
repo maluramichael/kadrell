@@ -87,6 +87,8 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private var a11y: [A11yElement] = []
     private var clockTask: Task<Void, Never>?
     private static let clock: DateFormatter = { let df = DateFormatter(); df.dateFormat = "HH:mm"; return df }()
+    /// Relative Reset-Zeit im Tooltip („in 2 Std.“), Sprache folgt der eingestellten Oberfläche.
+    private static let relative: RelativeDateTimeFormatter = { let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated; return f }()
     /// Umgeschaltete Badges: die Füllung wächst aus der Mitte auf.
     private var toggledAt: [String: CFTimeInterval] = [:]
     private var animUntil: CFTimeInterval = 0
@@ -380,16 +382,23 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             guard let plan else { return String(localized: "\(label): \(pct) % verbraucht", bundle: Bundle.app) }
             return String(localized: "\(label): \(pct) % verbraucht, \(plan) % nach Plan", bundle: Bundle.app)
         }
-        let rows: [(String, Int?, Int?, String, Int?)] = [
-            ("fable", usage.fable, usageFrom.fable, String(localized: "Fable-Kontingent", bundle: Bundle.app), nil),
-            ("7d", usage.weekly, usageFrom.weekly, String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app), usage.weeklyPlan()),
-            ("5h", usage.session, usageFrom.session, String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app), nil),
+        /// Reset-Zeit ans Tooltip: absolute Uhrzeit plus relativ, leer wenn kein Reset-Zeitpunkt bekannt ist.
+        func resetTip(_ resets: Date?) -> String {
+            guard let resets, resets > Date() else { return "" }
+            Self.relative.locale = Localization.locale
+            let rel = Self.relative.localizedString(for: resets, relativeTo: Date())
+            return " · " + String(localized: "Reset \(Self.clock.string(from: resets)) (\(rel))", bundle: Bundle.app)
+        }
+        let rows: [(String, Int?, Int?, String, Int?, Date?)] = [
+            ("fable", usage.fable, usageFrom.fable, String(localized: "Fable-Kontingent", bundle: Bundle.app), nil, usage.weeklyResets),
+            ("7d", usage.weekly, usageFrom.weekly, String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app), usage.weeklyPlan(), usage.weeklyResets),
+            ("5h", usage.session, usageFrom.session, String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app), nil, usage.sessionResets),
         ]
-        for (name, pct, from, label, plan) in rows {
+        for (name, pct, from, label, plan, reset) in rows {
             let value = NSMutableAttributedString()
             if let plan, pct != nil { value.append(NSAttributedString(string: "\(plan)%/", attributes: fMuted)) }
             value.append(pctString(pct, from: from, plan: plan))
-            module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), value], tip: usageTip(label, pct, plan))
+            module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), value], tip: usageTip(label, pct, plan) + resetTip(reset))
         }
     }
 
