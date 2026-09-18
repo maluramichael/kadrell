@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Website and download
+    url: https://kadrell.malura.de
+    about: Learn more about Kadrell and download the latest build.
+  - name: Support (Ko-fi)
+    url: https://ko-fi.com/malura
+    about: Support the project over Ko-fi.
+  - name: Privacy statement
+    url: https://kadrell.malura.de/datenschutz.html
+    about: How Kadrell handles your data (short version: it does not).

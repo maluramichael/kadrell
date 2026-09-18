@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest an idea for Kadrell.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Please keep Kadrell's scope in mind: it keeps many parallel
+        Claude Code sessions visible in one window, is fully keyboard-operable, aims to be
+        the only tool you need beside it, and follows tmux habits rather than inventing its
+        own. Requests that fit that scope are the easiest to take on.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are you trying to solve? What is annoying or missing today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like Kadrell to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you thought about, or workarounds you use now.
+    validations:
+      required: false

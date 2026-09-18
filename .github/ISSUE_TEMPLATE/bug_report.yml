@@ -1,0 +1,65 @@
+name: Bug report
+description: Report something that is broken or behaves unexpectedly in Kadrell.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill in the details below so it can be reproduced.
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      description: Which macOS version are you on?
+      placeholder: "e.g. macOS 15.4"
+    validations:
+      required: true
+  - type: input
+    id: kadrell-version
+    attributes:
+      label: Kadrell version
+      description: Shown in settings (⌘,) and in the About window (F1).
+      placeholder: "e.g. 1.50.3"
+    validations:
+      required: true
+  - type: input
+    id: claude-code-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`.
+      placeholder: "e.g. 2.1.240"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, step by step?
+      placeholder: |
+        1. Open Kadrell with ...
+        2. Start a session in ...
+        3. Press ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Add any relevant console output, crash logs or screenshots.
+      render: text
+    validations:
+      required: false

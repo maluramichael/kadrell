@@ -6,7 +6,7 @@ Mac-App, Aufbau und Build: `app/README.md`.
 
 Kadrell hält alle parallel laufenden Claude-Code-Sessions eines Nutzers in einem Fenster sichtbar und bedienbar,
 für Leute mit sehr vielen gleichzeitigen Sessions über mehrere Projekte. Nicht-Ziele: keine zoombare Karte (das
-war der verworfene erste Entwurf, siehe `prototype/`), kein eigener Daemon oder Server, keine App-Store-Sandbox
+war der verworfene erste Entwurf), kein eigener Daemon oder Server, keine App-Store-Sandbox
 (würde Claude Code den Zugriff auf Projektordner und Schlüsselbund nehmen). Maßstab für neue Features: komplett
 tastaturbedienbar, kein zweites Tool neben Kadrell (weitere Fenster derselben Instanz sind ok), Bedienung folgt tmux-Gewohnheiten statt eigener
 Erfindungen. Passt ein Vorschlag da nicht rein, erst nachfragen statt bauen.
@@ -31,7 +31,7 @@ Die Version steht in der App unter Einstellungen (⌘,) und im About (F1).
 
 - Jede Änderung baut ohne eigene Compiler-Warnungen (Clean Build). Einzige Ausnahme ist der Toolchain-Hinweis
   `appintentsmetadataprocessor: Metadata extraction skipped`, der kommt nicht aus unserem Code.
-- `lizard` bleibt ohne Warnungen (CCN ≤ 15): `cd app && ~/.local/bin/uv tool run lizard Kadrell -w` muss leer sein.
+- `lizard` bleibt ohne Warnungen (CCN ≤ 15): `cd app && uv tool run lizard Kadrell -w` muss leer sein.
 - Wird eine Funktion zu verzweigt, in kleine benannte Funktionen zerlegen, statt Zweige anzuhängen. Vorhandene
   Services und Helfer wiederverwenden, keine Logik duplizieren.
 - Vor dem Commit beides prüfen, genau wie die Tests.
@@ -49,7 +49,7 @@ Claude-Prozesse mitnehmen). Deshalb:
 
 ## Testen an der laufenden App: immer ein frisches Profil
 
-Michaels eigenes Kadrell (Standardprofil) nie beenden, neu starten oder dessen Daten anfassen. Zum Testen den Debug-Build
+Das eigene Kadrell (Standardprofil) nie beenden, neu starten oder dessen Daten anfassen. Zum Testen den Debug-Build
 selbst starten, immer mit frischem Temp-Profil:
 
 ```bash
@@ -63,41 +63,21 @@ open -n app/build/Build/Products/Debug/Kadrell.app --args --profile tmp
 - Benannte Profile (`--profile <name>`) bleiben unter `~/Library/Application Support/de.malura.kadrell/profiles/<name>/`
   liegen, zum Testen deshalb nicht verwenden.
 - Reste abgestürzter oder beendeter Temp-Profile (plist, Temp-Ordner) räumt jeder Start weg, nichts von Hand löschen.
-- Screenshots der laufenden Instanz gehen nicht (`screencapture` hat in der Tool-Shell kein Bildschirmaufnahme-Recht).
-  Für Sichtprüfungen einen temporären Render-Test schreiben und im Temp-Profil laufen lassen, damit er Michaels
+- Für Sichtprüfungen einen temporären Render-Test schreiben und im Temp-Profil laufen lassen, damit er die eigenen
   Einstellungen nicht anfasst: `TEST_RUNNER_KADRELL_PROFILE=tmp xcodebuild … test -only-testing:KadrellTests/<Test>`.
 
 ### Parallel an mehreren Features arbeiten
 
 Weil jedes Temp-Profil eigene Sessions, Einstellungen, Socket und Lock hat, können beliebig viele Sessions gleichzeitig
-an verschiedenen Features arbeiten und testen, ohne sich oder Michaels Kadrell zu stören:
+an verschiedenen Features arbeiten und testen, ohne sich oder das eigene Kadrell zu stören:
 
 1. Jede Session arbeitet in ihrem eigenen Worktree und baut dort (`app/build` liegt pro Worktree getrennt).
 2. Jede startet ihren eigenen Build mit `--profile tmp`, bekommt damit ein eigenes Profil und findet ihre Instanz über
    die pid ihres Build-Pfads (`/bin/ps -axo pid=,args= | grep "<worktree>/app/build.*profile tmp"`).
-3. Nur die eigene Instanz beenden, nie per Name (`pkill Kadrell` trifft alle Profile und Michaels App).
+3. Nur die eigene Instanz beenden, nie per Name (`pkill Kadrell` trifft alle Profile).
 
-## Release (kein App Store)
+## Release
 
-Vertrieb per Developer ID und Notarisierung, Download über https://kadrell.malura.de. Der Mac App Store
-verlangt die App Sandbox, und die würde `claude` als Kindprozess den Zugriff auf `~/.claude`, Projektordner
-und Schlüsselbund nehmen. `tools/release.sh` archiviert (Release, Hardened Runtime, Mikrofon-Entitlement),
-exportiert mit Developer ID, baut das DMG, notarisiert, stapelt und lädt nach `/var/www/kadrell/download/`.
-Einmalige Vorbereitung (Zertifikat, `notarytool store-credentials kadrell`) steht im Kopf des Skripts.
-Landingpage: `../kadrell.malura.de`.
-
-**Wann releasen: nur nach Rückfrage, und selten.** Jedes Release geht zur Notarisierung an Apple, das soll
-nicht nach jedem Fix passieren. Änderungen sammeln, mehrere Features und Fixes kommen gemeinsam in ein Release.
-Nach einem Auftrag normal den Debug-Build bauen (`app/README.md`), committen und pushen: Michael testet lokal.
-`tools/release.sh` erst laufen lassen, wenn Michael es ausdrücklich will. Wenn sich seit dem letzten DMG
-(Version auf dem Server) spürbar viel angesammelt hat, darf Claude im Abschlussbericht in einer Zeile fragen,
-ob released werden soll, aber nicht selbst starten. Reine Interna, Doku, Tests: nie Anlass für ein Release.
-Notarisierung dauert 1 bis 5 Minuten, das Skript wartet. Danach die Version und den Link im Abschlussbericht nennen.
-Nach dem Release in `../kadrell.malura.de/index.html` die Versionsnummer im Hero-Pill („Version x.y.z“) nachziehen
-und dort pushen (deployt automatisch).
-Danach die frisch gebaute Release-App lokal installieren, damit Michael sie per ⌘Space startet:
-`xcrun stapler staple app/build-release/export/Kadrell.app && rm -rf /Applications/Kadrell.app && ditto app/build-release/export/Kadrell.app /Applications/Kadrell.app`,
-prüfen mit `spctl -a -vv /Applications/Kadrell.app` (muss `accepted` melden). Die laufende App nicht neu starten.
-Das kann nur auf dem Mac laufen (Xcode, Schlüsselbund), nicht per Hook auf examplehost.
-Alle Versionen bleiben unter https://kadrell.malura.de/download/ liegen (Caddy-Listing), `Kadrell.dmg`
-ist immer die neueste. App-Größe: rund 7 MB, DMG rund 3,5 MB.
+Vertrieb per Developer ID und Notarisierung, Download über https://kadrell.malura.de, bewusst nicht über den Mac
+App Store (die Sandbox würde `claude` als Kindprozess den Zugriff auf `~/.claude`, Projektordner und Schlüsselbund
+nehmen). Die genauen Release-Schritte stehen im privaten Runbook und laufen nur lokal auf dem Mac.
