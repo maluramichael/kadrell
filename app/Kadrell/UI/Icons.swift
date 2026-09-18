@@ -43,6 +43,25 @@ enum Icons {
         p.stroke()
     }
 
+    /// Quadrat-Umriss: Kachel auf die ganze Arbeitsfläche zoomen (wie ⌥Z).
+    @MainActor static func square(in r: CGRect, color: NSColor) {
+        let p = NSBezierPath(rect: r.insetBy(dx: 4, dy: 4))
+        p.lineWidth = 1.5
+        color.setStroke()
+        p.stroke()
+    }
+
+    /// Waagerechter Strich: den Zoom wieder verkleinern.
+    @MainActor static func minus(in r: CGRect, color: NSColor) {
+        let p = NSBezierPath()
+        p.lineWidth = 1.5
+        p.lineCapStyle = .square
+        let i = r.insetBy(dx: 4, dy: 4)
+        p.move(to: CGPoint(x: i.minX, y: i.midY)); p.line(to: CGPoint(x: i.maxX, y: i.midY))
+        color.setStroke()
+        p.stroke()
+    }
+
     /// Monitor mit Fuß: Terminal ohne Claude (⌘T).
     @MainActor static func computer(in r: CGRect, color: NSColor) {
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 16 * r.width, y: r.minY + y / 16 * r.height) }

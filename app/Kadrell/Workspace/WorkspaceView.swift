@@ -192,6 +192,12 @@ final class WorkspaceView: NSView {
         select([key], add: true)
     }
 
+    /// Quadrat-Knopf der Kachel: diese Kachel zoomen (wie ⌥Z), im Zoom verkleinert der Knopf wieder.
+    func zoomCell(_ key: String) {
+        if !zen { setFocus(key) }
+        toggleZen()
+    }
+
     /// Nachbar der Fokus-Kachel: im Stack und Zoom nach Reihenfolge, sonst nach Lage der Felder.
     private func neighbor(_ d: Tiling.Direction) -> String? {
         let tiles = tiles
@@ -796,11 +802,11 @@ final class WorkspaceView: NSView {
     // MARK: Events
 
     private enum Hit {
-        case cell(String), cellClose(String), cellRename(String), cellDeselect(String), row(String), rowClose(String), rowRename(String), none
+        case cell(String), cellClose(String), cellRename(String), cellDeselect(String), cellZoom(String), row(String), rowClose(String), rowRename(String), none
 
         var key: String? {
             switch self {
-            case .cell(let k), .cellClose(let k), .cellRename(let k), .cellDeselect(let k), .row(let k), .rowClose(let k), .rowRename(let k): k
+            case .cell(let k), .cellClose(let k), .cellRename(let k), .cellDeselect(let k), .cellZoom(let k), .row(let k), .rowClose(let k), .rowRename(let k): k
             case .none: nil
             }
         }
@@ -816,6 +822,7 @@ final class WorkspaceView: NSView {
             if !v.state.headerHidden, v.xRect.insetBy(dx: -4, dy: -4).contains(local) { return .cellClose(key) }
             if !v.state.headerHidden, v.penRect.insetBy(dx: -2, dy: -4).contains(local) { return .cellRename(key) }
             if !v.state.headerHidden, v.deselectRect.insetBy(dx: -2, dy: -4).contains(local) { return .cellDeselect(key) }
+            if !v.state.headerHidden, v.zoomRect.insetBy(dx: -2, dy: -4).contains(local) { return .cellZoom(key) }
             return .cell(key)
         }
         return .none
@@ -843,7 +850,7 @@ final class WorkspaceView: NSView {
         var cell: String?, row: String?
         switch hit(at: p) {
         case .cell(let k): cell = k; NSCursor.arrow.set()
-        case .cellClose(let k), .cellRename(let k), .cellDeselect(let k): cell = k; NSCursor.pointingHand.set()
+        case .cellClose(let k), .cellRename(let k), .cellDeselect(let k), .cellZoom(let k): cell = k; NSCursor.pointingHand.set()
         case .row(let k), .rowClose(let k), .rowRename(let k): row = k; NSCursor.pointingHand.set()
         case .none: NSCursor.arrow.set()
         }
@@ -893,6 +900,7 @@ final class WorkspaceView: NSView {
         case .cellClose(let k), .rowClose(let k): onCloseSession?(k, force)
         case .cellRename(let k), .rowRename(let k): onRenameSession?(k)
         case .cellDeselect(let k): deselect(k)
+        case .cellZoom(let k): zoomCell(k)
         case .cell(let k), .row(let k):
             pressed = (p, k)
             activate(k)

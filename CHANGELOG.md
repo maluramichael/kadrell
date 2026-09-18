@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.55.0 (2026-09-18)
+
+- Feature: Neben dem Kreis-Knopf hat jede Kachel jetzt einen Quadrat-Knopf, der sie auf die ganze Arbeitsfläche zoomt (wie ⌥Z). Im Zoom wird der Knopf zum Minus und verkleinert wieder.
+
 ## 1.54.0 (2026-09-18)
 
 - Feature: Jede Kachel hat oben rechts jetzt einen Kreis-Knopf, der sie aus der Ansicht nimmt, ohne die Session zu beenden. Die Session läuft weiter und lässt sich jederzeit wieder einblenden.
