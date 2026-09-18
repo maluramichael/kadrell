@@ -52,6 +52,11 @@ enum Settings {
     static var sidebarFlatOrder: [String] { get { value("sidebar.flatOrder", []) } set { store("sidebar.flatOrder", newValue) } }
     /// Laufzeit („12m“) in jeder Session-Zeile des Baums, Default an.
     static var sidebarShowAge: Bool { get { value("sidebar.showAge", true) } set { store("sidebar.showAge", newValue) } }
+    /// Rechte Leiste (Ticket-Panel) sichtbar, Default aus, bis ein Panel gesetzt ist.
+    static var rightPanelVisible: Bool { get { value("rightPanel.visible", false) } set { store("rightPanel.visible", newValue) } }
+    /// JSON-RPC-Endpoint von Kanboard für die Ticket-Leiste, z. B. `https://kanboard.example.org/jsonrpc.php`. Leer = aus.
+    /// Der Token liegt im Schlüsselbund (`KanboardProvider.keychainService`), nicht hier.
+    static var kanboardURL: String { get { value("tickets.kanboardURL", "") } set { store("tickets.kanboardURL", newValue) } }
     /// Welche Sounds Kadrell spielt, Default alle.
     static var sounds: Feedback.Level { get { enumValue("sounds", .all) } set { store("sounds", newValue.rawValue) } }
     /// Systembenachrichtigungen bei wartenden/fertigen Sessions, Default nur wartet.

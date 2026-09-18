@@ -16,6 +16,23 @@ final class SettingsModel {
     var editorCommand = Settings.editorCommand {
         didSet { Settings.editorCommand = editorCommand.trimmingCharacters(in: .whitespacesAndNewlines); changed() }
     }
+    /// Kanboard-Endpoint der Ticket-Leiste. Der Token liegt im Schlüsselbund, nicht in den Einstellungen.
+    var kanboardURL = Settings.kanboardURL {
+        didSet { Settings.kanboardURL = kanboardURL.trimmingCharacters(in: .whitespacesAndNewlines); changed() }
+    }
+    /// Neuer Token wird nur geschrieben, nie angezeigt. Leer lassen behält den gespeicherten.
+    var kanboardToken = "" {
+        didSet {
+            let t = kanboardToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return }
+            Task { [weak self] in
+                _ = await Keychain.write(service: KanboardProvider.keychainService, account: KanboardProvider.keychainAccount, value: t)
+                self?.kanboardTokenStored = true
+                self?.changed()
+            }
+        }
+    }
+    private(set) var kanboardTokenStored = false
     var hotkeys: [HotkeyAction: Hotkey] {
         get { _ = revision; return Hotkeys.current }
         set { Hotkeys.current = newValue; changed() }
@@ -58,6 +75,12 @@ final class SettingsModel {
     func binding<Root, T>(_ root: Root, _ key: ReferenceWritableKeyPath<Root, T>) -> Binding<T> {
         Binding(get: { _ = self.revision; return root[keyPath: key] },
                 set: { root[keyPath: key] = $0; self.changed() })
+    }
+
+    init() {
+        Task { [weak self] in
+            self?.kanboardTokenStored = await Keychain.read(service: KanboardProvider.keychainService, account: KanboardProvider.keychainAccount) != nil
+        }
     }
 
     private func changed() {
@@ -154,6 +177,22 @@ struct SettingsView: View {
                 setting(String(localized: "Modell", bundle: Bundle.app)) { options(Settings.claudeModels, model.binding(\.claudeModel)) }
                 setting(String(localized: "Effort", bundle: Bundle.app)) { options(Settings.claudeEfforts, model.binding(\.claudeEffort)) }
                 setting(String(localized: "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)", bundle: Bundle.app)) { onOff(model.binding(\.controlOtherSessions)) }
+            }
+
+            heading(String(localized: "Tickets", bundle: Bundle.app), note: String(localized: "rechte Leiste, ⌥⌘B", bundle: Bundle.app))
+            table {
+                setting(String(localized: "Kanboard-Adresse (JSON-RPC, endet auf /jsonrpc.php)", bundle: Bundle.app)) {
+                    TextField("https://kanboard.example.org/jsonrpc.php", text: $model.kanboardURL)
+                        .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
+                        .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
+                }
+                setting(model.kanboardTokenStored
+                        ? String(localized: "Kanboard-Token (gesetzt, neu eingeben zum Ersetzen)", bundle: Bundle.app)
+                        : String(localized: "Kanboard-Token (API-Token)", bundle: Bundle.app)) {
+                    SecureField("", text: $model.kanboardToken)
+                        .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
+                        .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
+                }
             }
 
             heading(String(localized: "Konten", bundle: Bundle.app), note: String(localized: "mehrere Claude-Accounts, Umschalten ohne neues Login", bundle: Bundle.app))

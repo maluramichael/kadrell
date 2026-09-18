@@ -4310,6 +4310,100 @@
         }
       }
     },
+    "implement": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "implement" } },
+        "en": { "stringUnit": { "state": "translated", "value": "implement" } }
+      }
+    },
+    "Kanboard nicht erreichbar": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kanboard nicht erreichbar" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Kanboard not reachable" } }
+      }
+    },
+    "Leere Antwort von Kanboard": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Leere Antwort von Kanboard" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Empty response from Kanboard" } }
+      }
+    },
+    "Kein Ticket-Provider. In den Einstellungen einrichten.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kein Ticket-Provider. In den Einstellungen einrichten." } },
+        "en": { "stringUnit": { "state": "translated", "value": "No ticket provider. Set one up in Settings." } }
+      }
+    },
+    "Lade Tickets …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Lade Tickets …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Loading tickets …" } }
+      }
+    },
+    "Kein Kanboard-Token. In den Einstellungen setzen.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kein Kanboard-Token. In den Einstellungen setzen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "No Kanboard token. Set one in Settings." } }
+      }
+    },
+    "Keine offenen Tickets": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Keine offenen Tickets" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No open tickets" } }
+      }
+    },
+    "Tickets": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Tickets" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Tickets" } }
+      }
+    },
+    "Tickets filtern": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Tickets filtern" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Filter tickets" } }
+      }
+    },
+    "rechte Leiste, ⌥⌘B": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "rechte Leiste, ⌥⌘B" } },
+        "en": { "stringUnit": { "state": "translated", "value": "right panel, ⌥⌘B" } }
+      }
+    },
+    "Kanboard-Adresse (JSON-RPC, endet auf /jsonrpc.php)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kanboard-Adresse (JSON-RPC, endet auf /jsonrpc.php)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Kanboard address (JSON-RPC, ends in /jsonrpc.php)" } }
+      }
+    },
+    "Kanboard-Token (gesetzt, neu eingeben zum Ersetzen)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kanboard-Token (gesetzt, neu eingeben zum Ersetzen)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Kanboard token (set, re-enter to replace)" } }
+      }
+    },
+    "Kanboard-Token (API-Token)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kanboard-Token (API-Token)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Kanboard token (API token)" } }
+      }
+    },
+    "Rechte Leiste ein/aus": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte Leiste ein/aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggle Right Panel"
+          }
+        }
+      }
+    },
     "Rundes X": {
       "localizations": {
         "de": {

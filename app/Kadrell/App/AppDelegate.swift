@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var bar: StatusBarView { current.bar }
     private var split: ThinSplitView { current.split }
     private var sidebarScroll: NSScrollView { current.sidebarScroll }
+    private var rightContainer: NSView { current.rightContainer }
     private var sidebar: SidebarView { current.sidebar }
     var workspace: WorkspaceView { current.workspace }
     let store = GroupStore()
@@ -213,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wire(c)
         if registry != nil { reloadViews() }
         c.show()
+        if !c.rightContainer.isHidden { refreshTickets() }
     }
 
     private func persistWindows() { Profile.defaults.set(windows.map(\.index).sorted(), forKey: "windows.open") }
@@ -244,6 +246,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onCloseSession = { [weak self] key, force in self?.closeSession(key, force: force) }
         workspace.onEmptyClick = { [weak self] in self?.openNewSession(groupId: nil) }
         workspace.onRecheckCLI = { [weak self] in Task { await self?.recheckCLI() } }
+        c.ticketPanel.onImplement = { [weak self] ticket in self?.implementTicket(ticket) }
+        c.ticketPanel.onRefresh = { [weak self] in self?.refreshTickets() }
         sidebar.onSelect = { [weak self, weak workspace] ids, mode in
             guard let self, let workspace else { return }
             // Eine einzelne Session anklicken quittiert ihre Marke „neu“, eine ganze Gruppe nicht.
@@ -573,7 +577,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let before = attention.unseen
         let changed = attention.update(sessions: sessions, waiting: waiting,
                                        statuses: sessions.filter { attach?.isAttached($0.key) ?? false }.mapValues(\.status),
-                                       focused: workspace.focused, isKey: window?.isKeyWindow != false)
+                                       focused: workspace.focused, looking: workspace.visibleTiles, isKey: window?.isKeyWindow != false)
         for c in windows {
             if attention.unseen != before { c.sidebar.unread = attention.unseen; c.sidebar.needsDisplay = true }
             c.sidebar.flash(waiting: changed.waiting, done: changed.done)
@@ -742,6 +746,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let toggleGroups = NSMenuItem(title: String(localized: "Alle Gruppen auf-/zuklappen", bundle: Bundle.app), action: #selector(menuToggleGroups), keyEquivalent: "b")
         toggleGroups.keyEquivalentModifierMask = [.command, .shift]
         view.addItem(toggleGroups)
+        let rightPanel = NSMenuItem(title: String(localized: "Rechte Leiste ein/aus", bundle: Bundle.app), action: #selector(menuRightPanel), keyEquivalent: "b")
+        rightPanel.keyEquivalentModifierMask = [.command, .option]
+        view.addItem(rightPanel)
         view.addItem(.separator())
         view.addItem(withTitle: String(localized: "Terminal-Schrift größer", bundle: Bundle.app), action: #selector(menuFontBigger), keyEquivalent: "+")
         view.addItem(withTitle: String(localized: "Terminal-Schrift kleiner", bundle: Bundle.app), action: #selector(menuFontSmaller), keyEquivalent: "-")
@@ -872,6 +879,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuSidebar() {
         sidebarScroll.isHidden.toggle()
         split.adjustSubviews()
+    }
+    @objc private func menuRightPanel() {
+        rightContainer.isHidden.toggle()
+        if !rightContainer.isHidden {
+            if rightContainer.frame.width < 120 { current.ensureRightWidth() }
+            refreshTickets()
+            window.makeFirstResponder(current.rightContainer.search)
+        }
+        split.adjustSubviews()
+        Settings.rightPanelVisible = !rightContainer.isHidden
     }
     @objc private func menuToggleGroups() { sidebar.toggleAllGroups() }
     @objc private func menuHotkey(_ sender: NSMenuItem) {
@@ -1101,9 +1118,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startShell(group: g, cwd: g.cwd)
     }
 
-    private func openNewSession(groupId: String?) {
+    private func openNewSession(groupId: String?, prompt: String? = nil) {
         if let gid = groupId, let g = store.group(id: gid) {
-            if !pickRemoteSession(in: g) { startSession(group: g, cwd: g.cwd) }
+            if !pickRemoteSession(in: g) { startSession(group: g, cwd: g.cwd, prompt: prompt) }
             return
         }
         let sessions = workspace.sessions
@@ -1116,9 +1133,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let view = NewSessionView(model: model, onOpenSettings: { [weak self] in self?.menuSettings() }) { [weak self] g, cwd in
             self?.sheets.dismiss()
-            self?.startSession(group: g, cwd: cwd)
+            self?.startSession(group: g, cwd: cwd, prompt: prompt)
         }
         sheets.present(view, onPrimary: { model.start() })
+    }
+
+    /// „implement“ an einem Ticket: Ordner wählen wie bei ⌘N, die neue Session startet mit der Ticket-Prompt.
+    private func implementTicket(_ ticket: Ticket) {
+        openNewSession(groupId: nil, prompt: ticket.implementPrompt())
+    }
+
+    /// Lädt die Tickets in die rechte Leiste des aktiven Fensters. Ohne Endpoint oder Token bleibt es bei einer Meldung.
+    func refreshTickets() {
+        let panel = current.ticketPanel
+        guard !Settings.kanboardURL.isEmpty, let url = URL(string: Settings.kanboardURL) else {
+            panel.setTickets([])
+            panel.status = String(localized: "Kein Ticket-Provider. In den Einstellungen einrichten.", bundle: Bundle.app)
+            return
+        }
+        panel.status = String(localized: "Lade Tickets …", bundle: Bundle.app)
+        Task {
+            let token = await Keychain.read(service: KanboardProvider.keychainService, account: KanboardProvider.keychainAccount) ?? ""
+            guard !token.isEmpty else {
+                panel.status = String(localized: "Kein Kanboard-Token. In den Einstellungen setzen.", bundle: Bundle.app)
+                return
+            }
+            do {
+                let tickets = try await KanboardProvider(endpoint: url, token: token).fetch()
+                panel.setTickets(tickets)
+                panel.status = tickets.isEmpty ? String(localized: "Keine offenen Tickets", bundle: Bundle.app) : nil
+            } catch {
+                panel.status = error.localizedDescription
+            }
+        }
     }
 
     /// Kadrell vergibt die sessionId selbst (`claude --session-id`): die Kachel steht sofort, kein Warten auf `claude agents`.
@@ -1202,28 +1249,30 @@ final class ThinSplitView: NSSplitView {
     override var dividerColor: NSColor { Theme.line }
     override var dividerThickness: CGFloat { 1 }
 
-    private var grabRect: CGRect {
-        guard arrangedSubviews.count > 1, !arrangedSubviews[0].isHidden else { return .zero }
-        let x = arrangedSubviews[0].frame.maxX
-        return CGRect(x: x - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
+    /// Ein greifbares Rechteck je sichtbarem Trenner (zwischen zwei nicht versteckten Regionen).
+    private var grabRects: [CGRect] {
+        let visible = arrangedSubviews.filter { !$0.isHidden }
+        guard visible.count > 1 else { return [] }
+        return visible.dropLast().map { v in
+            CGRect(x: v.frame.maxX - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
+        }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
-        return grabRect.contains(p) ? self : super.hitTest(point)
+        return grabRects.contains(where: { $0.contains(p) }) ? self : super.hitTest(point)
     }
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        let r = grabRect
-        if !r.isEmpty { addCursorRect(r, cursor: .resizeLeftRight) }
+        for r in grabRects where !r.isEmpty { addCursorRect(r, cursor: .resizeLeftRight) }
     }
 
     override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
-        addTrackingArea(NSTrackingArea(rect: grabRect, options: [.mouseMoved, .activeInKeyWindow], owner: self))
+        for r in grabRects { addTrackingArea(NSTrackingArea(rect: r, options: [.mouseMoved, .activeInKeyWindow], owner: self)) }
     }
     override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); updateTrackingAreas() }
 }

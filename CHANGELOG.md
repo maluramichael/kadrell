@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.56.0 (2026-09-18)
+
+- Feature: Das Fenster hat jetzt drei Bereiche (Baum, Terminals, rechte Leiste). Jeder lässt sich ein- und ausblenden und in der Breite ziehen.
+- Feature: Neue rechte Leiste (⌥⌘B) zeigt offene Tickets aus Kanboard. Ein Klick auf „implement" an einem Ticket startet eine neue Session mit dem Ticket als erste Nachricht.
+- Feature: Die rechte Leiste hat ein Suchfeld, das die Tickets nach Titel und Projekt filtert.
+
 ## 1.55.0 (2026-09-18)
 
 - Feature: Neben dem Kreis-Knopf hat jede Kachel jetzt einen Quadrat-Knopf, der sie auf die ganze Arbeitsfläche zoomt (wie ⌥Z). Im Zoom wird der Knopf zum Minus und verkleinert wieder.
