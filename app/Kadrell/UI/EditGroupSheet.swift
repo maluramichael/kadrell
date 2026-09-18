@@ -23,11 +23,10 @@ final class EditGroupModel {
     }
 }
 
-/// Stift am Gruppen-Header: Name und Farbe. Klick auf die Farbe klappt die Paletten auf. Der Ordner bleibt fest.
+/// Stift am Gruppen-Header: Name und Farbe aus einer Palette. Die Paletten stehen immer offen. Der Ordner bleibt fest.
 struct EditGroupView: View {
     @Bindable var model: EditGroupModel
     @FocusState private var focused: Bool
-    @State private var showPalettes = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,16 +35,11 @@ struct EditGroupView: View {
                 TextField("Name", text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                     .focused($focused)
                     .onSubmit { model.save() }
-                Button { showPalettes.toggle() } label: {
-                    Capsule().fill(model.color).frame(width: 44 * Theme.scale, height: 20 * Theme.scale)
-                        .overlay(Capsule().stroke(Theme.mutedColor, lineWidth: showPalettes ? 1.5 : 0))
-                }
-                .buttonStyle(.plain).kbdFocusRing()
-                .accessibilityLabel(String(localized: "Farbe wählen", bundle: Bundle.app))
-                .help("Farbe aus einer Palette wählen")
+                Capsule().fill(model.color).frame(width: 44 * Theme.scale, height: 20 * Theme.scale)
+                    .accessibilityHidden(true)
             }
             .padding(14)
-            if showPalettes { palettes }
+            palettes
             Text(Theme.shortPath(model.group.cwd)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
             DialogFoot(hint: String(localized: "Esc abbrechen", bundle: Bundle.app), button: String(localized: "Speichern", bundle: Bundle.app)) { model.save() }
@@ -62,7 +56,7 @@ struct EditGroupView: View {
                 HStack(spacing: 4) {
                     Text(p.name).foregroundStyle(Color(nsColor: Theme.sub)).frame(width: 110 * Theme.scale, alignment: .leading)
                     ForEach(p.colors, id: \.self) { hex in
-                        Button { model.color = Color(nsColor: NSColor(hexString: hex)); showPalettes = false } label: {
+                        Button { model.color = Color(nsColor: NSColor(hexString: hex)) } label: {
                             Rectangle().fill(Color(nsColor: NSColor(hexString: hex))).frame(width: size, height: size)
                                 .overlay(Rectangle().stroke(Theme.fgColor, lineWidth: hex == current ? 2 : 0))
                         }
@@ -71,10 +65,6 @@ struct EditGroupView: View {
                         .accessibilityAddTraits(hex == current ? .isSelected : [])
                     }
                 }
-            }
-            HStack(spacing: 4) {
-                Text("Eigene").foregroundStyle(Color(nsColor: Theme.sub)).frame(width: 110 * Theme.scale, alignment: .leading)
-                ColorPicker(String(localized: "Eigene Farbe", bundle: Bundle.app), selection: $model.color, supportsOpacity: false).labelsHidden()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

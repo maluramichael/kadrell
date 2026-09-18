@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.55.2 (2026-09-18)
+
+- Änderung: Im Dialog „Gruppe bearbeiten" stehen die Farbpaletten jetzt immer offen, statt sich erst auf Klick aufzuklappen.
+- Entfernt: Die eigene Farbauswahl (Custom) im Gruppen-Dialog ist weg, die Paletten reichen.
+
 ## 1.55.1 (2026-09-18)
 
 - Entfernt: Der einmalige Hinweis „⌘⏎ startet eine zweite Session im selben Ordner" nach der ersten Session erscheint nicht mehr.
