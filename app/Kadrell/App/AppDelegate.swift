@@ -454,6 +454,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.accounts.recordUsage(u)
             self.accounts.considerAutoSwitch(u)
         }
+        if let cached = accounts.active?.usage {
+            let seeded = cached.asUsage()
+            usage.seed(seeded, at: cached.at)
+            bar.usage = seeded
+            bar.needsDisplay = true
+        }
         usage.start()
         accounts.onChange = { [weak self] in self?.refreshAccountBars() }
         accounts.onAutoSwitch = { [weak self] to in self?.notifyAutoSwitch(to) }

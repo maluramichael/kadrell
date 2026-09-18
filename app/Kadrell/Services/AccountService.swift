@@ -17,6 +17,11 @@ struct CachedUsage: Codable, Equatable, Sendable {
 
     func session(at now: Date) -> Int? { freed(session, sessionResets, now) }
     func weekly(at now: Date) -> Int? { freed(weekly, weeklyResets, now) }
+    /// Als Live-`Usage` zum Vorbelegen der Leiste beim Start, reset-bereinigt wie im Menü (Fable folgt dem 7-Tage-Reset).
+    func asUsage(at now: Date = Date()) -> Usage {
+        Usage(session: session(at: now), weekly: weekly(at: now), fable: freed(fable, weeklyResets, now),
+              sessionResets: sessionResets, weeklyResets: weeklyResets)
+    }
     /// Bindender Wert für den Auto-Wechsel: der höhere von 5 h und 7 Tagen, jeweils reset-bereinigt.
     func used(at now: Date = Date()) -> Int { max(session(at: now) ?? 0, weekly(at: now) ?? 0) }
     private func freed(_ v: Int?, _ resets: Date?, _ now: Date) -> Int? {

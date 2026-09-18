@@ -33,4 +33,17 @@ final class AccountServiceTests: XCTestCase {
         XCTAssertNil(AccountService.object(from: "kein json"))
         XCTAssertNil(AccountService.oauth(from: "{}"))
     }
+
+    /// Seed für die Leiste: abgelaufene Fenster kommen reset-bereinigt als 0 zurück, laufende behalten ihren Wert.
+    func testAsUsageAppliesResets() {
+        let now = Date()
+        let cached = CachedUsage(session: 18, weekly: 60, fable: 19,
+                                 sessionResets: now.addingTimeInterval(-60),   // 5h schon zurückgesetzt
+                                 weeklyResets: now.addingTimeInterval(3600),    // 7d/Fable noch offen
+                                 at: now)
+        let u = cached.asUsage(at: now)
+        XCTAssertEqual(u.session, 0, "abgelaufenes 5h-Fenster ist frei")
+        XCTAssertEqual(u.weekly, 60, "laufendes 7d-Fenster behält den Wert")
+        XCTAssertEqual(u.fable, 19, "Fable folgt dem 7d-Reset, hier noch offen")
+    }
 }

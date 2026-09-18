@@ -65,6 +65,17 @@ final class UsageService {
     private(set) var usage = Usage.empty
     var onChange: ((Usage) -> Void)?
     private var task: Task<Void, Never>?
+    /// Wann der geseedete Stand gemessen wurde, um den ersten Poll entsprechend nach hinten zu schieben.
+    private var seededAt: Date?
+
+    /// Beim Start mit dem letzten bekannten Stand (persistierter Account-Cache) vorbelegen, damit die Leiste nicht
+    /// bei „–%“ steht, bis der erste Poll durch ist. Löst bewusst kein `onChange` aus (kein Auto-Wechsel auf
+    /// veraltete Werte); die Leiste setzt der Aufrufer direkt. Greift nur, solange noch kein Live-Stand da ist.
+    func seed(_ u: Usage, at: Date) {
+        guard usage == .empty else { return }
+        usage = u
+        seededAt = at
+    }
 
     /// Alle drei Minuten; bei HTTP 429 (der Endpunkt limitiert streng) verdoppelt sich die Pause bis 15 min,
     /// `Retry-After` wird beachtet. Ein Fehler verwirft nie die letzten bekannten Werte.
@@ -72,6 +83,12 @@ final class UsageService {
         task?.cancel()
         task = Task { [weak self] in
             var delay = interval
+            // Ist der geseedete Stand noch frisch, den ersten Poll bis zum Ende des Intervalls aufschieben: sonst
+            // hämmert jeder (Debug-)Neustart sofort gegen den streng limitierten Endpunkt und holt sich ein 429.
+            if let seededAt = self?.seededAt {
+                let wait = interval - Date().timeIntervalSince(seededAt)
+                if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            }
             while !Task.isCancelled {
                 if let self {
                     let r = await UsageService.fetch()
