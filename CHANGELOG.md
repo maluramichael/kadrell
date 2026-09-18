@@ -2,9 +2,9 @@
 
 Neueste Version oben.
 
-## 1.50.2 (2026-09-18)
+## 1.50.3 (2026-09-18)
 
-- Fix: Im Suchfeld (⌘N) und in den Pfadfeldern der Einstellungen sitzt der Text jetzt wirklich senkrecht mittig im Feld statt am oberen Rand.
+- Fix: Im Suchfeld (⌘N) und in den Pfadfeldern der Einstellungen sitzt der Text jetzt senkrecht mittig im Feld statt am oberen Rand, und der Platzhalter erscheint nur noch einmal statt doppelt.
 
 ## 1.50.1 (2026-09-18)
 

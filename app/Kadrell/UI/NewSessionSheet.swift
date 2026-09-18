@@ -147,7 +147,7 @@ struct NewSessionView: View {
             Text("NEUE SESSION").dialogTitle()
             PathField(text: $model.query, placeholder: String(localized: "Projekt suchen oder Pfad tippen (~/d/p/kad)", bundle: Bundle.app),
                       onTab: model.tab, onSubmit: model.start, onMove: model.move)
-                .frame(height: 22 * Theme.scale).padding(14)
+                .padding(14)
             Divider().overlay(Theme.lineColor)
             list
             Divider().overlay(Theme.lineColor)
@@ -212,10 +212,32 @@ struct NewSessionView: View {
     }
 }
 
-/// AppKit-Textfeld für Pfade: Cursor am Ende, Tab vervollständigt, Pfeile wählen, ⏎ startet.
-struct PathField: NSViewRepresentable {
+/// Pfad-Eingabe: das AppKit-Feld darunter plus ein Platzhalter als SwiftUI-Text. Der Platzhalter liegt bewusst nicht
+/// im NSTextField: dessen Zelle zeichnet ihn stur an der Oberkante, nicht mittig. Der getippte Text dagegen läuft
+/// über den Feldeditor, den `CenteredTextFieldCell` senkrecht mittig setzt.
+struct PathField: View {
     @Binding var text: String
     var placeholder = ""
+    var autofocus = true
+    var size: CGFloat = 13
+    var onTab: () -> Void
+    var onSubmit: () -> Void
+    var onMove: (Int) -> Void
+
+    var body: some View {
+        PathFieldRep(text: $text, autofocus: autofocus, size: size, onTab: onTab, onSubmit: onSubmit, onMove: onMove)
+            .overlay(alignment: .leading) {
+                if text.isEmpty {
+                    Text(placeholder).font(Theme.ui(size)).foregroundStyle(Theme.mutedColor)
+                        .lineLimit(1).allowsHitTesting(false).padding(.leading, 2)
+                }
+            }
+    }
+}
+
+/// AppKit-Textfeld für Pfade: Cursor am Ende, Tab vervollständigt, Pfeile wählen, ⏎ startet.
+struct PathFieldRep: NSViewRepresentable {
+    @Binding var text: String
     var autofocus = true
     /// Schriftgröße in unskalierten Punkten, damit das Feld in den Einstellungen so hoch wird wie die Menüs daneben.
     var size: CGFloat = 13
@@ -233,8 +255,6 @@ struct PathField: NSViewRepresentable {
         // Kein nativer Fokusring (passt nicht zum Dialog-Stil), stattdessen ein eigener Rahmen bei Tastaturfokus,
         // siehe Coordinator.controlTextDidBeginEditing/EndEditing: sonst sieht ein Tab-Nutzer den Fokus gar nicht.
         f.focusRingType = .none
-        f.setContentHuggingPriority(.init(1), for: .vertical)
-        f.setContentCompressionResistancePriority(.init(1), for: .vertical)
         f.wantsLayer = true
         f.layer?.cornerRadius = 3
         f.font = Theme.font(size * Theme.scale)
@@ -245,7 +265,6 @@ struct PathField: NSViewRepresentable {
         f.lineBreakMode = .byClipping
         f.delegate = context.coordinator
         f.stringValue = text
-        f.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [.font: Theme.font(size * Theme.scale), .foregroundColor: Theme.muted])
         if autofocus { DispatchQueue.main.async {
             f.window?.makeFirstResponder(f)
             f.currentEditor()?.selectedRange = NSRange(location: f.stringValue.utf16.count, length: 0)
@@ -262,8 +281,8 @@ struct PathField: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: PathField
-        init(_ p: PathField) { parent = p }
+        var parent: PathFieldRep
+        init(_ p: PathFieldRep) { parent = p }
         func controlTextDidChange(_ n: Notification) {
             if let f = n.object as? NSTextField { parent.text = f.stringValue }
         }

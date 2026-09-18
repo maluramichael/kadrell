@@ -107,12 +107,4 @@ final class CenteredTextFieldCell: NSTextFieldCell {
         super.select(withFrame: centered(rect), in: view, editor: editor, delegate: delegate, start: start, length: length)
     }
 
-    /// Text und Platzhalter zeichnet NSTextFieldCell fest an der Oberkante und ignoriert dabei jeden Rahmen-Offset,
-    /// den man ihr gibt. Darum hier selbst zeichnen, senkrecht mittig. Gilt nur, solange nicht editiert wird
-    /// (beim Tippen übernimmt der Feldeditor, siehe oben).
-    override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) {
-        let text = attributedStringValue.length > 0 ? attributedStringValue : (placeholderAttributedString ?? NSAttributedString())
-        guard text.length > 0 else { return }
-        text.draw(at: CGPoint(x: cellFrame.minX + 2, y: cellFrame.midY - text.size().height / 2))
-    }
 }
