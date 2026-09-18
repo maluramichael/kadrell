@@ -94,6 +94,8 @@ enum Settings {
     static var activeAccountId: String? { get { Profile.defaults.string(forKey: "accounts.active") } set { store("accounts.active", newValue) } }
     /// Bei erreichtem Limit automatisch auf den nächsten Account wechseln. Default aus.
     static var autoswitchEnabled: Bool { get { value("autoswitch.enabled", false) } set { store("autoswitch.enabled", newValue) } }
+    /// Nach einem automatischen Wechsel einmal melden, welcher Account jetzt aktiv ist. „Nicht mehr anzeigen" in der Meldung schaltet es ab.
+    static var autoswitchNotice: Bool { get { value("autoswitch.notice", true) } set { store("autoswitch.notice", newValue) } }
     /// Ab welcher Auslastung (5 h oder 7 Tage) der Auto-Wechsel greift.
     static let autoswitchRange = 50.0...99.0
     static var autoswitchThreshold: Int {

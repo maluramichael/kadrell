@@ -314,6 +314,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Nach einem automatischen Account-Wechsel einmal melden, welcher Account jetzt aktiv ist. Die
+    /// „Nicht mehr anzeigen"-Checkbox (NSAlert-Suppression) schaltet die Meldung dauerhaft ab, wieder an
+    /// in den Einstellungen. Als Sheet am Fenster, damit sie den Fokus paralleler Arbeit nicht stiehlt.
+    private func notifyAutoSwitch(_ to: Account) {
+        guard Settings.autoswitchNotice else { return }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Account automatisch gewechselt", bundle: Bundle.app)
+        alert.informativeText = String(localized: "Jetzt aktiv: „\(to.title)“. Grund: Nutzungslimit erreicht.", bundle: Bundle.app)
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = String(localized: "Nicht mehr anzeigen", bundle: Bundle.app)
+        let apply = { if alert.suppressionButton?.state == .on { Settings.autoswitchNotice = false } }
+        if let window = bar.window {
+            alert.beginSheetModal(for: window) { _ in apply() }
+        } else {
+            alert.runModal()
+            apply()
+        }
+    }
+
     private func warnNoAccount() {
         let alert = NSAlert()
         alert.messageText = String(localized: "Kein angemeldeter Claude-Account gefunden", bundle: Bundle.app)
@@ -437,6 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         usage.start()
         accounts.onChange = { [weak self] in self?.refreshAccountBars() }
+        accounts.onAutoSwitch = { [weak self] to in self?.notifyAutoSwitch(to) }
         updateChecker.onChange = { [weak self] m in self?.bar.updateAvailable = m; self?.bar.needsDisplay = true }
         updateChecker.start()
         Notifications.setup()

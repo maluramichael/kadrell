@@ -55,6 +55,8 @@ final class AccountService {
     private(set) var accounts: [Account] = []
     private(set) var activeId: String? { didSet { Settings.activeAccountId = activeId } }
     var onChange: (() -> Void)?
+    /// Nach einem automatischen Wechsel aufgerufen, mit dem jetzt aktiven Account (für die Meldung an den Nutzer).
+    var onAutoSwitch: ((Account) -> Void)?
     private var lastSwitch = Date.distantPast
     /// Ein Wechsel läuft: kein zweiter parallel (der zweite läse den halb geschriebenen Eintrag).
     private var busy = false
@@ -187,7 +189,12 @@ final class AccountService {
         let used = max(usage.session ?? 0, usage.weekly ?? 0)
         guard used >= Settings.autoswitchThreshold, Date().timeIntervalSince(lastSwitch) >= Self.cooldown,
               let target = bestTarget(excluding: activeId, activeUsed: used) else { return }
-        Task { if await switchTo(target) { Feedback.play(.toggle) } }
+        Task {
+            if await switchTo(target), let to = accounts.first(where: { $0.id == target }) {
+                Feedback.play(.toggle)
+                onAutoSwitch?(to)
+            }
+        }
     }
 
     /// Der Account mit dem meisten Rest laut gecachtem Stand, aber nur wenn er den aktiven um die Hysterese-Marge

@@ -185,6 +185,7 @@ struct SettingsView: View {
                     slider(Binding(get: { Double(model.binding(\.autoswitchThreshold).wrappedValue) }, set: { model.binding(\.autoswitchThreshold).wrappedValue = Int($0) }),
                            Settings.autoswitchRange, step: 1, unit: "%")
                 }
+                setting(String(localized: "Wechsel-Meldung anzeigen", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchNotice)) }
             }
 
             heading(String(localized: "Darstellung", bundle: Bundle.app))

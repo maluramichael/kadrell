@@ -926,6 +926,70 @@
         }
       }
     },
+    "Account automatisch gewechselt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account automatisch gewechselt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account switched automatically"
+          }
+        }
+      }
+    },
+    "Jetzt aktiv: „%@“. Grund: Nutzungslimit erreicht.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt aktiv: „%@“. Grund: Nutzungslimit erreicht."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Now active: “%@”. Reason: usage limit reached."
+          }
+        }
+      }
+    },
+    "Nicht mehr anzeigen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht mehr anzeigen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don’t show again"
+          }
+        }
+      }
+    },
+    "Wechsel-Meldung anzeigen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wechsel-Meldung anzeigen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show switch notice"
+          }
+        }
+      }
+    },
     "BEENDET · KLICK SETZT FORT": {
       "localizations": {
         "de": {

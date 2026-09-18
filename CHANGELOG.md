@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.53.0 (2026-09-18)
+
+- Feature: Nach einem automatischen Account-Wechsel bei erreichtem Limit erscheint jetzt eine Meldung, welcher Account gerade aktiv ist. Sie lässt sich mit „Nicht mehr anzeigen" dauerhaft abschalten und in den Einstellungen wieder einschalten.
+
 ## 1.52.4 (2026-09-18)
 
 - Fix: Eine fertige Session bleibt jetzt auf „untätig" und kippt nicht mehr nach etwa einer Minute Nichtstun fälschlich auf „wartet" (Sanduhr).
