@@ -60,9 +60,12 @@ final class SettingsModel {
                 set: { root[keyPath: key] = $0; self.changed() })
     }
 
+    /// Erst anwenden, dann hochzählen: SwiftUI zeichnet beim Hochzählen neu und liest dabei Theme und UI-Größe, die `onApply` setzt.
     private func changed() {
-        revision += 1
-        Task { @MainActor [weak self] in self?.onApply?() }
+        Task { @MainActor [weak self] in
+            self?.onApply?()
+            self?.revision += 1
+        }
     }
 
     /// Nächster Tastendruck wird das Kürzel. Esc bricht ab, ⌫ entfernt es. Läuft vor OverlayPanel und Terminal.
@@ -204,7 +207,7 @@ struct SettingsView: View {
                 setting(String(localized: "Terminal auf der GPU zeichnen (Metal)", bundle: Bundle.app)) { onOff(model.binding(\.terminalMetal)) }
             }
 
-            heading(String(localized: "Anpassen", bundle: Bundle.app), note: String(localized: "Bild nur hinter den Kacheln", bundle: Bundle.app))
+            heading(String(localized: "Anpassen", bundle: Bundle.app), note: String(localized: "Bild hinter Baum und Kacheln", bundle: Bundle.app))
             table {
                 setting(String(localized: "Hintergrundbild", bundle: Bundle.app)) {
                     let image = model.binding(\.backgroundImage)
@@ -221,7 +224,7 @@ struct SettingsView: View {
                         iconButton("xmark") { image.wrappedValue = "" }.help("Kein Bild")
                     }
                 }
-                setting(String(localized: "Deckkraft der Kacheln", bundle: Bundle.app)) { slider(model.binding(\.tileOpacity), 0...100, step: 1, factor: 100, unit: "%") }
+                setting(String(localized: "Deckkraft von Baum und Kacheln", bundle: Bundle.app)) { slider(model.binding(\.tileOpacity), 0...100, step: 1, factor: 100, unit: "%") }
             }
 
             heading(String(localized: "Baum und Kacheln", bundle: Bundle.app))

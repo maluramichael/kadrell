@@ -30,6 +30,13 @@ final class OverlayPanel: ChildPanel {
         }
     }
 
+    /// Fenster, Hintergrund und Rand ziehen bei einem Themewechsel nach, solange der Dialog offen ist (Einstellungen).
+    func applyTheme() {
+        appearance = Theme.appearance
+        backgroundColor = Theme.panel
+        contentViewController?.view.layer?.borderColor = Theme.line.cgColor
+    }
+
     private func reanchor() {
         let f = frame
         let o = NSPoint(x: anchor.x - f.width / 2, y: anchor.y - f.height / 2)

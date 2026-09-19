@@ -81,8 +81,15 @@ final class CellView: NSView {
     var bodyColor: NSColor { state.groupColor.mixed(0.05, into: Theme.bg).withAlphaComponent(CGFloat(Settings.tileOpacity)) }
 
     override func draw(_ dirtyRect: NSRect) {
+        // Unter dem Terminal nicht füllen: es malt denselben Grund mit derselben Deckkraft selbst. Doppelt gemalt wäre
+        // das Terminal bei Deckkraft unter 100 % dunkler als der Innenabstand und der Rand drumherum.
+        let ground = NSBezierPath(rect: bounds)
+        if subviews.contains(where: { $0 is KadrellTerminalView }) {
+            ground.append(NSBezierPath(rect: terminalRect))
+            ground.windingRule = .evenOdd
+        }
         bodyColor.setFill()
-        bounds.fill()
+        ground.fill()
         if !state.headerHidden { Theme.scaled(headerRect) { drawHeader($0) } }
         Theme.scaled(bodyRect) { drawBody($0) }
     }

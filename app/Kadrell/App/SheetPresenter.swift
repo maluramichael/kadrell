@@ -38,6 +38,8 @@ final class SheetPresenter {
         if let window = host()?.window { p.open(over: window) }
     }
 
+    func applyTheme() { overlay?.applyTheme() }
+
     func dismiss() {
         overlay?.dismiss()
         overlay = nil

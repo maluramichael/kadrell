@@ -271,7 +271,7 @@ final class SidebarView: NSView {
 
     /// Zeilen, Zeichnen und Trefferflächen in unskalierten Punkten, siehe `local`.
     override func draw(_ dirty: NSRect) {
-        Theme.panel.setFill()
+        Theme.panel.withAlphaComponent(CGFloat(Settings.tileOpacity)).setFill()
         dirty.fill()
         Theme.scaled(bounds) { _ in drawRows(dirty.scaled(1 / Theme.scale)) }
     }

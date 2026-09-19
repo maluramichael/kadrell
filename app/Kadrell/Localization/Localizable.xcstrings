@@ -1150,18 +1150,18 @@
         }
       }
     },
-    "Bild nur hinter den Kacheln": {
+    "Bild hinter Baum und Kacheln": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bild nur hinter den Kacheln"
+            "value": "Bild hinter Baum und Kacheln"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "image only behind the tiles"
+            "value": "image behind tree and tiles"
           }
         }
       }
@@ -1374,18 +1374,18 @@
         }
       }
     },
-    "Deckkraft der Kacheln": {
+    "Deckkraft von Baum und Kacheln": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deckkraft der Kacheln"
+            "value": "Deckkraft von Baum und Kacheln"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tile opacity"
+            "value": "Tree and tile opacity"
           }
         }
       }

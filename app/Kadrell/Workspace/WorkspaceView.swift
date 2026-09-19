@@ -516,12 +516,13 @@ final class WorkspaceView: NSView {
         // Hängt schon in einem anderen Fenster: dort lassen, die Kachel zeigt den Hinweis (siehe `focusTerminal`).
         guard let t = attach?.terminal(for: key), host(of: t) == nil || host(of: t) === self else { return }
         if t.superview !== cell { cell.addSubview(t) }
-        let bg = cell.bodyColor
-        if t.nativeBackgroundColor != bg { t.nativeBackgroundColor = bg }
         let body = cell.terminalRect
         if t.frame != body { t.frame = body }
         // Erst im Fenster umschalten, so will es SwiftTerm. Scheitert Metal, bleibt CoreGraphics.
         if t.window != nil, t.isUsingMetalRenderer != Settings.terminalMetal { try? t.setUseMetal(Settings.terminalMetal) }
+        // Nach dem Umschalten: nur der Metal-Renderer braucht die vormultiplizierte Farbe (siehe `premultiplied`).
+        let bg = t.isUsingMetalRenderer ? cell.bodyColor.premultiplied : cell.bodyColor
+        if t.nativeBackgroundColor != bg { t.nativeBackgroundColor = bg }
     }
 
     /// Arbeitsfläche, in der das Terminal hängt. nil: frei, auch wenn es noch in einer schon entfernten Kachel steckt.
@@ -554,8 +555,7 @@ final class WorkspaceView: NSView {
             v.pulse = pulse
             if !v.state.headerHidden { v.setNeedsDisplay(v.dotRect) }
         }
-        // Stack-Zeilen zeichnet die Fläche selbst: nur die Punkte laufender Sessions pulsieren, nicht die ganze
-        // Fläche samt Hintergrundbild (siehe `drawBackground`).
+        // Stack-Zeilen zeichnet die Fläche selbst: nur die Punkte laufender Sessions pulsieren, nicht die ganze Fläche.
         for (r, key) in stackRows where sessions[key].map({ $0.status == .running || $0.hasRunningShell }) == true && (attach?.isAttached(key) ?? false) {
             setNeedsDisplay(stackDotRect(r).insetBy(dx: -1, dy: -1))
         }
@@ -590,34 +590,6 @@ final class WorkspaceView: NSView {
         if !polled { return .loading }
         if sessions.isEmpty { return .noSessions }
         return .hint
-    }
-
-    /// Hintergrundbild, einmal auf die Größe der Fläche gerechnet: Stack-Zeilen zeichnen oft neu, das Bild soll dabei nur kopiert werden.
-    private var background: (path: String, size: CGSize, image: CGImage?)?
-
-    private func drawBackground() {
-        let path = Settings.backgroundImage, px = convertToBacking(bounds).size
-        guard !path.isEmpty, px.width >= 1, px.height >= 1 else { return }
-        if background?.path != path || background?.size != px {
-            var scaled: CGImage?
-            if let src = NSImage(contentsOfFile: path)?.cgImage(forProposedRect: nil, context: nil, hints: nil),
-               let ctx = CGContext(data: nil, width: Int(px.width), height: Int(px.height), bitsPerComponent: 8, bytesPerRow: 0,
-                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) {
-                // Füllend wie „aspect fill“: die kürzere Seite passt, der Rest wird mittig abgeschnitten.
-                let s = max(px.width / CGFloat(src.width), px.height / CGFloat(src.height))
-                let w = CGFloat(src.width) * s, h = CGFloat(src.height) * s
-                ctx.interpolationQuality = .high
-                ctx.draw(src, in: CGRect(x: (px.width - w) / 2, y: (px.height - h) / 2, width: w, height: h))
-                scaled = ctx.makeImage()
-            }
-            background = (path, px, scaled)
-        }
-        guard let img = background?.image, let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.saveGState()
-        ctx.translateBy(x: 0, y: bounds.height)
-        ctx.scaleBy(x: 1, y: -1)
-        ctx.draw(img, in: bounds)
-        ctx.restoreGState()
     }
 
     /// Knöpfe im Leerzustand nebeneinander, mittig um `midX` in den logischen Koordinaten von `Theme.scaled`: Pillen
@@ -692,10 +664,8 @@ final class WorkspaceView: NSView {
         }
     }
 
+    /// Der Grund (Theme-Farbe, Hintergrundbild) liegt in der `WallpaperView` dahinter.
     override func draw(_ dirtyRect: NSRect) {
-        Theme.bg.setFill()
-        dirtyRect.fill()
-        drawBackground()
         if tiles.isEmpty {
             var collected: [(CGRect, () -> Void)] = []
             switch emptyReason {

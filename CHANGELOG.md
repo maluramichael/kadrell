@@ -2,6 +2,13 @@
 
 Neueste Version oben.
 
+## 1.56.0 (2026-09-19)
+
+- Änderung: Das Hintergrundbild füllt jetzt Baum und Arbeitsfläche zusammen, ohne Balken. Der Baum folgt der Deckkraft der Kacheln, unter 100 % scheint das Bild auch dort durch.
+- Fix: Bei Deckkraft unter 100 % ist der Terminalgrund jetzt genauso durchsichtig wie der Rand um das Terminal, statt heller oder dunkler abzustechen. Vorher wirkten besonders helle Farbschemata kaum durchsichtig.
+- Fix: In den Einstellungen wirken Farbschema und UI-Größe sofort im Dialog, vorher zeigte er erst bei der nächsten Änderung den vorigen Stand.
+- Fix: Nach dem Ausblenden des Baums mit ⌘B bleibt keine senkrechte Linie mehr an der Stelle des Trenners stehen.
+
 ## 1.55.2 (2026-09-18)
 
 - Änderung: Im Dialog „Gruppe bearbeiten" stehen die Farbpaletten jetzt immer offen, statt sich erst auf Klick aufzuklappen.

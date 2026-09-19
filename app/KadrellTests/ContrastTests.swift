@@ -32,4 +32,13 @@ final class ContrastTests: XCTestCase {
         let bg = NSColor(hex: 0x000000), fg = NSColor(hex: 0xffffff)
         XCTAssertEqual(fg.ensuringContrast(4.5, against: [bg], toward: NSColor(hex: 0x808080)), fg)
     }
+
+    /// Der Metal-Terminal nimmt RGB als vormultipliziert: aus Weiß bei 30 % Deckkraft wird Grau mit 30 % Alpha.
+    func testPremultipliedScalesRGBByAlpha() {
+        let c = NSColor(srgbRed: 1, green: 0.5, blue: 0, alpha: 0.3).premultiplied
+        XCTAssertEqual(c.redComponent, 0.3, accuracy: 0.001)
+        XCTAssertEqual(c.greenComponent, 0.15, accuracy: 0.001)
+        XCTAssertEqual(c.blueComponent, 0, accuracy: 0.001)
+        XCTAssertEqual(c.alphaComponent, 0.3, accuracy: 0.001)
+    }
 }

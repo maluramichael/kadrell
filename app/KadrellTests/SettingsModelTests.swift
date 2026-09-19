@@ -17,4 +17,18 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(Settings.stackShowPath, original)
         XCTAssertEqual(applied, 2)
     }
+
+    /// SwiftUI zeichnet neu, sobald der Beobachter benachrichtigt wird. Da muss die App das neue Theme schon angewendet haben,
+    /// sonst zeigt der Dialog immer den Stand der vorigen Änderung.
+    func testObserversNotifiedOnlyAfterApply() async throws {
+        final class Box: @unchecked Sendable { var applied = false; var appliedAtNotify: Bool? }
+        let original = Settings.stackShowPath
+        let model = SettingsModel(), box = Box()
+        model.onApply = { box.applied = true }
+        withObservationTracking { _ = model.locale } onChange: { box.appliedAtNotify = box.applied }
+        model.binding(\.stackShowPath).wrappedValue = !original
+        try await Task.sleep(for: .milliseconds(50))
+        Settings.stackShowPath = original
+        XCTAssertEqual(box.appliedAtNotify, true)
+    }
 }

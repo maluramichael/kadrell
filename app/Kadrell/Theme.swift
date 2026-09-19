@@ -214,6 +214,14 @@ extension NSColor {
                        blue: a.blueComponent * fraction + b.blueComponent * (1 - fraction), alpha: 1)
     }
 
+    /// Farbanteile mit dem Alpha multipliziert. SwiftTerms Metal-Renderer löscht seine Fläche mit RGB und Alpha der
+    /// Hintergrundfarbe, die Metal-Ebene rechnet sie aber als vormultipliziert. Ohne das wird ein halbtransparenter
+    /// Terminalgrund zu hell, in hellen Themes fast undurchsichtig.
+    var premultiplied: NSColor {
+        let c = usingColorSpace(.sRGB) ?? self, a = c.alphaComponent
+        return NSColor(srgbRed: c.redComponent * a, green: c.greenComponent * a, blue: c.blueComponent * a, alpha: a)
+    }
+
     /// WCAG-Kontrastverhältnis zu `other` (relative Luminanz nach der W3C-Formel), 1...21.
     func contrastRatio(with other: NSColor) -> CGFloat {
         func luminance(_ c: NSColor) -> CGFloat {

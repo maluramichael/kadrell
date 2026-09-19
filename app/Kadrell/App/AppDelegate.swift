@@ -840,6 +840,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             paletteLanguage = Settings.language
         }
         for c in windows { c.applyAppearance(themeChanged: themeChanged) }
+        if themeChanged { sheets.applyTheme() }
         attach?.applyTerminalSettings()
         reloadViews()
     }
@@ -872,6 +873,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuSidebar() {
         sidebarScroll.isHidden.toggle()
         split.adjustSubviews()
+        split.needsDisplay = true   // sonst bleibt der alte Trenner als Linie stehen, wo der Baum endete
     }
     @objc private func menuToggleGroups() { sidebar.toggleAllGroups() }
     @objc private func menuHotkey(_ sender: NSMenuItem) {

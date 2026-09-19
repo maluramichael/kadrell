@@ -8,6 +8,7 @@ final class MainWindowController: NSObject {
     let index: Int
     let window: NSWindow
     let bar = StatusBarView(frame: .zero)
+    let wallpaper = WallpaperView(frame: .zero)
     let split = ThinSplitView(frame: .zero)
     let sidebarScroll = NSScrollView(frame: .zero)
     let sidebar = SidebarView(frame: .zero)
@@ -37,8 +38,7 @@ final class MainWindowController: NSObject {
         sidebarScroll.documentView = sidebar
         sidebarScroll.hasVerticalScroller = true
         sidebarScroll.autohidesScrollers = true
-        sidebarScroll.drawsBackground = true
-        sidebarScroll.backgroundColor = Theme.panel
+        sidebarScroll.drawsBackground = false   // der Baum malt sein Panel selbst, mit der Deckkraft der Kacheln
         sidebar.autoresizingMask = [.width]
         sidebar.frame = NSRect(x: 0, y: 0, width: 260, height: 10)
         split.isVertical = true
@@ -50,6 +50,9 @@ final class MainWindowController: NSObject {
         split.delegate = self
         split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.bounds.width, height: root.bounds.height - Theme.barHeight)
         split.autoresizingMask = [.width, .height]
+        wallpaper.frame = split.frame
+        wallpaper.autoresizingMask = [.width, .height]
+        root.addSubview(wallpaper)
         root.addSubview(split)
         root.addSubview(bar)
         window.contentView = root
@@ -75,12 +78,13 @@ final class MainWindowController: NSObject {
         if themeChanged {
             window.appearance = Theme.appearance
             window.backgroundColor = Theme.bg
-            sidebarScroll.backgroundColor = Theme.panel
             split.needsDisplay = true
         }
         let root = window.contentView!.bounds
         bar.frame = NSRect(x: 0, y: 0, width: root.width, height: Theme.barHeight)
         split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.width, height: root.height - Theme.barHeight)
+        wallpaper.frame = split.frame
+        wallpaper.needsDisplay = true
         bar.needsDisplay = true
         sidebar.needsDisplay = true
     }
@@ -90,6 +94,11 @@ final class MainWindowController: NSObject {
 extension MainWindowController: NSSplitViewDelegate {
     func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
         min(proposedMaximumPosition, splitView.bounds.width / 2)
+    }
+
+    /// Der ausgeblendete Baum behält seinen Frame: ohne das zeichnet der Split den Trenner weiter an seiner alten Kante.
+    func splitView(_ splitView: NSSplitView, shouldHideDividerAt dividerIndex: Int) -> Bool {
+        sidebarScroll.isHidden
     }
 
     /// Ziehen startet nur im effektiven Rechteck, ohne das hier ist es die 1-px-Linie: so breit wie die Griffzone.
