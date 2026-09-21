@@ -112,8 +112,7 @@ class ChildPanel: NSPanel {
     }
 
     func dismiss() {
-        host?.removeChildWindow(self)
-        orderOut(nil)
+        if let h = host { host?.removeChildWindow(self); Backdrop.sync(h); orderOut(nil) }
     }
 
     /// `parent` ist nach orderOut/close schon nil. Deshalb das Hauptfenster selbst merken, sonst bleibt der Blur liegen.
