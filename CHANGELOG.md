@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.56.2 (2026-09-21)
+
+- Fix: Eine Kachel, die schon sichtbar auf der Arbeitsfläche liegt, bekommt keine Marke „neu" mehr, wenn sie fertig wird.
+
 ## 1.56.1 (2026-09-21)
 
 - Feature: Haiku steht in den Einstellungen jetzt als weiteres Modell zur Auswahl.

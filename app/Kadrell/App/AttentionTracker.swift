@@ -49,7 +49,9 @@ final class AttentionTracker {
     /// Abgleich nach jeder Änderung. `waiting` in Baumreihenfolge, `statuses` nur angehängter Sessions, `isKey`:
     /// das aktuelle Fenster ist vorn. Liefert die Übergänge, die der Baum aufblitzen lässt.
     func update(sessions: [String: Session], waiting: [String], statuses: [String: SessionStatus],
-                focused: String?, isKey: Bool) -> (waiting: Set<String>, done: Set<String>) {
+                focused: String?, looking: Set<String>? = nil, isKey: Bool) -> (waiting: Set<String>, done: Set<String>) {
+        // Ohne Angabe zählt nur die Fokus-Kachel als angeschaut (Tests, Alt-Aufrufer).
+        let looking = looking ?? Set([focused].compactMap { $0 })
         fireHookIfFocusChanged(focused.flatMap { sessions[$0] })
         let waitingSet = Set(waiting)
         // Wartend oder fertig, aber noch nicht angesehen: beides zusammen, sonst verschwinden fertige Sessions aus dem Badge.
@@ -59,7 +61,9 @@ final class AttentionTracker {
         lastWaitingIds = waitingSet
         let changed = Feedback.transitions(from: lastStatuses, to: statuses)
         lastStatuses = statuses
-        handleTransitions(changed, sessions: sessions, statuses: statuses) { $0 != focused || !isKey }
+        handleTransitions(changed, sessions: sessions, statuses: statuses) { !isKey || !looking.contains($0) }
+        // Was gerade sichtbar auf der Arbeitsfläche liegt, ist gesehen: auch eine ältere Marke fällt weg.
+        if isKey, !unseen.isDisjoint(with: looking) { unseen.subtract(looking) }
         return changed
     }
 

@@ -72,6 +72,26 @@ final class AttentionTrackerTests: XCTestCase {
         XCTAssertTrue(t.unseen.isEmpty)
     }
 
+    func testVisibleTilesCountAsSeen() {
+        let t = tracker(), s = sessions("a", "b")
+        _ = t.update(sessions: s, waiting: [], statuses: ["a": .running, "b": .running], focused: "a", looking: ["a", "b"], isKey: true)
+        // b ist sichtbar, aber nicht fokussiert: fertig werden markiert keine neue Marke.
+        _ = t.update(sessions: s, waiting: [], statuses: ["a": .running, "b": .idle], focused: "a", looking: ["a", "b"], isKey: true)
+        XCTAssertTrue(t.unseen.isEmpty, "sichtbare Kachel bekommt kein NEU")
+        XCTAssertTrue(sounds.isEmpty)
+    }
+
+    func testBringingUnseenIntoViewClearsMark() {
+        let t = tracker(), s = sessions("a")
+        // a wird im Hintergrund fertig und bekommt die Marke.
+        _ = t.update(sessions: s, waiting: [], statuses: ["a": .running], focused: nil, looking: [], isKey: false)
+        _ = t.update(sessions: s, waiting: [], statuses: ["a": .idle], focused: nil, looking: [], isKey: false)
+        XCTAssertEqual(t.unseen, ["a"])
+        // Jetzt in den Blick geholt: Marke fällt weg, ohne dass sich der Status ändert.
+        _ = t.update(sessions: s, waiting: [], statuses: ["a": .idle], focused: "a", looking: ["a"], isKey: true)
+        XCTAssertTrue(t.unseen.isEmpty, "in den Blick geholt = gesehen")
+    }
+
     func testPruneAndPersistedStart() {
         _ = tracker()
         defaults.set(["a", "gone"], forKey: "sessions.unseen")

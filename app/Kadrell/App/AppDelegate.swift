@@ -573,7 +573,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let before = attention.unseen
         let changed = attention.update(sessions: sessions, waiting: waiting,
                                        statuses: sessions.filter { attach?.isAttached($0.key) ?? false }.mapValues(\.status),
-                                       focused: workspace.focused, isKey: window?.isKeyWindow != false)
+                                       focused: workspace.focused, looking: workspace.visibleTiles,
+                                       isKey: window?.isKeyWindow != false)
         for c in windows {
             if attention.unseen != before { c.sidebar.unread = attention.unseen; c.sidebar.needsDisplay = true }
             c.sidebar.flash(waiting: changed.waiting, done: changed.done)
