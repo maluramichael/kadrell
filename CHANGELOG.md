@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.56.1 (2026-09-21)
+
+- Feature: Haiku steht in den Einstellungen jetzt als weiteres Modell zur Auswahl.
+
 ## 1.56.0 (2026-09-19)
 
 - Änderung: Das Hintergrundbild füllt jetzt Baum und Arbeitsfläche zusammen, ohne Balken. Der Baum folgt der Deckkraft der Kacheln, unter 100 % scheint das Bild auch dort durch.

@@ -78,7 +78,7 @@ enum Settings {
 
     /// Start-Flags für Claude, gelten ab dem nächsten Start eines Claude-Prozesses. "" = Claude-Default.
     static let claudeModes = ["", "acceptEdits", "auto", "plan", "dontAsk", "bypassPermissions"]
-    static let claudeModels = ["", "fable", "opus", "claude-opus-4-8[1m]", "sonnet"]
+    static let claudeModels = ["", "fable", "opus", "claude-opus-4-8[1m]", "sonnet", "haiku"]
     static let claudeEfforts = ["", "low", "medium", "high", "xhigh", "max"]
     static var claudeAllowBypass: Bool { get { value("claude.allowBypass", false) } set { store("claude.allowBypass", newValue) } }
     static var claudeMode: String { get { value("claude.mode", "") } set { store("claude.mode", newValue) } }
