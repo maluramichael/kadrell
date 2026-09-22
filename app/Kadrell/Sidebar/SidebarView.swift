@@ -632,8 +632,8 @@ final class SidebarView: NSView {
                 return
             }
             anchor = s.id
-            // Klick auf eine schon ausgewählte Session nimmt sie wieder heraus, wie ⌘-Klick.
-            onSelect?([s.id], cmd || selected.contains(s.id) ? .toggle : .replace)
+            // Normaler Klick wählt immer nur diese eine aus. Einzeln an- und abwählen nur mit ⌘-Klick.
+            onSelect?([s.id], cmd ? .toggle : .replace)
         }
     }
 }

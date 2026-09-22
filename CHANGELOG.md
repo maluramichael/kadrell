@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.56.3 (2026-09-22)
+
+- Fix: Ein normaler Klick auf eine bereits ausgewählte Session wählt jetzt nur noch diese eine aus, statt sie aus der Mehrfachauswahl herauszunehmen. Einzelne Sessions an- und abwählen geht weiterhin mit ⌘-Klick.
+
 ## 1.56.2 (2026-09-21)
 
 - Fix: Eine Kachel, die schon sichtbar auf der Arbeitsfläche liegt, bekommt keine Marke „neu" mehr, wenn sie fertig wird.
