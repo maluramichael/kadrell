@@ -96,6 +96,8 @@ enum Settings {
     static var autoswitchEnabled: Bool { get { value("autoswitch.enabled", false) } set { store("autoswitch.enabled", newValue) } }
     /// Nach einem automatischen Wechsel einmal melden, welcher Account jetzt aktiv ist. „Nicht mehr anzeigen" in der Meldung schaltet es ab.
     static var autoswitchNotice: Bool { get { value("autoswitch.notice", true) } set { store("autoswitch.notice", newValue) } }
+    /// Warnen, sobald das 7-Tage-Limit schneller vollläuft als der gleichmäßige Wochen-Plan erlaubt (früher Lockout droht). Default an.
+    static var autoswitchPaceWarning: Bool { get { value("autoswitch.paceWarning", true) } set { store("autoswitch.paceWarning", newValue) } }
     /// Ab welcher Auslastung (5 h oder 7 Tage) der Auto-Wechsel greift.
     static let autoswitchRange = 50.0...99.0
     static var autoswitchThreshold: Int {

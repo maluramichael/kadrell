@@ -202,16 +202,35 @@ final class AccountService {
         }
     }
 
-    /// Der Account mit dem meisten Rest laut gecachtem Stand, aber nur wenn er den aktiven um die Hysterese-Marge
-    /// schlägt. Sind alle etwa gleich voll, kommt nil zurück und es bleibt beim aktiven (kein Toggeln).
+    /// Der Account, auf den der Auto-Wechsel zielt, aus den echten Einstellungen und der aktuellen Zeit.
     private func bestTarget(excluding id: String, activeUsed: Int) -> String? {
-        guard let best = accounts.filter({ $0.id != id }).min(by: { cachedUsed($0) < cachedUsed($1) }),
-              cachedUsed(best) <= activeUsed - Self.hysteresis else { return nil }
+        Self.bestTarget(among: accounts, activeId: id, activeUsed: activeUsed,
+                        threshold: Settings.autoswitchThreshold, hysteresis: Self.hysteresis, now: Date())
+    }
+
+    /// Reine Zielwahl (testbar): unter den Accounts mit noch freiem 5-Stunden-Fenster der mit dem meisten
+    /// 7-Tage-Pace-Vorrat, aber nur wenn er den aktiven um die Hysterese-Marge an Gesamtauslastung unterbietet.
+    /// Sind alle etwa gleich voll oder alle beim 5-Stunden-Limit, kommt nil zurück (kein Toggeln, kein Leerlauf).
+    static func bestTarget(among accounts: [Account], activeId: String, activeUsed: Int,
+                           threshold: Int, hysteresis: Int, now: Date) -> String? {
+        let candidates = accounts.filter { $0.id != activeId && sessionUsed($0, now: now) < threshold }
+        guard let best = candidates.max(by: { paceHeadroom($0, now: now) < paceHeadroom($1, now: now) }),
+              cachedUsed(best, now: now) <= activeUsed - hysteresis else { return nil }
         return best.id
     }
 
-    /// Gecachte Auslastung, reset-bereinigt; nie gesehen zählt als leer, damit ein frischer Account zuerst drankommt.
-    private func cachedUsed(_ a: Account) -> Int { a.usage?.used() ?? 0 }
+    /// 7-Tage-Pace-Vorrat: um wie viele Prozentpunkte der Account unter dem Soll-Stand liegt (Soll = verstrichener
+    /// Wochenanteil). Höher = mehr Runway durch die Woche. Nie gesehen zählt als voller Vorrat.
+    static func paceHeadroom(_ a: Account, now: Date) -> Int {
+        guard let u = a.usage?.asUsage(at: now) else { return 100 }
+        return (u.weeklyPlan(now: now) ?? 100) - (u.weekly ?? 0)
+    }
+
+    /// 5-Stunden-Auslastung, reset-bereinigt; nie gesehen zählt als leer.
+    static func sessionUsed(_ a: Account, now: Date) -> Int { a.usage?.asUsage(at: now).session ?? 0 }
+
+    /// Gecachte Gesamtauslastung (höherer von 5 h und 7 Tagen), reset-bereinigt; nie gesehen zählt als leer.
+    static func cachedUsed(_ a: Account, now: Date) -> Int { a.usage?.used(at: now) ?? 0 }
 
     // MARK: JSON-Helfer (rein, testbar)
 

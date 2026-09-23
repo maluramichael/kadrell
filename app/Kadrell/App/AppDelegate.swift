@@ -334,6 +334,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Latch, damit die Pace-Warnung nur einmal pro Überschreitung kommt statt bei jedem Poll.
+    private var paceWarned = false
+    /// Nicht blockierende Warnung: liegt das 7-Tage-Limit über dem gleichmäßigen Wochen-Plan und erreicht bei diesem
+    /// Tempo vor dem Reset 100 %, droht ein früher Lockout. Einmal melden, „Nicht mehr anzeigen" schaltet dauerhaft ab.
+    private func notifyPaceIfNeeded(_ usage: Usage) {
+        guard Settings.autoswitchPaceWarning, let lockout = usage.weeklyLockout(), let reset = usage.weeklyResets else {
+            paceWarned = false
+            return
+        }
+        guard !paceWarned else { return }
+        paceWarned = true
+        let when = lockout.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+        let until = reset.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+        let alert = NSAlert()
+        alert.messageText = String(localized: "7-Tage-Limit läuft zu schnell voll", bundle: Bundle.app)
+        alert.informativeText = String(localized: "Bei diesem Tempo ist das 7-Tage-Limit am \(when) voll. Reset ist aber erst am \(until), bis dahin wärst du gesperrt.", bundle: Bundle.app)
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = String(localized: "Nicht mehr anzeigen", bundle: Bundle.app)
+        let apply = { if alert.suppressionButton?.state == .on { Settings.autoswitchPaceWarning = false } }
+        if let window = bar.window {
+            alert.beginSheetModal(for: window) { _ in apply() }
+        } else {
+            alert.runModal()
+            apply()
+        }
+    }
+
     private func warnNoAccount() {
         let alert = NSAlert()
         alert.messageText = String(localized: "Kein angemeldeter Claude-Account gefunden", bundle: Bundle.app)
@@ -454,6 +481,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.bar.needsDisplay = true
             self.accounts.recordUsage(u)
             self.accounts.considerAutoSwitch(u)
+            self.notifyPaceIfNeeded(u)
         }
         if let cached = accounts.active?.usage {
             let seeded = cached.asUsage()

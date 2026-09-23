@@ -22,6 +22,19 @@ struct Usage: Equatable, Sendable {
         return Int((elapsed / window * 100).rounded())
     }
 
+    /// Bei gleichbleibendem Tempo hochgerechnet: Zeitpunkt, an dem das 7-Tage-Limit 100 % erreicht.
+    /// Nil, wenn kein Reset-Zeitpunkt oder noch kein Verbrauch vorliegt, oder wenn die Hochrechnung erst am oder
+    /// nach dem Reset läge: dann läuft man nicht früher als der Reset in die Wand und es gibt nichts zu warnen.
+    func weeklyLockout(now: Date = Date()) -> Date? {
+        guard let weeklyResets, let weekly, weekly > 0 else { return nil }
+        let window: TimeInterval = 7 * 24 * 3600
+        let elapsed = window - weeklyResets.timeIntervalSince(now)
+        guard elapsed > 0 else { return nil }
+        let ratePerSecond = Double(weekly) / elapsed
+        let lockout = now.addingTimeInterval(Double(100 - weekly) / ratePerSecond)
+        return lockout < weeklyResets ? lockout : nil
+    }
+
     /// Bevorzugt das `limits`-Array (kind session / weekly_all / weekly_scoped mit Modellname),
     /// fällt auf `five_hour` / `seven_day` zurück.
     static func parse(_ data: Data) -> Usage {

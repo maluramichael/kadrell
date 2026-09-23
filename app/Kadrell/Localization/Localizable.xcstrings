@@ -926,6 +926,22 @@
         }
       }
     },
+    "7-Tage-Limit läuft zu schnell voll": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7-Tage-Limit läuft zu schnell voll"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7-day limit filling up too fast"
+          }
+        }
+      }
+    },
     "Account automatisch gewechselt": {
       "localizations": {
         "de": {
@@ -938,6 +954,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Account switched automatically"
+          }
+        }
+      }
+    },
+    "Bei diesem Tempo ist das 7-Tage-Limit am %@ voll. Reset ist aber erst am %@, bis dahin wärst du gesperrt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei diesem Tempo ist das 7-Tage-Limit am %@ voll. Reset ist aber erst am %@, bis dahin wärst du gesperrt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At this pace the 7-day limit is full on %1$@. But the reset isn’t until %2$@, so you’d be locked out until then."
           }
         }
       }
@@ -970,6 +1002,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Don’t show again"
+          }
+        }
+      }
+    },
+    "Warnen bei zu schnellem 7-Tage-Verbrauch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warnen bei zu schnellem 7-Tage-Verbrauch"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warn on too-fast 7-day usage"
           }
         }
       }

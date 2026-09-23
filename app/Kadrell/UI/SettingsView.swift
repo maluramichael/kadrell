@@ -189,6 +189,7 @@ struct SettingsView: View {
                            Settings.autoswitchRange, step: 1, unit: "%")
                 }
                 setting(String(localized: "Wechsel-Meldung anzeigen", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchNotice)) }
+                setting(String(localized: "Warnen bei zu schnellem 7-Tage-Verbrauch", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchPaceWarning)) }
             }
 
             heading(String(localized: "Darstellung", bundle: Bundle.app))

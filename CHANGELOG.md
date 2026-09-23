@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.58.0 (2026-09-23)
+
+- Feature: Der automatische Account-Wechsel bevorzugt jetzt den Account mit dem meisten 7-Tage-Spielraum (statt einfach dem leersten), damit dein Wochenlimit gleichmäßiger über die Woche reicht. Konten mit vollem 5-Stunden-Fenster werden dabei übersprungen.
+- Feature: Warnung, wenn dein 7-Tage-Limit schneller vollläuft als der gleichmäßige Wochenplan erlaubt, samt Prognose, wann du bei dem Tempo gesperrt wärst. Blockiert nicht, nur ein Hinweis, abschaltbar in den Einstellungen.
+
 ## 1.57.0 (2026-09-23)
 
 - Feature: Neues Layout „Reihe": alle Sessions liegen gleich breit nebeneinander in einer Reihe, ohne Scrollen.

@@ -373,6 +373,27 @@ final class UsagePlanTests: XCTestCase {
         XCTAssertEqual(usage(resetsIn: 500).weeklyPlan(now: now), 0)
     }
 
+    /// Auf oder unter dem Plan gibt es keine Lockout-Warnung: man erreicht 100 % nicht vor dem Reset.
+    func testLockoutNilOnOrUnderPace() {
+        var u = usage(resetsIn: 84)   // Soll 50 %
+        u.weekly = 50
+        XCTAssertNil(u.weeklyLockout(now: now), "genau auf Plan: kein früher Lockout")
+        u.weekly = 40
+        XCTAssertNil(u.weeklyLockout(now: now), "unter Plan: kein früher Lockout")
+        u.weekly = nil
+        XCTAssertNil(u.weeklyLockout(now: now), "kein Verbrauch: keine Warnung")
+    }
+
+    /// Über dem Plan wird der Lockout linear hochgerechnet und liegt vor dem Reset.
+    func testLockoutProjectsBeforeResetWhenOverPace() {
+        var u = usage(resetsIn: 84)   // 84 h verstrichen, Soll 50 %
+        u.weekly = 80                 // deutlich über Plan
+        // Restweg 20 % bei Tempo 80 %/84 h ⇒ 21 h bis 100 %.
+        let lockout = u.weeklyLockout(now: now)
+        XCTAssertEqual(lockout, now.addingTimeInterval(21 * 3600))
+        XCTAssertLessThan(try XCTUnwrap(lockout), try XCTUnwrap(u.weeklyResets), "Lockout liegt vor dem Reset")
+    }
+
     /// Der Tooltip mit Plan-Stand ist in beiden Sprachen übersetzt (fehlte der Eintrag, käme der deutsche Schlüssel zurück).
     func testPlanTooltipIsTranslated() {
         defer { Settings.language = .system }
