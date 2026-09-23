@@ -57,9 +57,9 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertFalse(after[0].isAccessibilityExpanded())
     }
 
-    /// ←/→ klappt die Gruppe der fokussierten Session zu/auf, auch wenn diese dadurch unsichtbar wird.
-    /// Klick auf eine noch nicht ausgewählte Session wählt nur diese, Klick auf eine ausgewählte nimmt sie heraus.
-    func testSidebarClickSelectedDeselects() {
+    /// Klick auf eine noch nicht ausgewählte Session wählt nur diese; ein normaler Klick auf eine bereits
+    /// ausgewählte Session isoliert sie (seit 1.56.3), statt sie aus der Auswahl herauszunehmen.
+    func testSidebarClickSelectedIsolates() {
         let a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha")
         let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a"], favorite: false)
         let sidebar = SidebarView(frame: .zero)
@@ -81,7 +81,7 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertEqual(picked?.0, ["a"]); XCTAssertEqual(picked?.1, .replace)
         sidebar.selected = ["a"]
         click()
-        XCTAssertEqual(picked?.0, ["a"]); XCTAssertEqual(picked?.1, .toggle)
+        XCTAssertEqual(picked?.0, ["a"]); XCTAssertEqual(picked?.1, .replace)
     }
 
     func testSidebarCollapseExpandKeyboard() {
