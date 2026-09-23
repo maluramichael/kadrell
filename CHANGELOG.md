@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.58.1 (2026-09-23)
+
+- Änderung: Der Wochen-Plan (die Vergleichslinie fürs 7-Tage-Limit) rechnet jetzt tageweise hoch: gleich nach dem Reset steht dir Tag 1 (rund 14 %) komplett zur Verfügung, jeder weitere Tag gibt rund 14 % mehr frei, bis am siebten Tag 100 %. Vorher stieg die Linie sekündlich und stand direkt nach dem Reset auf 0 %, wodurch jede Nutzung sofort als „über Plan" galt (gelbe/rote Anzeige und Warnung).
+
 ## 1.58.0 (2026-09-23)
 
 - Feature: Der automatische Account-Wechsel bevorzugt jetzt den Account mit dem meisten 7-Tage-Spielraum (statt einfach dem leersten), damit dein Wochenlimit gleichmäßiger über die Woche reicht. Konten mit vollem 5-Stunden-Fenster werden dabei übersprungen.

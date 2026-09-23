@@ -11,22 +11,23 @@ struct Usage: Equatable, Sendable {
     var weeklyResets: Date?
     static let empty = Usage()
 
-    /// Der Stand, den man bei gleichmäßiger Verteilung über die Woche gerade haben dürfte: der Anteil des
-    /// 7-Tage-Fensters, der jetzt verstrichen ist. Stundengenau (auf die Sekunde) aus `weeklyResets`
-    /// zurückgerechnet; die Fensterlänge liefert der Endpunkt nicht mit, nur `resets_at`, sie ist hier 7 Tage.
-    /// Nil, solange der Reset-Zeitpunkt fehlt.
+    /// Der Stand, den man bei gleichmäßiger Verteilung über die Woche gerade haben dürfte, tageweise hochgerechnet:
+    /// Tag 1 gibt gleich nach dem Reset rund 100/7 % frei, jeder weitere angebrochene Tag rund 100/7 % mehr, der
+    /// 7. Tag 100 %. Bewusst nicht sekündlich, sonst stünde direkt nach dem Reset 0 % und jede Nutzung wäre „über
+    /// Plan". Die Fensterlänge liefert der Endpunkt nicht mit, nur `resets_at`, sie ist hier 7 Tage. Nil ohne Reset.
     func weeklyPlan(now: Date = Date()) -> Int? {
         guard let weeklyResets else { return nil }
-        let window: TimeInterval = 7 * 24 * 3600
+        let window: TimeInterval = 7 * 24 * 3600, day: TimeInterval = 24 * 3600
         let elapsed = min(max(window - weeklyResets.timeIntervalSince(now), 0), window)
-        return Int((elapsed / window * 100).rounded())
+        let daysElapsed = floor(elapsed / day)   // 0…6, erst genau am Reset 7
+        return min(100, Int((daysElapsed + 1) * 100 / 7))
     }
 
-    /// Bei gleichbleibendem Tempo hochgerechnet: Zeitpunkt, an dem das 7-Tage-Limit 100 % erreicht.
-    /// Nil, wenn kein Reset-Zeitpunkt oder noch kein Verbrauch vorliegt, oder wenn die Hochrechnung erst am oder
-    /// nach dem Reset läge: dann läuft man nicht früher als der Reset in die Wand und es gibt nichts zu warnen.
+    /// Bei gleichbleibendem Tempo hochgerechnet: Zeitpunkt, an dem das 7-Tage-Limit 100 % erreicht. Nil, solange
+    /// man nicht über dem tageweisen Plan liegt (sonst schlüge die Warnung gleich nach dem Reset an), und nil, wenn
+    /// die Hochrechnung erst am oder nach dem Reset läge: dann läuft man nicht früher in die Wand.
     func weeklyLockout(now: Date = Date()) -> Date? {
-        guard let weeklyResets, let weekly, weekly > 0 else { return nil }
+        guard let weeklyResets, let weekly, let plan = weeklyPlan(now: now), weekly > plan else { return nil }
         let window: TimeInterval = 7 * 24 * 3600
         let elapsed = window - weeklyResets.timeIntervalSince(now)
         guard elapsed > 0 else { return nil }

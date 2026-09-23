@@ -357,36 +357,37 @@ final class UsagePlanTests: XCTestCase {
     }
     private let now = Date(timeIntervalSince1970: 1_000_000)
 
-    /// Der Plan-Stand kommt stundengenau aus dem Reset-Zeitpunkt, nicht aus ganzen Tagen.
-    func testPlanCountsHoursNotDays() {
-        XCTAssertEqual(usage(resetsIn: 168).weeklyPlan(now: now), 0)
-        XCTAssertEqual(usage(resetsIn: 84).weeklyPlan(now: now), 50)
-        XCTAssertEqual(usage(resetsIn: 42).weeklyPlan(now: now), 75)
-        XCTAssertEqual(usage(resetsIn: 1).weeklyPlan(now: now), 99)
-        XCTAssertNotEqual(usage(resetsIn: 83).weeklyPlan(now: now), usage(resetsIn: 84).weeklyPlan(now: now))
+    /// Der Plan-Stand springt tageweise: Tag 1 gibt gleich nach dem Reset 14 %, jeder weitere Tag 100/7 % mehr,
+    /// der letzte Tag 100 %. Innerhalb eines Tages bleibt er konstant, damit direkt nach dem Reset nicht 0 % steht.
+    func testPlanStepsByWholeDays() {
+        XCTAssertEqual(usage(resetsIn: 168).weeklyPlan(now: now), 14)   // gerade zurückgesetzt: sofort Tag-1-Budget
+        XCTAssertEqual(usage(resetsIn: 167).weeklyPlan(now: now), 14)   // noch Tag 1, gleicher Stand
+        XCTAssertEqual(usage(resetsIn: 144).weeklyPlan(now: now), 28)   // nach 24 h: Tag 2
+        XCTAssertEqual(usage(resetsIn: 84).weeklyPlan(now: now), 57)    // nach 3,5 Tagen: Tag 4 → 4·100/7
+        XCTAssertEqual(usage(resetsIn: 1).weeklyPlan(now: now), 100)    // letzter Tag
     }
 
-    /// Ohne Reset-Zeitpunkt gibt es keinen Plan; ein überfälliger oder zu weiter Reset bleibt in 0…100.
-    func testPlanIsNilWithoutResetAndStaysInRange() {
+    /// Ohne Reset-Zeitpunkt gibt es keinen Plan; ein überfälliger Reset ist 100, ein Reset bleibt in 0…100.
+    func testPlanIsNilWithoutResetAndClampsTo100() {
         XCTAssertNil(Usage.empty.weeklyPlan(now: now))
-        XCTAssertEqual(usage(resetsIn: -5).weeklyPlan(now: now), 100)
-        XCTAssertEqual(usage(resetsIn: 500).weeklyPlan(now: now), 0)
+        XCTAssertEqual(usage(resetsIn: -5).weeklyPlan(now: now), 100)   // überfällig
+        XCTAssertEqual(usage(resetsIn: 500).weeklyPlan(now: now), 14)   // Reset weit weg: mindestens Tag-1-Budget
     }
 
-    /// Auf oder unter dem Plan gibt es keine Lockout-Warnung: man erreicht 100 % nicht vor dem Reset.
+    /// Auf oder unter dem tageweisen Plan gibt es keine Lockout-Warnung.
     func testLockoutNilOnOrUnderPace() {
-        var u = usage(resetsIn: 84)   // Soll 50 %
-        u.weekly = 50
-        XCTAssertNil(u.weeklyLockout(now: now), "genau auf Plan: kein früher Lockout")
+        var u = usage(resetsIn: 84)   // Tag 4, Soll 57 %
+        u.weekly = 57
+        XCTAssertNil(u.weeklyLockout(now: now), "genau auf Plan: keine Warnung")
         u.weekly = 40
-        XCTAssertNil(u.weeklyLockout(now: now), "unter Plan: kein früher Lockout")
+        XCTAssertNil(u.weeklyLockout(now: now), "unter Plan: keine Warnung")
         u.weekly = nil
         XCTAssertNil(u.weeklyLockout(now: now), "kein Verbrauch: keine Warnung")
     }
 
     /// Über dem Plan wird der Lockout linear hochgerechnet und liegt vor dem Reset.
     func testLockoutProjectsBeforeResetWhenOverPace() {
-        var u = usage(resetsIn: 84)   // 84 h verstrichen, Soll 50 %
+        var u = usage(resetsIn: 84)   // 84 h verstrichen (Tag 4, Soll 57 %)
         u.weekly = 80                 // deutlich über Plan
         // Restweg 20 % bei Tempo 80 %/84 h ⇒ 21 h bis 100 %.
         let lockout = u.weeklyLockout(now: now)
