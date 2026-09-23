@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.57.0 (2026-09-23)
+
+- Feature: Neues Layout „Reihe": alle Sessions liegen gleich breit nebeneinander in einer Reihe, ohne Scrollen.
+- Feature: Das Layout „Scrollen" hat jetzt wie das Grid einen Spaltenregler in der Leiste, der einstellt, wie viele Spalten gleichzeitig sichtbar sind.
+
 ## 1.56.3 (2026-09-22)
 
 - Fix: Ein normaler Klick auf eine bereits ausgewählte Session wählt jetzt nur noch diese eine aus, statt sie aus der Mehrfachauswahl herauszunehmen. Einzelne Sessions an- und abwählen geht weiterhin mit ⌘-Klick.

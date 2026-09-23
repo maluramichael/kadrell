@@ -55,6 +55,9 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Spalten im Grid, 0 = automatisch. Nur im Grid sichtbar: ‹ weniger, › mehr.
     var gridColumns = 0
     var onGridColumns: ((Int) -> Void)?
+    /// Sichtbare Spalten beim Scrollen, mindestens 1. Nur beim Scrollen sichtbar.
+    var scrollColumns = 2
+    var onScrollColumns: ((Int) -> Void)?
     /// Frei: Teilung an der Fokus-Kachel, „r“ → , „d“ ↓, „a“ längere Seite. Klick schaltet reihum.
     var split: Character = "a"
     var onSplit: ((Character) -> Void)?
@@ -189,7 +192,8 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         divider(toggle.maxX, b)
         hitRects.append(HitRegion(rect: toggle, label: String(localized: "Layout", bundle: Bundle.app), value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) })
         var x = toggle.maxX + 1
-        if layoutMode == .grid { drawGridColumns(b, &x) }
+        if layoutMode == .grid { drawColumns(b, &x, value: gridColumns, min: 0) { [weak self] c in self?.onGridColumns?(c) } }
+        if layoutMode == .scroll { drawColumns(b, &x, value: scrollColumns, min: 1) { [weak self] c in self?.onScrollColumns?(c) } }
         if layoutMode == .custom { drawSplit(b, &x) }
         let onOff = { (on: Bool) in on ? String(localized: "an", bundle: Bundle.app) : String(localized: "aus", bundle: Bundle.app) }
         segment(b, &x, "AUTO", fill: auto ? Theme.waiting : nil, key: "auto", String(localized: "Auto-Modus", bundle: Bundle.app), onOff(auto)) { [weak self] in self?.onToggleAuto?() }
@@ -213,9 +217,9 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         x = r.maxX + 1
     }
 
-    /// ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl, unter 1 wird es wieder automatisch.
-    private func drawGridColumns(_ b: CGRect, _ x: inout CGFloat) {
-        let cols = gridColumns, midY = b.midY
+    /// ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl. `min` 0 lässt sie unter 1 wieder automatisch werden.
+    private func drawColumns(_ b: CGRect, _ x: inout CGFloat, value cols: Int, min lo: Int, onChange: @escaping (Int) -> Void) {
+        let midY = b.midY
         let value = NSAttributedString(string: cols == 0 ? String(localized: "AUTO SP", bundle: Bundle.app) : String(localized: "\(cols) SP", bundle: Bundle.app), attributes: Theme.attrs(10, cols == 0 ? Theme.muted : Theme.fg, bold: true))
         let less = NSAttributedString(string: "‹", attributes: Theme.attrs(12, Theme.sub, bold: true))
         let more = NSAttributedString(string: "›", attributes: Theme.attrs(12, Theme.sub, bold: true))
@@ -225,8 +229,8 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
         drawCentered(more, x: moreRect.minX + 7, midY: midY)
         let spoken = cols == 0 ? String(localized: "automatisch", bundle: Bundle.app) : "\(cols)"
-        hitRects.append(HitRegion(rect: lessRect, label: String(localized: "Weniger Spalten", bundle: Bundle.app), value: spoken) { [weak self] in self?.onGridColumns?(max(0, cols - 1)) })
-        hitRects.append(HitRegion(rect: moreRect, label: String(localized: "Mehr Spalten", bundle: Bundle.app), value: spoken) { [weak self] in self?.onGridColumns?(min(12, cols + 1)) })
+        hitRects.append(HitRegion(rect: lessRect, label: String(localized: "Weniger Spalten", bundle: Bundle.app), value: spoken) { onChange(Swift.max(lo, cols - 1)) })
+        hitRects.append(HitRegion(rect: moreRect, label: String(localized: "Mehr Spalten", bundle: Bundle.app), value: spoken) { onChange(Swift.min(12, cols + 1)) })
         divider(moreRect.maxX, b)
         x = moreRect.maxX + 1
     }

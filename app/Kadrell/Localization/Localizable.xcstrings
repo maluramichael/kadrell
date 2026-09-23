@@ -4438,6 +4438,22 @@
         }
       }
     },
+    "Reihe": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reihe"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Row"
+          }
+        }
+      }
+    },
     "Scrollen": {
       "localizations": {
         "de": {

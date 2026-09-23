@@ -1,7 +1,7 @@
 import Foundation
 
 enum LayoutMode: String, CaseIterable, Sendable {
-    case grid, main, spiral, custom, scroll, stack
+    case grid, main, spiral, custom, scroll, row, stack
     /// Reihum wie tmux `next-layout`.
     var next: LayoutMode { Self.allCases[(Self.allCases.firstIndex(of: self)! + 1) % Self.allCases.count] }
     var title: String {
@@ -11,6 +11,7 @@ enum LayoutMode: String, CaseIterable, Sendable {
         case .spiral: String(localized: "Spirale", bundle: Bundle.app)
         case .custom: String(localized: "Frei", bundle: Bundle.app)
         case .scroll: String(localized: "Scrollen", bundle: Bundle.app)
+        case .row: String(localized: "Reihe", bundle: Bundle.app)
         case .stack: String(localized: "Stack", bundle: Bundle.app)
         }
     }
@@ -44,15 +45,16 @@ enum Tiling {
     /// Die Vorlage des Layouts für n Kacheln: Felder in Reihenfolge und ihre ziehbaren Grenzen. Die Terminals werden
     /// nur eingefüllt, die Größen gehören der Vorlage (`ratios`), nicht einzelnen Sessions. Stack hat keine Vorlage.
     /// `columns` 0 = Grid wählt ⌈√n⌉ Spalten. `splits`: Frei, Zeichen i teilt Feld i „r“ rechts oder „d“ unten.
-    static func layout(_ mode: LayoutMode, count n: Int, in b: CGRect, gap: CGFloat, columns fixed: Int = 0, splits: String = "",
-                       ratios: @escaping Ratios = { _, _ in nil }) -> (frames: [CGRect], dividers: [SplitLine]) {
+    static func layout(_ mode: LayoutMode, count n: Int, in b: CGRect, gap: CGFloat, columns fixed: Int = 0, scrollColumns: Int = 2,
+                       splits: String = "", ratios: @escaping Ratios = { _, _ in nil }) -> (frames: [CGRect], dividers: [SplitLine]) {
         guard n > 0 else { return ([], []) }
         var s = Splitter(gap: gap, ratios: ratios)
         let frames = switch mode {
         case .grid, .stack: s.grid(n, in: b, columns: fixed)
+        case .row: s.grid(n, in: b, columns: n)
         case .main: s.main(n, in: b)
         case .spiral, .custom: s.chain(n, in: b, mode: mode, splits: Array(splits))
-        case .scroll: scroll(n, in: b, gap: gap, widths: ratios("scroll.widths", n) ?? [])
+        case .scroll: scroll(n, in: b, gap: gap, columns: scrollColumns, widths: ratios("scroll.widths", n) ?? [])
         }
         return (frames, s.dividers)
     }
@@ -113,10 +115,12 @@ enum Tiling {
     }
 
     /// niri: Spalten fester Breite (Anteil der Fläche) nebeneinander, was nicht passt, ragt rechts hinaus.
-    private static func scroll(_ n: Int, in b: CGRect, gap: CGFloat, widths v: [Double]) -> [CGRect] {
+    /// Ohne eigene Breite füllt eine Spalte 1/`columns` der Fläche, so passen genau `columns` Spalten ins Sichtfeld.
+    private static func scroll(_ n: Int, in b: CGRect, gap: CGFloat, columns: Int, widths v: [Double]) -> [CGRect] {
+        let def = 1.0 / Double(max(1, columns))
         var x = b.minX, frames: [CGRect] = []
         for i in 0..<n {
-            let w = ((b.width + gap) * CGFloat(min(max(v.indices.contains(i) ? v[i] : 0.5, 0.1), 1)) - gap).rounded()
+            let w = ((b.width + gap) * CGFloat(min(max(v.indices.contains(i) ? v[i] : def, 0.1), 1)) - gap).rounded()
             frames.append(CGRect(x: x, y: b.minY, width: w, height: b.height))
             x += w + gap
         }

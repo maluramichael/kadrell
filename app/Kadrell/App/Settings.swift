@@ -146,6 +146,8 @@ enum Settings {
 
     /// Feste Spaltenzahl im Grid (Leiste), 0 = automatisch ⌈√n⌉.
     static var gridColumns: Int { get { value("layout.grid.columns", 0) } set { store("layout.grid.columns", newValue) } }
+    /// Sichtbare Spalten beim Scrollen (Leiste), Spaltenbreite = Fläche/N. Mindestens 1.
+    static var scrollColumns: Int { get { max(1, value("layout.scroll.columns", 2)) } set { store("layout.scroll.columns", max(1, newValue)) } }
     /// Layout Frei: Teilungsrichtung je Position, „r“ rechts, „d“ unten, „a“ längere Seite. Bleibt beim Zurücksetzen der Trennlinien.
     static var customSplits: String { get { value("workspace.custom.splits", "") } set { store("workspace.custom.splits", newValue) } }
 
@@ -154,7 +156,7 @@ enum Settings {
     static func setLayoutRatios(_ key: String, _ value: [Double]?) { store("layout." + key, value) }
     /// Alle gezogenen Verhältnisse weg, Spaltenzahl bleibt.
     static func resetLayoutRatios() {
-        for k in Profile.defaults.dictionaryRepresentation().keys where k.hasPrefix("layout.") && k != "layout.grid.columns" { Profile.defaults.removeObject(forKey: k) }
+        for k in Profile.defaults.dictionaryRepresentation().keys where k.hasPrefix("layout.") && k != "layout.grid.columns" && k != "layout.scroll.columns" { Profile.defaults.removeObject(forKey: k) }
     }
 
     static var terminalFont: NSFont {

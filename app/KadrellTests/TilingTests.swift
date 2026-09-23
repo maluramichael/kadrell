@@ -98,6 +98,19 @@ final class TilingTests: XCTestCase {
         XCTAssertEqual(Tiling.scrollOffset(300, reveal: nil, contentMaxX: 800, in: b), 0)
     }
 
+    func testRowFillsOneRowAndScrollColumnCount() {
+        // Reihe: alle Kacheln nebeneinander, gleich breit, volle Höhe, keine überstehende.
+        let row = Tiling.layout(.row, count: 3, in: b, gap: 0).frames
+        XCTAssertEqual(row.map(\.minY), [0, 0, 0])
+        XCTAssertEqual(row.map(\.height), [600, 600, 600])
+        XCTAssertEqual(row.map(\.width).reduce(0, +), 1000)
+        XCTAssertEqual(row.last?.maxX, 1000)
+        // Scrollen: N sichtbare Spalten teilen die Fläche, ohne gezogene Breite.
+        let four = Tiling.layout(.scroll, count: 4, in: b, gap: 0, scrollColumns: 4).frames
+        XCTAssertEqual(four.map(\.width), [250, 250, 250, 250])
+        XCTAssertEqual(four.last?.maxX, 1000)
+    }
+
     func testDragMovesBoundaryAndClamps() {
         let d = Tiling.layout(.main, count: 2, in: b, gap: 10).dividers[0]
         XCTAssertTrue(d.vertical)

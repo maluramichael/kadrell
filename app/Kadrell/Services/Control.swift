@@ -119,7 +119,7 @@ enum ControlCommand: Equatable {
             },
             "select": parser(values: ["-t"], bools: ["-a"]) { .select(target: $0["-t"], add: $0.has("-a")) },
             "layout": { rest in
-                guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|main|spiral|custom|scroll|stack") }
+                guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|main|spiral|custom|scroll|row|stack") }
                 return .layout(m)
             },
             "zoom": parser(values: ["-t"]) { .zoom(target: $0["-t"]) },

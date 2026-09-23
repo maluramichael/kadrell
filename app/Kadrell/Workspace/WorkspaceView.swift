@@ -288,6 +288,11 @@ final class WorkspaceView: NSView {
         relayout()
     }
 
+    func setScrollColumns(_ c: Int) {
+        Settings.scrollColumns = max(1, c)
+        relayout()
+    }
+
     func resetRatios() {
         Settings.resetLayoutRatios()
         relayout()
@@ -465,7 +470,7 @@ final class WorkspaceView: NSView {
             stackRows = Array(zip(rows, tiles))
             return tiles.isEmpty ? [:] : [tiles[active]: body]
         }
-        let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, splits: Settings.customSplits, ratios: Settings.layoutRatios)
+        let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, scrollColumns: Settings.scrollColumns, splits: Settings.customSplits, ratios: Settings.layoutRatios)
         dividers = t.dividers
         var laid = t.frames
         if mode == .scroll {

@@ -277,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         bar.onPickLayout = { [weak workspace] m in workspace?.setMode(m) }
         bar.onGridColumns = { [weak workspace] c in workspace?.setGridColumns(c) }
+        bar.onScrollColumns = { [weak workspace] c in workspace?.setScrollColumns(c) }
         bar.onSplit = { [weak workspace] c in workspace?.setSplit(c) }
         bar.onToggleZoom = { [weak workspace] in workspace?.toggleZen() }
         bar.onToggleAuto = { [weak workspace] in Feedback.play(.toggle); workspace?.toggleAuto() }
@@ -607,6 +608,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
         bar.gridColumns = Settings.gridColumns
+        bar.scrollColumns = Settings.scrollColumns
         bar.split = workspace.focusedSplit
         bar.zoomed = workspace.zen
         bar.auto = workspace.auto

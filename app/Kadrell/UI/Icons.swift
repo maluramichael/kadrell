@@ -202,6 +202,10 @@ enum Icons {
             p.appendRect(CGRect(x: i.minX + w + 2, y: i.minY, width: w, height: i.height))
             let x = i.minX + 2 * w + 4
             p.move(to: CGPoint(x: i.maxX, y: i.minY)); p.line(to: CGPoint(x: x, y: i.minY)); p.line(to: CGPoint(x: x, y: i.maxY)); p.line(to: CGPoint(x: i.maxX, y: i.maxY))
+        case .row:
+            // Drei gleich breite Spalten, alle sichtbar.
+            let w = (i.width - 4) / 3
+            for c in 0..<3 { p.appendRect(CGRect(x: i.minX + CGFloat(c) * (w + 2), y: i.minY, width: w, height: i.height)) }
         }
         color.setStroke()
         p.stroke()
