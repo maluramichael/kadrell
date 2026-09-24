@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.59.0 (2026-09-24)
+
+- Änderung: Die Omni-Suche (⌘P) bündelt Treffer jetzt nach Gruppe wie die Seitenleiste: passt ein Gruppenname, siehst du die Gruppe als Überschrift und alle ihre Sessions eingerückt darunter, sonst nur die passenden Sessions je Gruppe. So kommst du schneller auf die gesuchten Sessions.
+- Änderung: Die normale Suche prüft jetzt nur noch Session-Titel und Pfad, nicht mehr den Terminal-Inhalt. Dadurch tauchen keine fremden Sessions mehr auf, nur weil ihr Verlauf zufällig die Buchstaben enthält. Der Terminal-Inhalt bleibt über die „/"-Suche durchsuchbar.
+- Fix: Nach dem Schließen der Omni-Suche mit Esc bekommt das zuletzt fokussierte Terminal die Tastatur wieder, ohne dass du erst hineinklicken musst.
+
 ## 1.58.1 (2026-09-23)
 
 - Änderung: Der Wochen-Plan (die Vergleichslinie fürs 7-Tage-Limit) rechnet jetzt tageweise hoch: gleich nach dem Reset steht dir Tag 1 (rund 14 %) komplett zur Verfügung, jeder weitere Tag gibt rund 14 % mehr frei, bis am siebten Tag 100 %. Vorher stieg die Linie sekündlich und stand direkt nach dem Reset auf 0 %, wodurch jede Nutzung sofort als „über Plan" galt (gelbe/rote Anzeige und Warnung).

@@ -409,6 +409,9 @@ final class WorkspaceView: NSView {
         window?.makeFirstResponder(t)
     }
 
+    /// Nach dem Schließen der Palette (Esc): die fokussierte Kachel bekommt die Tastatur zurück.
+    func refocusTerminal() { focusTerminal() }
+
     /// Fenster geht zu: Terminals freigeben und den Takt anhalten.
     func close() {
         pulseTask?.cancel()

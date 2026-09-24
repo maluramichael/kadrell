@@ -12,6 +12,7 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         let group: String?
         let status: SessionStatus?
         let sessionKey: String?
+        var indent: Int = 0
         let run: () -> Void
     }
     struct Source {
@@ -34,6 +35,8 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
 
     var source = Source()
     var onHighlight: ((Set<String>?) -> Void)?
+    /// Nach dem Schließen (Esc, ohne Auswahl): dem Hauptfenster die Tastatur zurückgeben, sonst hängt der Fokus.
+    var onClose: (() -> Void)?
     private let field = NSTextField()
     private let table = NSTableView()
     private let scroll = NSScrollView()
@@ -127,6 +130,7 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
     func dismiss(runHighlightReset: Bool) {
         super.dismiss()
         if runHighlightReset { onHighlight?(nil) }
+        onClose?()
     }
 
     func switchToCommandMode() {
@@ -155,26 +159,60 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
             items = remoteItems(String(q.dropFirst()))
             onHighlight?(nil)
         } else {
-            var list: [Item] = []
-            if !q.isEmpty {
-                list += source.groups.filter { PaletteWindow.fuzzy(q, $0.name) }.map { g in
-                    Item(label: g.name, sub: String(localized: "Gruppe · \(g.cwd)", bundle: Bundle.app), group: nil, status: nil, sessionKey: nil, run: { [source] in source.onFitGroup(g.id) })
-                }
-            }
-            var matches = source.sessions.filter { s, _, lines in
-                q.isEmpty || PaletteWindow.fuzzy(q, s.title + " " + s.cwd + " " + lines.suffix(3).joined(separator: " "))
-            }
-            // Ohne Suchbegriff: wer auf dich wartet, steht zuerst, sonst bleibt die Reihenfolge der Gruppen.
-            if q.isEmpty { matches.sort { ($0.0.status == .waiting ? 0 : 1) < ($1.0.status == .waiting ? 0 : 1) } }
-            list += matches.map { s, g, lines in
-                Item(label: s.title, sub: String((lines.last ?? Theme.shortPath(s.cwd)).prefix(70)), group: g?.name, status: s.status,
-                     sessionKey: s.id, run: { [source] in source.onFocusSession(s.id) })
-            }
+            let list = q.isEmpty ? flatSessionItems() : groupedItems(q)
             items = list
             onHighlight?(q.isEmpty ? nil : Set(list.compactMap(\.sessionKey)))
         }
         table.reloadData()
         if !items.isEmpty { table.scrollRowToVisible(0) }
+    }
+
+    /// ⌘P ohne Suchbegriff: flache Liste, wer auf dich wartet zuerst.
+    private func flatSessionItems() -> [Item] {
+        source.sessions
+            .sorted { ($0.0.status == .waiting ? 0 : 1) < ($1.0.status == .waiting ? 0 : 1) }
+            .map { sessionItem($0, indent: 0, showGroup: true) }
+    }
+
+    /// Mit Suchbegriff: nach Gruppen gebündelt wie in der Seitenleiste. Passt der Gruppenname, stehen alle ihre
+    /// Sessions eingerückt darunter; sonst nur die selbst passenden. Gruppenlose Treffer kommen unten.
+    private func groupedItems(_ q: String) -> [Item] {
+        var list: [Item] = []
+        var shown = Set<String>()
+        for g in source.groups where PaletteWindow.fuzzy(q, g.name) {
+            shown.insert(g.id)
+            list.append(groupItem(g))
+            list += sessionsOf(g.id).map { sessionItem($0, indent: 1, showGroup: false) }
+        }
+        for g in source.groups where !shown.contains(g.id) {
+            let hits = sessionsOf(g.id).filter { sessionMatches(q, $0) }
+            guard !hits.isEmpty else { continue }
+            list.append(groupItem(g))
+            list += hits.map { sessionItem($0, indent: 1, showGroup: false) }
+        }
+        list += source.sessions.filter { $0.group == nil && sessionMatches(q, $0) }
+            .map { sessionItem($0, indent: 0, showGroup: true) }
+        return list
+    }
+
+    private func sessionsOf(_ gid: String) -> [(Session, group: Group?, lines: [String])] {
+        source.sessions.filter { $0.group?.id == gid }
+    }
+
+    // Terminal-Puffer bleibt der `/`-Suche vorbehalten: sonst matchen fremde Sessions über zufälligen Puffer-Inhalt.
+    private func sessionMatches(_ q: String, _ e: (Session, group: Group?, lines: [String])) -> Bool {
+        PaletteWindow.fuzzy(q, e.0.title + " " + e.0.cwd)
+    }
+
+    private func sessionItem(_ e: (Session, group: Group?, lines: [String]), indent: Int, showGroup: Bool) -> Item {
+        Item(label: e.0.title, sub: String((e.lines.last ?? Theme.shortPath(e.0.cwd)).prefix(70)),
+             group: showGroup ? e.group?.name : nil, status: e.0.status, sessionKey: e.0.id, indent: indent,
+             run: { [source] in source.onFocusSession(e.0.id) })
+    }
+
+    private func groupItem(_ g: Group) -> Item {
+        Item(label: "▾ " + g.name, sub: Theme.shortPath(g.cwd), group: nil, status: nil, sessionKey: nil, indent: 0,
+             run: { [source] in source.onFitGroup(g.id) })
     }
 
     /// `@text` filtert die Hosts, ⏎ hängt sich an deren laufende tmux. `@host:text` zeigt die tmux-Sessions des
@@ -320,7 +358,7 @@ final class PaletteRow: NSView {
             NSAttributedString(string: String(localized: "Keine Treffer", bundle: Bundle.app), attributes: Theme.attrs(12, Theme.muted)).draw(at: CGPoint(x: 16, y: 14))
             return
         }
-        var x: CGFloat = 16
+        var x: CGFloat = 16 + CGFloat(item.indent) * 16
         if let st = item.status {
             Theme.color(for: st).setFill()
             NSBezierPath(ovalIn: CGRect(x: x, y: 13, width: 8, height: 8)).fill()

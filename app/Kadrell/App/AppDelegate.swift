@@ -1044,6 +1044,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commands += store.groups.map { g in (String(localized: "Alle Sessions von \(g.name)", bundle: Bundle.app), { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
         src.commands = commands
         palette.source = src
+        palette.onClose = { [weak self] in self?.workspace.refocusTerminal() }
         palette.open(over: window, prefix: prefix)
     }
 
