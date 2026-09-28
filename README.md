@@ -1,5 +1,10 @@
 # Kadrell
 
+<!-- links:start -->
+[![Support me on Ko-fi](https://malura.de/assets/badge/kofi.svg)](https://malura.de/go/kofi?ref=kadrell)
+[![Check out my page](https://malura.de/assets/badge/malura.svg)](https://malura.de/go/site?ref=kadrell)
+<!-- links:end -->
+
 **Every Claude Code session in one window, kept visible and usable.**
 
 Kadrell is a native macOS app for people who run a lot of Claude Code sessions at once across several projects. A tree on the left groups sessions by project with a status dot each; the terminals sit on the right in a grid, stack or zoom. No server, no account, no tracking. Kadrell starts `claude` itself as a child process.
