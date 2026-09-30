@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.60.0 (2026-09-30)
+
+- Feature: Neue Einstellung „Bei zu schnellem 7-Tage-Verbrauch wechseln". Ist sie an, wechselt Kadrell schon dann auf einen entspannteren Account, wenn dein Wochenverbrauch zu schnell steigt und ein früher Lockout droht, nicht erst beim Erreichen der Auslastungsschwelle. Default aus.
+
 ## 1.59.0 (2026-09-24)
 
 - Änderung: Die Omni-Suche (⌘P) bündelt Treffer jetzt nach Gruppe wie die Seitenleiste: passt ein Gruppenname, siehst du die Gruppe als Überschrift und alle ihre Sessions eingerückt darunter, sonst nur die passenden Sessions je Gruppe. So kommst du schneller auf die gesuchten Sessions.

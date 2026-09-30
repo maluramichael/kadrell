@@ -73,6 +73,27 @@ final class AccountServiceTests: XCTestCase {
         XCTAssertNil(target(accounts, activeUsed: 95))
     }
 
+    /// Pace-Ziel: Soll (weeklyPlan) = 50 % bei Reset in 84 h.
+    private func paceTarget(_ accounts: [Account], activeHeadroom: Int) -> String? {
+        AccountService.bestPaceTarget(among: accounts, activeId: "live", activeHeadroom: activeHeadroom,
+                                      threshold: 90, hysteresis: 10, now: now)
+    }
+
+    /// Aktiver Account brennt über Plan (negativer Vorrat), ein Account mit klar mehr Wochen-Vorrat wird gewählt,
+    /// obwohl dessen Füllstand die Schwelle nie erreicht.
+    func testPaceTargetSwitchesToMoreRunway() {
+        let live = acct("live", session: 40, weekly: 60, weeklyResetsIn: 84)
+        let accounts = [live, acct("x", session: 10, weekly: 10, weeklyResetsIn: 84)]
+        XCTAssertEqual(paceTarget(accounts, activeHeadroom: AccountService.paceHeadroom(live, now: now)), "x")
+    }
+
+    /// Ist der beste Kandidat nicht spürbar entspannter als der aktive, bleibt es beim aktiven (kein Flattern).
+    func testPaceTargetNilWhenNoRealImprovement() {
+        let live = acct("live", session: 40, weekly: 60, weeklyResetsIn: 84)
+        let accounts = [live, acct("barely", session: 10, weekly: 55, weeklyResetsIn: 84)]
+        XCTAssertNil(paceTarget(accounts, activeHeadroom: AccountService.paceHeadroom(live, now: now)))
+    }
+
     /// Ein noch nie gesehener Account (kein Stand) gilt als leer mit vollem Vorrat und kommt zuerst dran.
     func testTargetPrefersFreshAccount() {
         let fresh = Account(id: "fresh", alias: "fresh", email: nil, subscription: nil, usage: nil)

@@ -1006,6 +1006,22 @@
         }
       }
     },
+    "Bei zu schnellem 7-Tage-Verbrauch wechseln": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei zu schnellem 7-Tage-Verbrauch wechseln"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch on too-fast 7-day usage"
+          }
+        }
+      }
+    },
     "Warnen bei zu schnellem 7-Tage-Verbrauch": {
       "localizations": {
         "de": {

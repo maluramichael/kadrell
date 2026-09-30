@@ -190,16 +190,25 @@ final class AccountService {
     /// Nach jedem Usage-Update: ist der aktive Account über der Schwelle und die Sperrzeit vorbei, auf den Account
     /// mit dem meisten Rest wechseln, aber nur wenn der spürbar leerer ist.
     func considerAutoSwitch(_ usage: Usage) {
-        guard Settings.autoswitchEnabled, accounts.count > 1, let activeId else { return }
-        let used = max(usage.session ?? 0, usage.weekly ?? 0)
-        guard used >= Settings.autoswitchThreshold, Date().timeIntervalSince(lastSwitch) >= Self.cooldown,
-              let target = bestTarget(excluding: activeId, activeUsed: used) else { return }
+        guard Settings.autoswitchEnabled, accounts.count > 1, let activeId,
+              Date().timeIntervalSince(lastSwitch) >= Self.cooldown,
+              let target = autoSwitchTarget(usage, activeId: activeId) else { return }
         Task {
             if await switchTo(target), let to = accounts.first(where: { $0.id == target }) {
                 Feedback.play(.toggle)
                 onAutoSwitch?(to)
             }
         }
+    }
+
+    /// Ziel des Auto-Wechsels: bei erreichter Füllstand-Schwelle der leerste Account. Zusätzlich, wenn `autoswitchOnPace`
+    /// an ist und ein früher Wochen-Lockout droht, der Account mit spürbar mehr Wochen-Runway. Sonst nil (kein Wechsel).
+    private func autoSwitchTarget(_ usage: Usage, activeId: String) -> String? {
+        let used = max(usage.session ?? 0, usage.weekly ?? 0)
+        if used >= Settings.autoswitchThreshold, let t = bestTarget(excluding: activeId, activeUsed: used) { return t }
+        guard Settings.autoswitchOnPace, usage.weeklyLockout() != nil else { return nil }
+        let headroom = (usage.weeklyPlan() ?? 100) - (usage.weekly ?? 0)
+        return bestPaceTarget(excluding: activeId, activeHeadroom: headroom)
     }
 
     /// Der Account, auf den der Auto-Wechsel zielt, aus den echten Einstellungen und der aktuellen Zeit.
@@ -216,6 +225,22 @@ final class AccountService {
         let candidates = accounts.filter { $0.id != activeId && sessionUsed($0, now: now) < threshold }
         guard let best = candidates.max(by: { paceHeadroom($0, now: now) < paceHeadroom($1, now: now) }),
               cachedUsed(best, now: now) <= activeUsed - hysteresis else { return nil }
+        return best.id
+    }
+
+    /// Wie `bestTarget`, aber für den Pace-Fall: Ziel ist der Account mit dem meisten Wochen-Runway, gewählt nur wenn er
+    /// den aktiven um die Hysterese-Marge an Pace-Vorrat übertrifft. So springt der Wechsel weg vom zu schnell brennenden
+    /// Account, auch wenn dessen Füllstand die Schwelle noch nicht erreicht hat.
+    private func bestPaceTarget(excluding id: String, activeHeadroom: Int) -> String? {
+        Self.bestPaceTarget(among: accounts, activeId: id, activeHeadroom: activeHeadroom,
+                            threshold: Settings.autoswitchThreshold, hysteresis: Self.hysteresis, now: Date())
+    }
+
+    static func bestPaceTarget(among accounts: [Account], activeId: String, activeHeadroom: Int,
+                               threshold: Int, hysteresis: Int, now: Date) -> String? {
+        let candidates = accounts.filter { $0.id != activeId && sessionUsed($0, now: now) < threshold }
+        guard let best = candidates.max(by: { paceHeadroom($0, now: now) < paceHeadroom($1, now: now) }),
+              paceHeadroom(best, now: now) >= activeHeadroom + hysteresis else { return nil }
         return best.id
     }
 
