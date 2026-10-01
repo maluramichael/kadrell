@@ -52,6 +52,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Dock-Icon direkt aus dem Bundle: LaunchServices hält für Debug-Builds am selben Pfad gern das alte, leere Icon.
         if let url = Bundle.main.url(forResource: "Kadrell", withExtension: "icns"), let img = NSImage(contentsOf: url) { NSApp.applicationIconImage = img }
         buildMenu()
+        // Dock-Badge nur bei geändertem Wert anfassen, der Abgleich läuft sehr oft.
+        let setBadge = attention.setBadge
+        var badge: Int?
+        attention.setBadge = { n in
+            guard n != badge else { return }
+            badge = n
+            setBadge(n)
+        }
         attention.onTip = { [weak self] tip in self?.windows.forEach { $0.bar.tip = tip; $0.bar.needsDisplay = true } }
         attention.notify = { [weak self] key, s, waiting in
             Notifications.notify(sessionKey: key, group: self?.store.group(forSession: key)?.name ?? "", title: s.title,
@@ -223,7 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windows.removeAll { $0 === c }
         if current === c { current = windows.last }
         c.workspace.close()
-        for k in ["workspace.selected", "workspace.mode", "workspace.auto"] { Profile.defaults.removeObject(forKey: k + MainWindowController.suffix(c.index)) }
+        c.workspace.clearPersisted()
         persistWindows()
         syncSidebar()
     }
@@ -233,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func wire(_ c: MainWindowController) {
         let workspace = c.workspace, sidebar = c.sidebar, bar = c.bar
 
-        workspace.onChange = { [weak self] in self?.syncSidebar() }
+        workspace.onChange = { [weak self] in self?.scheduleSync() }
         // Terminal hier ausgehängt: andere Fenster, die es als Hinweis zeigen, dürfen es jetzt einhängen.
         workspace.onReleaseTerminal = { [weak self, weak c] in
             DispatchQueue.main.async { self?.windows.filter { $0 !== c }.forEach { $0.workspace.relayout() } }
@@ -286,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onDismissTip = { [weak self] in self?.attention.tip = nil }
         bar.onSelectWaiting = { [weak self, weak workspace] in guard let self else { return }; workspace?.select(waitingIds(), add: false) }
         bar.onShowUpdate = { [weak self] in self?.showUpdateAvailable() }
+        bar.onShowError = { [weak self] in self?.showError() }
         bar.onDetachIdle = { [weak self] in self?.detachIdleSessions() }
         bar.onSwitchAccount = { [weak self] id in self?.switchAccount(id) }
         bar.onAddAccount = { [weak self] in self?.addAccount() }
@@ -304,39 +313,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Auf einen anderen Account umschalten (Global-Swap), danach die Nutzung sofort neu holen.
-    private func switchAccount(_ id: String) { Task { if await accounts.switchTo(id) { usage.refreshNow() } } }
-
-    /// Den gerade angemeldeten Account als Slot aufnehmen; scheitert, wenn keiner angemeldet ist.
-    private func addAccount() {
+    private func switchAccount(_ id: String) {
         Task { [weak self] in
             guard let self else { return }
-            if await self.accounts.addCurrent() { Feedback.play(.done) } else { self.warnNoAccount() }
+            if await self.accounts.switchTo(id) { self.usage.refreshNow(); return }
+            guard let reason = self.accounts.lastError else { return }
+            self.sheets.report(reason, title: String(localized: "Kontowechsel fehlgeschlagen", bundle: Bundle.app))
         }
     }
 
-    /// Nach einem automatischen Account-Wechsel einmal melden, welcher Account jetzt aktiv ist. Die
-    /// „Nicht mehr anzeigen"-Checkbox (NSAlert-Suppression) schaltet die Meldung dauerhaft ab, wieder an
-    /// in den Einstellungen. Als Sheet am Fenster, damit sie den Fokus paralleler Arbeit nicht stiehlt.
+    /// Den gerade angemeldeten Account als Slot aufnehmen; scheitert z. B., wenn keiner angemeldet ist.
+    private func addAccount() {
+        Task { [weak self] in
+            guard let self else { return }
+            if await self.accounts.addCurrent() { Feedback.play(.done); return }
+            let reason = self.accounts.lastError
+                ?? String(localized: "Kein angemeldeter Claude-Account gefunden. Melde dich zuerst in einer Session mit „claude“ an, dann versuch es erneut.", bundle: Bundle.app)
+            self.sheets.report(reason, title: String(localized: "Konto nicht hinzugefügt", bundle: Bundle.app))
+        }
+    }
+
+    /// Nach einem automatischen Account-Wechsel melden, welcher Account jetzt aktiv ist. Als Meldung in der Leiste
+    /// statt Dialog: wer gerade tippt, tippt sonst in den Dialog. Abschaltbar in den Einstellungen.
     private func notifyAutoSwitch(_ to: Account) {
         guard Settings.autoswitchNotice else { return }
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Account automatisch gewechselt", bundle: Bundle.app)
-        alert.informativeText = String(localized: "Jetzt aktiv: „\(to.title)“. Grund: Nutzungslimit erreicht.", bundle: Bundle.app)
-        alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = String(localized: "Nicht mehr anzeigen", bundle: Bundle.app)
-        let apply = { if alert.suppressionButton?.state == .on { Settings.autoswitchNotice = false } }
-        if let window = bar.window {
-            alert.beginSheetModal(for: window) { _ in apply() }
-        } else {
-            alert.runModal()
-            apply()
-        }
+        attention.notice(String(localized: "Konto automatisch gewechselt: „\(to.title)“ (Nutzungslimit)", bundle: Bundle.app))
     }
 
     /// Latch, damit die Pace-Warnung nur einmal pro Überschreitung kommt statt bei jedem Poll.
     private var paceWarned = false
-    /// Nicht blockierende Warnung: liegt das 7-Tage-Limit über dem gleichmäßigen Wochen-Plan und erreicht bei diesem
-    /// Tempo vor dem Reset 100 %, droht ein früher Lockout. Einmal melden, „Nicht mehr anzeigen" schaltet dauerhaft ab.
+    /// Nicht blockierende Warnung in der Leiste: liegt das 7-Tage-Limit über dem gleichmäßigen Wochen-Plan und
+    /// erreicht bei diesem Tempo vor dem Reset 100 %, droht ein früher Lockout. Abschaltbar in den Einstellungen.
     private func notifyPaceIfNeeded(_ usage: Usage) {
         guard Settings.autoswitchPaceWarning, let lockout = usage.weeklyLockout(), let reset = usage.weeklyResets else {
             paceWarned = false
@@ -346,25 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         paceWarned = true
         let when = lockout.formatted(.dateTime.weekday(.abbreviated).hour().minute())
         let until = reset.formatted(.dateTime.weekday(.abbreviated).hour().minute())
-        let alert = NSAlert()
-        alert.messageText = String(localized: "7-Tage-Limit läuft zu schnell voll", bundle: Bundle.app)
-        alert.informativeText = String(localized: "Bei diesem Tempo ist das 7-Tage-Limit am \(when) voll. Reset ist aber erst am \(until), bis dahin wärst du gesperrt.", bundle: Bundle.app)
-        alert.showsSuppressionButton = true
-        alert.suppressionButton?.title = String(localized: "Nicht mehr anzeigen", bundle: Bundle.app)
-        let apply = { if alert.suppressionButton?.state == .on { Settings.autoswitchPaceWarning = false } }
-        if let window = bar.window {
-            alert.beginSheetModal(for: window) { _ in apply() }
-        } else {
-            alert.runModal()
-            apply()
-        }
-    }
-
-    private func warnNoAccount() {
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Kein angemeldeter Claude-Account gefunden", bundle: Bundle.app)
-        alert.informativeText = String(localized: "Melde dich zuerst in einer Session mit „claude“ an, dann versuch es erneut.", bundle: Bundle.app)
-        alert.runModal()
+        attention.notice(String(localized: "7-Tage-Limit läuft zu schnell voll: bei diesem Tempo am \(when) voll, Reset erst am \(until).", bundle: Bundle.app))
     }
 
     /// Einmal für alle Fenster: Tasten wirken im Key-Fenster, Mausrad in dem Fenster unter der Maus.
@@ -590,9 +579,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         syncSidebar()
     }
 
+    /// `workspace.onChange` feuert bei jedem relayout, also bei Resize und Splitter-Drag pro Frame: höchstens
+    /// ein Abgleich je Runloop-Durchlauf. Ein direkter `syncSidebar` dazwischen macht den ausstehenden überflüssig.
+    private var syncScheduled = false
+    private func scheduleSync() {
+        guard !syncScheduled else { return }
+        syncScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self, syncScheduled else { return }
+            syncSidebar()
+        }
+    }
+
     /// Baum und Leiste jedes Fensters folgen seiner Arbeitsfläche (Auswahl, Fokus, Layout). Hook, Dock, Sounds und
     /// Marke „neu“ (`AttentionTracker`) gelten global und folgen dem Fokus des Key-Fensters.
     private func syncSidebar() {
+        syncScheduled = false
         guard current != nil else { return }
         let sessions = workspace.sessions
         attention.prune(to: sessions)
@@ -628,7 +630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fg = focused.flatMap { workspace.group(forSession: $0.id) }
         bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
-        bar.errorText = registry?.lastError
+        bar.errorText = registry?.lastError ?? registry?.storageError ?? store.lastError
         bar.versionWarning = versionWarning
         bar.tip = attention.tip
         bar.sessionCount = sessions.count
@@ -911,6 +913,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Kürzel der Arbeitsfläche erledigt `WorkspaceView.perform`, hier bleiben die mit Baum, Vorschau oder Dialog.
+    /// Ohne `default`: eine neue `HotkeyAction` muss hier eingeordnet werden, sonst baut es nicht.
     private func perform(_ action: HotkeyAction) {
         if action != .previewNext, action != .previewPrev { endPreview(commit: false) }
         guard !workspace.perform(action) else { return }
@@ -921,11 +924,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .focusSidebar: focusSidebar()
         case .focusWorkspace: focusWorkspace()
         case .openEditor: openEditor()
-        case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
+        case .renameSession: renameFocused()
         case .cycleSort: cycleSort()
         case .toggleGrouping: toggleGrouping()
-        default: break
+        // Erledigt `WorkspaceView.perform` (oben schon zurückgekehrt).
+        case .focusLeft, .focusRight, .focusUp, .focusDown, .swapLeft, .swapRight, .swapUp, .swapDown,
+             .resizeLeft, .resizeRight, .resizeUp, .resizeDown, .splitRight, .splitDown,
+             .nextSession, .prevSession, .lastSession,
+             .focus1, .focus2, .focus3, .focus4, .focus5, .focus6, .focus7, .focus8, .focus9,
+             .zoom, .nextLayout, .closeFocused, .syncInput:
+            break
         }
+    }
+
+    private func renameFocused() {
+        guard let key = workspace.focused else { NSSound.beep(); return }
+        renameSession(key)
     }
 
     private func cycleSort() { Settings.sidebarSort = Settings.sidebarSort.next; syncSidebar() }
@@ -995,11 +1009,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sheets.dismiss()
         // Kein Hintergrund-Timer mehr: Snapshots erst hier auf den aktuellen Stand bringen, direkt vorm Zeigen.
         attach?.refreshSnapshots()
+        var src = paletteSource()
+        src.commands = paletteCommands()
+        palette.source = src
+        palette.onClose = { [weak self] in self?.workspace.refocusTerminal() }
+        palette.open(over: window, prefix: prefix)
+    }
+
+    private func paletteSource() -> PaletteWindow.Source {
         var src = PaletteWindow.Source()
         let sessions = workspace.sessions
         let bufferSessions = store.groups.flatMap { g in g.sessionIds.compactMap { sessions[$0] }.map { ($0, group: g, lines: attach?.lines(for: $0.id) ?? []) } }
         src.sessions = bufferSessions
         src.groups = store.groups
+        src.isAttached = { [weak self] in self?.attach?.isAttached($0) ?? false }
         // getBufferAsData + UTF-8-Dekodierung je Terminal kostet spürbar: erst holen, wenn die `/`-Suche sie
         // tatsächlich braucht (siehe `PaletteWindow.terminalMatches`), nicht bei jedem Öffnen der Palette.
         src.buffers = { [weak self] in
@@ -1021,30 +1044,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let g = store.group(id: gid) else { return }
             workspace.select(g.sessionIds, add: false)
         }
-        let focusedSession = workspace.focused.flatMap { sessions[$0] }
-        var commands: [(String, () -> Void)] = LayoutMode.allCases.map { m in (String(localized: "Layout: \(m.title)", bundle: Bundle.app), { [weak self] in self?.workspace.setMode(m) }) }
+        return src
+    }
+
+    private typealias PaletteCommand = (String, () -> Void)
+
+    private func paletteCommands() -> [PaletteCommand] {
+        var commands: [PaletteCommand] = LayoutMode.allCases.map { m in (String(localized: "Layout: \(m.title)", bundle: Bundle.app), { [weak self] in self?.workspace.setMode(m) }) }
         commands += [
             (String(localized: "Trennlinien zurücksetzen (gleich verteilt)", bundle: Bundle.app), { [weak self] in self?.workspace.resetRatios() }),
-            (String(localized: "Zoom ein/aus (fokussierte)", bundle: Bundle.app), { [weak self] in self?.workspace.toggleZen() }),
             (String(localized: "Neue Session", bundle: Bundle.app), { [weak self] in self?.openNewSession(groupId: nil) }),
             (String(localized: "Neues Terminal ohne Claude", bundle: Bundle.app), { [weak self] in self?.menuNewShell() }),
             (String(localized: "Remote verbinden (ssh → tmux)", bundle: Bundle.app), { [weak self] in self?.menuRemote() }),
-            (String(localized: "Session stoppen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
-            (String(localized: "Session fortsetzen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.attach.attachNow(s); self?.workspace.select([s.id], add: false) } }),
-            (String(localized: "Session umbenennen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.renameSession(s.id) } }),
-            (String(localized: "Session schließen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.closeSession(s.id) } }),
-            (String(localized: "Gruppe bearbeiten (der fokussierten Session)", bundle: Bundle.app), { [weak self] in
-                if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
+        ]
+        commands += focusedCommands()
+        commands += restoreCommands()
+        commands += [
             (String(localized: "Statistik", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.stats) }),
             (String(localized: "Reload", bundle: Bundle.app), { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
             (String(localized: "Konto hinzufügen (aktuell angemeldetes)", bundle: Bundle.app), { [weak self] in self?.addAccount() }),
         ]
         commands += accounts.accounts.map { a in (String(localized: "Zu Konto wechseln: \(a.title)", bundle: Bundle.app), { [weak self] in self?.switchAccount(a.id) }) }
         commands += store.groups.map { g in (String(localized: "Alle Sessions von \(g.name)", bundle: Bundle.app), { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
-        src.commands = commands
-        palette.source = src
-        palette.onClose = { [weak self] in self?.workspace.refocusTerminal() }
-        palette.open(over: window, prefix: prefix)
+        return commands
+    }
+
+    /// Befehle auf die beim Öffnen fokussierte Session. Ohne Fokus-Session piepen sie, statt still nichts zu tun.
+    private func focusedCommands() -> [PaletteCommand] {
+        let focused = workspace.focused.flatMap { workspace.sessions[$0] }
+        func cmd(_ title: String, _ run: @escaping (AppDelegate, Session) -> Void) -> PaletteCommand {
+            (title, { [weak self] in
+                guard let self, let focused else { NSSound.beep(); return }
+                run(self, focused)
+            })
+        }
+        return [
+            cmd(String(localized: "Zoom ein/aus (fokussierte)", bundle: Bundle.app)) { d, _ in d.workspace.toggleZen() },
+            cmd(String(localized: "Session stoppen (fokussierte)", bundle: Bundle.app)) { d, s in d.stopSession(s) },
+            cmd(String(localized: "Session fortsetzen (fokussierte)", bundle: Bundle.app)) { d, s in d.attach.attachNow(s); d.workspace.select([s.id], add: false) },
+            cmd(String(localized: "Session umbenennen (fokussierte)", bundle: Bundle.app)) { d, s in d.renameSession(s.id) },
+            cmd(String(localized: "Session schließen (fokussierte)", bundle: Bundle.app)) { d, s in d.closeSession(s.id) },
+            cmd(String(localized: "Kachel aus der Ansicht nehmen (fokussierte)", bundle: Bundle.app)) { d, s in d.workspace.deselect(s.id) },
+            cmd(String(localized: "Gruppe bearbeiten (der fokussierten Session)", bundle: Bundle.app)) { d, s in d.withGroup(of: s) { d.openEditGroup($0.id) } },
+            cmd(String(localized: "Favorit umschalten (Gruppe der fokussierten)", bundle: Bundle.app)) { d, s in
+                d.withGroup(of: s) { d.store.toggleFavorite(id: $0.id); d.reloadViews() } },
+            cmd(String(localized: "Gruppe schließen (der fokussierten Session)", bundle: Bundle.app)) { d, s in d.withGroup(of: s) { d.closeGroup($0.id) } },
+        ]
+    }
+
+    private func withGroup(of s: Session, _ run: (Group) -> Void) {
+        guard let g = workspace.group(forSession: s.id) else { NSSound.beep(); return }
+        run(g)
+    }
+
+    /// Zuletzt geschlossene Sessions (closed.json) wieder aufnehmen: ⌘W soll eine Konversation nicht verschwinden lassen.
+    private func restoreCommands() -> [PaletteCommand] {
+        guard let registry else { return [] }
+        let entries = SessionRegistry.restorable(registry.closed, running: Set(registry.sessions.map(\.sessionId)))
+        return entries.map { c in
+            let s = c.session, folder = URL(fileURLWithPath: s.cwd).lastPathComponent
+            return (String(localized: "Wiederherstellen: \(s.title) · \(folder)", bundle: Bundle.app), { [weak self] in self?.restoreClosed(s) })
+        }
+    }
+
+    /// Setzt die Konversation mit ihrer alten sessionId fort, in der Gruppe ihres Ordners, mit ihrem eigenen Namen.
+    private func restoreClosed(_ s: Session) {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: s.cwd, isDirectory: &isDir), isDir.boolValue else {
+            sheets.report(String(localized: "Der Ordner \(s.cwd) existiert nicht mehr, die Session „\(s.title)“ lässt sich dort nicht fortsetzen.", bundle: Bundle.app),
+                          title: String(localized: "Wiederherstellen nicht möglich", bundle: Bundle.app))
+            return
+        }
+        // Zwischen Öffnen der Palette und Auswahl kann sie schon wieder laufen (`kadrell resume`, claude in einem anderen Terminal).
+        do { try checkResumable(s.sessionId) } catch {
+            sheets.report((error as? ControlError)?.message ?? String(describing: error), title: String(localized: "Wiederherstellen nicht möglich", bundle: Bundle.app))
+            return
+        }
+        let key = startSession(group: nil, cwd: s.cwd, sessionId: s.sessionId)
+        if let name = s.customName { registry.rename(key, to: name) }
+        _ = registry.takeClosed(sessionId: s.sessionId)
     }
 
     /// Treffer aus der Suche über alle Terminals: Session zeigen, Suchleiste dort mit dem Begriff öffnen und
@@ -1063,13 +1141,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Klick auf die rote Fehler-Pille: voller Text. Speicherfehler gelten damit als gesehen, CLI-Fehler bleiben,
+    /// bis `recheckCLI` sie räumt.
+    private func showError() {
+        if let e = registry?.lastError { sheets.report(e); return }
+        let title = String(localized: "Kadrell konnte Daten nicht laden oder speichern", bundle: Bundle.app)
+        if let e = registry?.storageError {
+            sheets.report(e, title: title)
+            registry.clearStorageError()
+        } else if let e = store.lastError {
+            sheets.report(e, title: title)
+            store.clearError()
+            reloadViews()
+        }
+    }
+
+    /// Nur https-Downloads vom eigenen Update-Server (Host der Manifest-URL in `UpdateChecker`) unter `/download/`.
+    nonisolated static func isTrustedDownload(_ url: URL) -> Bool {
+        url.scheme == "https" && url.host() == "kadrell.malura.de" && url.path().hasPrefix("/download/")
+    }
+
     // MARK: Sessions
 
     /// Klick auf die Update-Pille in der Statusleiste: Changelog-Zeilen der neuen Version, Download öffnet den Browser.
     private func showUpdateAvailable() {
         guard let m = updateChecker.available else { return }
-        sheets.confirm(String(localized: "Kadrell \(m.version) verfügbar", bundle: Bundle.app), m.notes.joined(separator: "\n"), button: String(localized: "Herunterladen", bundle: Bundle.app), destructive: false) {
-            guard let url = URL(string: m.url) else { return }
+        sheets.confirm(String(localized: "Kadrell \(m.version) verfügbar", bundle: Bundle.app), m.notes.joined(separator: "\n"), button: String(localized: "Herunterladen", bundle: Bundle.app), destructive: false) { [weak self] in
+            guard let self else { return }
+            guard let url = URL(string: m.url), Self.isTrustedDownload(url) else {
+                AppDelegate.log.error("update: untrusted download url \(m.url, privacy: .public)")
+                self.sheets.report(String(localized: "Die Download-Adresse im Update-Manifest zeigt nicht auf kadrell.malura.de. Lade das Update bitte direkt von https://kadrell.malura.de herunter.", bundle: Bundle.app),
+                                   title: String(localized: "Update nicht geöffnet", bundle: Bundle.app))
+                return
+            }
             NSWorkspace.shared.open(url)
         }
     }
@@ -1140,7 +1244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let sessions = workspace.sessions
-        let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
+        let counts = Dictionary(store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) }, uniquingKeysWith: { a, _ in a })
         // Repos unter dem Startordner und neben allen bekannten Projekten; bis der Scan steht, gilt der gespeicherte Stand.
         let model = NewSessionModel(groups: store.groups, counts: counts)
         let known = store.groups.map(\.cwd) + FolderIndex.shared.uses.keys

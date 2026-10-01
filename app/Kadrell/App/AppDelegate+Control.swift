@@ -142,7 +142,7 @@ extension AppDelegate {
     }
 
     /// Dieselbe Konversation in zwei Prozessen schreibt durcheinander ins Transcript: nur übernehmen, was nirgends mehr läuft.
-    private func checkResumable(_ sessionId: String) throws {
+    func checkResumable(_ sessionId: String) throws {
         guard !registry.sessions.contains(where: { $0.sessionId == sessionId || $0.id == sessionId }) else { throw ControlError("\(sessionId) ist schon in Kadrell") }
         guard Transcript.path(sessionId: sessionId, configDir: registry.cli.configDir) != nil else { throw ControlError("kein Transcript für \(sessionId)") }
         let dir = registry.cli.configDir + "/sessions"

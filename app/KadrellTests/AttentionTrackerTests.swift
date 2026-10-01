@@ -117,4 +117,24 @@ final class AttentionTrackerTests: XCTestCase {
         for f in ["a", "a", "b"] { _ = t.update(sessions: s, waiting: [], statuses: [:], focused: f, isKey: true) }
         XCTAssertEqual(fired, ["a", "b"], "vor claude kein Hook, danach nur bei Wechsel")
     }
+
+    func testNoticeShowsEveryTimeAndClearsAfterDuration() async {
+        let t = tracker()
+        t.tipDuration = .milliseconds(50)
+        t.notice("x")
+        t.tip = nil
+        t.notice("x")
+        XCTAssertEqual(tips, ["x", nil, "x"], "keine Einmal-Sperre")
+        for _ in 0..<100 where t.tip != nil { try? await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertNil(t.tip, "räumt sich nach Ablauf selbst")
+    }
+
+    func testTrustedDownloadURL() {
+        let ok = ["https://kadrell.malura.de/download/Kadrell-1.2.3.dmg", "https://kadrell.malura.de/download/"]
+        let bad = ["http://kadrell.malura.de/download/K.dmg", "https://evil.example/download/K.dmg",
+                   "https://kadrell.malura.de/other/K.dmg", "https://kadrell.malura.de.evil.example/download/K.dmg",
+                   "file:///download/K.dmg", "https://kadrell.malura.de/downloadx/K.dmg"]
+        for s in ok { XCTAssertTrue(AppDelegate.isTrustedDownload(URL(string: s)!), s) }
+        for s in bad { XCTAssertFalse(AppDelegate.isTrustedDownload(URL(string: s)!), s) }
+    }
 }

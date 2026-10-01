@@ -119,6 +119,22 @@
     "%@  ⏎": {
       "shouldTranslate": false
     },
+    "%@ %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@"
+          }
+        }
+      }
+    },
     "%@ existiert nicht · ⌘⏎ anlegen und starten": {
       "localizations": {
         "de": {
@@ -147,6 +163,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ done"
+          }
+        }
+      }
+    },
+    "%@ ist kaputt, Original gesichert unter %@, Datei beginnt leer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ist kaputt, Original gesichert unter %@, Datei beginnt leer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is corrupt, original saved at %@, file starts empty"
+          }
+        }
+      }
+    },
+    "%@ ist nicht lesbar (%@), Datei wird nicht überschrieben": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ist nicht lesbar (%@), Datei wird nicht überschrieben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is not readable (%@), file will not be overwritten"
           }
         }
       }
@@ -263,6 +311,22 @@
         }
       }
     },
+    "%@: %lld von %lld Einträgen kaputt, Rest übernommen, Original gesichert unter %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %lld von %lld Einträgen kaputt, Rest übernommen, Original gesichert unter %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %lld of %lld entries corrupt, rest imported, original saved at %@"
+          }
+        }
+      }
+    },
     "%@: Nutzung nicht abrufbar": {
       "localizations": {
         "de": {
@@ -323,6 +387,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@: claude not found"
+          }
+        }
+      }
+    },
+    "%@: Sicherung fehlgeschlagen, Datei wird nicht überschrieben": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: Sicherung fehlgeschlagen, Datei wird nicht überschrieben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: backup failed, file will not be overwritten"
           }
         }
       }
@@ -570,6 +650,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 Claude session is running interactively in other terminals · Import: tools/tmux-dump.py"
+          }
+        }
+      }
+    },
+    "7-Tage-Limit läuft zu schnell voll: bei diesem Tempo am %@ voll, Reset erst am %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7-Tage-Limit läuft zu schnell voll: bei diesem Tempo am %@ voll, Reset erst am %@."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7-day limit is filling up too fast: at this pace it is full on %@, reset only on %@."
           }
         }
       }
@@ -974,6 +1070,134 @@
         }
       }
     },
+    "Der Ordner %@ existiert nicht mehr, die Session „%@“ lässt sich dort nicht fortsetzen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner %@ existiert nicht mehr, die Session „%@“ lässt sich dort nicht fortsetzen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The folder %@ no longer exists, so the session \"%@\" cannot be resumed there."
+          }
+        }
+      }
+    },
+    "Die Download-Adresse im Update-Manifest zeigt nicht auf kadrell.malura.de. Lade das Update bitte direkt von https://kadrell.malura.de herunter.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Download-Adresse im Update-Manifest zeigt nicht auf kadrell.malura.de. Lade das Update bitte direkt von https://kadrell.malura.de herunter."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download address in the update manifest does not point to kadrell.malura.de. Please download the update directly from https://kadrell.malura.de."
+          }
+        }
+      }
+    },
+    "Ein Wechsel läuft schon": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Wechsel läuft schon"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A switch is already in progress"
+          }
+        }
+      }
+    },
+    "Favorit umschalten (Gruppe der fokussierten)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorit umschalten (Gruppe der fokussierten)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggle favorite (group of the focused session)"
+          }
+        }
+      }
+    },
+    "Finder-Ordner vorschlagen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder-Ordner vorschlagen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggest Finder folders"
+          }
+        }
+      }
+    },
+    "Gespeicherter Zugang für „%@“ ist nicht lesbar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherter Zugang für „%@“ ist nicht lesbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stored credentials for \"%@\" are not readable"
+          }
+        }
+      }
+    },
+    "Gruppe schließen (der fokussierten Session)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gruppe schließen (der fokussierten Session)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close group (of the focused session)"
+          }
+        }
+      }
+    },
+    "Hosts aus ~/.ssh/config · user@host direkt tippen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hosts aus ~/.ssh/config · user@host direkt tippen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hosts from ~/.ssh/config · type user@host directly"
+          }
+        }
+      }
+    },
     "Jetzt aktiv: „%@“. Grund: Nutzungslimit erreicht.": {
       "localizations": {
         "de": {
@@ -986,6 +1210,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "Now active: “%@”. Reason: usage limit reached."
+          }
+        }
+      }
+    },
+    "Kachel aus der Ansicht nehmen (fokussierte)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kachel aus der Ansicht nehmen (fokussierte)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove tile from the view (focused)"
+          }
+        }
+      }
+    },
+    "Kadrell konnte Daten nicht laden oder speichern": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell konnte Daten nicht laden oder speichern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kadrell could not load or save data"
+          }
+        }
+      }
+    },
+    "Kein angemeldeter Claude-Account gefunden. Melde dich zuerst in einer Session mit „claude“ an, dann versuch es erneut.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein angemeldeter Claude-Account gefunden. Melde dich zuerst in einer Session mit „claude“ an, dann versuch es erneut."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No signed-in Claude account found. Sign in first in a session with \"claude\", then try again."
+          }
+        }
+      }
+    },
+    "kein Kürzel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kein Kürzel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no shortcut"
+          }
+        }
+      }
+    },
+    "Konto automatisch gewechselt: „%@“ (Nutzungslimit)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto automatisch gewechselt: „%@“ (Nutzungslimit)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account switched automatically: \"%@\" (usage limit)"
+          }
+        }
+      }
+    },
+    "Konto nicht hinzugefügt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto nicht hinzugefügt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account not added"
+          }
+        }
+      }
+    },
+    "Kontowechsel fehlgeschlagen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontowechsel fehlgeschlagen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account switch failed"
           }
         }
       }
@@ -1018,6 +1354,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch on too-fast 7-day usage"
+          }
+        }
+      }
+    },
+    "Schlüsselbund hat das Speichern abgelehnt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schlüsselbund hat das Speichern abgelehnt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keychain refused to save"
+          }
+        }
+      }
+    },
+    "Schreibtisch, Dokumente und Downloads werden nicht durchsucht · ⌘O wählt jeden Ordner": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schreibtisch, Dokumente und Downloads werden nicht durchsucht · ⌘O wählt jeden Ordner"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop, Documents and Downloads are not searched · ⌘O picks any folder"
+          }
+        }
+      }
+    },
+    "Speichern von %@ fehlgeschlagen: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern von %@ fehlgeschlagen: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saving %@ failed: %@"
+          }
+        }
+      }
+    },
+    "ssh · ⏎ tmux attach": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ssh · ⏎ tmux attach"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ssh · ⏎ tmux attach"
+          }
+        }
+      }
+    },
+    "Uhrzeit %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uhrzeit %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time %@"
+          }
+        }
+      }
+    },
+    "Update nicht geöffnet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update nicht geöffnet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update not opened"
+          }
+        }
+      }
+    },
+    "Verbinden mit %@ (ssh)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinden mit %@ (ssh)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to %@ (ssh)"
           }
         }
       }
@@ -5970,6 +6418,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn back on: Settings (⌘,) › Confirmations"
+          }
+        }
+      }
+    },
+    "Wiederherstellen nicht möglich": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederherstellen nicht möglich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore not possible"
+          }
+        }
+      }
+    },
+    "Wiederherstellen: %@ · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederherstellen: %@ · %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore: %@ · %@"
           }
         }
       }

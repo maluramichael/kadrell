@@ -26,16 +26,34 @@ final class NewSessionModel {
     /// Läuft der Repo-Scan gerade im Hintergrund (⌘N kurz nach dem Start).
     var scanning: Bool { index.scanning }
 
-    /// `askFinder: false` in Tests: sonst fragt macOS nach der Erlaubnis, den Finder zu steuern.
-    init(groups: [Group], counts: [String: Int], index: FolderIndex = .shared, askFinder: Bool = true) {
+    /// Finder-Ordner vorschlagen: Knopf, solange die Erlaubnis noch nie abgefragt wurde.
+    private(set) var offersFinderButton = false
+    private(set) var finderTask: Task<Void, Never>?
+    private let finderFolder: () async -> String?
+
+    /// Erlaubnis und Abfrage sind injizierbar: Tests schicken keine Apple Events an den Finder. Ohne Erlaubnis
+    /// fragt macOS sonst beim ersten ⌘N „Kadrell möchte Finder steuern“ und der Dialog stiehlt dem Suchfeld den Fokus.
+    init(groups: [Group], counts: [String: Int], index: FolderIndex = .shared,
+         finderPermission: () -> FinderPermission = FolderIndex.finderPermission,
+         finderFolder: @escaping () async -> String? = FolderIndex.finderFolder) {
         self.groups = groups
         self.counts = counts
         self.index = index
+        self.finderFolder = finderFolder
         if let c = FolderIndex.clipboardFolder() { context.append((c, String(localized: "Zwischenablage", bundle: Bundle.app))) }
         update()
-        guard askFinder else { return }
-        Task { [weak self] in
-            guard let f = await FolderIndex.finderFolder(), let self else { return }
+        switch finderPermission() {
+        case .granted: suggestFinderFolder()
+        case .notAsked: offersFinderButton = true
+        case .denied: break
+        }
+    }
+
+    /// Fragt den Finder (bei `.notAsked` mit Systemdialog) und übernimmt den Ordner als ersten Vorschlag.
+    func suggestFinderFolder() {
+        offersFinderButton = false
+        finderTask = Task { [weak self] in
+            guard let f = await self?.finderFolder(), let self else { return }
             self.context.removeAll { $0.path == f }
             self.context.insert((f, "Finder"), at: 0)
             // Nicht unter den Fingern umsortieren: nur, solange noch nichts getippt oder gewählt ist.
@@ -176,6 +194,11 @@ struct NewSessionView: View {
                         Text("Suche Git-Repos unter ~ …").font(Theme.ui(10)).foregroundStyle(Theme.mutedColor)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 8)
                     }
+                    if model.offersFinderButton {
+                        Button(String(localized: "Finder-Ordner vorschlagen", bundle: Bundle.app)) { model.suggestFinderFolder() }
+                            .buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.runningColor)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 8)
+                    }
                     if items.isEmpty, let bad = model.notFoundPath {
                         Text(String(localized: "\(Theme.shortPath(bad)) existiert nicht · ⌘⏎ anlegen und starten", bundle: Bundle.app))
                             .foregroundStyle(Theme.errorColor)
@@ -184,14 +207,27 @@ struct NewSessionView: View {
                         Text("Kein Ordner gefunden. ⌘O wählt im Finder.").foregroundStyle(Theme.mutedColor)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                     }
+                    if items.isEmpty, model.notFoundPath == nil { skipHint }
                     ForEach(Array(items.enumerated()), id: \.element.id) { i, c in row(c, on: i == model.selected)
                         .onTapGesture { model.pick(i) }
                     }
                 }
             }
-            .frame(height: min(368, CGFloat(max(items.count, 1)) * 46) * Theme.scale)
+            .frame(height: min(368, CGFloat(max(items.count, 1)) * 46 + extraLines(empty: items.isEmpty) * 30) * Theme.scale)
             .onChange(of: model.selected) { _, s in if items.indices.contains(s) { proxy.scrollTo(items[s].id) } }
         }
+    }
+
+    /// Zeilen über den Treffern (Finder-Knopf, Hinweis bei leerer Liste) bekommen eigene Höhe, sonst drücken sie Treffer aus dem Bild.
+    private func extraLines(empty: Bool) -> CGFloat {
+        CGFloat((model.offersFinderButton ? 1 : 0) + (empty && model.notFoundPath == nil ? 1 : 0))
+    }
+
+    /// Bei leerer Liste: der Scan lässt diese Ordner bewusst aus.
+    private var skipHint: some View {
+        Text("Schreibtisch, Dokumente und Downloads werden nicht durchsucht · ⌘O wählt jeden Ordner")
+            .font(Theme.ui(10)).foregroundStyle(Theme.mutedColor)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.vertical, 8)
     }
 
     private func row(_ c: NewSessionModel.Candidate, on: Bool) -> some View {

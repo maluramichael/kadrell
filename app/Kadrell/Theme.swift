@@ -51,7 +51,7 @@ enum Theme {
         ("Okabe-Ito", ["#e69f00", "#56b4e9", "#009e73", "#f0e442", "#0072b2", "#d55e00", "#cc79a7"]),
     ]
     /// UI-Größe aus den Einstellungen. Gezeichnete Views skalieren per `scaled`, SwiftUI per `ui`, Terminals nicht.
-    nonisolated(unsafe) static var scale = CGFloat(Settings.uiScale)
+    nonisolated(unsafe) static var scale = CGFloat(Settings.uiScale) { didSet { fontLock.lock(); fontCache.removeAll(); fontLock.unlock() } }
     static var barHeight: CGFloat { (30 * scale).rounded() }
 
     /// Zeichnet `body` in unskalierten Punkten: Koordinatensystem an `r` verschoben und um `scale` vergrößert.
@@ -92,15 +92,29 @@ enum Theme {
         return c.withAlphaComponent(pulse)
     }
 
+    private struct FontKey: Hashable { let size: CGFloat; let bold: Bool }
+    private static let fontLock = NSLock()
+    nonisolated(unsafe) private static var fontCache: [FontKey: NSFont] = [:]
+
     static func font(_ size: CGFloat, bold: Bool = false) -> NSFont {
-        NSFont(name: bold ? "JetBrainsMonoNF-Bold" : "JetBrainsMonoNF-Regular", size: size)
+        let key = FontKey(size: size, bold: bold)
+        fontLock.lock(); defer { fontLock.unlock() }
+        if let f = fontCache[key] { return f }
+        let f = NSFont(name: bold ? "JetBrainsMonoNF-Bold" : "JetBrainsMonoNF-Regular", size: size)
             ?? NSFont.monospacedSystemFont(ofSize: size, weight: bold ? .bold : .regular)
+        fontCache[key] = f
+        return f
+    }
+
+    nonisolated(unsafe) private static let truncateStyle = paragraph(.byTruncatingTail), wrapStyle = paragraph(.byWordWrapping)
+    private static func paragraph(_ mode: NSLineBreakMode) -> NSParagraphStyle {
+        let p = NSMutableParagraphStyle()
+        p.lineBreakMode = mode
+        return p
     }
 
     static func attrs(_ size: CGFloat, _ color: NSColor, bold: Bool = false, truncate: Bool = true) -> [NSAttributedString.Key: Any] {
-        let p = NSMutableParagraphStyle()
-        p.lineBreakMode = truncate ? .byTruncatingTail : .byWordWrapping
-        return [.font: font(size, bold: bold), .foregroundColor: color, .paragraphStyle: p]
+        [.font: font(size, bold: bold), .foregroundColor: color, .paragraphStyle: truncate ? truncateStyle : wrapStyle]
     }
 
     /// Home wird zu `~`, sonst bleibt der Pfad wie er ist.

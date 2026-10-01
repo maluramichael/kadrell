@@ -24,6 +24,8 @@ final class AttentionTracker {
     private var hookFocusWorktree: String?
 
     var onTip: (String?) -> Void = { _ in }
+    /// Wie lange ein Tipp oder eine Meldung stehen bleibt; Tests kürzen sie.
+    var tipDuration: Duration = .seconds(12)
     /// nil, bis claude aufgelöst ist: bis dahin feuert kein Hook.
     var fireFocusHook: ((Session) -> Void)?
     var notify: (_ key: String, _ session: Session, _ waiting: Bool) -> Void = { _, _, _ in }
@@ -101,11 +103,15 @@ final class AttentionTracker {
         showTip(text)
     }
 
-    /// Einmaliger Tipp in der Leiste (Kanboard #14): verschwindet nach 12 s von selbst oder per Klick darauf.
+    /// Meldung in der Leiste ohne Einmal-Sperre (z. B. Kontowechsel): nimmt keinem Fenster den Fokus.
+    func notice(_ text: String) { showTip(text) }
+
+    /// Tipp in der Leiste (Kanboard #14): verschwindet nach `tipDuration` von selbst oder per Klick darauf.
     private func showTip(_ text: String) {
         tip = text
+        let duration = tipDuration
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(12))
+            try? await Task.sleep(for: duration)
             guard let self, self.tip == text else { return }
             self.tip = nil
         }

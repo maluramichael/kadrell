@@ -54,18 +54,33 @@ final class ClaudeCLI: Sendable {
         return ClaudeCLI(binary: binary, environment: env)
     }
 
+    /// Liefert nur stdout. stderr (Node-Warnungen, ANSI) gehört nicht in geparste Ausgabe, steht aber im Fehlerfall im `CLIError`.
     @discardableResult
     func run(_ args: [String], cwd: String? = nil) async throws -> String {
         if args.first != "agents" { ClaudeCLI.log.info("claude \(args.joined(separator: " "), privacy: .private)") }
-        let r = try await ProcessRunner.run(binary, args, environment: environment, cwd: cwd)
-        guard r.status == 0 else { throw CLIError(command: "claude " + args.joined(separator: " "), status: r.status, output: r.output) }
-        return r.output
+        let r = try await ProcessRunner.runSeparated(binary, args, environment: environment, cwd: cwd)
+        guard r.status == 0 else {
+            throw CLIError(command: "claude " + args.joined(separator: " "), status: r.status, output: ClaudeCLI.errorText(stdout: r.stdout, stderr: r.stderr))
+        }
+        return r.stdout
+    }
+
+    /// stderr zuerst (dort steht die Ursache), gekürzt; ohne stderr die stdout-Ausgabe.
+    static func errorText(stdout: String, stderr: String) -> String {
+        let err = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String((err.isEmpty ? stdout : err).prefix(2000))
     }
 
     func agents() async throws -> [Agent] {
-        let out = try await run(["agents", "--json", "--all"])
-        guard let start = out.firstIndex(of: "[") else { return [] }
-        return try Agent.decodeList(Data(out[start...].utf8))
+        do { return try ClaudeCLI.parseAgents(try await run(["agents", "--json", "--all"])) } catch let e as DecodingError {
+            throw CLIError(command: "claude agents --json --all", status: 0, output: "\(e.localizedDescription)")
+        }
+    }
+
+    /// Leere Ausgabe ist eine leere Liste, sonst muss stdout reines JSON sein.
+    static func parseAgents(_ stdout: String) throws -> [Agent] {
+        guard let start = stdout.firstIndex(of: "[") else { return [] }
+        return try Agent.decodeList(Data(stdout[start...].utf8))
     }
 
     /// Hält eine Hintergrund-Session aus `claude --bg` an; die Konversation bleibt für `--resume` erhalten.

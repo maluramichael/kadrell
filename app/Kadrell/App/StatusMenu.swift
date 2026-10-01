@@ -16,32 +16,37 @@ enum StatusMenu {
 /// Menüleisten-Icon mit Kurzstatus. Sein Menü listet wartende und ungesehen fertige Sessions, Klick fokussiert
 /// sie. Bleibt sichtbar, solange Kadrell läuft, auch wenn das Fenster versteckt ist.
 @MainActor
-final class StatusItemController: NSObject {
+final class StatusItemController: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let store: GroupStore
     var onFocus: (String) -> Void = { _ in }
     var onNextWaiting: () -> Void = {}
     var onOpen: () -> Void = {}
+    /// Stand vom letzten `update`, das Menü entsteht daraus erst beim Öffnen (`menuNeedsUpdate`).
+    private var rows: (waiting: [String], done: [String]) = ([], [])
+    private var sessions: [String: Session] = [:]
+    let menu = NSMenu()
 
     init(store: GroupStore) {
         self.store = store
         super.init()
         item.button?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "Kadrell")
         item.button?.image?.isTemplate = true
-        item.menu = menu(rows: (waiting: [], done: []), sessions: [:])
+        menu.delegate = self
+        item.menu = menu
     }
 
-    /// "3 warten · 1 neu" im Menüleisten-Icon (ungesehen fertige zählen als „neu“ mit), und sein Menü.
+    /// "3 warten · 1 neu" im Menüleisten-Icon (ungesehen fertige zählen als „neu“ mit). Läuft bei jedem Abgleich,
+    /// deshalb nur Titel und Daten merken, das Menü baut erst `menuNeedsUpdate`.
     func update(_ sessions: [Session], unseen: Set<String>) {
-        let byKey = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        self.sessions = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let waiting = Set(sessions.filter { $0.status == .waiting }.map(\.id))
-        let rows = StatusMenu.rows(order: store.groups.flatMap(\.sessionIds), waiting: waiting, unseen: unseen)
+        rows = StatusMenu.rows(order: store.groups.flatMap(\.sessionIds), waiting: waiting, unseen: unseen)
         item.button?.title = StatusMenu.title(waiting: rows.waiting.count, done: rows.done.count)
-        item.menu = menu(rows: rows, sessions: byKey)
     }
 
-    private func menu(rows: (waiting: [String], done: [String]), sessions: [String: Session]) -> NSMenu {
-        let menu = NSMenu()
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
         func add(_ title: String, _ action: Selector) -> NSMenuItem {
             let item = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
             item.target = self
@@ -64,7 +69,6 @@ final class StatusItemController: NSObject {
         }
         menu.addItem(.separator())
         _ = add(String(localized: "Kadrell öffnen", bundle: Bundle.app), #selector(open))
-        return menu
     }
 
     @objc private func select(_ sender: NSMenuItem) {

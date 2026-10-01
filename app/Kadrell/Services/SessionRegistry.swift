@@ -144,6 +144,29 @@ final class SessionRegistry {
         let now = Date().timeIntervalSince1970
         closed.insert(contentsOf: removed.map { ClosedSession(session: $0, closedAt: now) }, at: 0)
         closed = Array(closed.prefix(Self.maxClosed))
+        saveClosed()
+    }
+
+    /// Wiederherstellen: Eintrag aus `closed` nehmen und speichern. nil, wenn die sessionId dort nicht steht.
+    func takeClosed(sessionId: String) -> ClosedSession? {
+        guard let entry = closed.first(where: { $0.session.sessionId == sessionId }) else { return nil }
+        closed.removeAll { $0.session.sessionId == sessionId }
+        saveClosed()
+        return entry
+    }
+
+    /// Wiederherstellbare Einträge: nur Claude-Sessions mit gültiger sessionId, die nicht schon wieder laufen
+    /// (z. B. per `kadrell resume`), je sessionId einmal, neueste zuerst, höchstens `limit`.
+    nonisolated static func restorable(_ closed: [ClosedSession], running: Set<String>, limit: Int = 10) -> [ClosedSession] {
+        var seen = running
+        let ok = closed.filter { c in
+            let s = c.session
+            return !s.isShell && !s.isRemote && UUID(uuidString: s.sessionId) != nil && seen.insert(s.sessionId).inserted
+        }
+        return Array(ok.prefix(limit))
+    }
+
+    private func saveClosed() {
         guard !readOnly else { return }
         JSONFile.saveArray(closed, to: closedURL, version: Self.schemaVersion) { [weak self] msg in self?.storageFailed(msg) }
     }

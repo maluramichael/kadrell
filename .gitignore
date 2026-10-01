@@ -10,3 +10,4 @@ CLAUDE.local.md
 refactor-analyse.md
 booster-report.html
 tools/deploy.local.env
+app/build-release-archive/

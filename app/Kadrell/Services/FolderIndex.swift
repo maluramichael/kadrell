@@ -185,6 +185,17 @@ final class FolderIndex {
         return isDirectory(path) ? normalize(path) : (path as NSString).deletingLastPathComponent
     }
 
+    /// Erlaubnis, den Finder zu steuern, ohne Dialog. Läuft der Finder nicht (Status -600), gilt das als abgelehnt.
+    nonisolated static func finderPermission() -> FinderPermission {
+        let target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.finder")
+        let status = AEDeterminePermissionToAutomateTarget(target.aeDesc, typeWildCard, typeWildCard, false)
+        switch status {
+        case noErr: return .granted
+        case OSStatus(errAEEventWouldRequireUserConsent): return .notAsked
+        default: return .denied
+        }
+    }
+
     /// Ordner des vordersten Finder-Fensters. Fragt beim ersten Mal nach der Erlaubnis, den Finder zu steuern.
     /// Über `osascript` statt NSAppleScript: das darf nur auf den Main-Thread, und die Rückfrage würde ihn blockieren.
     nonisolated static func finderFolder() async -> String? {
@@ -194,3 +205,6 @@ final class FolderIndex {
         return folder(for: normalize(r.output))
     }
 }
+
+/// Automations-Erlaubnis für den Finder: nur bei `.granted` wird automatisch gefragt, `.notAsked` bietet einen Knopf.
+enum FinderPermission { case granted, notAsked, denied }

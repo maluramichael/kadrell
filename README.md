@@ -7,7 +7,7 @@
 
 **Every Claude Code session in one window, kept visible and usable.**
 
-Kadrell is a native macOS app for people who run a lot of Claude Code sessions at once across several projects. A tree on the left groups sessions by project with a status dot each; the terminals sit on the right in a grid, stack or zoom. No server, no account, no tracking. Kadrell starts `claude` itself as a child process.
+Kadrell is a native macOS app for people who run a lot of Claude Code sessions at once across several projects. A tree on the left groups sessions by project with a status dot each; the terminals sit on the right in a grid, stack or zoom. No server of its own, no account, no tracking. Kadrell starts `claude` itself as a child process.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: macOS 15+](https://img.shields.io/badge/Platform-macOS%2015%2B-lightgrey.svg)](https://kadrell.malura.de)
@@ -24,7 +24,7 @@ Kadrell keeps them all in a single window:
 - **A tree, not a flat tab bar.** Sessions are grouped by project folder, each with a status dot, runtime and a "new" mark for sessions that finished or started waiting while you were looking elsewhere.
 - **Tiling layouts like i3 and bspwm, not a rigid grid.** Grid, stack, main + column, spiral, i3-style free split and niri-style scrolling columns. Split lines are draggable; the split belongs to the layout, not the individual session.
 - **tmux shortcuts, not a new set of habits.** Focus, swap, zoom, sync, rename: the defaults follow tmux and every shortcut is rebindable. If tmux is in your muscle memory, there is nothing new to learn.
-- **Everything local.** No server to run, no account to create, nothing sent anywhere. Kadrell launches and holds the Claude processes itself.
+- **Everything local.** No server to run, no account to create, no telemetry. Kadrell launches and holds the Claude processes itself. The only network traffic is listed under [What Kadrell touches](#what-kadrell-touches).
 
 ## Screenshots
 
@@ -48,7 +48,7 @@ Kadrell keeps them all in a single window:
 - **Favorites.** Mark a group as a favorite so it stays in the tree even after its last session closes, ready to start a new one.
 - **Remote sessions.** ⌘⇧N connects over ssh to a host from your ssh config and attaches to its tmux, in the same interface as local sessions.
 - **Profiles.** `--profile <name>` starts a second instance with its own sessions, groups and settings; `--profile tmp` is a throwaway profile for testing.
-- **Command-line control.** A `kadrell` command drives the running app over a Unix socket, tmux-style: `kadrell ls`, `new`, `send`, `capture`, `select`, `layout` and more.
+- **Command-line control.** A `kadrell` command drives the running app over a Unix socket, tmux-style: `kadrell ls`, `new`, `send`, `capture`, `select`, `layout` and more. By default a session inside a tile can only address its own group; the setting "Sessions may control other sessions" lifts that. See [SECURITY.md](SECURITY.md).
 - **Keyboard-first and accessible.** The tree is fully keyboard-operable and a real outline for VoiceOver; status dots add a shape under "differentiate without color" and animations respect "reduce motion".
 
 ## Install
@@ -103,7 +103,51 @@ Defaults follow tmux and are rebindable in settings (⌘,).
 
 ## Privacy
 
-Kadrell has no server, no account and no tracking. It runs entirely on your machine and holds the Claude processes locally. See the [privacy statement](https://kadrell.malura.de/datenschutz.html).
+Kadrell has no server of its own, no account and no tracking. It runs on your machine and holds the Claude processes locally. Two features talk to the network, both listed below: an optional update check and the usage display, which asks Anthropic with your own Claude Code login. See also the [privacy statement](https://kadrell.malura.de/datenschutz.html).
+
+## What Kadrell touches
+
+**Network**
+
+| Destination | Purpose | Switch |
+| --- | --- | --- |
+| `https://kadrell.malura.de/download/latest.json` | Update check at start, then every 24 hours. A plain GET without parameters. | Settings: "Nach Updates suchen" (check for updates), on by default |
+| `https://api.anthropic.com/api/oauth/usage` | 5-hour and 7-day usage for the bar, polled about every 3 minutes with the OAuth token of your Claude Code login | none, the display needs it |
+| `https://api.anthropic.com/api/oauth/profile` | E-mail of the logged-in account, shown in settings and used as the name of an account slot | none, fails silently |
+
+The `claude` processes Kadrell starts talk to Anthropic as usual. Remote sessions use your own `ssh`.
+
+**Files and folders**
+
+- `~/Library/Application Support/de.malura.kadrell/`: `sessions.json`, `groups.json`, `closed.json`, `folders.json`, `folders-uses.json`, the socket `kadrell.sock` (mode 0600) and a lock file. Further profiles live in `profiles/<name>/`, the throwaway profile `--profile tmp` in the temp folder and is removed on quit.
+- `~/Library/Preferences/de.malura.kadrell.plist` for settings, `de.malura.kadrell.profile.<name>.plist` for named profiles.
+- `~/.local/bin/kadrell`: a symlink to the app binary, only if you choose "Kommandozeilen-Tool installieren" in the menu.
+- `~/.config/kadrell/hooks/`: scripts you put there yourself. Kadrell only runs them, it creates nothing.
+- It reads `$CLAUDE_CONFIG_DIR` (default `~/.claude`) to find Claude Code's session files. Nothing is written to `~/.claude/settings.json`: the status hooks are passed to each `claude` process with `--settings`.
+
+**Keychain**
+
+- Reads the item `Claude Code-credentials` (the login of Claude Code) through `/usr/bin/security`, for the usage display. With multiple accounts it also writes this item when you switch.
+- Stores one item per saved account under the service `de.malura.kadrell.account`.
+
+**Environment variables**
+
+- Read: `KADRELL_PROFILE` (profile name), `CLAUDE_CONFIG_DIR`, and in the `kadrell` command `KADRELL_SOCKET` and `KADRELL_SESSION_KEY`.
+- Set in every tile: `KADRELL_SESSION_KEY`, `KADRELL_SOCKET`, `KADRELL` (path to the binary). Hook scripts also get `KADRELL_EVENT`, `KADRELL_CWD`, `KADRELL_SESSION_ID`, `KADRELL_TITLE`, `KADRELL_BRANCH`.
+
+**Not sandboxed.** Kadrell is not an App Store app on purpose: the sandbox would block `claude` from `~/.claude`, your project folders and the keychain.
+
+**Uninstall.** Quit Kadrell, then:
+
+```bash
+rm -rf /Applications/Kadrell.app
+rm -rf ~/Library/Application\ Support/de.malura.kadrell
+rm -f ~/Library/Preferences/de.malura.kadrell*.plist
+rm -f ~/.local/bin/kadrell          # only if it points to Kadrell
+rm -rf ~/.config/kadrell            # only if you created hooks there and no longer need them
+```
+
+Saved account slots stay in the keychain. List them in Keychain Access under `de.malura.kadrell.account`, or remove one with `security delete-generic-password -s de.malura.kadrell.account` (repeat per slot). Do not delete `Claude Code-credentials`, that is Claude Code's own login.
 
 ## Contributing
 

@@ -148,4 +148,41 @@ final class RegistryReportTests: XCTestCase {
         r.clearStorageError()
         XCTAssertNil(r.storageError)
     }
+
+    /// `takeClosed` nimmt den Eintrag aus closed.json und speichert sofort, unbekannte Id liefert nil.
+    func testTakeClosedRemovesAndSaves() throws {
+        let dir = try tempDir()
+        let r = makeRegistry(dir)
+        let id = UUID().uuidString.lowercased()
+        r.add(Session(id: id, cwd: "/p", startedAt: 1, sessionId: id, name: ""))
+        r.remove([id])
+        XCTAssertEqual(r.closed.map(\.session.sessionId), [id])
+        XCTAssertNil(r.takeClosed(sessionId: "unbekannt"))
+        XCTAssertEqual(r.closed.count, 1)
+        XCTAssertEqual(r.takeClosed(sessionId: id)?.session.id, id)
+        XCTAssertTrue(r.closed.isEmpty)
+        XCTAssertTrue(makeRegistry(dir).closed.isEmpty, "gespeichert")
+        XCTAssertNil(r.takeClosed(sessionId: id))
+    }
+
+    /// Wiederherstellbar: nur Claude-Sessions mit gültiger sessionId, die nicht schon wieder laufen, neueste zuerst, höchstens `limit`.
+    func testRestorableFiltersAndLimits() {
+        func closed(_ s: Session) -> ClosedSession { ClosedSession(session: s, closedAt: 0) }
+        let a = UUID().uuidString, b = UUID().uuidString, running = UUID().uuidString
+        var remote = Session(id: "ssh-x", cwd: "/p", startedAt: 1, sessionId: UUID().uuidString, name: "")
+        remote.host = "h"
+        let list = [
+            closed(Session(id: "a", cwd: "/p", startedAt: 1, sessionId: a, name: "")),
+            closed(Session(id: Session.newShellId(), cwd: "/p", startedAt: 1, sessionId: UUID().uuidString, name: "")),
+            closed(remote),
+            closed(Session(id: "kaputt", cwd: "/p", startedAt: 1, sessionId: "kaputt", name: "")),
+            closed(Session(id: "r", cwd: "/p", startedAt: 1, sessionId: running, name: "")),
+            closed(Session(id: "a2", cwd: "/p", startedAt: 1, sessionId: a, name: "")),
+            closed(Session(id: "b", cwd: "/p", startedAt: 1, sessionId: b, name: "")),
+        ]
+        XCTAssertEqual(SessionRegistry.restorable(list, running: [running]).map(\.session.id), ["a", "b"])
+        XCTAssertEqual(SessionRegistry.restorable(list, running: [], limit: 1).map(\.session.id), ["a"])
+        let many = (0..<15).map { _ in closed(Session(id: UUID().uuidString, cwd: "/p", startedAt: 1, sessionId: UUID().uuidString, name: "")) }
+        XCTAssertEqual(SessionRegistry.restorable(many, running: []).map(\.session.id), many.prefix(10).map(\.session.id))
+    }
 }

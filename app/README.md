@@ -21,7 +21,7 @@ Einstellungen und eigenem Socket (`~/Library/Application Support/de.malura.kadre
 gilt das Standardprofil am bisherigen Ort. `--profile tmp` ist ein Wegwerfprofil im Temp-Ordner, das beim Beenden
 verschwindet (auch im Menü: „Neue Instanz mit temporärem Profil“). Jedes Profil läuft höchstens einmal.
 
-Layouts (Symbol links in der Leiste, ⌘L reihum): Grid, Haupt + Spalte, Spirale (bspwm), Frei (i3), Scrollen (niri), Stack. Jedes Layout ist eine
+Layouts (Symbol links in der Leiste, ⌘L reihum): Grid, Haupt + Spalte, Spirale (bspwm), Frei (i3), Scrollen (niri), Reihe, Stack. Jedes Layout ist eine
 Vorlage aus Feldern, die Terminals füllen sie in Baumreihenfolge. Trennlinien lassen sich ziehen (Doppelklick verteilt
 gleich) oder per ⌃⌥-Pfeil um 5 % verschieben, die Verhältnisse gehören der Vorlage, nicht den Sessions. Im Grid legt
 ‹ SP › in der Leiste die Spaltenzahl fest. Frei: jede Kachel teilt das Feld der vorigen rechts oder unten, gesetzt per
@@ -42,11 +42,11 @@ wartet vor Fehler vor arbeitet vor fertig, bei gleichem Stand die neuere Session
 
 Belegbare Kürzel (⌘, Einstellungen, Defaults wie in der tmux-Config): ⌥-Pfeile Fokus, ⌥⇧-Pfeile Kachel
 tauschen, ⌥1…⌥9 Kachel direkt, ⌥N/⌥P nächste/vorige, ⌥J/⌥K Vorschau: blättert durch den Baum und zeigt die Session allein, ohne die Auswahl anzufassen (⏎ übernimmt, Esc zurück), ⌥⇥ zuletzt fokussierte, ⌥I Sync (Tippen und ⌘V gehen an alle offenen Kacheln, rotes Badge „SYNC“ in der Leiste, auch per Klick), ⌥Z Zoom (Fokus-Kachel allein,
-Badge „ZOOM“ in der Leiste und „Z“ in der Titelzeile), ⌥E Ordner der Fokus-Session im externen Editor (Kommando in den Einstellungen, z. B. `code`),
+Badge „ZOOM“ in der Leiste und „Z“ in der Titelzeile), (⌥-Kombinationen, die auf dem Tastaturlayout ein ASCII-Zeichen tippen, etwa ⌥5 = `[` auf QWERTZ, gehen ans Terminal statt an ein Kürzel), ⌥E Ordner der Fokus-Session im externen Editor (Kommando in den Einstellungen, z. B. `code`),
 F2 oder Stift an Kachel/Baum-Zeile benennt die Session um (eigener Name geht immer vor dem Titel von Claude Code, leer = zurück),
-⌘L Grid ↔ Stack, ⌘Esc Kachel schließen
+⌘L schaltet reihum durch alle Layouts, ⌘Esc Kachel schließen
 (Esc selbst geht an Claude Code). ⌘1 gibt dem Baum die Tastatur, ↑↓ zeigt dann die nächste Session rechts, ohne
-dass Claude die Tasten bekommt; ⌘2 gibt die Tastatur an die fokussierte Kachel zurück (ohne offene Kachel: erste Session).
+dass Claude die Tasten bekommt; ⇧↑ / ⇧↓ erweitern dabei die Auswahl um die nächste Session, `x` schaltet die Session unter dem Cursor in der Auswahl um (wie ⌘-Klick); ⌘2 gibt die Tastatur an die fokussierte Kachel zurück (ohne offene Kachel: erste Session).
 
 Darstellung (⌘, Einstellungen): Design des Baums (Klassisch, Getönte Gruppen, Kompakt; je ein `SidebarRenderer`
 unter `Kadrell/Sidebar/`), Laufzeit im Baum an/aus, UI-Größe 90 bis 130 % für Baum, Leiste, Kacheln und Dialoge, Terminal-Schrift
@@ -79,9 +79,13 @@ läuft: jede Kachel hat `KADRELL_SESSION_KEY`, `KADRELL_SOCKET` und `KADRELL` (P
 Per CLI angelegte Gruppen sind Favoriten, sonst räumt der Abgleich sie leer wieder weg. Rückfragen entfallen.
 Welche Kachel aufruft, bestimmt die App selbst über die pid am Socket (`LOCAL_PEERPID`) und den Prozessbaum bzw. die
 Terminal-Session der Kacheln, nicht über `KADRELL_SESSION_KEY`. Einstellung „Sessions dürfen andere Sessions steuern“
-(Default an): aus, dürfen Aufrufe aus einer Kachel nur Sessions der eigenen Gruppe und diese Gruppe selbst ansprechen (`send`,
-`capture`, `stop`, `kill` …); `ls`, `select`, `layout` und `new` bleiben frei, Aufrufe von außerhalb sind nie eingeschränkt.
-Das ist Schadensbegrenzung gegen Prompt Injection, keine harte Grenze: alles läuft als derselbe Benutzer.
+(Default aus): solange sie aus ist, dürfen Aufrufe aus einer Kachel nur Sessions der eigenen Gruppe und diese Gruppe selbst
+ansprechen (`send`, `capture`, `stop`, `kill` …), und `new` startet nur in der eigenen Gruppe und unterhalb von deren Ordner;
+`ls`, `select` und `layout` bleiben frei, Aufrufe von außerhalb sind nie eingeschränkt.
+Das ist Schadensbegrenzung gegen Prompt Injection, keine harte Grenze: alles läuft als derselbe Benutzer
+(Bedrohungsmodell: `../SECURITY.md`, was Kadrell anfasst: `../README.md`). Programme in einer Kachel können die
+Zwischenablage nicht per OSC 52 lesen (Schreiben geht), Terminal-Links auf Programme und Skripte zeigt der Finder an,
+statt sie zu starten.
 
 tmux-Sessions importieren: `tools/tmux-dump.py dump -o dump.json` sammelt alle laufenden Claude-Sessions aus
 tmux-Panes (Baum Session/Window/Pane) als JSON, `tools/tmux-dump.py import dump.json` startet sie per
@@ -90,6 +94,13 @@ anzufassen) und legt je tmux-Session eine Gruppe in `groups.json` an. Kadrell mu
 überschreibt der Import dessen `groups.json` unter der laufenden App weg. `--dry-run` zeigt nur, was passieren würde.
 Der Leerzustand zählt separat, wie viele Claude-Sessions gerade interaktiv in anderen Terminals laufen, und
 verweist auf dieses Skript.
+
+Sichern und Umziehen: Ein Profil besteht aus seinem Ordner (Standardprofil `~/Library/Application Support/de.malura.kadrell/`,
+benannte unter `profiles/<name>/`) und seiner Einstellungs-Plist (`~/Library/Preferences/de.malura.kadrell.plist`, benannte
+`de.malura.kadrell.profile.<name>.plist`). Beides sichern oder auf den neuen Mac kopieren, Kadrell dabei beenden.
+Die Account-Geheimnisse liegen im Schlüsselbund (Dienst `de.malura.kadrell.account`) und wandern nicht mit, dort müssen die
+Accounts neu angemeldet werden. Tests laufen automatisch im Temp-Profil (`--profile tmp` ohne Angabe unter XCTest) und
+fassen die echten Daten nicht an.
 
 Wissensgraph (graphify): `graphify-out/` enthält einen mit [graphify](https://github.com/safishamsi/graphify)
 (`uv tool install graphifyy`) gebauten Code-Graph über `app/Kadrell`, nicht eingecheckt (`.gitignore`),

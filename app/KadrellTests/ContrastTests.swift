@@ -62,4 +62,18 @@ final class ContrastTests: XCTestCase {
         XCTAssertEqual(c.blueComponent, 0, accuracy: 0.001)
         XCTAssertEqual(c.alphaComponent, 0.3, accuracy: 0.001)
     }
+
+    func testAttrsCacheMatchesFreshBuildAndFollowsSize() {
+        let a = Theme.attrs(12, .red, bold: true, truncate: false)
+        let font = a[.font] as? NSFont
+        XCTAssertEqual(font?.pointSize, 12)
+        XCTAssertEqual(font, Theme.font(12, bold: true))
+        XCTAssertEqual((a[.paragraphStyle] as? NSParagraphStyle)?.lineBreakMode, .byWordWrapping)
+        let b = Theme.attrs(12, .red)
+        XCTAssertEqual((b[.paragraphStyle] as? NSParagraphStyle)?.lineBreakMode, .byTruncatingTail)
+        let old = Theme.scale
+        defer { Theme.scale = old }
+        Theme.scale = old * 2
+        XCTAssertEqual((Theme.attrs(24, .red)[.font] as? NSFont)?.pointSize, 24)
+    }
 }

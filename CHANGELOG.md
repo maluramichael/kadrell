@@ -2,8 +2,17 @@
 
 Neueste Version oben.
 
-## Unreleased
+## 1.61.0 (2026-10-01)
 
+- Feature: Geschlossene Sessions lassen sich wiederherstellen: ⌘P, dann „Wiederherstellen: …“ setzt die Konversation im alten Ordner mit ihrem Namen fort.
+- Feature: Neue Befehle in ⌘P: Favorit umschalten, Gruppe schließen und Kachel aus der Ansicht nehmen, jeweils für die fokussierte Session.
+- Änderung: Automatischer Kontowechsel und die Warnung vor zu schnellem Wochenverbrauch erscheinen als Hinweis in der Leiste statt als Dialog, der beim Tippen den Fokus stiehlt.
+- Änderung: ⌘N fragt den Finder nur noch automatisch, wenn Kadrell ihn schon steuern darf. Sonst gibt es einen Knopf „Finder-Ordner vorschlagen“, statt beim ersten Öffnen eine Systemabfrage zu zeigen.
+- Fix: Ein gescheiterter Kontowechsel oder ein gescheitertes „Konto hinzufügen“ nennt jetzt den Grund, statt still zu bleiben oder fälschlich „kein Account angemeldet“ zu melden.
+- Fix: Ein Klick auf die rote Fehlermarkierung in der Leiste zeigt den ganzen Fehler. Probleme beim Laden oder Speichern der Gruppen erscheinen dort jetzt auch.
+- Fix: Der Download-Knopf eines Updates öffnet nur Adressen auf kadrell.malura.de.
+- Fix: Warnungen der Claude-CLI auf stderr bringen die Statusanzeige nicht mehr durcheinander.
+- Fix: Fenster vergrößern und Trennlinien ziehen sind flüssiger: Baum, Leiste und Menüleisten-Menü werden nicht mehr bei jedem Bild neu aufgebaut.
 - Änderung: „Sessions dürfen andere Sessions steuern" ist für neue Installationen aus. Eine Session kann dann per `kadrell` nur noch ihre eigene Gruppe steuern und neue Sessions nur im Ordner ihrer Gruppe starten. Wer Sessions bewusst gegenseitig steuern lassen will, schaltet es in den Einstellungen ein.
 - Änderung: Auf deutschem Tastaturlayout kommen ⌥-Zeichen wie [ ] { } | @ ~ jetzt im Terminal an, statt eine Kachel zu fokussieren. Auf U.S.-Layout ändert sich nichts.
 - Änderung: Programme in einer Kachel können die Zwischenablage nicht mehr unbemerkt auslesen. Kopieren aus dem Terminal funktioniert weiter.

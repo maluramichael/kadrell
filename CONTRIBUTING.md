@@ -26,6 +26,20 @@ xcodebuild -project Kadrell.xcodeproj -scheme Kadrell -configuration Debug \
 open build/Build/Products/Debug/Kadrell.app
 ```
 
+### Building without the maintainer's signing certificate
+
+`app/project.yml` pins the maintainer's code signing identity and team, so a plain `xcodebuild` fails on any other machine. Override them on the command line, nothing in the repo needs to change:
+
+```bash
+cd app
+xcodegen generate
+xcodebuild -project Kadrell.xcodeproj -scheme Kadrell -configuration Debug \
+  -derivedDataPath build -skipPackagePluginValidation -skipMacroValidation \
+  CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build
+```
+
+This ad-hoc signs the app. Verified with Xcode 27.0 on macOS 26: the Debug build succeeds, and the same overrides with `test` instead of `build` run the whole test suite (267 tests, no failures). Release builds, archives and notarization need the maintainer's certificate and are not covered here.
+
 When testing against a running build, always use a fresh throwaway profile so you never touch your own Kadrell data:
 
 ```bash

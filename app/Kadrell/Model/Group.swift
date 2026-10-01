@@ -95,6 +95,8 @@ final class GroupStore {
         JSONFile.saveArray(groups, to: url, version: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
     }
 
+    func clearError() { lastError = nil }
+
     func group(id: String) -> Group? { groups.first { $0.id == id } }
     func group(forSession sessionId: String) -> Group? { groups.first { $0.sessionIds.contains(sessionId) } }
     func group(forCwd cwd: String) -> Group? { groups.first { $0.cwd == cwd && $0.host == nil } }

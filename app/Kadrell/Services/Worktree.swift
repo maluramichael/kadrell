@@ -11,9 +11,9 @@ enum Worktree {
     /// `git worktree list --porcelain` im Repo von `cwd`, geparst. Erster Eintrag ist laut Git immer die
     /// Hauptarbeitskopie. Leer ohne Repo oder wenn `git` fehlschlägt.
     static func list(at cwd: String) async -> [Entry] {
-        guard let result = try? await ProcessRunner.run("/usr/bin/git", ["-C", cwd, "worktree", "list", "--porcelain"]),
+        guard let result = try? await ProcessRunner.runSeparated("/usr/bin/git", ["-C", cwd, "worktree", "list", "--porcelain"]),
               result.status == 0 else { return [] }
-        return parsePorcelain(result.output)
+        return parsePorcelain(result.stdout)
     }
 
     /// Blöcke durch Leerzeile getrennt: `worktree <pfad>`, `HEAD <sha>`, `branch refs/heads/<name>` (fehlt bei
