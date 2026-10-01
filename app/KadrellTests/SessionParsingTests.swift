@@ -96,11 +96,11 @@ final class SessionRegistryTests: XCTestCase {
                       Session(id: "k2", cwd: "/p/proj", startedAt: 2, sessionId: "k2", name: "")]
         let list = try agents("""
         [{ "id": "a7adb9af", "cwd": "/p/proj", "kind": "background", "startedAt": 1, "sessionId": "old", "name": "Fix", "state": "done" },
-         { "pid": 11, "cwd": "/p/proj", "kind": "interactive", "startedAt": 5, "sessionId": "new", "name": "proj-c6", "status": "busy" },
+         { "pid": 11, "cwd": "/p/proj", "kind": "interactive", "startedAt": 5, "sessionId": "3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b", "name": "proj-c6", "status": "busy" },
          { "pid": 99, "cwd": "/p/proj", "kind": "interactive", "startedAt": 5, "sessionId": "k2", "name": "Fremd", "status": "busy" }]
         """)
         let merged = SessionRegistry.merge(stored, agents: list, pids: [11: "a7adb9af"])
-        XCTAssertEqual(merged[0].sessionId, "new")
+        XCTAssertEqual(merged[0].sessionId, "3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b")
         XCTAssertEqual(merged[0].name, "Fix")
         XCTAssertEqual(merged[0].status, .running)
         XCTAssertEqual(merged[0].pid, 11)
@@ -108,13 +108,13 @@ final class SessionRegistryTests: XCTestCase {
         XCTAssertEqual(merged[1].status, .idle)
         XCTAssertEqual(merged[1].name, "")
 
-        let titled = SessionRegistry.merge(stored, agents: try agents(#"[{"pid":11,"cwd":"/p/proj","kind":"interactive","startedAt":5,"sessionId":"new","name":"Neuer Titel","status":"idle"}]"#), pids: [11: "a7adb9af"])
+        let titled = SessionRegistry.merge(stored, agents: try agents(#"[{"pid":11,"cwd":"/p/proj","kind":"interactive","startedAt":5,"sessionId":"3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b","name":"Neuer Titel","status":"idle"}]"#), pids: [11: "a7adb9af"])
         XCTAssertEqual(titled[0].name, "Neuer Titel")
 
         // Von Hand vergebener Name (F2) bleibt Titel, auch wenn Claude Code später umbenennt; alte JSON ohne Feld lädt.
         var manual = stored
         manual[0].customName = "Meins"
-        let kept = SessionRegistry.merge(manual, agents: try agents(#"[{"pid":11,"cwd":"/p/proj","kind":"interactive","startedAt":5,"sessionId":"new","name":"Neuer Titel","status":"idle"}]"#), pids: [11: "a7adb9af"])
+        let kept = SessionRegistry.merge(manual, agents: try agents(#"[{"pid":11,"cwd":"/p/proj","kind":"interactive","startedAt":5,"sessionId":"3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b","name":"Neuer Titel","status":"idle"}]"#), pids: [11: "a7adb9af"])
         XCTAssertEqual(kept[0].title, "Meins")
         let roundtrip = try JSONDecoder().decode([Session].self, from: JSONEncoder().encode(kept))
         XCTAssertEqual(roundtrip[0].title, "Meins")
@@ -166,7 +166,7 @@ final class SessionRegistryTests: XCTestCase {
 
         let r = SessionRegistry(cli: cli, url: url)
         XCTAssertTrue(r.sessions.isEmpty)
-        XCTAssertNotNil(r.lastError)
+        XCTAssertNotNil(r.storageError)
         XCTAssertTrue((try FileManager.default.contentsOfDirectory(atPath: dir.path)).contains { $0.hasPrefix("sessions.corrupt-") })
 
         r.add(Session(id: "s1", cwd: "/p", startedAt: 1, sessionId: "s1", name: ""))

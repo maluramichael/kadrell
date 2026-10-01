@@ -13,6 +13,8 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         let status: SessionStatus?
         let sessionKey: String?
         var indent: Int = 0
+        var attached = true
+        var shellRunning = false
         let run: () -> Void
     }
     struct Source {
@@ -20,6 +22,8 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         var groups: [Group] = []
         var commands: [(String, () -> Void)] = []
         var onFocusSession: (String) -> Void = { _ in }
+        /// Ob die Session einen laufenden Prozess hat; getrennte sind grau und warten nicht auf dich.
+        var isAttached: (String) -> Bool = { _ in true }
         var onFitGroup: (String) -> Void = { _ in }
         /// Verlauf je laufendem Terminal: `getBufferAsData` plus UTF-8-Dekodierung kostet über alle Terminals
         /// hinweg spürbar, deshalb erst geholt, wenn `/`-Suche tatsächlich läuft, nicht schon beim Öffnen.
@@ -38,15 +42,22 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
     /// Nach dem Schließen (Esc, ohne Auswahl): dem Hauptfenster die Tastatur zurückgeben, sonst hängt der Fokus.
     var onClose: (() -> Void)?
     private let field = NSTextField()
+    private(set) var items: [Item] = []
     private let table = NSTableView()
     private let scroll = NSScrollView()
     private let foot = NSTextField(labelWithString: String(localized: "↑↓ wählen · ⏎ öffnen · Esc schließen", bundle: Bundle.app))
-    private var items: [Item] = []
     private var selected = 0
     /// tmux-Sessions je Host, einmal pro Öffnen geholt; nil = Abfrage läuft, leeres Ergebnis = kein tmux-Server.
     private var remoteCache: [String: [String]?] = [:]
     /// `source.buffers()`/`source.hosts()`: teuer, deshalb erst bei tatsächlichem Bedarf und dann nur einmal pro Öffnen geholt.
     private var buffersCache: [(Session, group: Group?, lines: [String])]?
+    /// Kleingeschriebene Puffer (einmal pro Öffnen) und, solange der Begriff nur wächst, die Sessions der letzten Treffer.
+    private var lowerCache: [LoweredBuffer]?
+    private var lastTerm = ""
+    private var lastHitIds: Set<String>?
+    private var scanTask: Task<Void, Never>?
+    /// Zwischen Anschlag und Ergebnis zeigt die Liste noch den alten Begriff, ⏎ darf dann nichts ausführen.
+    private var scanPending = false
     private var hostsCache: [String]?
     private var searchTask: Task<Void, Never>?
 
@@ -115,10 +126,15 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
 
     func open(over parent: NSWindow, prefix: String = "") {
         let pf = parent.frame
+        let maxW = min(pf.width, (parent.screen ?? NSScreen.main)?.visibleFrame.width ?? pf.width) - 48
+        setContentSize(NSSize(width: min((640 * Theme.scale).rounded(), maxW), height: contentRect(forFrameRect: frame).height))
         setFrameOrigin(NSPoint(x: pf.midX - frame.width / 2, y: pf.maxY - 0.12 * pf.height - frame.height))
         field.stringValue = prefix
         remoteCache = [:]
         buffersCache = nil
+        lowerCache = nil
+        lastTerm = ""
+        lastHitIds = nil
         hostsCache = nil
         attach(to: parent)
         makeFirstResponder(field)
@@ -128,6 +144,9 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
 
     override func dismiss() { dismiss(runHighlightReset: true) }
     func dismiss(runHighlightReset: Bool) {
+        scanTask?.cancel()
+        scanPending = false
+        searchTask?.cancel()
         super.dismiss()
         if runHighlightReset { onHighlight?(nil) }
         onClose?()
@@ -147,14 +166,15 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
     private func refreshList() {
         let q = field.stringValue
         selected = 0
+        if !q.hasPrefix("/") { scanTask?.cancel(); scanPending = false }
         if q.hasPrefix(">") {
             let t = q.dropFirst().trimmingCharacters(in: .whitespaces)
             items = source.commands.filter { t.isEmpty || PaletteWindow.fuzzy(t, $0.0) }
                 .map { Item(label: $0.0, sub: String(localized: "Kommando", bundle: Bundle.app), group: nil, status: nil, sessionKey: nil, run: $0.1) }
             onHighlight?(nil)
         } else if q.hasPrefix("/") {
-            items = terminalMatches(String(q.dropFirst()))
-            onHighlight?(Set(items.compactMap(\.sessionKey)))
+            startTerminalSearch(String(q.dropFirst()))
+            return
         } else if q.hasPrefix("@") {
             items = remoteItems(String(q.dropFirst()))
             onHighlight?(nil)
@@ -170,9 +190,11 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
     /// ⌘P ohne Suchbegriff: flache Liste, wer auf dich wartet zuerst.
     private func flatSessionItems() -> [Item] {
         source.sessions
-            .sorted { ($0.0.status == .waiting ? 0 : 1) < ($1.0.status == .waiting ? 0 : 1) }
+            .sorted { rank($0.0) < rank($1.0) }
             .map { sessionItem($0, indent: 0, showGroup: true) }
     }
+
+    private func rank(_ s: Session) -> Int { s.status == .waiting && source.isAttached(s.id) ? 0 : 1 }
 
     /// Mit Suchbegriff: nach Gruppen gebündelt wie in der Seitenleiste. Passt der Gruppenname, stehen alle ihre
     /// Sessions eingerückt darunter; sonst nur die selbst passenden. Gruppenlose Treffer kommen unten.
@@ -207,6 +229,7 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
     private func sessionItem(_ e: (Session, group: Group?, lines: [String]), indent: Int, showGroup: Bool) -> Item {
         Item(label: e.0.title, sub: String((e.lines.last ?? Theme.shortPath(e.0.cwd)).prefix(70)),
              group: showGroup ? e.group?.name : nil, status: e.0.status, sessionKey: e.0.id, indent: indent,
+             attached: source.isAttached(e.0.id), shellRunning: e.0.hasRunningShell,
              run: { [source] in source.onFocusSession(e.0.id) })
     }
 
@@ -221,10 +244,7 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         if hostsCache == nil { hostsCache = source.hosts() }
         let hosts = hostsCache ?? []
         guard let colon = q.firstIndex(of: ":") else {
-            return hosts.filter { q.isEmpty || PaletteWindow.fuzzy(q, $0) }.map { h in
-                Item(label: h, sub: String(localized: "ssh · ⏎ tmux attach · „\(h):“ wählt die Session", bundle: Bundle.app), group: nil, status: nil, sessionKey: nil,
-                     run: { [source] in source.onConnect(h, nil) })
-            }
+            return hostItems(q, hosts)
         }
         let host = String(q[..<colon]), text = q[q.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         var list: [Item] = []
@@ -258,32 +278,91 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         }
         return list
     }
-    private var remoteError: [String: Bool] = [:]
-
-    /// Treffer zeilenweise, ohne Groß-/Kleinschreibung wie die Suchleiste im Terminal. Die Nummer des Treffers
-    /// in der Session springt dort per `findNext` an dieselbe Stelle.
-    private func terminalMatches(_ term: String) -> [Item] {
-        guard term.count >= 2 else { return [] }
-        if buffersCache == nil { buffersCache = source.buffers() }
-        var list: [Item] = []
-        for (s, g, lines) in buffersCache ?? [] {
-            var n = 0
-            for line in lines {
-                var r = line.startIndex..<line.endIndex
-                var first: Int?
-                while let hit = line.range(of: term, options: .caseInsensitive, range: r) {
-                    if first == nil { first = n }
-                    n += 1
-                    r = hit.upperBound..<line.endIndex
-                }
-                guard let index = first else { continue }
-                list.append(Item(label: line.trimmingCharacters(in: .whitespaces), sub: s.title, group: g?.name, status: s.status,
-                                 sessionKey: s.id, run: { [source] in source.onFindInSession(s.id, term, index) }))
-                // ponytail: feste Obergrenze, sonst wird die Tabelle bei „e“-artigen Begriffen zäh.
-                if list.count >= 300 { return list }
-            }
+    /// Host-Treffer; ohne Treffer bietet ein getippter Host (`user@host`) das direkte Verbinden an.
+    private func hostItems(_ q: String, _ hosts: [String]) -> [Item] {
+        var list = hosts.filter { q.isEmpty || PaletteWindow.fuzzy(q, $0) }.map { h in
+            Item(label: h, sub: String(localized: "ssh · ⏎ tmux attach · „\(h):“ wählt die Session", bundle: Bundle.app), group: nil, status: nil, sessionKey: nil,
+                 run: { [source] in source.onConnect(h, nil) })
+        }
+        if list.isEmpty, !q.isEmpty, !q.contains(" "), !q.hasPrefix("-") {
+            list.append(Item(label: String(localized: "Verbinden mit \(q) (ssh)", bundle: Bundle.app), sub: String(localized: "ssh · ⏎ tmux attach", bundle: Bundle.app), group: nil, status: nil, sessionKey: nil,
+                             run: { [source] in source.onConnect(q, nil) }))
+        }
+        if list.isEmpty, hosts.isEmpty {
+            list.append(Item(label: String(localized: "Hosts aus ~/.ssh/config · user@host direkt tippen", bundle: Bundle.app), sub: "", group: nil, status: nil, sessionKey: nil, run: {}))
         }
         return list
+    }
+    private var remoteError: [String: Bool] = [:]
+
+    struct LoweredBuffer: Sendable {
+        let session: Session
+        let group: Group?
+        let lines: [String]
+        let lower: [String]
+    }
+    struct Hit: Sendable {
+        let session: Session
+        let group: Group?
+        let label: String
+        let index: Int
+    }
+
+    /// Treffer zeilenweise, ohne Groß-/Kleinschreibung. Die Nummer des Treffers in der Session springt im Terminal
+    /// per `findNext` an dieselbe Stelle. Der Scan läuft abseits des Main-Threads und bricht beim nächsten Anschlag ab.
+    private func startTerminalSearch(_ term: String) {
+        scanTask?.cancel()
+        scanPending = false
+        guard term.count >= 2 else {
+            items = []; lastHitIds = nil; lastTerm = ""
+            onHighlight?([])
+            table.reloadData()
+            return
+        }
+        if buffersCache == nil { buffersCache = source.buffers() }
+        scanPending = true
+        let raw = buffersCache ?? [], cache = lowerCache
+        let only = lastHitIds.flatMap { !lastTerm.isEmpty && term.lowercased().contains(lastTerm) ? $0 : nil }
+        scanTask = Task.detached { [weak self] in
+            let bufs = cache ?? raw.map { LoweredBuffer(session: $0.0, group: $0.group, lines: $0.lines, lower: $0.lines.map { $0.lowercased() }) }
+            let found = PaletteWindow.scan(bufs.filter { only?.contains($0.session.id) ?? true }, term: term.lowercased())
+            guard !Task.isCancelled else { return }
+            await self?.applyScan(term: term, bufs: bufs, found: found)
+        }
+    }
+
+    nonisolated static func scan(_ bufs: [LoweredBuffer], term: String) -> (hits: [Hit], truncated: Bool) {
+        var hits: [Hit] = []
+        for b in bufs {
+            var n = 0
+            for (i, low) in b.lower.enumerated() {
+                if i % 512 == 0, Task.isCancelled { return (hits, true) }
+                guard low.contains(term) else { continue }
+                hits.append(Hit(session: b.session, group: b.group, label: b.lines[i].trimmingCharacters(in: .whitespaces), index: n))
+                var r = low.startIndex..<low.endIndex
+                while let h = low.range(of: term, range: r) { n += 1; r = h.upperBound..<low.endIndex }
+                // ponytail: feste Obergrenze, sonst wird die Tabelle bei „e“-artigen Begriffen zäh.
+                if hits.count >= 300 { return (hits, true) }
+            }
+        }
+        return (hits, false)
+    }
+
+    private func applyScan(term: String, bufs: [LoweredBuffer], found: (hits: [Hit], truncated: Bool)) {
+        guard isVisible, field.stringValue.hasPrefix("/"), String(field.stringValue.dropFirst()) == term else { return }
+        scanPending = false
+        lowerCache = bufs
+        lastTerm = term.lowercased()
+        lastHitIds = found.truncated ? nil : Set(found.hits.map(\.session.id))
+        items = found.hits.map { h in
+            Item(label: h.label, sub: h.session.title, group: h.group?.name, status: h.session.status, sessionKey: h.session.id,
+                 attached: source.isAttached(h.session.id), shellRunning: h.session.hasRunningShell,
+                 run: { [source] in source.onFindInSession(h.session.id, term, h.index) })
+        }
+        selected = 0
+        onHighlight?(Set(items.compactMap(\.sessionKey)))
+        table.reloadData()
+        if !items.isEmpty { table.scrollRowToVisible(0) }
     }
 
     /// Leicht verzögert statt pro Tastendruck: die Buffer-Suche (`/`) läuft mit `String.range(of:)` über den
@@ -293,6 +372,7 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled, let self else { return }
+            self.searchTask = nil
             self.refreshList()
         }
     }
@@ -304,6 +384,7 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         case #selector(NSResponder.insertNewline(_:)):
             // Ein wartender, noch nicht gelaufener Suchdurchlauf darf ⏎ nicht auf veralteten Treffern ausführen.
             if searchTask != nil { searchTask?.cancel(); searchTask = nil; refreshList() }
+            if scanPending { return true }
             activate(selected)
             return true
         case #selector(NSResponder.cancelOperation(_:)): dismiss(); return true
@@ -360,8 +441,8 @@ final class PaletteRow: NSView {
         }
         var x: CGFloat = 16 + CGFloat(item.indent) * 16
         if let st = item.status {
-            Theme.color(for: st).setFill()
-            NSBezierPath(ovalIn: CGRect(x: x, y: 13, width: 8, height: 8)).fill()
+            Icons.statusDot(in: CGRect(x: x, y: 13, width: 8, height: 8), status: st, attached: item.attached,
+                            color: Theme.statusColor(st, attached: item.attached, shellRunning: item.shellRunning))
             x += 18
         }
         let g = item.group.map { NSAttributedString(string: $0, attributes: Theme.attrs(11, Theme.muted)) }

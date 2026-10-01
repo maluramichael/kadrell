@@ -48,7 +48,7 @@ final class GroupStore {
     let url: URL
     private static let schemaVersion = 1
     private static let log = Logger(subsystem: "de.malura.kadrell", category: "groups")
-    /// Umschlag nennt eine höhere Version als diese Kadrell-Version kennt: nur lesen, nie überschreiben.
+    /// Neuere Version oder unlesbare Datei: nur lesen, nie überschreiben.
     private var readOnly = false
 
     static var defaultURL: URL { Profile.directory.appendingPathComponent("groups.json") }
@@ -56,9 +56,17 @@ final class GroupStore {
     init(url: URL = GroupStore.defaultURL) {
         self.url = url
         let result = JSONFile.loadArray(Group.self, from: url, currentVersion: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
-        groups = result.items
-        readOnly = result.newerThanKnown
+        groups = Self.dedupedById(result.items)
+        readOnly = result.readOnly
         dedupeSessionsAcrossGroups()
+    }
+
+    /// Erste gewinnt: eine doppelte Gruppen-Id ließe `Dictionary(uniqueKeysWithValues:)` abstürzen.
+    private static func dedupedById(_ groups: [Group]) -> [Group] {
+        var seen = Set<String>()
+        let result = groups.filter { seen.insert($0.id).inserted }
+        if result.count != groups.count { log.warning("groups.json: \(groups.count - result.count) doppelte Id(s) bereinigt") }
+        return result
     }
 
     /// Dieselbe sessionId darf in höchstens einer Gruppe stehen: eine kaputte Datei oder ein Bug beim Schreiben
@@ -81,7 +89,7 @@ final class GroupStore {
     /// Loggt und meldet Schreibfehler (voller Volume, gesperrter Ordner), statt sie mit `try?` zu verschlucken.
     func save() {
         guard !readOnly else {
-            Self.log.error("groups.json hat eine neuere Schema-Version, wird nicht überschrieben")
+            Self.log.error("groups.json ist neuer oder unlesbar, wird nicht überschrieben")
             return
         }
         JSONFile.saveArray(groups, to: url, version: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }

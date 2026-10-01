@@ -199,3 +199,67 @@ extension ControlTests {
         }
     }
 }
+
+/// Steuer-Socket härten: Default aus, mitgeschickte Kennung schränkt ein, `new` bleibt im Gruppenordner, große Antworten.
+extension ControlTests {
+    func testClaimRestrictsWhenPidUnknown() {
+        let g1 = Group(id: "g1", name: "A", color: "#fff", cwd: "/a", sessionIds: ["s1"])
+        let g2 = Group(id: "g2", name: "B", color: "#fff", cwd: "/b", sessionIds: ["s3"])
+        let caller = ControlCaller.resolve(peer: nil, claim: "s1", sessions: ["s1", "s3"])
+        XCTAssertEqual(caller, "s1")
+        XCTAssertFalse(ControlCaller.allowed(group: g2, caller: caller, othersAllowed: false))
+        XCTAssertFalse(ControlCaller.allowed(session: "s3", groups: [g1, g2], caller: caller, othersAllowed: false))
+        // Unbekannte Kennung: wie bisher von außen.
+        XCTAssertNil(ControlCaller.resolve(peer: nil, claim: "s9", sessions: ["s1", "s3"]))
+        XCTAssertNil(ControlCaller.resolve(peer: nil, claim: nil, sessions: ["s1"]))
+        // Die pid gewinnt immer.
+        XCTAssertEqual(ControlCaller.resolve(peer: "s3", claim: "s1", sessions: ["s1", "s3"]), "s3")
+    }
+
+    func testNewDirMustStayInGroup() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("kadrell-dir-\(UUID().uuidString)").path
+        defer { try? fm.removeItem(atPath: root) }
+        try fm.createDirectory(atPath: root + "/proj/sub", withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: root + "/projX", withIntermediateDirectories: true)
+        try fm.createSymbolicLink(atPath: root + "/link", withDestinationPath: root + "/projX")
+        try fm.createSymbolicLink(atPath: root + "/proj/out", withDestinationPath: root + "/projX")
+        let g = root + "/proj"
+        XCTAssertTrue(ControlCaller.allowed(dir: g, groupDir: g))
+        XCTAssertTrue(ControlCaller.allowed(dir: g + "/sub", groupDir: g))
+        XCTAssertTrue(ControlCaller.allowed(dir: ControlTarget.path("sub", cwd: g), groupDir: g))
+        XCTAssertFalse(ControlCaller.allowed(dir: root + "/projX", groupDir: g))
+        XCTAssertFalse(ControlCaller.allowed(dir: ControlTarget.path("../projX", cwd: g), groupDir: g))
+        XCTAssertFalse(ControlCaller.allowed(dir: root + "/proj/out", groupDir: g))
+        XCTAssertFalse(ControlCaller.allowed(dir: root, groupDir: g))
+        XCTAssertTrue(ControlCaller.allowed(dir: root + "/link", groupDir: root + "/projX"))
+    }
+
+    func testUsageListsAllLayouts() {
+        for m in LayoutMode.allCases { XCTAssertTrue(ControlCommand.usage.contains(m.rawValue), m.rawValue) }
+        XCTAssertThrowsError(try ControlCommand.parse(["layout", "tiles"])) { e in
+            XCTAssertTrue((e as? ControlError)?.message.contains("|row|") == true)
+        }
+    }
+
+    func testReadLineLargeResponse() throws {
+        var fds: [Int32] = [0, 0]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        defer { close(fds[0]) }
+        var big = Data(repeating: UInt8(ascii: "x"), count: 2 << 20)
+        big.append(10)
+        let writer = fds[1], payload = big
+        DispatchQueue.global().async { ControlSocket.writeAll(writer, payload); close(writer) }
+        XCTAssertEqual(ControlSocket.readLine(fds[0], limit: ControlSocket.maxResponse)?.count, big.count)
+        XCTAssertGreaterThan(ControlSocket.maxResponse, ControlSocket.maxRequest)
+    }
+
+    func testControlOtherSessionsDefaultsOff() throws {
+        try XCTSkipIf(Profile.name == nil, "nur im Temp-Profil, das Standardprofil bleibt unangetastet")
+        let key = "control.otherSessions"
+        let old = Profile.defaults.object(forKey: key)
+        defer { Profile.defaults.set(old, forKey: key) }
+        Profile.defaults.removeObject(forKey: key)
+        XCTAssertFalse(Settings.controlOtherSessions)
+    }
+}

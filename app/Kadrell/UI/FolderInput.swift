@@ -74,7 +74,7 @@ struct DialogFootBar: View {
                 Text(foot.hint).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 Spacer()
                 Button(action: foot.action) {
-                    Text("\(foot.button)  ⏎").font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
+                    Text("\(foot.button)  ⏎").font(Theme.ui(12, bold: true)).foregroundStyle(Theme.onColor(Theme.running))
                         .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.runningColor)
                 }.buttonStyle(.plain).kbdFocusRing()
             }

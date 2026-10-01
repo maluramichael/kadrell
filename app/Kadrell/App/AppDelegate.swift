@@ -159,8 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let title = busy.isEmpty ? String(localized: "Kadrell beenden?", bundle: Bundle.app) : String(localized: "Kadrell beenden? \(busy.count) Session(s) arbeiten gerade!", bundle: Bundle.app)
             let info = String(localized: "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.", bundle: Bundle.app)
                 + "\n\n\(list)"
-            sheets.confirm(title, info, button: String(localized: "Beenden", bundle: Bundle.app), ask: .quit) { [weak self] in
-                guard let self else { return }
+            sheets.confirm(title, info, button: String(localized: "Beenden", bundle: Bundle.app), ask: .quit) {
                 Task {
                     await self.attach.shutdown()
                     self.quitConfirmed = true

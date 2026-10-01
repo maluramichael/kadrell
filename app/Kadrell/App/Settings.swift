@@ -85,8 +85,8 @@ enum Settings {
     static var claudeModel: String { get { value("claude.model", "") } set { store("claude.model", newValue) } }
     static var claudeEffort: String { get { value("claude.effort", "") } set { store("claude.effort", newValue) } }
     /// `kadrell` aus einer Session heraus darf Sessions anderer Gruppen lesen und steuern (send, capture, kill …).
-    /// Default an: Agenten, die andere Sessions steuern, sollen ohne Umweg laufen. Aus: nur die eigene Gruppe.
-    static var controlOtherSessions: Bool { get { value("control.otherSessions", true) } set { store("control.otherSessions", newValue) } }
+    /// Default aus (Schutz gegen Prompt Injection): nur die eigene Gruppe. Wer Orchestrierung will, schaltet bewusst ein.
+    static var controlOtherSessions: Bool { get { value("control.otherSessions", false) } set { store("control.otherSessions", newValue) } }
 
     /// Hinterlegte Claude-Accounts (nur Metadaten, das OAuth-Geheimnis liegt im Schlüsselbund), JSON-kodiert.
     static var accountsData: Data? { get { Profile.defaults.data(forKey: "accounts.index") } set { store("accounts.index", newValue) } }

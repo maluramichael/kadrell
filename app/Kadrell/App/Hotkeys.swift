@@ -21,7 +21,20 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case focusSidebar, focusWorkspace, cycleSort, toggleGrouping
 
     /// 0-basiert für focus1…focus9.
-    var tileIndex: Int? { rawValue.hasPrefix("focus") ? Int(rawValue.dropFirst(5)).map { $0 - 1 } : nil }
+    var tileIndex: Int? {
+        switch self {
+        case .focus1: 0
+        case .focus2: 1
+        case .focus3: 2
+        case .focus4: 3
+        case .focus5: 4
+        case .focus6: 5
+        case .focus7: 6
+        case .focus8: 7
+        case .focus9: 8
+        default: nil
+        }
+    }
 
     var title: String {
         if let i = tileIndex { return String(localized: "Kachel \(i + 1)", bundle: Bundle.app) }
@@ -145,6 +158,16 @@ struct Hotkey: Hashable, Sendable {
         self.init(mods, c)
     }
 
+    /// ⌥ tippt hier ein druckbares ASCII-Zeichen, das in den Prompt gehört statt ein Kürzel auszulösen.
+    /// QWERTZ: ⌥5/⌥6 „[ ]“, ⌥7 „|“, ⌥8/⌥9 „{ }“, ⌥L „@“, ⌥N „~“. Auf U.S. liefert ⌥ nie ASCII, dort ändert sich nichts.
+    static func yieldsToTyping(_ event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(modMask)
+        guard mods.contains(.option), mods.isDisjoint(with: [.command, .control]),
+              !specials.contains(where: { $0.0 == event.keyCode }),
+              let c = event.characters, c.count == 1 else { return false }
+        return c.unicodeScalars.allSatisfy { (0x21...0x7E).contains($0.value) }
+    }
+
     init?(string: String) {
         let parts = string.split(separator: "|", maxSplits: 1)
         guard parts.count == 2, let m = UInt(parts[0]) else { return nil }
@@ -189,7 +212,7 @@ enum Hotkeys {
     }
 
     static func action(for event: NSEvent) -> HotkeyAction? {
-        guard let k = Hotkey(event: event) else { return nil }
+        guard !Hotkey.yieldsToTyping(event), let k = Hotkey(event: event) else { return nil }
         return current.first { $0.value == k }?.key
     }
 }

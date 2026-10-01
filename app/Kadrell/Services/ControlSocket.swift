@@ -6,6 +6,8 @@ import os
 enum ControlSocket {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "control")
     static let maxRequest = 1 << 20
+    /// Antworten dürfen größer sein: `capture --all` mit langem Verlauf.
+    static let maxResponse = 64 << 20
 
     static var defaultPath: String { Profile.directory.appendingPathComponent("kadrell.sock").path }
 
@@ -27,18 +29,18 @@ enum ControlSocket {
         withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { body($0, socklen_t(MemoryLayout<sockaddr_un>.size)) } }
     }
 
-    /// Liest bis EOF oder Zeilenende.
-    static func readLine(_ fd: Int32) -> Data? {
+    /// Liest bis EOF oder Zeilenende. Über `limit` bricht es ab und liefert mehr als `limit` Bytes, der Aufrufer prüft.
+    static func readLine(_ fd: Int32, limit: Int = maxRequest) -> Data? {
         var data = Data()
         var buf = [UInt8](repeating: 0, count: 65536)
-        while data.count <= maxRequest {
+        while data.count <= limit {
             let n = read(fd, &buf, buf.count)
             if n < 0, errno == EINTR { continue }
             if n <= 0 { break }
             data.append(contentsOf: buf[0..<n])
             if buf[0..<n].contains(10) { break }
         }
-        return data.isEmpty || data.count > maxRequest ? nil : data
+        return data.isEmpty ? nil : data
     }
 
     static func writeAll(_ fd: Int32, _ data: Data) {
@@ -109,7 +111,7 @@ final class ControlServer: @unchecked Sendable {
         var tv = timeval(tv_sec: 5, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
         // Lesen blockiert höchstens 5 s und nur diese Queue; der Client schickt die Zeile sofort.
-        guard let data = ControlSocket.readLine(fd), let req = try? JSONDecoder().decode(ControlRequest.self, from: data) else {
+        guard let data = ControlSocket.readLine(fd), data.count <= ControlSocket.maxRequest, let req = try? JSONDecoder().decode(ControlRequest.self, from: data) else {
             ControlSocket.writeAll(fd, ControlServer.encode(.fail("ungültige Anfrage")))
             close(fd)
             return
@@ -143,7 +145,8 @@ enum ControlClient {
         line.append(10)
         ControlSocket.writeAll(fd, line)
         shutdown(fd, SHUT_WR)
-        guard let data = ControlSocket.readLine(fd) else { throw ControlError("keine Antwort von Kadrell") }
+        guard let data = ControlSocket.readLine(fd, limit: ControlSocket.maxResponse) else { throw ControlError("keine Antwort von Kadrell") }
+        guard data.count <= ControlSocket.maxResponse else { throw ControlError("Antwort zu groß (über 64 MiB)") }
         return try JSONDecoder().decode(ControlResponse.self, from: data)
     }
 

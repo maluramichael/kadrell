@@ -15,6 +15,27 @@ final class ContrastTests: XCTestCase {
         }
     }
 
+    /// Alle Status-Textfarben erreichen AA gegen `panel` und `bg`.
+    func testStatusTextMeetsAA() {
+        for t in ColorTheme.all {
+            for bg in [t.panel, t.bg] {
+                for (name, c) in [("running", t.runningText), ("waiting", t.waitingText), ("idle", t.idleText), ("error", t.errorText)] {
+                    XCTAssertGreaterThanOrEqual(c.contrastRatio(with: bg), 4.5, "\(t.id): \(name)Text gegen \(bg.hexString)")
+                }
+            }
+        }
+    }
+
+    /// ANSI-Farbslots 1-6 und 9-14 (die hellen sind dieselben) erreichen AA gegen `bg`, Schwarz/Weiß bleibt roh.
+    func testAnsiContrast() {
+        for t in ColorTheme.all {
+            for i in [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14] {
+                XCTAssertGreaterThanOrEqual(t.ansi[i % 8].contrastRatio(with: t.bg), 4.5, "\(t.id): ansi \(i)")
+            }
+            for i in [0, 7] { XCTAssertEqual(t.ansi[i], t.ansiRaw[i], "\(t.id): ansi \(i) unverändert") }
+        }
+    }
+
     /// `pillText` liefert für jede Statusfarbe (Beschriftung auf gefüllten Badges) mindestens AA.
     func testPillTextMeetsAA() {
         let saved = Theme.current

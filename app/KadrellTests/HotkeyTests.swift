@@ -41,4 +41,25 @@ final class HotkeyTests: XCTestCase {
         XCTAssertEqual(HotkeyAction.focusSidebar.defaultKey, Hotkey(.command, "1"))
         XCTAssertEqual(HotkeyAction.nextLayout.defaultKey, Hotkey(.command, "l"))
     }
+
+    private func key(_ chars: String, _ plain: String, _ mods: NSEvent.ModifierFlags, code: UInt16 = 23) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: mods, timestamp: 0, windowNumber: 0, context: nil,
+                                       characters: chars, charactersIgnoringModifiers: plain, isARepeat: false, keyCode: code))
+    }
+
+    /// QWERTZ: ⌥5 tippt „[“, das gehört dem Prompt und nicht „Kachel 5“.
+    func testOptionCharacterYieldsToTyping() throws {
+        let bracket = try key("[", "5", .option)
+        XCTAssertEqual(Hotkey(event: bracket), HotkeyAction.focus5.defaultKey)
+        XCTAssertTrue(Hotkey.yieldsToTyping(bracket))
+        XCTAssertNil(Hotkeys.action(for: bracket))
+        XCTAssertTrue(Hotkey.yieldsToTyping(try key("\\", "7", [.option, .shift])))
+        XCTAssertFalse(Hotkey.yieldsToTyping(try key("∞", "5", .option)))
+        XCTAssertEqual(Hotkeys.action(for: try key("∞", "5", .option)), .focus5)
+        XCTAssertFalse(Hotkey.yieldsToTyping(try key("", "", [.option, .numericPad, .function], code: 123)))
+        XCTAssertFalse(Hotkey.yieldsToTyping(try key("[", "5", [.option, .command])))
+        XCTAssertFalse(Hotkey.yieldsToTyping(try key("[", "5", [.option, .control])))
+        XCTAssertFalse(Hotkey.yieldsToTyping(try key("", "n", .option, code: 45)))
+        XCTAssertFalse(Hotkey.yieldsToTyping(try key("[", "5", [])))
+    }
 }

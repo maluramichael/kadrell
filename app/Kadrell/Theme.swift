@@ -17,6 +17,9 @@ enum Theme {
     static var detached: NSColor { current.detached }
     /// `waiting`, aber lesbar als Text (Warte-Badge im Baum): in hellen Schemata sonst unter 3:1 auf `panel`.
     static var waitingText: NSColor { current.waitingText }
+    static var runningText: NSColor { current.runningText }
+    static var idleText: NSColor { current.idleText }
+    static var errorText: NSColor { current.errorText }
     static var appearance: NSAppearance? { NSAppearance(named: current.dark ? .darkAqua : .aqua) }
 
     /// Lesbare Beschriftung auf einer Statusfarbe (Marke „neu“, Z-Badge, Leiste): `bg` reicht in dunklen Schemata,
@@ -130,8 +133,10 @@ private func accessibleText(_ c: NSColor, against backgrounds: [NSColor], toward
 /// Farbschema der ganzen Oberfläche. `ansi` sind die acht Terminal-Grundfarben, die hellen Varianten sind dieselben.
 struct ColorTheme {
     let id: String, name: String, dark: Bool
-    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText: NSColor
+    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText, runningText, idleText, errorText: NSColor
     let ansi: [NSColor]
+    /// Die Palette vor der Kontrastkorrektur.
+    let ansiRaw: [NSColor]
 
     init(_ id: String, _ name: String, dark: Bool, _ c: [UInt32], ansi: [UInt32]) {
         self.id = id; self.name = name; self.dark = dark
@@ -144,8 +149,17 @@ struct ColorTheme {
         let textBGs = [panel, surface], extreme = NSColor(hex: dark ? 0xffffff : 0)
         sub = accessibleText(n[5], against: textBGs, toward: fg, extreme: extreme)
         muted = accessibleText(n[6], against: textBGs, toward: fg, extreme: extreme)
-        waitingText = accessibleText(waiting, against: textBGs, toward: fg, extreme: extreme)
-        self.ansi = ansi.map { NSColor(hex: $0) }
+        waitingText = accessibleText(waiting, against: textBGs + [bg], toward: fg, extreme: extreme)
+        runningText = accessibleText(running, against: textBGs + [bg], toward: fg, extreme: extreme)
+        idleText = accessibleText(idle, against: textBGs + [bg], toward: fg, extreme: extreme)
+        errorText = accessibleText(error, against: textBGs + [bg], toward: fg, extreme: extreme)
+        // Terminaltext gegen `bg`: in hellen Schemata liegen Gelb/Grün/Cyan/Magenta bei 2,3 bis 3:1. Schwarz/Weiß
+        // (0, 7) bleiben roh, 8-15 sind dieselben Farben wie 0-7.
+        ansiRaw = ansi.map { NSColor(hex: $0) }
+        let (bgc, fgc) = (n[0], n[4])
+        self.ansi = ansiRaw.enumerated().map { i, c in
+            (1...6).contains(i) ? accessibleText(c, against: [bgc], toward: fgc, extreme: extreme) : c
+        }
     }
 
     static func named(_ id: String) -> ColorTheme { all.first { $0.id == id } ?? all[0] }

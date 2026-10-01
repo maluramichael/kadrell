@@ -6,6 +6,54 @@ import os
 @MainActor
 final class KadrellTerminalView: LocalProcessTerminalView {
     var onExit: ((Int32?) -> Void)?
+    /// `terminalDelegate` ist weak, deshalb hält das Terminal seinen Guard selbst.
+    private var delegateGuard: TerminalDelegateGuard?
+
+    /// Ersetzt das Terminal als eigenen Delegate durch den Guard (OSC 52 lesen gesperrt).
+    func installDelegateGuard() {
+        let g = TerminalDelegateGuard(self)
+        delegateGuard = g
+        terminalDelegate = g
+    }
+
+    enum LinkAction: Equatable { case open, reveal(URL) }
+
+    /// Endungen, die beim Öffnen etwas ausführen oder installieren.
+    nonisolated private static let runnableExtensions: Set<String> = ["app", "command", "tool", "terminal", "workflow", "pkg", "sh", "scpt", "applescript"]
+
+    /// Links mit Schema (http, mailto, …) öffnen wie bisher. Lokale Pfade, die beim Öffnen etwas starten würden
+    /// (App, Skript, ausführbare Datei), zeigt der Finder nur an: ein Programm in der Kachel bestimmt den Linktext.
+    nonisolated static func linkAction(for link: String) -> LinkAction {
+        let path: String
+        if let url = URL(string: link), let scheme = url.scheme {
+            guard scheme.lowercased() == "file" else { return .open }
+            path = url.path
+        } else {
+            path = localPath(link)
+        }
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        let exists = fm.fileExists(atPath: path, isDirectory: &isDir)
+        let runnable = runnableExtensions.contains(URL(fileURLWithPath: path).pathExtension.lowercased())
+            || (exists && !isDir.boolValue && fm.isExecutableFile(atPath: path))
+        return runnable ? .reveal(URL(fileURLWithPath: path)) : .open
+    }
+
+    /// Wie SwiftTerm: ~ auflösen, „datei:12:4“ ohne Zeilenangabe, wenn nur so eine Datei existiert.
+    nonisolated private static func localPath(_ link: String) -> String {
+        let path = NSString(string: link).expandingTildeInPath
+        guard !FileManager.default.fileExists(atPath: path),
+              let r = path.range(of: #":[0-9]+(?::[0-9]+)?$"#, options: .regularExpression) else { return path }
+        let stripped = String(path[..<r.lowerBound])
+        return FileManager.default.fileExists(atPath: stripped) ? stripped : path
+    }
+
+    override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        switch Self.linkAction(for: link) {
+        case .open: super.requestOpenLink(source: source, link: link, params: params)
+        case .reveal(let url): NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
 
     /// Sync: Taste an ein Terminal ohne Tastatur. `keyDown` taugt dafür nur bei Funktionstasten (Pfeile, F-Tasten, Pos1/Ende),
     /// die SwiftTerm selbst kodiert. Text, ⏎, ⌫, Esc und ⌃-Tasten laufen dort über das Eingabesystem von macOS, und das liefert
@@ -20,11 +68,12 @@ final class KadrellTerminalView: LocalProcessTerminalView {
     }
 
     /// `keyDown` ist in SwiftTerm nicht `open`; `performKeyEquivalent` sieht jedes Tastenereignis vorher.
-    /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt.
+    /// Tasten ohne Modifier gehen direkt ins Terminal, damit kein Menü-Kürzel das Tippen abfängt. Ebenso ⌥-Zeichen
+    /// (QWERTZ ⌥5 „[“), sonst löst das Hauptmenü „Kachel 5“ aus; auf U.S. ändert sich nichts.
     /// ⌘Esc fängt die App fensterweit ab (Event-Monitor), Esc allein geht an Claude.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.shift, .capsLock, .numericPad, .function])
-        if mods.isEmpty, window?.firstResponder === self { keyDown(with: event); return true }
+        if mods.isEmpty || Hotkey.yieldsToTyping(event), window?.firstResponder === self { keyDown(with: event); return true }
         return super.performKeyEquivalent(with: event)
     }
 
@@ -39,6 +88,56 @@ final class KadrellTerminalView: LocalProcessTerminalView {
     override func processTerminated(_ source: LocalProcess, exitCode: Int32?) {
         super.processTerminated(source, exitCode: exitCode)
         onExit?(exitCode)
+    }
+}
+
+/// Delegate vor dem Terminal: reicht alles an `LocalProcessTerminalView` weiter (Eingabe, Größe, Titel, Links),
+/// nur OSC 52 lesen bleibt gesperrt. Sonst liest jedes Programm in einer Kachel (`cat` auf eine präparierte Datei,
+/// ein Remote-Host) ungefragt die Zwischenablage. Kopieren per OSC 52 bleibt erlaubt, Claude Code nutzt es.
+@MainActor
+final class TerminalDelegateGuard: TerminalViewDelegate {
+    private weak var terminal: KadrellTerminalView?
+    private var loggedRead = false
+
+    init(_ terminal: KadrellTerminalView) { self.terminal = terminal }
+
+    func clipboardRead(source: TerminalView) -> Data? {
+        if !loggedRead {
+            loggedRead = true
+            AttachManager.log.notice("OSC 52: Lesen der Zwischenablage abgelehnt")
+        }
+        return nil
+    }
+
+    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) { terminal?.sizeChanged(source: source, newCols: newCols, newRows: newRows) }
+    func setTerminalTitle(source: TerminalView, title: String) { terminal?.setTerminalTitle(source: source, title: title) }
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) { terminal?.hostCurrentDirectoryUpdate(source: source, directory: directory) }
+    func send(source: TerminalView, data: ArraySlice<UInt8>) { terminal?.send(source: source, data: data) }
+    func scrolled(source: TerminalView, position: Double) { terminal?.scrolled(source: source, position: position) }
+    func requestOpenLink(source: TerminalView, link: String, params: [String: String]) { terminal?.requestOpenLink(source: source, link: link, params: params) }
+    func bell(source: TerminalView) { terminal?.bell(source: source) }
+    func clipboardCopy(source: TerminalView, content: Data) { terminal?.clipboardCopy(source: source, content: content) }
+    func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) { terminal?.iTermContent(source: source, content: content) }
+    func rangeChanged(source: TerminalView, startY: Int, endY: Int) { terminal?.rangeChanged(source: source, startY: startY, endY: endY) }
+
+    func kittyClipboardCapabilities(source: TerminalView) -> KittyClipboardCapabilities {
+        terminal?.kittyClipboardCapabilities(source: source) ?? []
+    }
+
+    func kittyClipboardAvailableMimeTypes(source: TerminalView, location: KittyClipboardLocation) -> [String]? {
+        terminal?.kittyClipboardAvailableMimeTypes(source: source, location: location)
+    }
+
+    func kittyClipboardRead(source: TerminalView, location: KittyClipboardLocation, mimeType: String) -> KittyClipboardReadResult? {
+        terminal?.kittyClipboardRead(source: source, location: location, mimeType: mimeType)
+    }
+
+    func kittyClipboardWrite(source: TerminalView, location: KittyClipboardLocation, content: KittyClipboardWriteContent) -> KittyClipboardWriteResult {
+        terminal?.kittyClipboardWrite(source: source, location: location, content: content) ?? .unsupported
+    }
+
+    func kittyClipboardRequestPermission(source: TerminalView, request: KittyClipboardPermissionRequest) -> KittyClipboardPermissionResult {
+        terminal?.kittyClipboardRequestPermission(source: source, request: request) ?? .deny
     }
 }
 
@@ -126,24 +225,8 @@ final class AttachManager {
         t.lineSpacing = CGFloat(Settings.terminalLineSpacing)
         t.nativeBackgroundColor = Theme.bg
         applyColors(t)
+        t.installDelegateGuard()
         attachStarted[key] = CFAbsoluteTimeGetCurrent()
-        t.onExit = { [weak self] exitCode in
-            // `t` hält die Closure und die Closure `t`: erst nach dem gemeldeten Ende lösen, sonst bleibt jedes Terminal im Speicher.
-            t.onExit = nil
-            guard let self else { return }
-            if self.closing.removeValue(forKey: key) == nil {
-                self.ended.insert(key)
-                self.snapshots[key] = AttachManager.snapshotRows(t, trimTrailing: false)
-                AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .private)")
-                // Innerhalb weniger Sekunden mit Fehlercode gestorben: kein reguläres `/exit`, sondern ein Startfehler
-                // (kaputtes Flag, alte CLI, nicht eingeloggt). Die Kachel bekommt eine eigene Meldung statt der
-                // normalen Schraffur, damit ein Klick nicht denselben Fehler stumm wiederholt.
-                let quick = self.attachStarted[key].map { CFAbsoluteTimeGetCurrent() - $0 < 5 } ?? false
-                if let exitCode, exitCode != 0, quick { self.exitCodes[key] = exitCode }
-            }
-            self.detach(key, signal: false)
-            if self.ended.contains(key) { self.onEnded?(key) }
-        }
         // Wie $TMUX_PANE: `kadrell` in dieser Session weiß, wo es läuft, und findet den Socket.
         var env = cli.environment
         env["KADRELL_SESSION_KEY"] = key
@@ -172,8 +255,39 @@ final class AttachManager {
             (executable, args, execName) = (cli.binary, claudeArgs, "claude")
         }
         t.startProcess(executable: executable, args: args, environment: env.map { "\($0.key)=\($0.value)" }, execName: execName, currentDirectory: session.cwd)
+        // Das Ende kommt asynchron auf dem Main-Thread, `onExit` danach zu setzen verpasst nichts.
+        let pid = t.process.shellPid
+        t.onExit = { [weak self] exitCode in
+            // `t` hält die Closure und die Closure `t`: erst nach dem gemeldeten Ende lösen, sonst bleibt jedes Terminal im Speicher.
+            t.onExit = nil
+            self?.processEnded(t, key: key, pid: pid, exitCode: exitCode)
+        }
         terminals[key] = t
         onChange?()
+    }
+
+    /// Prozess `pid` von Terminal `t` ist beendet. Erwartet (von Kadrell gestoppt) ist das Ende nur, wenn `closing`
+    /// genau diese pid hält. Ist `t` schon ersetzt oder ausgehängt (Stop, sofort fortgesetzt), betrifft das Ende
+    /// das neue Terminal nicht: dann nur den `closing`-Eintrag räumen.
+    private func processEnded(_ t: KadrellTerminalView, key: String, pid: pid_t, exitCode: Int32?) {
+        let expected = closing[key] == pid
+        if expected { closing[key] = nil }
+        guard terminals[key] === t else { return }
+        if !expected { markEnded(t, key: key, exitCode: exitCode) }
+        detach(key, signal: false)
+        if ended.contains(key) { onEnded?(key) }
+    }
+
+    /// Unerwartetes Ende (`/exit`, Absturz): letzten Bildschirm festhalten, Kachel zeigt „Klick setzt fort“.
+    private func markEnded(_ t: KadrellTerminalView, key: String, exitCode: Int32?) {
+        ended.insert(key)
+        snapshots[key] = AttachManager.snapshotRows(t, trimTrailing: false)
+        AttachManager.log.warning("claude \(key, privacy: .public) beendet: \(self.snapshots[key]?.suffix(3).joined(separator: " ") ?? "", privacy: .private)")
+        // Innerhalb weniger Sekunden mit Fehlercode gestorben: kein reguläres `/exit`, sondern ein Startfehler
+        // (kaputtes Flag, alte CLI, nicht eingeloggt). Die Kachel bekommt eine eigene Meldung statt der
+        // normalen Schraffur, damit ein Klick nicht denselben Fehler stumm wiederholt.
+        let quick = attachStarted[key].map { CFAbsoluteTimeGetCurrent() - $0 < 5 } ?? false
+        if let exitCode, exitCode != 0, quick { exitCodes[key] = exitCode }
     }
 
     /// Beendet den Claude-Prozess per `SIGHUP`. Die Konversation liegt im Transcript und lässt sich fortsetzen.

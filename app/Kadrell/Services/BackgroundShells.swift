@@ -31,7 +31,7 @@ enum BackgroundShells {
     nonisolated private static func isToolShell(pid: pid_t) -> Bool {
         var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
         guard proc_pidpath(pid, &path, UInt32(MAXPATHLEN)) > 0 else { return false }
-        let name = URL(fileURLWithPath: String(cString: path)).lastPathComponent
+        let name = URL(fileURLWithPath: path.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }).lastPathComponent
         guard name.hasSuffix("sh") else { return false }
         return arguments(of: pid)?.contains(marker) == true
     }

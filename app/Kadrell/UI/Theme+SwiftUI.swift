@@ -13,7 +13,9 @@ extension Theme {
     static var fgColor: Color { Color(nsColor: fg) }
     static var mutedColor: Color { Color(nsColor: muted) }
     static var runningColor: Color { Color(nsColor: running) }
-    static let errorColor = Color(nsColor: error)
+    static var errorColor: Color { Color(nsColor: error) }
+    /// Schriftfarbe auf einer gefüllten Fläche (Primär- und destruktive Buttons), mindestens 4,5:1.
+    static func onColor(_ fill: NSColor) -> Color { Color(nsColor: pillText(on: fill)) }
 }
 
 /// Sichtbarer Tastaturfokus für `.buttonStyle(.plain)`-Elemente (Menüs, Icon-Knöpfe, Dialog-Fuß, Farbfelder):

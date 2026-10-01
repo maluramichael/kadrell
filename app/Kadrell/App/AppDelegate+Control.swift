@@ -20,7 +20,7 @@ extension AppDelegate {
     func handleControl(_ req: ControlRequest, peer: pid_t) async -> ControlResponse {
         guard registry != nil, attach != nil else { return ControlResponse(status: ControlResponse.startingStatus, stdout: "", stderr: "Kadrell startet noch\n") }
         var req = req
-        req.caller = ControlCaller.session(pid: peer, terminals: attach.pids)
+        req.caller = ControlCaller.resolve(peer: ControlCaller.session(pid: peer, terminals: attach.pids), claim: req.caller, sessions: registry.sessions.map(\.id))
         do {
             return try await runControl(ControlCommand.parse(req.argv), req)
         } catch let e as ControlError {
@@ -125,10 +125,20 @@ extension AppDelegate {
         var g = try target.map { try group($0, req, restricted: false) }
         let caller = req.caller.flatMap { c in registry.sessions.first { $0.id == c } }
         if target == nil, dir == nil, let caller { g = store.group(forSession: caller.id) }
+        if req.caller != nil, !Settings.controlOtherSessions { g = try restrictedNewGroup(target: target, dir: dir, req) }
         let cwd = try dir.map { try existingDir($0, req) } ?? (target == nil ? caller?.cwd : nil) ?? g?.cwd ?? existingDir(req.cwd, req)
         let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt, sessionId: resume)
         if let name { registry.rename(key, to: name) }
         return key
+    }
+
+    /// Eingeschränkte Kachel (Schutz gegen Prompt Injection): nur in die eigene Gruppe und unter deren Ordner.
+    private func restrictedNewGroup(target: String?, dir: String?, _ req: ControlRequest) throws -> Group {
+        let g = try group(target, req)
+        if let dir, !ControlCaller.allowed(dir: try existingDir(dir, req), groupDir: g.cwd) {
+            throw ControlError("„\(dir)“ liegt nicht im Ordner der Gruppe „\(g.name)“ (\(g.cwd), Einstellung „Sessions dürfen andere Sessions steuern“)")
+        }
+        return g
     }
 
     /// Dieselbe Konversation in zwei Prozessen schreibt durcheinander ins Transcript: nur übernehmen, was nirgends mehr läuft.

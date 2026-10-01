@@ -1,38 +1,45 @@
 import Foundation
 import os
+import Synchronization
 
 /// Die Sessions, die Kadrell verwaltet, persistiert als JSON unter Application Support. Liest alle 2 s (versteckt/
 /// inaktiv seltener, siehe `setBackground`) die Session-Dateien der eigenen Claude-Prozesse (Status, Name, aktuelle
 /// sessionId) und meldet nur echte Änderungen.
 @MainActor
 final class SessionRegistry {
-    private static let log = Logger(subsystem: "de.malura.kadrell", category: "registry")
+    nonisolated private static let log = Logger(subsystem: "de.malura.kadrell", category: "registry")
     private static let schemaVersion = 1
     let cli: ClaudeCLI
     let url: URL
     private(set) var sessions: [Session] = []
     /// Letzte Textantwort von Claude je Session (`Session.id`), nur wenn in den Einstellungen eingeschaltet.
     private(set) var lastMessages: [String: String] = [:]
-    /// Binary nicht gefunden, `claude agents` schlägt fehl, sessions.json ist kaputt oder Speichern schlägt fehl.
-    /// Von außen (oder aus `save`/`init`) über `fail(_:)` gesetzt, kein Poll räumt es wieder ab.
+    /// Binary nicht gefunden oder `claude agents` schlägt fehl. Nur von außen über `fail(_:)` gesetzt, kein Poll
+    /// räumt es wieder ab. Speicherfehler stehen getrennt in `storageError`.
     private(set) var lastError: String?
+    /// sessions.json/closed.json kaputt, unlesbar oder nicht schreibbar. Übersteht `clearError`, nur
+    /// `clearStorageError` räumt es ab.
+    private(set) var storageError: String?
     /// `lastError` ist speziell das fehlende Binary: der Leerzustand zeigt dann den Installationsbefehl statt nur den Pfad.
     private(set) var lastErrorIsMissingBinary = false
     /// Ob schon ein Poll durchgelaufen ist, für den Lade-Zustand davor.
     private(set) var polled = false
-    /// Umschlag nennt eine höhere Version als diese Kadrell-Version kennt: nur lesen, nie überschreiben.
+    /// Umschlag nennt eine höhere Version als diese Kadrell-Version kennt oder die Datei ist nicht lesbar: nur lesen, nie überschreiben.
     private var readOnly = false
     /// Zuletzt geschlossene Sessions (neueste zuerst, höchstens `maxClosed`): der Schließen-Dialog verspricht
     /// "Konversation bleibt erhalten", `remove` löschte die sessionId bisher trotzdem restlos aus Kadrells Daten.
     private(set) var closed: [ClosedSession] = []
     private let closedURL: URL
     private static let maxClosed = 50
-    private var transcripts: [String: Transcript.Entry] = [:]
+    private(set) var transcripts: [String: Transcript.Entry] = [:]
     /// `git worktree list` je Root-Ordner (`cwd`), neu geholt nur wenn der oberste Transcript-Kandidat einer
     /// Session in diesem Ordner von der gecachten Liste nicht mehr abgedeckt ist (siehe `applyActiveWorktree`),
     /// nicht bei jeder Kandidatenänderung: Tool-Aufrufe innerhalb desselben Worktrees ändern den Kandidaten
     /// praktisch bei jedem Poll, ohne dass ein neuer Worktree entstanden sein kann.
     private var worktreeCache: [String: [Worktree.Entry]] = [:]
+    /// Letzte `git worktree list`-Abfrage je `cwd`: nicht abgedeckte Kandidaten (Pfade außerhalb jedes Worktrees)
+    /// lösen höchstens alle 30 s eine neue Abfrage aus statt bei jedem Poll.
+    private var worktreeCheckedAt: [String: Date] = [:]
     /// Ersatztitel je sessionId. Die erste Nachricht ändert sich nicht, einmal gefunden wird nie wieder gelesen.
     private var firstPrompts: [String: String] = [:]
     /// Kacheln, die sich per `report` selbst melden (Claude-Hooks): kein Lesen ihrer Session-Datei, kein Transcript-Scan.
@@ -45,6 +52,16 @@ final class SessionRegistry {
     var pids: () -> [Int: String] = { [:] }
     var onChange: (([Session]) -> Void)?
     private var task: Task<Void, Never>?
+    /// Zuletzt eingereihter Poll-Lauf und ob er schon begonnen hat: höchstens einer läuft, Aufrufe währenddessen
+    /// teilen sich genau einen Folgelauf (siehe `pollNow`).
+    private var pollTail: Task<Void, Never>?
+    private var pollTailStarted = false
+    /// Für Tests: Anzahl Läufe und höchste Zahl gleichzeitig laufender Polls.
+    private(set) var pollRuns = 0
+    private(set) var maxPollsInFlight = 0
+    private var pollsInFlight = 0
+    /// Session-Keys, für die eine ungültige sessionId schon geloggt wurde.
+    nonisolated private static let loggedInvalidIds = Mutex(Set<String>())
     /// Fenster versteckt oder App nicht aktiv (Menüleisten-Betrieb): seltener pollen, siehe `setBackground`.
     private(set) var isBackground = false
 
@@ -54,8 +71,8 @@ final class SessionRegistry {
         self.cli = cli
         self.url = url
         self.closedURL = url.deletingLastPathComponent().appendingPathComponent("closed.json")
-        let result = JSONFile.loadArray(Session.self, from: url, currentVersion: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
-        readOnly = result.newerThanKnown
+        let result = JSONFile.loadArray(Session.self, from: url, currentVersion: Self.schemaVersion) { [weak self] msg in self?.storageError = msg }
+        readOnly = result.readOnly
         sessions = SessionRegistry.dedupedById(result.items)
         closed = JSONFile.loadArray(ClosedSession.self, from: closedURL, currentVersion: Self.schemaVersion).items
     }
@@ -128,7 +145,7 @@ final class SessionRegistry {
         closed.insert(contentsOf: removed.map { ClosedSession(session: $0, closedAt: now) }, at: 0)
         closed = Array(closed.prefix(Self.maxClosed))
         guard !readOnly else { return }
-        JSONFile.saveArray(closed, to: closedURL, version: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
+        JSONFile.saveArray(closed, to: closedURL, version: Self.schemaVersion) { [weak self] msg in self?.storageFailed(msg) }
     }
 
     /// Binary fehlt oder `claude agents` schlägt fehl: vom Aufrufer gesetzt, kein Poll räumt es automatisch wieder ab.
@@ -146,6 +163,23 @@ final class SessionRegistry {
         onChange?(sessions)
     }
 
+    func clearStorageError() {
+        guard storageError != nil else { return }
+        storageError = nil
+        onChange?(sessions)
+    }
+
+    /// Nur echte UUIDs übernehmen (leer, halb geschrieben, Kurz-Id): sonst zielen `--resume` und die Transcript-Suche
+    /// ins Leere. Ungültig: alte behalten, je Session-Key einmal loggen.
+    nonisolated static func acceptedSessionId(_ new: String?, old: String, key: String) -> String {
+        guard let new, new != old else { return old }
+        if UUID(uuidString: new) != nil { return new }
+        if loggedInvalidIds.withLock({ $0.insert(key).inserted }) {
+            log.warning("ungültige sessionId für \(key.prefix(8), privacy: .public) ignoriert")
+        }
+        return old
+    }
+
     /// `kadrell status` aus einem Hook der Session (`ClaudeHook`): ab jetzt gilt für diese Kachel das Gemeldete,
     /// der Poll lässt Status, sessionId, Name und Transcript in Ruhe, solange ihr Prozess läuft.
     func report(_ key: String, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?) {
@@ -155,7 +189,7 @@ final class SessionRegistry {
         s.rawStatus = state
         s.waitingFor = state == "waiting" ? waitingFor : nil
         s.pid = pids().first { $0.value == key }?.key ?? s.pid
-        if let sessionId, !sessionId.isEmpty { s.sessionId = sessionId }
+        s.sessionId = Self.acceptedSessionId(sessionId, old: s.sessionId, key: key)
         if let title, !title.isEmpty { s.name = title }
         if let firstPrompt, firstPrompts[s.sessionId] == nil { firstPrompts[s.sessionId] = firstPrompt }
         s.firstPrompt = firstPrompts[s.sessionId].flatMap { $0.isEmpty ? nil : $0 }
@@ -172,7 +206,26 @@ final class SessionRegistry {
         if changed || message != nil { onChange?(sessions) }
     }
 
+    /// Höchstens ein Poll gleichzeitig: sonst liefen zwei `Transcript.refresh` parallel (doppelt gezählte Stats,
+    /// unsynchronisierter Not-found-Cache). Aufrufe während eines Laufs warten auf einen gemeinsamen Folgelauf.
     func pollNow() async {
+        if let queued = pollTail, !pollTailStarted { await queued.value; return }
+        let previous = pollTail
+        pollTailStarted = false
+        let run = Task {
+            await previous?.value
+            self.pollTailStarted = true
+            await self.runPoll()
+        }
+        pollTail = run
+        await run.value
+    }
+
+    private func runPoll() async {
+        pollRuns += 1
+        pollsInFlight += 1
+        maxPollsInFlight = max(maxPollsInFlight, pollsInFlight)
+        defer { pollsInFlight -= 1 }
         let pids = pids(), priorSessions = sessions, configDir = cli.configDir
         // Gemeldete Kacheln, deren Prozess weg ist, fallen zurück auf den Poll.
         reported.formIntersection(pids.values)
@@ -244,7 +297,11 @@ final class SessionRegistry {
         let ids = merged.filter { !$0.isShell && !$0.isRemote && (!reported.contains($0.id) || transcriptDue.contains($0.id)) }.map(\.sessionId)
         transcriptDue.subtract(reported)
         let cache = transcripts, wantText = Settings.showLastMessage, configDir = cli.configDir
-        transcripts = await Task.detached { Transcript.refresh(ids, configDir: configDir, cache: cache, wantText: wantText) }.value
+        let fresh = await Task.detached { Transcript.refresh(ids, configDir: configDir, cache: cache, wantText: wantText) }.value
+        // Mergen statt ersetzen: nicht abgefragte (gemeldete) Sessions behalten ihren Eintrag.
+        let alive = Set(merged.map(\.sessionId))
+        transcripts.merge(fresh) { _, new in new }
+        transcripts = transcripts.filter { alive.contains($0.key) }
         var messages: [String: String] = [:]
         if Settings.showLastMessage {
             for s in merged { if let t = hookMessages[s.id] ?? transcripts[s.sessionId]?.text { messages[s.id] = t } }
@@ -263,7 +320,10 @@ final class SessionRegistry {
             // Nur neu laden, wenn der Kandidat von der gecachten Liste nicht mehr abgedeckt ist: nur dann kann
             // ein Worktree entstanden oder verschwunden sein. Mehrere Sessions im selben `cwd` teilen sich den Cache.
             let covered = worktreeCache[cwd].map { Worktree.match(top, in: $0) != nil } ?? false
-            if !covered { worktreeCache[cwd] = await Worktree.list(at: cwd) }
+            if !covered, Date().timeIntervalSince(worktreeCheckedAt[cwd] ?? .distantPast) > 30 {
+                worktreeCheckedAt[cwd] = Date()
+                worktreeCache[cwd] = await Worktree.list(at: cwd)
+            }
             guard let list = worktreeCache[cwd] else { continue }
             guard let active = Worktree.active(candidates: candidates, in: list) else { merged[i].activeWorktree = nil; continue }
             merged[i].activeWorktree = active.path
@@ -284,7 +344,7 @@ final class SessionRegistry {
             // Per Hook gemeldet: Status, sessionId und Name kommen von der Session selbst, nur die pid nachziehen.
             if reported.contains(s.id) { s.pid = pidByKey[s.id]; return s }
             guard let a = live[s.id] else { s.rawStatus = nil; s.pid = nil; s.waitingFor = nil; return s }
-            s.sessionId = a.sessionId
+            s.sessionId = acceptedSessionId(a.sessionId, old: s.sessionId, key: s.id)
             if !Session.isAutoName(a.name, cwd: s.cwd) { s.name = a.name }
             s.rawStatus = a.status
             s.pid = a.pid
@@ -319,15 +379,25 @@ final class SessionRegistry {
 
     private func save() {
         guard !readOnly else {
-            Self.log.error("sessions.json hat eine neuere Schema-Version, wird nicht überschrieben")
+            Self.log.error("sessions.json ist neuer als bekannt oder nicht lesbar, wird nicht überschrieben")
             return
         }
-        JSONFile.saveArray(sessions, to: url, version: Self.schemaVersion) { [weak self] msg in self?.lastError = msg }
+        JSONFile.saveArray(sessions, to: url, version: Self.schemaVersion) { [weak self] msg in self?.storageFailed(msg) }
+    }
+
+    private func storageFailed(_ message: String) {
+        storageError = message
+        onChange?(sessions)
     }
 }
 
 private extension Session {
-    var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? ""] }
+    /// Kodierte Form, also genau die persistierten Felder (`CodingKeys`): jedes neue gespeicherte Feld zählt automatisch.
+    var stored: Data? {
+        let enc = JSONEncoder()
+        enc.outputFormatting = .sortedKeys
+        return try? enc.encode(self)
+    }
 }
 
 /// Eintrag in `closed.json`: die Session, wie sie beim Schließen zuletzt aussah, plus Zeitpunkt.

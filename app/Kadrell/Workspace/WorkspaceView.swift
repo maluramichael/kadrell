@@ -23,6 +23,11 @@ final class WorkspaceView: NSView {
     private(set) var mode: LayoutMode = .grid
     /// Weitere Fenster speichern Auswahl, Layout und Auto-Modus unter eigenen Schlüsseln („.2“), Fenster 1 ohne.
     let defaultsSuffix: String
+    /// Defaults-Schlüssel dieser Fläche (ohne Fenster-Suffix).
+    static let persistedKeys = ["workspace.selected", "workspace.mode", "workspace.auto"]
+    private func key(_ base: String) -> String { base + defaultsSuffix }
+    /// Fenster endgültig geschlossen: Auswahl, Layout und Auto-Modus dieser Fläche vergessen.
+    func clearPersisted() { for k in Self.persistedKeys { Profile.defaults.removeObject(forKey: key(k)) } }
     /// Zoom: nur die Fokus-Kachel, bildschirmfüllend, die Auswahl bleibt.
     private(set) var zen = false
     /// ⌥J/⌥K: eine Session aus dem Baum vorübergehend allein zeigen. Auswahl und Fokus bleiben unangetastet.
@@ -48,7 +53,8 @@ final class WorkspaceView: NSView {
     private var hoveredCell: String?
     private var hoveredRow: String?
     /// Klickflächen der Knöpfe im Leerzustand (Fehler-/Erststart-Karte), in echten View-Koordinaten, neu bei jedem `draw`.
-    private(set) var emptyHitRects: [(rect: CGRect, action: () -> Void)] = []
+    typealias EmptyHit = (rect: CGRect, action: () -> Void, title: String)
+    private(set) var emptyHitRects: [EmptyHit] = []
     private var pulse: CGFloat = 1
     private var pulseTask: Task<Void, Never>?
     private weak var lastFirstResponder: NSResponder?
@@ -92,9 +98,9 @@ final class WorkspaceView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         clipsToBounds = true
-        mode = LayoutMode(rawValue: Profile.defaults.string(forKey: "workspace.mode" + defaultsSuffix) ?? "") ?? .grid
-        auto = Profile.defaults.bool(forKey: "workspace.auto" + defaultsSuffix)
-        selected = Profile.defaults.stringArray(forKey: "workspace.selected" + defaultsSuffix) ?? []
+        mode = LayoutMode(rawValue: Profile.defaults.string(forKey: key("workspace.mode")) ?? "") ?? .grid
+        auto = Profile.defaults.bool(forKey: key("workspace.auto"))
+        selected = Profile.defaults.stringArray(forKey: key("workspace.selected")) ?? []
         focused = selected.first
         pulseTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -122,6 +128,7 @@ final class WorkspaceView: NSView {
         // Entfernte Kacheln blenden kurz aus, neue ein. Beim allerersten Laden erscheint alles sofort.
         for (k, v) in cells where self.sessions[k] == nil {
             cells[k] = nil
+            if Feedback.reduceMotion { v.removeFromSuperview(); continue }
             NSAnimationContext.runAnimationGroup({ $0.duration = 0.15; v.animator().alphaValue = 0 }, completionHandler: { MainActor.assumeIsolated { v.removeFromSuperview() } })
         }
         for id in selected { ensureCell(id, fadeIn: true)?.state.session = self.sessions[id]! }
@@ -253,8 +260,34 @@ final class WorkspaceView: NSView {
         return true
     }
 
+    /// Verhältnisse beim Ziehen: nur im Speicher bis mouseUp, `layoutFrames` bevorzugt sie.
+    private var dragRatios: [String: [Double]] = [:]
+    /// Beim Ziehen bekommen Terminals höchstens alle 100 ms neue Rahmen (jedes Mal SIGWINCH an claude).
+    private var terminalFrameDeadline: CFTimeInterval = 0
+
+    private func ratios(_ key: String, _ count: Int) -> [Double]? { dragRatios[key] ?? Settings.layoutRatios(key, count) }
+
+    private func draggedRatios(_ d: SplitLine, to p: CGPoint) -> [Double] {
+        Tiling.drag(d, to: p, gap: CGFloat(Settings.tileGap), ratios: ratios(d.key, d.count) ?? [])
+    }
+
+    /// Tastatur: sofort speichern und neu anordnen.
     private func moveDivider(_ d: SplitLine, to p: CGPoint) {
-        Settings.setLayoutRatios(d.key, Tiling.drag(d, to: p, gap: CGFloat(Settings.tileGap), ratios: Settings.layoutRatios(d.key, d.count) ?? []))
+        Settings.setLayoutRatios(d.key, draggedRatios(d, to: p))
+        relayout()
+    }
+
+    private func dragDivider(_ d: SplitLine, to p: CGPoint) {
+        dragRatios[d.key] = draggedRatios(d, to: p)
+        relayout()
+    }
+
+    private func endDividerDrag() {
+        draggedDivider = nil
+        terminalFrameDeadline = 0
+        let done = dragRatios
+        dragRatios = [:]
+        for (k, v) in done { Settings.setLayoutRatios(k, v) }
         relayout()
     }
 
@@ -321,7 +354,7 @@ final class WorkspaceView: NSView {
 
     func toggleAuto() {
         auto.toggle()
-        Profile.defaults.set(auto, forKey: "workspace.auto" + defaultsSuffix)
+        Profile.defaults.set(auto, forKey: key("workspace.auto"))
         linger = [:]
         lastMatching = []
         zen = false
@@ -376,7 +409,7 @@ final class WorkspaceView: NSView {
     func setMode(_ m: LayoutMode) {
         mode = m
         revealFocus = true
-        Profile.defaults.set(m.rawValue, forKey: "workspace.mode" + defaultsSuffix)
+        Profile.defaults.set(m.rawValue, forKey: key("workspace.mode"))
         relayout()
         focusTerminal()
     }
@@ -394,7 +427,7 @@ final class WorkspaceView: NSView {
         selected = selected.enumerated().sorted { (order[$0.1] ?? .max, $0.0) < (order[$1.1] ?? .max, $1.0) }.map(\.1)
     }
 
-    private func persist() { Profile.defaults.set(selected, forKey: "workspace.selected" + defaultsSuffix) }
+    private func persist() { Profile.defaults.set(selected, forKey: key("workspace.selected")) }
 
     /// Die Fokus-Kachel bekommt die Tastatur. Hängt ihr Terminal in einem anderen Fenster, holt sie es hierher:
     /// eine NSView kann nur an einer Stelle hängen, dort bleibt der Hinweis stehen.
@@ -473,7 +506,7 @@ final class WorkspaceView: NSView {
             stackRows = Array(zip(rows, tiles))
             return tiles.isEmpty ? [:] : [tiles[active]: body]
         }
-        let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, scrollColumns: Settings.scrollColumns, splits: Settings.customSplits, ratios: Settings.layoutRatios)
+        let t = Tiling.layout(mode, count: tiles.count, in: inset, gap: gap, columns: Settings.gridColumns, scrollColumns: Settings.scrollColumns, splits: Settings.customSplits, ratios: ratios)
         dividers = t.dividers
         var laid = t.frames
         if mode == .scroll {
@@ -492,7 +525,7 @@ final class WorkspaceView: NSView {
         let v = CellView(session: s)
         addSubview(v)
         cells[id] = v
-        if fadeIn, loaded { v.alphaValue = 0; NSAnimationContext.runAnimationGroup { $0.duration = 0.18; v.animator().alphaValue = 1 } }
+        if fadeIn, loaded, !Feedback.reduceMotion { v.alphaValue = 0; NSAnimationContext.runAnimationGroup { $0.duration = 0.18; v.animator().alphaValue = 1 } }
         return v
     }
 
@@ -525,12 +558,21 @@ final class WorkspaceView: NSView {
         guard let t = attach?.terminal(for: key), host(of: t) == nil || host(of: t) === self else { return }
         if t.superview !== cell { cell.addSubview(t) }
         let body = cell.terminalRect
-        if t.frame != body { t.frame = body }
+        if t.frame != body, !throttleTerminalFrame() { t.frame = body }
         // Erst im Fenster umschalten, so will es SwiftTerm. Scheitert Metal, bleibt CoreGraphics.
         if t.window != nil, t.isUsingMetalRenderer != Settings.terminalMetal { try? t.setUseMetal(Settings.terminalMetal) }
         // Nach dem Umschalten: nur der Metal-Renderer braucht die vormultiplizierte Farbe (siehe `premultiplied`).
         let bg = t.isUsingMetalRenderer ? cell.bodyColor.premultiplied : cell.bodyColor
         if t.nativeBackgroundColor != bg { t.nativeBackgroundColor = bg }
+    }
+
+    /// true: Terminal-Rahmen beim Ziehen diesmal auslassen. Sonst Frist erneuern.
+    private func throttleTerminalFrame() -> Bool {
+        guard draggedDivider != nil else { return false }
+        let now = CACurrentMediaTime()
+        if now < terminalFrameDeadline { return true }
+        terminalFrameDeadline = now + 0.1
+        return false
     }
 
     /// Arbeitsfläche, in der das Terminal hängt. nil: frei, auch wenn es noch in einer schon entfernten Kachel steckt.
@@ -539,6 +581,8 @@ final class WorkspaceView: NSView {
     private func unmountTerminal(for key: String) {
         guard let t = attach?.terminal(for: key), t.superview != nil, host(of: t) == nil || host(of: t) === self else { return }
         if window?.firstResponder === t { window?.makeFirstResponder(self) }
+        // Ausgehängt hält der Metal-Renderer Drawables und Glyph-Atlanten weiter (bei 26 Sessions über 1 GB IOSurface).
+        if t.isUsingMetalRenderer { try? t.setUseMetal(false) }
         t.removeFromSuperview()
         released = true
     }
@@ -602,17 +646,17 @@ final class WorkspaceView: NSView {
 
     /// Knöpfe im Leerzustand nebeneinander, mittig um `midX` in den logischen Koordinaten von `Theme.scaled`: Pillen
     /// mit Rahmen, die Haupt-Aktion gefüllt. Ihre realen Klickflächen landen in `collected`.
-    private func drawEmptyButtons(_ buttons: [(title: String, primary: Bool, action: () -> Void)], midX: CGFloat, y: CGFloat, collected: inout [(CGRect, () -> Void)]) {
+    private func drawEmptyButtons(_ buttons: [(title: String, primary: Bool, action: () -> Void)], midX: CGFloat, y: CGFloat, collected: inout [EmptyHit]) {
         let gap: CGFloat = 8
-        let labels = buttons.map { NSAttributedString(string: $0.title, attributes: Theme.attrs(11.5, $0.primary ? Theme.bg : Theme.fg, bold: true)) }
+        let labels = buttons.map { NSAttributedString(string: $0.title, attributes: Theme.attrs(11.5, $0.primary ? Theme.pillText(on: Theme.running) : Theme.fg, bold: true)) }
         let widths = labels.map { $0.size().width + 32 }
         var x = midX - (widths.reduce(0, +) + gap * CGFloat(buttons.count - 1)) / 2
-        for (i, (_, primary, action)) in buttons.enumerated() {
+        for (i, (title, primary, action)) in buttons.enumerated() {
             let r = CGRect(x: x, y: y, width: widths[i], height: 32), t = labels[i]
             let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
             if primary { Theme.running.setFill(); path.fill() } else { Theme.line.setStroke(); path.lineWidth = 1; path.stroke() }
             t.draw(at: CGPoint(x: r.midX - t.size().width / 2, y: r.midY - t.size().height / 2 + 1))
-            collected.append((r.scaled(Theme.scale), action))
+            collected.append((r.scaled(Theme.scale), action, title))
             x += widths[i] + gap
         }
     }
@@ -626,7 +670,7 @@ final class WorkspaceView: NSView {
     /// Erststart-Karte im Leerzustand: Titel, darunter der Knopf, darunter die drei Kernkürzel als eigene Zeilen,
     /// ganz unten der Hinweis auf anderswo laufende Sessions. Deutliche Abstände, nichts berührt sich (Feedback
     /// zum ersten Entwurf: alles klebte aneinander).
-    private func drawEmptyOnboarding(in r: CGRect, collected: inout [(CGRect, () -> Void)]) {
+    private func drawEmptyOnboarding(in r: CGRect, collected: inout [EmptyHit]) {
         let title = NSAttributedString(string: String(localized: "Erste Session starten", bundle: Bundle.app), attributes: Theme.attrs(13, Theme.fg, bold: true))
         let shortcuts: [(String, String)] = [
             ("⌘N", String(localized: "sucht Projekt oder Ordner", bundle: Bundle.app)),
@@ -675,7 +719,7 @@ final class WorkspaceView: NSView {
     /// Der Grund (Theme-Farbe, Hintergrundbild) liegt in der `WallpaperView` dahinter.
     override func draw(_ dirtyRect: NSRect) {
         if tiles.isEmpty {
-            var collected: [(CGRect, () -> Void)] = []
+            var collected: [EmptyHit] = []
             switch emptyReason {
             case .noSessions:
                 Theme.scaled(bounds) { r in drawEmptyOnboarding(in: r, collected: &collected) }
@@ -774,6 +818,10 @@ final class WorkspaceView: NSView {
                                           actions: [a11yAction(String(localized: "Umbenennen", bundle: Bundle.app)) { [weak self] in self?.onRenameSession?(key) },
                                                     a11yAction(String(localized: "Schließen", bundle: Bundle.app)) { [weak self] in self?.onCloseSession?(key, false) }])
         }
+        let buttons = emptyHitRects.map { h in
+            a11y.reuse(h.title).update(parent: self, role: .button, label: h.title, frame: h.rect, press: { h.action() })
+        }
+        a11y += buttons
         return (super.accessibilityChildren() ?? []) + a11y
     }
 
@@ -889,7 +937,7 @@ final class WorkspaceView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        if let d = draggedDivider { moveDivider(d, to: convert(event.locationInWindow, from: nil)); return }
+        if let d = draggedDivider { dragDivider(d, to: convert(event.locationInWindow, from: nil)); return }
         guard let press = pressed, tiles.count > 1, !zen else { return }
         let p = convert(event.locationInWindow, from: nil)
         if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true }
@@ -903,7 +951,7 @@ final class WorkspaceView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if draggedDivider != nil { draggedDivider = nil; return }
+        if draggedDivider != nil { endDividerDrag(); return }
         let src = pressed?.key, t = dropTarget, wasDragging = dragging
         pressed = nil; dragging = false; dropTarget = nil
         guard wasDragging else { return }

@@ -12,8 +12,9 @@ struct StatusCounts: Equatable {
 final class StatusBarView: NSView, NSViewToolTipOwner {
     var crumb: (group: String, session: String)?
     var crumbGroupAttrs: [NSAttributedString.Key: Any]?
-    /// Sessions können nicht geladen werden: steht statt der Session-Zahl in der Mitte, rot.
+    /// Fehler aus der Registry (Speichern, kaputte CLI): rotes Modul rechts, Klick ruft `onShowError`.
     var errorText: String?
+    var onShowError: (() -> Void)?
     /// claude läuft, ist aber älter als von Kadrell getestet: blockiert nichts, nur ein Hinweis-Badge rechts.
     var versionWarning: String?
     /// Einmaliger Tipp (zweite Session, Bedeutung von Gelb), verschwindet mit einem Klick darauf.
@@ -88,6 +89,9 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private var toolTipEntries: [(rect: CGRect, text: String)] = []
     private var toolTipsKey = ""
     private var a11y: [A11yElement] = []
+    /// Reine Anzeige (Nutzung, Zähler, Uhr, Breadcrumb): für VoiceOver als Text, ohne Klick. `a11yTexts` hält die Elemente je Schlüssel.
+    private var staticTexts: [(rect: CGRect, text: String)] = []
+    private var a11yTexts: [String: StaticTextElement] = [:]
     private var clockTask: Task<Void, Never>?
     private static let clock: DateFormatter = { let df = DateFormatter(); df.dateFormat = "HH:mm"; return df }()
     /// Relative Reset-Zeit im Tooltip („in 2 Std.“), Sprache folgt der eingestellten Oberfläche.
@@ -129,21 +133,27 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         wantsLayer = true
         clockTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(Self.secondsToNextMinute()))
                 guard let self else { return }
-                // Fenster verdeckt/versteckt: die Uhr darf ruhig eine Sekunde nachhängen, sie zeichnet niemand.
+                // Fenster verdeckt/versteckt: die Uhr darf nachhängen, sie zeichnet niemand.
                 guard self.window?.occlusionState.contains(.visible) == true else { continue }
                 self.needsDisplay = true
             }
         }
     }
     required init?(coder: NSCoder) { nil }
+
+    /// Sekunden bis zur nächsten vollen Minute, die Uhr zeigt nur HH:mm.
+    static func secondsToNextMinute(_ now: Date = Date()) -> Double {
+        max(0.05, 60 - now.timeIntervalSince1970.truncatingRemainder(dividingBy: 60))
+    }
     override var isFlipped: Bool { true }
 
     /// Gezeichnet in unskalierten Punkten, die Hit-Rects auch.
     override func draw(_ dirtyRect: NSRect) {
         hitRects = []
         moduleTips = []
+        staticTexts = []
         Theme.scaled(bounds) { drawBar($0) }
         updateToolTips()
     }
@@ -166,7 +176,8 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         Theme.line.setFill(); CGRect(x: 0, y: b.height - 1, width: b.width, height: 1).fill()
         let leftEnd = drawLeft(b)
         var rx = b.width
-        module(b, &rx, [NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
+        module(b, &rx, [NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))],
+               speak: String(localized: "Uhrzeit \(Self.clock.string(from: Date()))", bundle: Bundle.app))
         drawNotices(b, &rx)
         drawUsage(b, &rx)
         drawCrumb(b, from: leftEnd, to: rx)
@@ -260,7 +271,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     /// Modul links von `rx`. `pill`: gefüllte Fläche mit 4 pt Abstand, sonst die ganze Modulhöhe.
     private func module(_ b: CGRect, _ rx: inout CGFloat, _ parts: [NSAttributedString], tip: String? = nil, pill: NSColor? = nil,
-                        _ label: String? = nil, value: String? = nil, action: (@MainActor () -> Void)? = nil) {
+                        speak: String? = nil, _ label: String? = nil, value: String? = nil, action: (@MainActor () -> Void)? = nil) {
         let w = parts.reduce(20) { $0 + $1.size().width } + CGFloat(max(0, parts.count - 1)) * 5
         rx -= w
         divider(rx, b)
@@ -272,6 +283,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         }
         if let tip { moduleTips.append((rect, tip)) }
         if let label, let action { hitRects.append(HitRegion(rect: rect, label: label, value: value, action: action)) }
+        else if let spoken = tip ?? speak { staticTexts.append((rect, spoken)) }
     }
 
     /// Konto-Pille: aktiver Account, Klick öffnet das Menü zum Wechseln, Hinzufügen und Verwalten. Ohne Accounts leer.
@@ -331,22 +343,31 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         }
         drawCounts(b, &rx)
         if let tip {
-            module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))],
+            module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waitingText))],
                    String(localized: "Tipp", bundle: Bundle.app), value: tip) { [weak self] in self?.onDismissTip?() }
         }
+        drawError(b, &rx)
         if versionWarning != nil {
-            module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update", bundle: Bundle.app), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))],
+            module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update", bundle: Bundle.app), attributes: Theme.attrs(10.5, Theme.waitingText, bold: true))],
                    String(localized: "Ältere claude-Version", bundle: Bundle.app), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
         }
+    }
+
+    /// Fehler als rote Pille, gekürzt; der volle Text steht im Tooltip und im VoiceOver-Wert.
+    private func drawError(_ b: CGRect, _ rx: inout CGFloat) {
+        guard let e = errorText else { return }
+        let shown = e.count > 40 ? String(e.prefix(39)) + "…" : e
+        module(b, &rx, [NSAttributedString(string: shown, attributes: Theme.attrs(10.5, Theme.pillText(on: Theme.error), bold: true))], pill: Theme.error,
+               String(localized: "Fehler", bundle: Bundle.app), value: e) { [weak self] in self?.onShowError?() }
     }
 
     /// Sessions je Status in den Farben der Statuspunkte, dahinter die Gesamtzahl. Fehler nur, wenn es welche gibt.
     private func drawCounts(_ b: CGRect, _ rx: inout CGFloat) {
         let rows: [(n: Int, color: NSColor, label: String, always: Bool)] = [
-            (counts.running, Theme.running, String(localized: "arbeiten", bundle: Bundle.app), true),
+            (counts.running, Theme.runningText, String(localized: "arbeiten", bundle: Bundle.app), true),
             (counts.waiting, Theme.waitingText, String(localized: "warten", bundle: Bundle.app), true),
-            (counts.idle, Theme.idle, String(localized: "fertig", bundle: Bundle.app), true),
-            (counts.error, Theme.error, String(localized: "mit Fehler", bundle: Bundle.app), false),
+            (counts.idle, Theme.idleText, String(localized: "fertig", bundle: Bundle.app), true),
+            (counts.error, Theme.errorText, String(localized: "mit Fehler", bundle: Bundle.app), false),
             // Statusfarbe für „getrennt“ ist als Text zu dunkel; `muted` ist derselbe Grauton in lesbar.
             (counts.detached, Theme.muted, String(localized: "getrennt", bundle: Bundle.app), true),
         ]
@@ -366,6 +387,12 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         return v > plan ? Theme.error : v >= plan - Self.usagePlanWarning ? Theme.waiting : Theme.idle
     }
 
+    /// `usageColor` als lesbare Textfarbe.
+    static func usageTextColor(_ v: Int, plan: Int?) -> NSColor {
+        let c = usageColor(v, plan: plan)
+        return c == Theme.error ? Theme.errorText : c == Theme.waiting ? Theme.waitingText : Theme.idleText
+    }
+
     /// So viele Punkte vor dem Plan wird aus Grün Gelb (bei 7 Tagen rund 8 Stunden Vorlauf).
     static let usagePlanWarning = 5
 
@@ -378,7 +405,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             guard let target else { return NSAttributedString(string: "–%", attributes: fMuted) }
             var v = target
             if let countUp, let from { v = from + Int((CGFloat(target - from) * countUp).rounded()) }
-            return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, Self.usageColor(v, plan: plan)))
+            return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, Self.usageTextColor(v, plan: plan)))
         }
         /// Tooltip: Bezeichnung plus Prozentwert, beim 7-Tage-Wert zusätzlich der Plan-Stand.
         func usageTip(_ label: String, _ pct: Int?, _ plan: Int?) -> String {
@@ -417,14 +444,14 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             m.append(NSAttributedString(string: c.session, attributes: Theme.attrs(11.5, Theme.fg, bold: true)))
             if openCount > 1 { m.append(NSAttributedString(string: String(localized: " · \(openCount) offen", bundle: Bundle.app), attributes: fMuted)) }
             mid = m
-        } else if let e = errorText {
-            mid = NSAttributedString(string: String(localized: "kadrell · \(e)", bundle: Bundle.app), attributes: Theme.attrs(11.5, Theme.error))
         } else {
             mid = NSAttributedString(string: String(localized: "kadrell · \(sessionCount) sessions", bundle: Bundle.app), attributes: fMuted)
         }
         let avail = rx - leftEnd - 16
         let mw = min(mid.size().width, max(0, avail))
-        mid.draw(with: CGRect(x: leftEnd + (avail - mw) / 2, y: b.midY - 8, width: mw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        let r = CGRect(x: leftEnd + (avail - mw) / 2, y: b.midY - 8, width: mw, height: 16)
+        mid.draw(with: r, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        staticTexts.append((r, mid.string))
     }
 
     private func showLayoutMenu(at p: CGPoint) {
@@ -451,12 +478,44 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Knöpfe aus den Trefferflächen des letzten Zeichnens.
     override func accessibilityChildren() -> [Any]? {
         a11y = hitRects.accessibilityElements(parent: self, reusing: a11y)
-        return a11y
+        return a11y + staticTextElements()
+    }
+
+    /// Anzeige-Module als Text; je Position wiederverwendet, damit VoiceOver den Cursor behält.
+    private func staticTextElements() -> [Any] {
+        let els = staticTexts.enumerated().map { i, t in
+            let el = a11yTexts["\(i)"] ?? StaticTextElement()
+            el.update(parent: self, label: t.text, frame: t.rect.scaled(Theme.scale))
+            a11yTexts["\(i)"] = el
+            return el
+        }
+        a11yTexts = a11yTexts.filter { Int($0.key).map { $0 < els.count } ?? false }
+        return els
     }
 
     override func mouseDown(with event: NSEvent) {
         let v = convert(event.locationInWindow, from: nil)
         let p = CGPoint(x: v.x / Theme.scale, y: v.y / Theme.scale)
         hitRects.first(at: p)?.action()
+    }
+}
+
+/// Nur lesbarer Text in der Leiste (Rolle staticText). Kein `A11yElement`: das sind die bedienbaren Flächen.
+private final class StaticTextElement: NSAccessibilityElement {
+    private weak var view: NSView?
+    private var rect = CGRect.zero
+
+    @MainActor func update(parent: NSView, label: String, frame: CGRect) {
+        setAccessibilityParent(parent)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel(label)
+        view = parent
+        rect = frame
+    }
+
+    /// Wie `A11yElement`: die Leiste ist gespiegelt, `accessibilityFrameInParentSpace` wäre falsch.
+    override func accessibilityFrame() -> NSRect {
+        let v = view, r = rect
+        return MainActor.assumeIsolated { v.map { NSAccessibility.screenRect(fromView: $0, rect: r) } ?? .zero }
     }
 }

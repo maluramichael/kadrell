@@ -36,8 +36,36 @@ final class CellView: NSView {
     }
     var state: State { didSet { if state != oldValue { needsDisplay = true } } }
     var pulse: CGFloat = 1
-    /// Abgedunkelter Körper bei fehlendem Ordner, Startfehler und beendeter Session.
-    private static let shade = NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 1)
+    /// Abgedunkelter Körper bei fehlendem Ordner, Startfehler und beendeter Session: Theme-Grund mit Deckkraft.
+    private static let hatchAlpha: CGFloat = 0.15
+    private static var shade: NSColor { Theme.bg }
+
+    /// Flächen, auf denen eine Beschriftung über dem Schatten landen kann: Grund und Schraffurstreifen.
+    static func shadeSurfaces(alpha: CGFloat, group: NSColor) -> [NSColor] {
+        let under = group.mixed(0.05, into: Theme.bg)
+        let base = shade.mixed(alpha, into: under)
+        return [base, Theme.muted.mixed(hatchAlpha, into: base)]
+    }
+
+    /// Beschriftung auf dem Schatten, auf 4,5:1 gegen alle möglichen Flächen gebracht.
+    static func shadeLabel(_ c: NSColor, alpha: CGFloat, group: NSColor) -> NSColor {
+        c.ensuringContrast(4.5, against: shadeSurfaces(alpha: alpha, group: group), toward: extreme)
+    }
+
+    /// Ziel der Anpassung: Weiß im dunklen, Schwarz im hellen Theme (monoton, erreicht jede Fläche).
+    private static var extreme: NSColor { Theme.current.dark ? NSColor(hex: 0xffffff) : NSColor(hex: 0) }
+
+    private nonisolated(unsafe) static var headCache: (theme: String, colors: [String: NSColor]) = ("", [:])
+
+    /// Kopfzeilentext auf 4,5:1 gegen die getönte Fläche; gecacht je (Farbe, Fläche), Cache fällt beim Theme-Wechsel.
+    static func headText(_ c: NSColor, on head: NSColor) -> NSColor {
+        if headCache.theme != Theme.current.id { headCache = (Theme.current.id, [:]) }
+        let key = c.hexString + head.hexString
+        if let hit = headCache.colors[key] { return hit }
+        let r = c.ensuringContrast(4.5, against: [head], toward: extreme)
+        headCache.colors[key] = r
+        return r
+    }
 
     init(session: Session) {
         state = State(session: session)
@@ -100,6 +128,12 @@ final class CellView: NSView {
         guard let layer else { return }
         let c = borderColor.cgColor, w: CGFloat = state.focused || state.dropTarget ? 2 : 1
         guard layer.borderColor != c || layer.borderWidth != w else { return }
+        if Feedback.reduceMotion {
+            layer.removeAnimation(forKey: "borderColor")
+            layer.borderColor = c
+            layer.borderWidth = w
+            return
+        }
         let anim = CABasicAnimation(keyPath: "borderColor")
         anim.fromValue = layer.borderColor
         anim.toValue = c
@@ -118,7 +152,7 @@ final class CellView: NSView {
         Theme.line.setFill()
         CGRect(x: 0, y: head.maxY - 1, width: b.width, height: 1).fill()
         Icons.statusDot(in: dotRectLogical, status: state.session.status, attached: state.attached, color: dot)
-        let meta = NSAttributedString(string: state.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
+        let meta = NSAttributedString(string: state.session.elapsed(), attributes: Theme.attrs(10.5, Self.headText(Theme.muted, on: headBase)))
         let metaW = meta.size().width
         var iconW: CGFloat = state.hovered ? 84 : 0
         if state.zoomed {
@@ -129,8 +163,8 @@ final class CellView: NSView {
             iconW += 24
         }
         let title = NSAttributedString(string: state.session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
-        let group = NSAttributedString(string: state.groupName, attributes: Theme.attrs(10.5, state.groupColor))
-        let branch = NSAttributedString(string: state.session.branch ?? "", attributes: Theme.attrs(10.5, Theme.muted))
+        let group = NSAttributedString(string: state.groupName, attributes: Theme.attrs(10.5, Self.headText(state.groupColor, on: headBase)))
+        let branch = NSAttributedString(string: state.session.branch ?? "", attributes: Theme.attrs(10.5, Self.headText(Theme.muted, on: headBase)))
         // Der Titel hat Vorrang: Branch und Gruppe erscheinen nur, solange daneben noch Platz ist.
         let avail = max(0, b.width - 24 - metaW - iconW - 16)
         let titleW = min(title.size().width, avail)
@@ -190,27 +224,38 @@ final class CellView: NSView {
         if state.missingFolder {
             Self.shade.withAlphaComponent(0.72).setFill()
             body.fill()
-            drawLabel(String(localized: "ORDNER FEHLT · \(Theme.shortPath(state.session.cwd))", bundle: Bundle.app), in: body, color: Theme.error)
+            drawLabel(String(localized: "ORDNER FEHLT · \(Theme.shortPath(state.session.cwd))", bundle: Bundle.app), in: body, color: Theme.error, alpha: 0.72)
         } else if let exitCode = state.exitCode {
             // Startfehler statt normalem `/exit`: keine Schraffur, die letzten Zeilen bleiben lesbar (Kanboard #20).
             Self.shade.withAlphaComponent(0.35).setFill()
             body.fill()
             if !state.lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
-            drawLabel(String(localized: "START FEHLGESCHLAGEN · EXIT \(String(exitCode))", bundle: Bundle.app), in: body, color: Theme.error)
+            drawLabel(String(localized: "START FEHLGESCHLAGEN · EXIT \(String(exitCode))", bundle: Bundle.app), in: body, color: Theme.error, alpha: 0.35)
         } else if state.ended {
             drawHatch(in: body)
             if !state.lines.isEmpty { drawLines(in: body.insetBy(dx: 10, dy: 8)) }
-            drawLabel(String(localized: "BEENDET · KLICK SETZT FORT", bundle: Bundle.app), in: body)
+            drawLabel(String(localized: "BEENDET · KLICK SETZT FORT", bundle: Bundle.app), in: body, alpha: 0.72)
         } else if !state.attached, state.previewing {
             drawLabel(String(localized: "VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET", bundle: Bundle.app), in: body)
         } else if !state.attached {
-            Icons.spinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24), color: Theme.sub, width: 2)
+            drawSpinner(in: CGRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24))
             drawLabel(String(localized: "STARTET …", bundle: Bundle.app), in: body)
         } else if !terminalMounted, state.elsewhere {
             drawLabel(String(localized: "IN ANDEREM FENSTER · KLICK HOLT HIERHER", bundle: Bundle.app), in: body)
         } else if !terminalMounted {
             drawLines(in: body.insetBy(dx: 10, dy: 8))
         }
+    }
+
+    /// Ohne „Bewegung reduzieren“ der drehende Spinner, sonst ein statischer Bogen.
+    private func drawSpinner(in r: CGRect) {
+        guard Feedback.reduceMotion else { return Icons.spinner(in: r, color: Theme.sub, width: 2) }
+        let p = NSBezierPath()
+        p.lineWidth = 2
+        p.lineCapStyle = .round
+        p.appendArc(withCenter: CGPoint(x: r.midX, y: r.midY), radius: r.width / 2 - 1, startAngle: 0, endAngle: -270, clockwise: true)
+        Theme.sub.setStroke()
+        p.stroke()
     }
 
     private var borderColor: NSColor {
@@ -241,7 +286,7 @@ final class CellView: NSView {
         r.fill()
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: r).addClip()
-        NSColor.black.withAlphaComponent(0.35).setStroke()
+        Theme.muted.withAlphaComponent(Self.hatchAlpha).setStroke()
         let p = NSBezierPath()
         p.lineWidth = 6
         var x = r.minX - r.height
@@ -253,8 +298,10 @@ final class CellView: NSView {
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    private func drawLabel(_ text: String, in r: CGRect, color: NSColor = Theme.muted) {
+    /// `alpha`: Deckkraft des Schattens unter dem Label (nil = kein Schatten, Theme-Farbe wie sie ist).
+    private func drawLabel(_ text: String, in r: CGRect, color: NSColor = Theme.muted, alpha: CGFloat? = nil) {
         guard r.height > 24 else { return }
+        let color = alpha.map { Self.shadeLabel(color, alpha: $0, group: state.groupColor) } ?? color
         let para = NSMutableParagraphStyle(); para.alignment = .center; para.lineBreakMode = .byTruncatingTail
         let a = NSAttributedString(string: text, attributes: [.font: Theme.font(11), .foregroundColor: color, .kern: 0.5, .paragraphStyle: para])
         let h = a.size().height

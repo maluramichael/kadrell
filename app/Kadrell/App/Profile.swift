@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 /// Profil dieser Instanz: eigene Sessions, Gruppen, Einstellungen und eigener Socket. Ohne Namen ist es das
 /// Standardprofil am bisherigen Ort, dafür muss nichts umziehen. `--profile <name>` (oder `KADRELL_PROFILE`) liegt
@@ -6,10 +7,35 @@ import AppKit
 /// Mehrere Profile laufen parallel, dasselbe Profil nur einmal (Lock-Datei).
 enum Profile {
     static let name: String? = {
-        let args = CommandLine.arguments
-        if let i = args.firstIndex(of: "--profile"), i + 1 < args.count { return clean(args[i + 1]) }
-        return ProcessInfo.processInfo.environment["KADRELL_PROFILE"].flatMap(clean)
+        let r = resolveName(arguments: CommandLine.arguments, environment: ProcessInfo.processInfo.environment,
+                            underTest: NSClassFromString("XCTestCase") != nil)
+        if let bad = r.invalid {
+            Logger(subsystem: "de.malura.kadrell", category: "profile").error("Ungültiger Profilname: \(bad, privacy: .public)")
+            FileHandle.standardError.write(Data("kadrell: ungültiger Profilname „\(bad)“ (erlaubt: A-Z a-z 0-9 . _ -)\n".utf8))
+            exit(64)
+        }
+        return r.name
     }()
+
+    /// `--profile` vor `KADRELL_PROFILE`. Ein ungültiger Name kommt als `invalid` zurück, nie als Standardprofil.
+    /// Unter XCTest ohne Angabe `tmp`, damit Tests nicht in die echten Daten schreiben.
+    static func resolveName(arguments: [String], environment: [String: String], underTest: Bool) -> (name: String?, invalid: String?) {
+        var raw: String?
+        if let i = arguments.firstIndex(of: "--profile"), i + 1 < arguments.count { raw = arguments[i + 1] }
+        else if let e = environment["KADRELL_PROFILE"], !e.isEmpty { raw = e }
+        guard let raw else { return (underTest ? "tmp" : nil, nil) }
+        guard let n = clean(raw) else { return (nil, raw) }
+        return (n, nil)
+    }
+
+    /// Einstellungen, die ein neues Profil vom Standardprofil übernimmt. Raus: Zustand statt Vorliebe
+    /// (Auswahl, Lesestand, Session-Reihenfolge, offene Fenster, Statistik) und `autoswitch.*`, weil die
+    /// Account-Slots global im Schlüsselbund liegen und zwei Instanzen sonst gegeneinander wechseln.
+    static func copiedPreferences(_ base: [String: Any]) -> [String: Any] {
+        let prefixes = ["workspace.selected", "stats.", "autoswitch."]
+        let keys: Set = ["sessions.unseen", "sidebar.flatOrder", "windows.open"]
+        return base.filter { k, _ in !keys.contains(k) && !prefixes.contains { k.hasPrefix($0) } }
+    }
     static var isTemporary: Bool { name == "tmp" }
 
     private static let bundleId = Bundle.main.bundleIdentifier ?? "de.malura.kadrell"
@@ -38,9 +64,8 @@ enum Profile {
     /// die gehören zu Sessions, die es dort nicht gibt.
     nonisolated(unsafe) static let defaults: UserDefaults = {
         guard let suite = suiteName, let d = UserDefaults(suiteName: suite) else { return .standard }
-        if d.persistentDomain(forName: suite)?.isEmpty ?? true, var base = UserDefaults.standard.persistentDomain(forName: bundleId) {
-            for k in base.keys where k.hasPrefix("workspace.selected") || ["session.lastSeenSize", "folders.uses", "windows.open"].contains(k) { base[k] = nil }
-            d.setPersistentDomain(base, forName: suite)
+        if d.persistentDomain(forName: suite)?.isEmpty ?? true, let base = UserDefaults.standard.persistentDomain(forName: bundleId) {
+            d.setPersistentDomain(copiedPreferences(base), forName: suite)
         }
         return d
     }()

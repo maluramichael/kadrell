@@ -8,7 +8,8 @@ struct ControlRequest: Codable, Sendable {
     /// Arbeitsordner des Aufrufers, für relative Pfade.
     var cwd: String
     /// `KADRELL_SESSION_KEY` des Aufrufers, wenn er in einer Kadrell-Kachel läuft (wie `$TMUX_PANE`).
-    /// Frei setzbar: die App ersetzt ihn durch die Kachel, aus deren Prozessbaum der Aufruf kommt (`ControlCaller`).
+    /// Frei setzbar: die App ersetzt ihn durch die Kachel, aus deren Prozessbaum der Aufruf kommt, und nimmt ihn
+    /// nur, wenn dort keine gefunden wird (`ControlCaller.resolve`).
     var caller: String?
 }
 
@@ -51,6 +52,7 @@ enum ControlCommand: Equatable {
     case status(target: String?, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?)
 
     static let states = ["working", "waiting", "idle"]
+    static let layouts = LayoutMode.allCases.map(\.rawValue).joined(separator: "|")
 
     static let usage = """
     Kadrell fernsteuern (die App muss laufen, sonst wird sie gestartet).
@@ -68,7 +70,8 @@ enum ControlCommand: Equatable {
                                                            --resume: bestehende Konversation übernehmen
                                                            (Claude darf dort nicht mehr laufen, -c = ihr Ordner)
       kadrell select [-t session|gruppe] [-a]              zeigen (-a: zur Auswahl dazu/weg)
-      kadrell layout grid|main|spiral|custom|scroll|stack Layout
+      kadrell layout \(layouts)
+                                                           Layout
       kadrell zoom [-t session]                            Zoom ein/aus
       kadrell rename [-t session] <name>                   umbenennen (leer = Titel von Claude Code)
       kadrell move [-t session] <gruppe>                   Session in eine andere Gruppe verschieben, läuft weiter
@@ -119,7 +122,7 @@ enum ControlCommand: Equatable {
             },
             "select": parser(values: ["-t"], bools: ["-a"]) { .select(target: $0["-t"], add: $0.has("-a")) },
             "layout": { rest in
-                guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|main|spiral|custom|scroll|row|stack") }
+                guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout " + layouts) }
                 return .layout(m)
             },
             "zoom": parser(values: ["-t"]) { .zoom(target: $0["-t"]) },
@@ -235,6 +238,19 @@ enum ControlCaller {
     static func allowed(group: Group, caller: String?, othersAllowed: Bool) -> Bool {
         guard let caller, !othersAllowed else { return true }
         return group.sessionIds.contains(caller)
+    }
+
+    /// Findet die pid keine Kachel (Doppel-Fork, pid schon weg), zählt der mitgeschickte Key, wenn es die Session gibt.
+    /// Eine behauptete Kennung kann nur einschränken, nie erweitern (ohne caller ist ohnehin alles erlaubt).
+    static func resolve(peer: String?, claim: String?, sessions: [String]) -> String? {
+        peer ?? claim.flatMap { sessions.contains($0) ? $0 : nil }
+    }
+
+    /// `new -c` aus einer eingeschränkten Kachel: Gruppenordner oder darunter, nach Auflösen von `..` und Symlinks.
+    static func allowed(dir: String, groupDir: String) -> Bool {
+        let real = { (p: String) in URL(fileURLWithPath: p).standardizedFileURL.resolvingSymlinksInPath().path }
+        let d = real(dir), g = real(groupDir)
+        return d == g || d.hasPrefix(g.hasSuffix("/") ? g : g + "/")
     }
 }
 

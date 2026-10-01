@@ -251,6 +251,76 @@ final class GroupStorePersistenceTests: XCTestCase {
     }
 }
 
+extension GroupStorePersistenceTests {
+    private func corruptFiles(_ d: URL) throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: d.path).filter { $0.hasPrefix("groups.corrupt-") }
+    }
+
+    /// Höhere Version mit unbekanntem Eintragsformat: keine Quarantäne, nur lesen, Save schreibt nichts.
+    func testNewerVersionIsReadOnlyWithoutQuarantine() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        let original = Data(##"{"version":99,"items":[{"x":1}]}"##.utf8)
+        try original.write(to: url)
+
+        let store = GroupStore(url: url)
+        XCTAssertNil(store.lastError)
+        XCTAssertTrue(try corruptFiles(d).isEmpty)
+        store.add(Group(id: "g", name: "n", color: "#fff", cwd: "/p", sessionIds: []))
+        XCTAssertEqual(try Data(contentsOf: url), original)
+    }
+
+    /// Zwei Korruptionen nacheinander (auch im selben Sekundenstempel): beide Sicherungen bleiben.
+    func testTwoCorruptionsKeepTwoBackups() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        try Data("{kaputt1".utf8).write(to: url)
+        _ = GroupStore(url: url)
+        try Data("{kaputt2".utf8).write(to: url)
+        _ = GroupStore(url: url)
+
+        let files = try corruptFiles(d)
+        XCTAssertEqual(files.count, 2)
+        let contents = try files.map { try String(contentsOf: d.appendingPathComponent($0), encoding: .utf8) }
+        XCTAssertEqual(Set(contents), ["{kaputt1", "{kaputt2"])
+    }
+
+    /// Lesefehler (hier: Verzeichnis statt Datei) ist kein leerer Start: read-only, nichts wird angefasst.
+    func testUnreadableFileIsReadOnlyAndUntouched() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        let marker = url.appendingPathComponent("inhalt.txt")
+        try Data("x".utf8).write(to: marker)
+
+        let store = GroupStore(url: url)
+        XCTAssertNotNil(store.lastError)
+        store.add(Group(id: "g", name: "n", color: "#fff", cwd: "/p", sessionIds: []))
+        var isDir: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir))
+        XCTAssertTrue(isDir.boolValue)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+        XCTAssertTrue(try corruptFiles(d).isEmpty)
+    }
+
+    /// Doppelte Gruppen-Id: die erste gewinnt.
+    func testDuplicateGroupIdIsDropped() throws {
+        let d = dir()
+        defer { try? FileManager.default.removeItem(at: d) }
+        let url = d.appendingPathComponent("groups.json")
+        try Data(##"""
+        [{"id":"g1","name":"eins","color":"#fff","cwd":"/p","sessionIds":[]},
+         {"id":"g1","name":"zwei","color":"#000","cwd":"/q","sessionIds":[]}]
+        """##.utf8).write(to: url)
+
+        let store = GroupStore(url: url)
+        XCTAssertEqual(store.groups.map(\.name), ["eins"])
+    }
+}
+
 @MainActor
 final class GroupStoreRemoteTests: XCTestCase {
     func testRemoteSessionsGroupByHostNotCwd() throws {

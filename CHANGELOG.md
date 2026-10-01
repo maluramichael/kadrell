@@ -2,6 +2,32 @@
 
 Neueste Version oben.
 
+## Unreleased
+
+- Änderung: „Sessions dürfen andere Sessions steuern" ist für neue Installationen aus. Eine Session kann dann per `kadrell` nur noch ihre eigene Gruppe steuern und neue Sessions nur im Ordner ihrer Gruppe starten. Wer Sessions bewusst gegenseitig steuern lassen will, schaltet es in den Einstellungen ein.
+- Änderung: Auf deutschem Tastaturlayout kommen ⌥-Zeichen wie [ ] { } | @ ~ jetzt im Terminal an, statt eine Kachel zu fokussieren. Auf U.S.-Layout ändert sich nichts.
+- Änderung: Programme in einer Kachel können die Zwischenablage nicht mehr unbemerkt auslesen. Kopieren aus dem Terminal funktioniert weiter.
+- Änderung: Ein Klick auf einen Terminal-Link zu einem Programm oder Skript zeigt die Datei im Finder, statt sie zu starten.
+- Änderung: Neue Profile übernehmen vom Standardprofil keine Statistik, keinen Lesestand, keine Sortierung und keinen automatischen Account-Wechsel mehr.
+- Fix: Ein Account-Wechsel sichert den angemeldeten Zugang jetzt in das Konto, dem er wirklich gehört. Vorher konnte ein Wechsel nach einer Anmeldung außerhalb von Kadrell den Zugang eines anderen Kontos überschreiben. Scheitert das Sichern, wird nicht gewechselt.
+- Fix: „Account hinzufügen" legt dasselbe Konto nicht mehr mehrfach an, wenn die E-Mail gerade nicht abrufbar ist.
+- Fix: Eine unerwartete Antwort der Nutzungs-Abfrage löscht die zuletzt bekannte Nutzung nicht mehr.
+- Fix: Stoppen und sofort Fortsetzen einer Session konnte einen zweiten, unsichtbaren Claude-Prozess auf derselben Konversation hinterlassen.
+- Fix: Eine gestoppte Session bleibt als Kachel stehen, wie der Stoppen-Dialog es verspricht.
+- Fix: Ist sessions.json oder groups.json nicht lesbar oder stammt von einer neueren Kadrell-Version, überschreibt Kadrell sie nicht mehr. Sicherungen kaputter Dateien überschreiben sich nicht mehr gegenseitig.
+- Fix: Eine doppelte Gruppe in groups.json bringt den Dialog für neue Sessions nicht mehr zum Absturz.
+- Fix: `kadrell capture --all` mit langem Verlauf meldet nicht mehr fälschlich „keine Antwort von Kadrell".
+- Fix: Fehler (etwa beim Speichern oder eine kaputte Claude-CLI) stehen jetzt als rote Markierung in der Leiste, auch wenn eine Session fokussiert ist.
+- Fix: Beendete Kacheln, Statuszahlen in der Leiste, Dialog-Knöpfe und Terminal-Farben sind in hellen Farbschemata wieder gut lesbar.
+- Fix: Ausgeblendete Terminals geben ihren Grafikspeicher frei. Bei vielen Sessions braucht Kadrell deutlich weniger Speicher.
+- Fix: Beim Ziehen einer Trennlinie bekommen die Claude-Sessions nicht mehr bei jeder Mausbewegung eine neue Fenstergröße.
+- Feature: Im Baum erweitern ⇧↑ und ⇧↓ die Auswahl, x nimmt die Session unter dem Cursor dazu oder heraus.
+- Feature: In ⌘P mit @ lässt sich direkt `user@host` eintippen und verbinden, auch ohne Eintrag in der ssh-Konfiguration.
+- Änderung: Die Textsuche in ⌘P (/) läuft im Hintergrund und bremst das Tippen nicht mehr aus. Statuspunkte in ⌘P sehen aus wie im Baum.
+- Änderung: VoiceOver liest Nutzung, Zähler und Uhr in der Leiste, die Knöpfe auf der Startkarte und die Titel aller Einstellungen vor und folgt dem Cursor im Baum.
+- Änderung: „Bewegung reduzieren" gilt jetzt auch für Ein- und Ausblenden der Kacheln, den Fokusrahmen und den Start-Spinner.
+- Fix: Einstellungen und ⌘P werden bei großer UI-Größe nicht mehr breiter als Fenster und Bildschirm.
+
 ## 1.60.0 (2026-09-30)
 
 - Feature: Neue Einstellung „Bei zu schnellem 7-Tage-Verbrauch wechseln". Ist sie an, wechselt Kadrell schon dann auf einen entspannteren Account, wenn dein Wochenverbrauch zu schnell steigt und ein früher Lockout droht, nicht erst beim Erreichen der Auslastungsschwelle. Default aus.

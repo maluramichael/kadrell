@@ -19,6 +19,33 @@ final class AttachManagerTests: XCTestCase {
         XCTAssertNil(weakTerminal)
     }
 
+    /// Stop und sofortiges Fortsetzen: das spät gemeldete Ende des alten Prozesses hängt das neue Terminal nicht aus.
+    func testLateExitOfStoppedProcessKeepsResumedTerminal() async throws {
+        let id = Session.shellPrefix + "resume-race-test"
+        let session = Session(id: id, cwd: NSTemporaryDirectory(), startedAt: 0, sessionId: id, name: "Shell")
+        let attach = AttachManager(cli: ClaudeCLI(binary: "/usr/bin/false", environment: ["SHELL": "/bin/sh"]))
+        weak var first: KadrellTerminalView?
+        for _ in 0..<2 {
+            do {
+                attach.attachNow(session)
+                first = attach.terminal(for: id)
+                XCTAssertNotNil(first)
+                attach.stop(id)
+                attach.attachNow(session)
+            }
+            let second = try XCTUnwrap(attach.terminal(for: id))
+            XCTAssertFalse(second === first)
+            let deadline = Date().addingTimeInterval(5)
+            while first != nil, Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+            XCTAssertNil(first, "Ende des ersten Prozesses nicht gemeldet")
+            XCTAssertTrue(attach.terminal(for: id) === second)
+            XCTAssertTrue(attach.isAttached(id))
+            XCTAssertFalse(attach.isEnded(id))
+            attach.stop(id)
+        }
+        await attach.shutdown(timeout: 5)
+    }
+
     /// Hintergrundjob, der die Pipe erbt, blockiert `ProcessRunner.run` nicht; ein hängender Prozess endet per Timeout.
     func testProcessRunnerReturnsAtProcessExitAndTimesOut() async throws {
         let t0 = Date()

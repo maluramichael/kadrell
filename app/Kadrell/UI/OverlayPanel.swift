@@ -47,8 +47,14 @@ final class OverlayPanel: ChildPanel {
         let pf = parent.frame
         anchor = CGPoint(x: pf.midX, y: pf.midY)
         limit.maxHeight = pf.height - 2 * 24
+        limit.maxWidth = Self.maxWidth(parent: pf.width, screen: (parent.screen ?? NSScreen.main)?.visibleFrame.width)
         reanchor()
         attach(to: parent)
+    }
+
+    /// Breite höchstens bis 24 pt an jeden Rand des Hauptfensters und des Bildschirms; ohne Bildschirm zählt nur das Fenster.
+    static func maxWidth(parent: CGFloat, screen: CGFloat?) -> CGFloat {
+        min(parent, screen ?? .infinity) - 2 * 24
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -64,6 +70,7 @@ final class OverlayPanel: ChildPanel {
 @MainActor
 final class OverlayLimit {
     var maxHeight = CGFloat.infinity
+    var maxWidth = CGFloat.infinity
 }
 
 /// Höher als bis je 24 pt an den oberen und unteren Fensterrand wird ein Dialog nicht, der Rest scrollt.
@@ -79,7 +86,7 @@ struct OverlayScroll<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView(.vertical) {
-                content.onGeometryChange(for: CGSize.self) { $0.size } action: { height = $0.height; width = $0.width }
+                content.frame(maxWidth: limit.maxWidth).onGeometryChange(for: CGSize.self) { $0.size } action: { height = $0.height; width = $0.width }
             }
             .scrollBounceBehavior(.basedOnSize)
             .frame(height: height > 0 ? min(height, limit.maxHeight - footHeight) : nil)
@@ -96,6 +103,7 @@ struct OverlayScroll<Content: View>: View {
 class ChildPanel: NSPanel {
     init(size: NSSize) {
         super.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        isReleasedWhenClosed = false
         isFloatingPanel = true
         level = .floating
         hasShadow = true

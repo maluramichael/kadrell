@@ -52,8 +52,8 @@ struct Account: Codable, Equatable, Identifiable, Sendable {
 final class AccountService {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "accounts")
     /// Der Eintrag, den die `claude`-CLI liest. Sein Account-Name ist der macOS-Benutzer.
-    static let liveService = "Claude Code-credentials"
-    static let storeService = "de.malura.kadrell.account"
+    nonisolated static let liveService = "Claude Code-credentials"
+    nonisolated static let storeService = "de.malura.kadrell.account"
     /// Nach einem Auto-Wechsel so lange nicht erneut wechseln, gegen Flattern nahe der Schwelle.
     private static let cooldown: TimeInterval = 300
 
@@ -65,8 +65,15 @@ final class AccountService {
     private var lastSwitch = Date.distantPast
     /// Ein Wechsel läuft: kein zweiter parallel (der zweite läse den halb geschriebenen Eintrag).
     private var busy = false
+    /// Verständlicher Grund, warum der letzte Wechsel oder die letzte Aufnahme gescheitert ist; nil bei Erfolg.
+    private(set) var lastError: String?
+    private let keychain: KeychainAccess
+    private let fetchEmail: @Sendable (String) async -> String?
 
-    init() {
+    init(keychain: KeychainAccess = .live,
+         profileEmail: @escaping @Sendable (String) async -> String? = AccountService.profileEmail) {
+        self.keychain = keychain
+        fetchEmail = profileEmail
         if let data = Settings.accountsData, let list = try? JSONDecoder().decode([Account].self, from: data) { accounts = list }
         activeId = Settings.activeAccountId
     }
@@ -110,67 +117,122 @@ final class AccountService {
 
     // MARK: Hinzufügen
 
-    /// Nimmt den gerade angemeldeten Account (aktueller `Claude Code-credentials`-Eintrag) als Slot auf. Ist er als
-    /// E-Mail schon dabei, wird nur sein Block aufgefrischt und er aktiv gesetzt. Gibt false zurück, wenn kein
-    /// angemeldeter Account gefunden wurde.
+    /// Nimmt den gerade angemeldeten Account (aktueller `Claude Code-credentials`-Eintrag) als Slot auf. Ist er schon
+    /// dabei (gleiche E-Mail, ohne E-Mail gleicher Token), wird nur sein Block aufgefrischt und er aktiv gesetzt.
     func addCurrent() async -> Bool {
-        guard let raw = await Keychain.read(service: Self.liveService),
-              let oauth = Self.oauth(from: raw), let token = oauth["accessToken"] as? String else { return false }
-        let email = await Self.profileEmail(token: token)
-        let sub = oauth["subscriptionType"] as? String
-        guard let blob = Self.string(from: oauth) else { return false }
-
-        if let email, let i = accounts.firstIndex(where: { $0.email == email }) {
-            let id = accounts[i].id
-            guard await Keychain.write(service: Self.storeService, account: id, value: blob) else { return false }
-            accounts[i].subscription = sub
-            setActive(id)
-            return true
+        lastError = nil
+        guard let raw = await keychain.read(Self.liveService, nil), let oauth = Self.oauth(from: raw) else {
+            return fail("read live", String(localized: "Kein angemeldeter Claude-Account gefunden", bundle: Bundle.app))
         }
-        let id = UUID().uuidString
-        guard await Keychain.write(service: Self.storeService, account: id, value: blob) else { return false }
-        let alias = email ?? String(localized: "Konto \(accounts.count + 1)", bundle: Bundle.app)
-        accounts.append(Account(id: id, alias: alias, email: email, subscription: sub))
+        guard let id = await capture(oauth, fallbackActive: false) else { return false }
         setActive(id)
         return true
     }
 
     // MARK: Wechseln
 
-    /// Schaltet den aktiven Account auf `id`. Der aktuell live liegende Block wird vorher in den Slot des bisher
-    /// aktiven Accounts zurückgeschrieben (die `claude`-CLI rotiert die Tokens im Betrieb).
+    /// Schaltet den aktiven Account auf `id`. Der live liegende Block wird vorher in den Slot des Accounts gesichert,
+    /// dem er gehört (die `claude`-CLI rotiert die Tokens im Betrieb). Scheitert das Sichern, bleibt live unverändert.
     @discardableResult
     func switchTo(_ id: String) async -> Bool {
-        guard !busy, id != activeId, accounts.contains(where: { $0.id == id }) else { return false }
+        lastError = nil
+        guard !busy else { return fail("busy", String(localized: "Ein Wechsel läuft schon", bundle: Bundle.app)) }
+        guard id != activeId, let target = accounts.first(where: { $0.id == id }) else { return false }
         busy = true
         defer { busy = false }
-        guard let raw = await Keychain.read(service: Self.liveService), var full = Self.object(from: raw) else { return false }
-        await captureLive(full)
-        guard let targetRaw = await Keychain.read(service: Self.storeService, account: id),
-              let targetOauth = Self.object(from: targetRaw) else { return false }
+        guard let raw = await keychain.read(Self.liveService, nil), Self.object(from: raw) != nil else {
+            return fail("read live", String(localized: "Kein angemeldeter Claude-Account gefunden", bundle: Bundle.app))
+        }
+        var owner: String?
+        if let oauth = Self.oauth(from: raw) {
+            guard let o = await capture(oauth, fallbackActive: true) else { return false }
+            owner = o
+        }
+        guard let targetRaw = await keychain.read(Self.storeService, id), let targetOauth = Self.object(from: targetRaw) else {
+            return fail("read target", String(localized: "Gespeicherter Zugang für „\(target.title)“ ist nicht lesbar", bundle: Bundle.app))
+        }
+        guard var full = await rereadLive(since: raw, owner: owner) else { return false }
         full["claudeAiOauth"] = targetOauth
         guard let merged = Self.string(from: full),
-              await Keychain.write(service: Self.liveService, account: NSUserName(), value: merged) else { return false }
+              await keychain.write(Self.liveService, NSUserName(), merged) else {
+            return fail("write live", String(localized: "Schlüsselbund hat das Speichern abgelehnt", bundle: Bundle.app))
+        }
         lastSwitch = Date()
         setActive(id)
         Self.log.notice("Account gewechselt")
         return true
     }
 
-    /// Den live liegenden `claudeAiOauth`-Block in den Slot des bisher aktiven Accounts sichern, damit dessen
-    /// rotierter Refresh-Token nicht verloren geht.
-    /// ponytail: schreibt immer in `activeId`. Meldet man sich außerhalb von Kadrell an einem anderen Account an
-    /// und lässt dann wechseln, landet dessen Block im falschen Slot. Upgrade-Pfad: vor dem Sichern die E-Mail
-    /// per `/oauth/profile` gegen den aktiven Slot prüfen.
-    private func captureLive(_ full: [String: Any]) async {
-        guard let curId = activeId, let oauth = full["claudeAiOauth"] as? [String: Any], let blob = Self.string(from: oauth) else { return }
-        await Keychain.write(service: Self.storeService, account: curId, value: blob)
+    /// Direkt vor dem Überschreiben live erneut lesen: hat die CLI inzwischen rotiert, den neueren Block in denselben
+    /// Slot sichern. Liefert das aktuelle Live-JSON, nil bei Abbruch.
+    private func rereadLive(since first: String, owner: String?) async -> [String: Any]? {
+        guard let raw = await keychain.read(Self.liveService, nil), let full = Self.object(from: raw) else {
+            fail("read live", String(localized: "Kein angemeldeter Claude-Account gefunden", bundle: Bundle.app))
+            return nil
+        }
+        guard raw != first, let oauth = full["claudeAiOauth"] as? [String: Any] else { return full }
+        if let owner {
+            return await save(oauth, to: owner) ? full : nil
+        }
+        return await capture(oauth, fallbackActive: true) == nil ? nil : full
+    }
+
+    /// Den Live-Block in den Slot sichern, dem er gehört: per E-Mail, ohne E-Mail per gleichem Token, sonst (nur beim
+    /// Wechsel) der aktive. Ohne Treffer wird er als neuer Account aufgenommen, damit nichts verloren geht.
+    /// Liefert die Slot-Id, nil wenn das Sichern scheitert.
+    private func capture(_ oauth: [String: Any], fallbackActive: Bool) async -> String? {
+        let email = await (oauth["accessToken"] as? String).asyncMap(fetchEmail)
+        var id = email.flatMap { e in accounts.first { $0.email == e }?.id }
+        if email == nil { id = await slotMatching(oauth) }
+        if id == nil, email == nil, fallbackActive, let activeId {
+            Self.log.warning("Account: Identität unklar, sichere in den aktiven Slot")
+            id = activeId
+        }
+        let slot = id ?? UUID().uuidString
+        guard await save(oauth, to: slot) else { return nil }
+        let sub = oauth["subscriptionType"] as? String
+        if let i = accounts.firstIndex(where: { $0.id == slot }) {
+            accounts[i].subscription = sub
+        } else {
+            let alias = email ?? String(localized: "Konto \(accounts.count + 1)", bundle: Bundle.app)
+            accounts.append(Account(id: slot, alias: alias, email: email, subscription: sub))
+            persist()
+        }
+        return slot
+    }
+
+    private func save(_ oauth: [String: Any], to slot: String) async -> Bool {
+        guard let blob = Self.string(from: oauth), await keychain.write(Self.storeService, slot, blob) else {
+            return fail("capture", String(localized: "Schlüsselbund hat das Speichern abgelehnt", bundle: Bundle.app))
+        }
+        return true
+    }
+
+    /// Slot, dessen gespeicherter Block denselben Refresh- oder Access-Token trägt. Unlesbare Slots zählen nicht.
+    private func slotMatching(_ oauth: [String: Any]) async -> String? {
+        for a in accounts {
+            guard let raw = await keychain.read(Self.storeService, a.id), let stored = Self.object(from: raw) else { continue }
+            if Self.sameToken(stored, oauth) { return a.id }
+        }
+        return nil
+    }
+
+    static func sameToken(_ a: [String: Any], _ b: [String: Any]) -> Bool {
+        ["refreshToken", "accessToken"].contains { key in (a[key] as? String).map { $0 == b[key] as? String } ?? false }
+    }
+
+    /// Abbruch: Schritt loggen (ohne Werte), Text für den Nutzer merken.
+    @discardableResult
+    private func fail(_ step: String, _ message: String) -> Bool {
+        Self.log.error("Account: Abbruch bei \(step, privacy: .public)")
+        lastError = message
+        return false
     }
 
     // MARK: Verwalten
 
     func remove(_ id: String) async {
-        await Keychain.delete(service: Self.storeService, account: id)
+        await keychain.delete(Self.storeService, id)
         accounts.removeAll { $0.id == id }
         if activeId == id { activeId = nil }
         persist()
@@ -271,7 +333,7 @@ final class AccountService {
     }
 
     /// E-Mail des Accounts über `api.anthropic.com/api/oauth/profile`, für den Anzeigenamen. Scheitert still.
-    static func profileEmail(token: String) async -> String? {
+    nonisolated static func profileEmail(token: String) async -> String? {
         guard let url = URL(string: "https://api.anthropic.com/api/oauth/profile") else { return nil }
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -281,5 +343,12 @@ final class AccountService {
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         let account = root["account"] as? [String: Any]
         return (account?["email"] as? String) ?? (account?["email_address"] as? String) ?? (root["email"] as? String)
+    }
+}
+
+private extension Optional {
+    func asyncMap<T>(_ f: (Wrapped) async -> T?) async -> T? {
+        guard let self else { return nil }
+        return await f(self)
     }
 }

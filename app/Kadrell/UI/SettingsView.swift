@@ -272,7 +272,7 @@ struct SettingsView: View {
             Color.clear.frame(height: 12)
             DialogFoot(hint: String(localized: "Änderungen gelten sofort · Esc schließt", bundle: Bundle.app), button: String(localized: "Fertig", bundle: Bundle.app)) { model.stopRecording(); model.onClose?() }
         }
-        .frame(width: 900 * Theme.scale, alignment: .leading)
+        .frame(minWidth: 0, idealWidth: 900 * Theme.scale, maxWidth: 900 * Theme.scale, alignment: .leading)
         .background(Theme.panelColor)
         .environment(\.locale, model.locale)
         .onDisappear { model.stopRecording() }
@@ -299,7 +299,7 @@ struct SettingsView: View {
         HStack(spacing: 12) {
             Text(title).foregroundStyle(Theme.fgColor).lineLimit(1)
             Spacer(minLength: 12)
-            control().frame(width: controlWidth)
+            control().frame(width: controlWidth).environment(\.rowTitle, title)
         }
         .font(Theme.ui(12))
         .padding(.horizontal, 10).padding(.vertical, 5)
@@ -322,7 +322,7 @@ struct SettingsView: View {
             .frame(width: controlWidth).background(Theme.bgColor).contentShape(Rectangle())
         }
         .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).kbdFocusRing()
-        .frame(width: controlWidth)
+        .frame(width: controlWidth).modifier(RowLabel())
     }
 
     /// Ganzzahliger Schieberegler mit Wert rechts daneben. `factor` rechnet gespeicherte Faktoren in Prozent um.
@@ -337,6 +337,7 @@ struct SettingsView: View {
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Theme.bgColor)
             .dropDestination(for: URL.self) { urls, _ in drop(urls) }
+            .modifier(RowLabel())
     }
 
     private func iconButton(_ symbol: String, action: @escaping () -> Void) -> some View {
@@ -367,15 +368,27 @@ struct SettingsView: View {
             Button { isRecording ? model.stopRecording() : model.record(a) } label: {
                 Text(isRecording ? String(localized: "Tasten drücken …", bundle: Bundle.app) : key?.display ?? "–")
                     .font(Theme.ui(12, bold: true))
-                    .foregroundStyle(isRecording ? Theme.bgColor : Theme.fgColor)
+                    .foregroundStyle(isRecording ? Theme.onColor(Theme.running) : Theme.fgColor)
                     .padding(.horizontal, 8).padding(.vertical, 3).frame(width: controlWidth, alignment: .leading)
                     .background(isRecording ? Theme.runningColor : Theme.bgColor)
             }
             .buttonStyle(.plain).kbdFocusRing()
+            .accessibilityLabel(a.title)
+            .accessibilityValue(key?.display ?? String(localized: "kein Kürzel", bundle: Bundle.app))
         }
         .font(Theme.ui(12))
         .padding(.horizontal, 10).padding(.vertical, 5)
     }
+}
+
+private extension EnvironmentValues {
+    @Entry var rowTitle = ""
+}
+
+/// Gibt dem Control den Titel seiner Einstellungszeile als VoiceOver-Label.
+private struct RowLabel: ViewModifier {
+    @Environment(\.rowTitle) private var title
+    func body(content: Content) -> some View { content.accessibilityLabel(title) }
 }
 
 private struct IntSlider: View {
@@ -393,7 +406,7 @@ private struct IntSlider: View {
             }), in: range, step: step) { editing in
                 if !editing, let d = draft { value = d / factor; draft = nil }
             }
-            .controlSize(.small).tint(Theme.runningColor)
+            .controlSize(.small).tint(Theme.runningColor).modifier(RowLabel())
             Text("\(Int(shown)) \(unit)").monospacedDigit().foregroundStyle(Theme.fgColor)
                 .frame(width: 60 * Theme.scale, alignment: .trailing)
         }

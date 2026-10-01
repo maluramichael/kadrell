@@ -400,8 +400,7 @@ final class SidebarView: NSView {
         switch (event.keyCode, mods) {
         case (KeyCode.down, [.option, .command]): moveFocused(step: 1)
         case (KeyCode.up, [.option, .command]): moveFocused(step: -1)
-        case (KeyCode.down, []): step(1)
-        case (KeyCode.up, []): step(-1)
+        case (KeyCode.down, []), (KeyCode.up, []), (KeyCode.down, [.shift]), (KeyCode.up, [.shift]), (Self.xKey, []): selectKey(event.keyCode, shift: mods == [.shift])
         case (KeyCode.left, []): collapseFocusedGroup()
         case (KeyCode.right, []): expandFocusedGroup()
         case (KeyCode.returnKey, [.control]), (KeyCode.f10, [.shift]): if let id = focused { showContextMenu(for: id) }
@@ -411,11 +410,44 @@ final class SidebarView: NSView {
         }
     }
 
-    private func step(_ d: Int) {
+    /// Leertaste ist schon „öffnen“, daher schaltet `x` die Cursor-Session in der Auswahl um (wie ⌘-Klick).
+    private static let xKey: UInt16 = 7
+
+    /// ↑↓ bewegen den Cursor, ⇧↑↓ fügen die neue Session der Auswahl hinzu, `x` schaltet die Cursor-Session um.
+    private func selectKey(_ code: UInt16, shift: Bool) {
+        if code == Self.xKey {
+            if let id = focused { onSelect?([id], .toggle) }
+        } else {
+            step(code == KeyCode.down ? 1 : -1, mode: shift ? .add : .cursor)
+        }
+    }
+
+    private func step(_ d: Int, mode: SelectMode) {
         guard let id = sessionId(after: focused, step: d) else { return }
         anchor = id
-        onSelect?([id], .cursor)
+        focused = id
+        onSelect?([id], mode)
         reveal(id)
+        announceCursor()
+    }
+
+    /// VoiceOver folgt dem Cursor: Auswahl und Fokus-Element der Cursor-Zeile melden.
+    private func announceCursor() {
+        NSAccessibility.post(element: self, notification: .selectedRowsChanged)
+        guard let e = cursorElement() else { return }
+        NSAccessibility.post(element: e, notification: .focusedUIElementChanged)
+    }
+
+    override var accessibilityFocusedUIElement: Any? {
+        nonisolated(unsafe) var e: Any?
+        MainActor.assumeIsolated { e = cursorElement() }
+        return e
+    }
+
+    private func cursorElement() -> A11yElement? {
+        guard window?.firstResponder === self, let id = focused else { return nil }
+        let key = Row.key(session: id)
+        return (accessibilityChildren() as? [A11yElement])?.first { $0.key == key }
     }
 
     /// Gruppe der fokussierten Session, auch wenn diese durch Einklappen gerade nicht sichtbar ist.

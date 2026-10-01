@@ -38,7 +38,7 @@ struct ConfirmView: View {
                     }.buttonStyle(.plain).kbdFocusRing()
                 }
                 Button(action: onConfirm) {
-                    Text(destructive ? "\(button)  ⌘⏎" : button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
+                    Text(destructive ? "\(button)  ⌘⏎" : button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.onColor(destructive ? Theme.error : Theme.running))
                         .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.runningColor)
                 }.buttonStyle(.plain).kbdFocusRing()
             }

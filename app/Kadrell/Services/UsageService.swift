@@ -81,6 +81,14 @@ final class UsageService {
     private var task: Task<Void, Never>?
     /// Wann der geseedete Stand gemessen wurde, um den ersten Poll entsprechend nach hinten zu schieben.
     private var seededAt: Date?
+    /// Steigt mit jedem `refreshNow` (etwa nach einem Account-Wechsel). Ein Fetch, der unter einer älteren Generation
+    /// begann, lief noch mit dem alten Token; sein Ergebnis wird verworfen.
+    private var generation = 0
+    private let fetcher: () async -> Result
+
+    init(fetcher: @escaping () async -> Result = UsageService.fetch) {
+        self.fetcher = fetcher
+    }
 
     /// Beim Start mit dem letzten bekannten Stand (persistierter Account-Cache) vorbelegen, damit die Leiste nicht
     /// bei „–%“ steht, bis der erste Poll durch ist. Löst bewusst kein `onChange` aus (kein Auto-Wechsel auf
@@ -105,7 +113,9 @@ final class UsageService {
             }
             while !Task.isCancelled {
                 if let self {
-                    let r = await UsageService.fetch()
+                    let gen = self.generation
+                    let r = await self.fetcher()
+                    guard gen == self.generation else { try? await Task.sleep(for: .seconds(delay)); continue }
                     switch r {
                     case .ok(let fresh):
                         delay = interval
@@ -124,8 +134,11 @@ final class UsageService {
 
     /// Sofort einmal abfragen, etwa direkt nach einem Account-Wechsel, ohne den laufenden Poll-Takt zu stören.
     func refreshNow() {
+        generation += 1
+        let gen = generation
         Task { [weak self] in
-            if case .ok(let fresh) = await UsageService.fetch(), let self, fresh != self.usage {
+            guard let fetch = self?.fetcher else { return }
+            if case .ok(let fresh) = await fetch(), let self, gen == self.generation, fresh != self.usage {
                 self.usage = fresh
                 self.onChange?(fresh)
             }
@@ -134,21 +147,31 @@ final class UsageService {
 
     enum Result { case ok(Usage), rateLimited(TimeInterval?), failed }
 
-    /// OAuth-Token aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (wie die CLI ihn ablegt). Der Eintrag ist ein
-    /// einziges JSON, Teile davon liefert der Schlüsselbund nicht: nur `accessToken` wird dekodiert, der Rest verworfen.
+    /// OAuth-Token aus dem Schlüsselbund-Eintrag „Claude Code-credentials“ (wie die CLI ihn ablegt).
     static func token() async -> String? {
-        struct Credentials: Decodable {
-            struct OAuth: Decodable { let accessToken: String }
-            let claudeAiOauth: OAuth
+        guard let raw = await Keychain.read(service: AccountService.liveService) else {
+            log.warning("usage: Schlüsselbund-Eintrag nicht lesbar"); return nil
         }
-        guard let r = try? await ProcessRunner.run("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"]) else {
-            log.warning("usage: security nicht startbar"); return nil
-        }
-        guard r.status == 0 else { log.warning("usage: security exit \(r.status, privacy: .public)"); return nil }
-        guard let t = try? JSONDecoder().decode(Credentials.self, from: Data(r.output.utf8)).claudeAiOauth.accessToken, !t.isEmpty else {
+        guard let t = AccountService.oauth(from: raw)?["accessToken"] as? String, !t.isEmpty else {
             log.warning("usage: Schlüsselbund-Eintrag ohne accessToken"); return nil
         }
         return t
+    }
+
+    /// Unbekanntes Format nur einmal melden, nicht bei jedem Poll.
+    private static var loggedUnknownFormat = false
+
+    /// HTTP-200-Antwort deuten. Enthält sie keine einzige Zahl, ist das Format unbekannt: `.failed`, damit die letzten
+    /// bekannten Werte stehen bleiben.
+    static func result(for data: Data) -> Result {
+        let u = Usage.parse(data)
+        guard u.session == nil, u.weekly == nil, u.fable == nil else { return .ok(u) }
+        if !loggedUnknownFormat {
+            loggedUnknownFormat = true
+            let keys = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?.keys.sorted() ?? []
+            log.warning("usage: unbekanntes Antwortformat, Keys: \(keys.joined(separator: ","), privacy: .public)")
+        }
+        return .failed
     }
 
     static func fetch() async -> Result {
@@ -167,9 +190,9 @@ final class UsageService {
                 log.warning("usage: HTTP \(http?.statusCode ?? -1, privacy: .public)")
                 return .failed
             }
-            let u = Usage.parse(data)
-            log.notice("usage: 5h \(u.session ?? -1) 7d \(u.weekly ?? -1) fable \(u.fable ?? -1)")
-            return .ok(u)
+            let r = result(for: data)
+            if case .ok(let u) = r { log.notice("usage: 5h \(u.session ?? -1) 7d \(u.weekly ?? -1) fable \(u.fable ?? -1)") }
+            return r
         } catch {
             log.warning("usage: \(String(describing: error), privacy: .public)")
             return .failed
