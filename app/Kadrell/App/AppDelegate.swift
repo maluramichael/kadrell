@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             showWhatsNewIfNeeded()
         }
+        warnIfFontsMissing()
         let item = StatusItemController(store: store)
         item.onFocus = { [weak self] in self?.focusSession($0) }
         item.onNextWaiting = { [weak self] in self?.focusNextWaiting() }
@@ -104,6 +105,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else if let fallback {
             sheets.confirm(title, fallback, button: String(localized: "OK", bundle: Bundle.app), destructive: false) {}
         }
+    }
+
+    /// Fehlt die JetBrainsMono Nerd Font, weicht `Theme.font` auf die System-Monospace aus (kein Crash mehr,
+    /// siehe Fallback dort), aber Icons und Glyphen fehlen. Einmalig darauf hinweisen, wie man sie nachinstalliert.
+    private func warnIfFontsMissing() {
+        guard NSFont(name: "JetBrainsMonoNF-Regular", size: NSFont.systemFontSize) == nil else { return }
+        Self.log.warning("JetBrainsMono Nerd Font nicht installiert, Fallback auf System-Monospace")
+        guard !Profile.isTemporary, !Profile.defaults.bool(forKey: "fontWarningShown") else { return }
+        Profile.defaults.set(true, forKey: "fontWarningShown")
+        sheets.confirm(
+            String(localized: "Schrift fehlt", bundle: Bundle.app),
+            String(localized: "JetBrainsMono Nerd Font ist nicht installiert. Kadrell nutzt ersatzweise die System-Monospace, dabei fehlen Icons und Glyphen. Zum Nachinstallieren: brew install --cask font-jetbrains-mono-nerd-font, dann Kadrell neu starten.", bundle: Bundle.app),
+            button: String(localized: "OK", bundle: Bundle.app),
+            destructive: false
+        ) {}
     }
 
     /// Fenster nach vorn: Menüleisten-Menü, Dock-Klick, Benachrichtigung, Beenden-Rückfrage.
