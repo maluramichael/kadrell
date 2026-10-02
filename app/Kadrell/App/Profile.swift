@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 /// Profil dieser Instanz: eigene Sessions, Gruppen, Einstellungen und eigener Socket. Ohne Namen ist es das
 /// Standardprofil am bisherigen Ort, dafür muss nichts umziehen. `--profile <name>` (oder `KADRELL_PROFILE`) liegt
@@ -58,7 +59,12 @@ enum Profile {
 
     nonisolated(unsafe) private static var lockFD: Int32 = -1
 
-    /// Sperrt das Profil für diese Instanz. Hält schon eine andere es, kommt deren pid zurück.
+    private static let log = Logger(subsystem: "de.malura.kadrell", category: "profile")
+
+    /// Sperrt das Profil für diese Instanz. Hält schon eine echte zweite Kadrell-Instanz es, kommt deren pid zurück.
+    /// Hält dagegen ein Fremdprozess die Lock-Datei offen (mutagen/DDEV, Backup, Cloud-Sync, Spotlight) oder zeigt der
+    /// Eintrag auf eine tote/wiederverwendete pid (abgestürzte Instanz), wird NICHT blockiert: dann startet diese
+    /// Instanz trotzdem. Sonst macht ein beliebiger Prozess, der kadrell.lock offen hält, die App unstartbar.
     static func acquire() -> pid_t? {
         let path = directory.appendingPathComponent("kadrell.lock").path
         let fd = open(path, O_CREAT | O_RDWR, 0o600)
@@ -66,7 +72,12 @@ enum Profile {
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
             let other = (try? String(contentsOfFile: path, encoding: .utf8)).flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
             close(fd)
-            return other ?? 0
+            // Nur zurückhalten, wenn die pid wirklich eine laufende Kadrell-Instanz ist.
+            if let other, other > 0, let app = NSRunningApplication(processIdentifier: other), app.bundleIdentifier == bundleId {
+                return other
+            }
+            log.warning("kadrell.lock von Fremdprozess oder toter pid gehalten, starte trotzdem")
+            return nil
         }
         ftruncate(fd, 0)
         let s = "\(pid)\n"
