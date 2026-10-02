@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.60.1 (2026-10-02)
+
+- Fix: Kadrell startet jetzt auch dann, wenn ein anderes Programm (z. B. DDEV/mutagen, ein Backup- oder Sync-Dienst) die Profil-Sperrdatei offen hält. Vorher konnte Kadrell sich dadurch beim Start sofort wieder beenden.
+
 ## 1.60.0 (2026-09-30)
 
 - Feature: Neue Einstellung „Bei zu schnellem 7-Tage-Verbrauch wechseln". Ist sie an, wechselt Kadrell schon dann auf einen entspannteren Account, wenn dein Wochenverbrauch zu schnell steigt und ein früher Lockout droht, nicht erst beim Erreichen der Auslastungsschwelle. Default aus.
