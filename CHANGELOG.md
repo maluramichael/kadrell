@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.60.2 (2026-10-02)
+
+- Fix: Absturz behoben, der auftreten konnte, wenn man eine Session per ⌘W schloss, während der Mauszeiger über der Seitenleiste stand. Die Seitenleiste merkte sich die überfahrene Zeile und griff nach dem Schließen noch auf die bereits entfernte Zeile zu.
+
 ## 1.60.1 (2026-10-02)
 
 - Fix: Kadrell startet jetzt auch dann, wenn ein anderes Programm (z. B. DDEV/mutagen, ein Backup- oder Sync-Dienst) die Profil-Sperrdatei offen hält. Vorher konnte Kadrell sich dadurch beim Start sofort wieder beenden.

@@ -138,6 +138,8 @@ final class SidebarView: NSView {
         self.groups = grouped ? sort.apply(groups, sessions: self.sessions) : groups
         let oldRows = rows, previousHeight = frame.height
         rows = grouped ? groupedRows() : SidebarFlat.rows(groups, sessions: self.sessions, sort: sort, order: flatOrder).map { .session($0.session, $0.group) }
+        // Eine geschlossene Session verkürzt die Zeilen: ein gemerkter Hover-Index (Maus unbewegt) zeigt sonst ins Leere.
+        if let h = hovered, h >= rows.count { hovered = nil; hoveredButton = nil }
         rebuildRowOffsets()
         let h = (rowOffsets.last.map { $0.y + $0.height } ?? renderer.topInset) + 6
         let want = max((h * Theme.scale).rounded(.up), superview?.bounds.height ?? 0)
