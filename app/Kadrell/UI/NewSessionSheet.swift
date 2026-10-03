@@ -167,6 +167,9 @@ struct NewSessionView: View {
         .background { Button("", action: model.createAndStart).keyboardShortcut(.return, modifiers: .command).opacity(0).accessibilityHidden(true) }
     }
 
+    private static let rowHeight: CGFloat = 46
+    private static let visibleRows: CGFloat = 8
+
     private var list: some View {
         let items = model.candidates
         return ScrollViewReader { proxy in
@@ -189,7 +192,7 @@ struct NewSessionView: View {
                     }
                 }
             }
-            .frame(height: min(368, CGFloat(max(items.count, 1)) * 46) * Theme.scale)
+            .frame(height: Self.visibleRows * Self.rowHeight * Theme.scale)
             .onChange(of: model.selected) { _, s in if items.indices.contains(s) { proxy.scrollTo(items[s].id) } }
         }
     }
@@ -204,7 +207,7 @@ struct NewSessionView: View {
             Text(c.group.map { String(localized: "\(model.counts[$0.id] ?? 0) Sessions", bundle: Bundle.app) } ?? c.tag).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
         }
         .padding(.vertical, 8).padding(.horizontal, 16)
-        .frame(height: 46 * Theme.scale)
+        .frame(height: Self.rowHeight * Theme.scale)
         .background(on ? Theme.surfaceColor : .clear)
         .overlay(alignment: .leading) { if on { Rectangle().fill(Theme.runningColor).frame(width: 3) } }
         .contentShape(Rectangle())

@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.60.3 (2026-10-03)
+
+- Fix: Das Fenster „Neue Session" hat jetzt eine feste Höhe und scrollt, statt beim Tippen je nach Anzahl der Treffer in der Größe zu springen.
+
 ## 1.60.2 (2026-10-02)
 
 - Fix: Absturz behoben, der auftreten konnte, wenn man eine Session per ⌘W schloss, während der Mauszeiger über der Seitenleiste stand. Die Seitenleiste merkte sich die überfahrene Zeile und griff nach dem Schließen noch auf die bereits entfernte Zeile zu.
