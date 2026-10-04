@@ -134,9 +134,7 @@ final class ExtensionManager {
     /// Nur Lua-Dateien und Manifest: schreibt eine Extension eigene Dateien in ihren Ordner, lädt sie nicht endlos neu.
     private static func stamp(_ dir: URL) -> [String: Date] {
         var out: [String: Date] = [:]
-        let files = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles])
-        while let url = files?.nextObject() as? URL {
-            guard url.pathExtension == "lua" || url.lastPathComponent == "kadrell.json" else { continue }
+        for url in ExtensionCatalog.luaFiles(dir) + [dir.appendingPathComponent("kadrell.json")] {
             out[url.path] = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         }
         return out

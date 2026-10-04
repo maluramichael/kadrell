@@ -105,8 +105,15 @@ enum ExtensionCatalog {
         }
         let initLua = url.appendingPathComponent("init.lua")
         if !FileManager.default.fileExists(atPath: initLua.path) { return String(localized: "init.lua fehlt", bundle: Bundle.app) }
-        // Wie bei Shell-Hooks: Ordner und Dateien müssen dir gehören und dürfen für andere nicht beschreibbar sein.
-        let untrusted = [url, url.appendingPathComponent("kadrell.json"), initLua].first { !Hooks.trusted($0.path) }
+        // Wie bei Shell-Hooks: Ordner und Dateien müssen dir gehören und dürfen für andere nicht beschreibbar sein. Jede
+        // Lua-Datei, denn require lädt auch die aus Unterordnern.
+        let untrusted = ([url, url.appendingPathComponent("kadrell.json")] + luaFiles(url)).first { !Hooks.trusted($0.path) }
         return untrusted.map { String(localized: "\($0.lastPathComponent) gehört nicht dir oder ist für andere beschreibbar", bundle: Bundle.app) }
+    }
+
+    /// Alle Lua-Dateien einer Extension, auch in Unterordnern, ohne versteckte.
+    static func luaFiles(_ dir: URL) -> [URL] {
+        let files = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+        return (files?.allObjects as? [URL] ?? []).filter { $0.pathExtension == "lua" }
     }
 }

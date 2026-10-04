@@ -44,6 +44,9 @@ struct AboutView: View {
         return out
     }
 
+    /// Lizenzhinweis der mitgelieferten Lua-Teile; der Lua-Lizenztext liegt als LICENSE im Bundle.
+    static var credits: String { String(localized: "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi)", bundle: Bundle.app) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -63,6 +66,7 @@ struct AboutView: View {
                 Link("kadrell.malura.de/extensions", destination: ExtensionsView.docs).foregroundStyle(Theme.runningColor)
             }
             .font(Theme.ui(12)).padding(.horizontal, 16).padding(.top, 4)
+            Text(Self.credits).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).padding(.horizontal, 16).padding(.top, 4)
             Divider().overlay(Theme.lineColor).padding(.top, 14)
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(sections, id: \.0) { title, keys in

@@ -8260,6 +8260,38 @@
     },
     "kadrell.malura.de/extensions": {
       "shouldTranslate": false
+    },
+    "… und %lld weitere Warnungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "… und %lld weitere Warnungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "… and %lld more warnings"
+          }
+        }
+      }
+    },
+    "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Includes Lua 5.5.1 (MIT, lua.org) and json.lua (MIT, rxi)"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

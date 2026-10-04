@@ -154,6 +154,46 @@ final class ExtensionModelTests: XCTestCase {
         XCTAssertEqual(error, .tooLarge(2001))
     }
 
+    /// A4: jedes Array-Element zählt zur Grenze, auch Nicht-Knoten und Aktionen; sonst baute ein Panel aus
+    /// 500000 Zahlen ebenso viele Warnungen auf dem Hauptthread.
+    func testPanelCountsEveryArrayElement() throws {
+        let numbers = Array(repeating: "1", count: 500_000).joined(separator: ",")
+        let v = try JSONDecoder().decode(JSONValue.self, from: Data(#"{"children":[\#(numbers)]}"#.utf8))
+        guard case .failure(let error) = PanelValidation.tree(v) else { return XCTFail("500000 Zahlen müssen abgelehnt werden") }
+        XCTAssertEqual(error, .tooLarge(500_000))
+        let actions = Array(repeating: #"{"id":"a","label":"A"}"#, count: 2000).joined(separator: ",")
+        let w = try JSONDecoder().decode(JSONValue.self, from: Data(#"{"children":[{"type":"item","text":"x","actions":[\#(actions)]}]}"#.utf8))
+        guard case .failure(let e2) = PanelValidation.tree(w) else { return XCTFail("2000 Aktionen zählen mit") }
+        XCTAssertEqual(e2, .tooLarge(2001))
+    }
+
+    /// A4: höchstens 20 Warnungen je Baum, dazu eine Sammelzeile.
+    func testPanelWarningsAreCapped() throws {
+        let unknown = Array(repeating: #"{"type":"video"}"#, count: 100).joined(separator: ",")
+        let (_, warnings) = try tree(#"{"children":[\#(unknown)]}"#)
+        XCTAssertEqual(warnings.count, 21)
+        XCTAssertEqual(warnings.last, String(localized: "… und \(80) weitere Warnungen", bundle: Bundle.app))
+    }
+
+    /// B2: jede Lua-Datei der Extension wird geprüft, nicht nur init.lua.
+    func testGroupWritableLuaInSubfolderIsUntrusted() throws {
+        let sub = try make("lib").appendingPathComponent("lib")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        let file = sub.appendingPathComponent("x.lua")
+        try Data("return 1".utf8).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o664], ofItemAtPath: file.path)
+        let problem = try XCTUnwrap(ExtensionCatalog.scan(root).first?.problem)
+        XCTAssertTrue(problem.contains("x.lua"), problem)
+    }
+
+    /// A5: die MIT-Lizenz von Lua liegt im Bundle, das About nennt Lua und json.lua.
+    @MainActor func testLuaLicenseShips() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "LICENSE", withExtension: nil), "LICENSE fehlt im Bundle")
+        XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("Lua.org, PUC-Rio"))
+        XCTAssertTrue(AboutView.credits.contains("Lua 5.5.1"), AboutView.credits)
+        XCTAssertTrue(AboutView.credits.contains("json.lua"), AboutView.credits)
+    }
+
     func testStatusTruncatedTo40() throws {
         let long = String(repeating: "x", count: 60)
         let v = try JSONDecoder().decode(JSONValue.self, from: Data(#"{"text":"\#(long)","color":"ok","action":"a"}"#.utf8))

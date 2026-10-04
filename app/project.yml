@@ -38,6 +38,9 @@ targets:
       - path: Vendor/lua
         excludes: [lua.c, luac.c, Makefile, LICENSE]
         compilerFlags: ["-w", "-DLUA_USE_POSIX"]
+      # MIT verlangt den Lizenztext in jeder Kopie, auch im App-Bundle.
+      - path: Vendor/lua/LICENSE
+        buildPhase: resources
       - path: ../CHANGELOG.md
         buildPhase: resources
     dependencies:

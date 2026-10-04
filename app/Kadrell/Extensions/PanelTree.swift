@@ -24,6 +24,7 @@ enum PanelValidation {
     static let maxNodes = 2000
     static let maxText = 500
     static let maxStatus = 40
+    static let maxWarnings = 20
 
     static func tree(_ v: JSONValue) -> Result<(PanelTree, warnings: [String]), PanelError> {
         let count = nodeCount(v["children"])
@@ -31,7 +32,7 @@ enum PanelValidation {
         var builder = Builder()
         let nodes = builder.nodes(v["children"])
         let title = clip(v["title"]?.string ?? "", maxText)
-        return .success((PanelTree(title: title, nodes: nodes), warnings: builder.warnings))
+        return .success((PanelTree(title: title, nodes: nodes), warnings: builder.summary))
     }
 
     static func status(_ v: JSONValue) -> (text: String, color: ThemeColor?, action: String?)? {
@@ -42,14 +43,21 @@ enum PanelValidation {
 
     fileprivate static func clip(_ s: String, _ limit: Int) -> String { String(s.prefix(limit)) }
 
-    /// Zählt Rohknoten vor dem Prüfen, damit ein Flut-Panel gar nicht erst gebaut wird.
+    /// Zählt Rohknoten vor dem Prüfen, damit ein Flut-Panel gar nicht erst gebaut wird. Jedes Array-Element zählt,
+    /// auch Nicht-Knoten und Aktionen: sonst kosteten 500000 Zahlen ebenso viele Warnungen auf dem Hauptthread.
     private static func nodeCount(_ children: JSONValue?) -> Int {
-        (children?.array ?? []).reduce(0) { $0 + ($1.object == nil ? 0 : 1 + nodeCount($1["children"])) }
+        (children?.array ?? []).reduce(0) { $0 + 1 + nodeCount($1["children"]) + ($1["actions"]?.array?.count ?? 0) }
     }
 
     /// Sammelt Warnungen beim Bauen; ein Knoten pro Aufruf, damit jede Funktion klein bleibt.
     private struct Builder {
         var warnings: [String] = []
+        var dropped = 0
+
+        /// Höchstens `maxWarnings`, der Rest als eine Sammelzeile.
+        var summary: [String] {
+            dropped == 0 ? warnings : warnings + [String(localized: "… und \(dropped) weitere Warnungen", bundle: Bundle.app)]
+        }
 
         mutating func nodes(_ v: JSONValue?) -> [PanelNode] {
             // Eine leere Lua-Tabelle kommt als `[]`, ein Nicht-Array (`{}`, Zahl, …) heißt: keine Kinder.
@@ -116,6 +124,8 @@ enum PanelValidation {
 
         func str(_ v: JSONValue?) -> String { clip(v?.string ?? "") }
         func clip(_ s: String) -> String { PanelValidation.clip(s, PanelValidation.maxText) }
-        mutating func warn(_ s: String) { warnings.append(s) }
+        mutating func warn(_ s: String) {
+            if warnings.count < PanelValidation.maxWarnings { warnings.append(s) } else { dropped += 1 }
+        }
     }
 }
