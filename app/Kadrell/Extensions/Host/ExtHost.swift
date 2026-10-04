@@ -1,6 +1,6 @@
 import Foundation
 
-/// `Kadrell ext-host <ordner>`: der Helper-Prozess einer Extension. Eine Lua-Instanz auf der seriellen Queue `lua`,
+/// `Kadrell ext-host <ordner>`: der Helper-Prozess einer Extension. Eine Lua-Instanz auf dem Main-Thread,
 /// Nachrichten als JSON-Zeilen über stdin/stdout. Lua sieht nur die C-Schicht (`LuaShim`), nie Swift-Frames.
 enum ExtHost {
     /// Protokollkanal: eine Kopie des ursprünglichen stdout. fd 1 zeigt danach auf stderr, damit `io.write` oder
@@ -20,17 +20,20 @@ enum ExtHost {
         guard let prelude = Bundle.main.path(forResource: "prelude", ofType: "lua") else { fail("prelude.lua fehlt") }
         if let err = call({ kl_run_file(L, prelude, $0, $1) }) { fail(err) }
 
-        let lua = DispatchQueue(label: "lua")
+        // Lua läuft auf dem Main-Thread: nur der hat 8 MB Stack. Lua begrenzt C-Rekursion auf 200 Ebenen und rechnet
+        // mit normalem Stack, auf den 512 KB eines GCD-Workers endet tiefe Rekursion in SIGBUS statt in „C stack overflow“.
         // Eigener Lese-Thread: bei EOF endet der Prozess hier, auch wenn Lua gerade in einer Endlosschleife hängt.
         Thread {
             while let line = readLine() {
-                lua.async {
+                DispatchQueue.main.async {
                     if let err = call({ kl_dispatch(L, line, $0, $1) }) { FileHandle.standardError.write(Data((err + "\n").utf8)) }
                 }
             }
             exit(0)
         }.start()
-        dispatchMain()
+        // Nicht dispatchMain(): das beendet den Main-Thread, die Main-Queue liefe dann wieder auf einem GCD-Worker.
+        CFRunLoopRun()
+        exit(0)
     }
 
     /// Ruft die C-Schicht mit einem Fehlerpuffer auf, liefert den Fehlertext oder nil.

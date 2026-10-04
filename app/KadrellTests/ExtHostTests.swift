@@ -56,6 +56,37 @@ final class ExtHostTests: XCTestCase {
         XCTAssertTrue(text.contains("ü"), text)
     }
 
+    /// Tiefe C-Rekursion (verschachtelte pcall) ist ein Lua-Fehler, kein Absturz des Helpers: der Fehler wird
+    /// durch alle Ebenen weitergereicht, init.lua lädt nicht, der Helper endet regulär mit Status 1.
+    func testDeepRecursionIsALuaError() throws {
+        let p = try start("local function f() local ok, err = pcall(f); error(err, 0) end\nf()")
+        let log = p.next(timeout: 3)
+        XCTAssertEqual(log?["level"] as? String, "error")
+        let text = log?["text"] as? String ?? ""
+        XCTAssertTrue(text.contains("stack overflow"), text)
+        XCTAssertTrue(p.waitForExit(timeout: 3))
+        XCTAssertEqual(p.process.terminationReason, .exit)
+        XCTAssertEqual(p.process.terminationStatus, 1)
+    }
+
+    /// Rekursives __index in einem Event-Handler: Fehler ins Log, die Extension läuft weiter.
+    func testRecursiveIndexInHandlerIsLogged() throws {
+        let p = try start("""
+            local t = setmetatable({}, { __index = function(t, k) return t[k] end })
+            kadrell.on("app.ready", function() return t.x end)
+            """)
+        XCTAssertEqual(p.next(timeout: 3)?["t"] as? String, "ready")
+        p.send(["t": "event", "name": "app.ready", "data": [:]])
+        let log = p.next(timeout: 3)
+        XCTAssertEqual(log?["level"] as? String, "error")
+        let text = log?["text"] as? String ?? ""
+        XCTAssertTrue(text.contains("stack overflow"), text)
+        p.send(["t": "ping", "id": 3])
+        let pong = p.next(timeout: 3)
+        XCTAssertEqual(pong?["t"] as? String, "pong")
+        XCTAssertEqual(pong?["id"] as? Int, 3)
+    }
+
     func testStdinEofEndsHelper() throws {
         let p = try start("")
         XCTAssertEqual(p.next(timeout: 3)?["t"] as? String, "ready")

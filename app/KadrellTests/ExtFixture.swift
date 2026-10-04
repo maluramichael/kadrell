@@ -30,6 +30,8 @@ final class HostPipe: @unchecked Sendable {
         process.environment = ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin"]
         process.standardInput = input
         process.standardOutput = output
+        // Ein abgestürzter Helper darf den Test-Host nicht per SIGPIPE mitreißen, Schreiben liefert dann nur EPIPE.
+        _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in self?.receive(handle.availableData) }
         try process.run()
     }
