@@ -574,6 +574,22 @@
         }
       }
     },
+    "3 Abstürze in 2 min, bleibt aus": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 Abstürze in 2 min, bleibt aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 crashes in 2 min, stays off"
+          }
+        }
+      }
+    },
     "AUTO SP": {
       "localizations": {
         "de": {
@@ -778,6 +794,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "View"
+          }
+        }
+      }
+    },
+    "Antwortet nicht mehr (kein Pong binnen 5 s)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antwortet nicht mehr (kein Pong binnen 5 s)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not responding (no pong within 5 s)"
           }
         }
       }
@@ -5122,6 +5154,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Starts with: %@"
+          }
+        }
+      }
+    },
+    "Startet nicht (kein Ready binnen 3 s)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet nicht (kein Ready binnen 3 s)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Does not start (no ready within 3 s)"
           }
         }
       }
