@@ -7489,6 +7489,166 @@
     },
     "☑": {
       "shouldTranslate": false
+    },
+    "kadrell.json fehlt oder ist kaputt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kadrell.json fehlt oder ist kaputt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kadrell.json is missing or broken"
+          }
+        }
+      }
+    },
+    "Name im Manifest („%@“) passt nicht zum Ordnernamen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name im Manifest („%@“) passt nicht zum Ordnernamen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name in the manifest (“%@”) does not match the folder name"
+          }
+        }
+      }
+    },
+    "Braucht neueres Kadrell (API %lld, unterstützt: %lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Braucht neueres Kadrell (API %lld, unterstützt: %lld)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs a newer Kadrell (API %lld, supported: %lld)"
+          }
+        }
+      }
+    },
+    "init.lua fehlt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "init.lua fehlt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "init.lua is missing"
+          }
+        }
+      }
+    },
+    "%@ gehört nicht dir oder ist für andere beschreibbar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ gehört nicht dir oder ist für andere beschreibbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is not owned by you or is writable by others"
+          }
+        }
+      }
+    },
+    "Knoten ohne Typ übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knoten ohne Typ übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped a node without a type"
+          }
+        }
+      }
+    },
+    "Unbekannter Knotentyp „%@“ übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannter Knotentyp „%@“ übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped unknown node type “%@”"
+          }
+        }
+      }
+    },
+    "Aktion ohne id oder label übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktion ohne id oder label übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped an action without id or label"
+          }
+        }
+      }
+    },
+    "Unbekannte Farbe ignoriert (erlaubt: accent, muted, ok, warn, err)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannte Farbe ignoriert (erlaubt: accent, muted, ok, warn, err)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignored unknown color (allowed: accent, muted, ok, warn, err)"
+          }
+        }
+      }
+    },
+    "Knoten „%@“ ohne Feld „%@“ übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knoten „%@“ ohne Feld „%@“ übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped “%@” node without field “%@”"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
