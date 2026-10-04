@@ -6358,6 +6358,54 @@
         }
       }
     },
+    "Menüleiste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menüleiste"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menu bar"
+          }
+        }
+      }
+    },
+    "Symbol und Text": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symbol und Text"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icon and text"
+          }
+        }
+      }
+    },
+    "nur Symbol": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nur Symbol"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icon only"
+          }
+        }
+      }
+    },
     "aus = ohne Nachfrage ausführen": {
       "localizations": {
         "de": {

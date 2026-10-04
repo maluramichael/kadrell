@@ -21,4 +21,10 @@ final class StatusMenuTests: XCTestCase {
         XCTAssertEqual(StatusMenu.title(waiting: 0, done: 0), "")
         XCTAssertFalse(StatusMenu.title(waiting: 2, done: 1).isEmpty)
     }
+
+    func testTitleOnlyWithTextInFullMode() {
+        XCTAssertFalse(StatusMenu.title(.full, waiting: 2, done: 1).isEmpty)
+        XCTAssertEqual(StatusMenu.title(.icon, waiting: 2, done: 1), "")
+        XCTAssertEqual(StatusMenu.title(.hidden, waiting: 2, done: 1), "")
+    }
 }

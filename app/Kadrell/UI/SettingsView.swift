@@ -199,6 +199,7 @@ struct SettingsView: View {
                     menu(model.binding(\.language), Localization.Language.allCases.map { ($0, "\($0.flag)  \($0.title)") })
                 }
                 setting(String(localized: "Farbschema", bundle: Bundle.app)) { menu(model.binding(\.colorTheme), ColorTheme.all.map { ($0.id, $0.name) }) }
+                setting(String(localized: "Menüleiste", bundle: Bundle.app)) { menu(model.binding(\.statusBar), StatusMenu.Display.allCases.map { ($0, $0.title) }) }
                 setting(String(localized: "UI-Größe", bundle: Bundle.app)) { slider(model.binding(\.uiScale), Settings.uiScalePercent, step: 5, factor: 100, unit: "%", live: false) }
                 setting(String(localized: "Terminal-Schrift", bundle: Bundle.app)) { menu(model.binding(\.terminalFontName), model.fonts.map { ($0.name, $0.display) }) }
                 setting(String(localized: "Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad", bundle: Bundle.app)) { slider(model.binding(\.terminalFontSize), Settings.fontSizes, step: 1, unit: "pt") }

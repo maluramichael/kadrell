@@ -13,6 +13,11 @@ final class MainWindowController: NSObject {
     let sidebarScroll = NSScrollView(frame: .zero)
     let sidebar = SidebarView(frame: .zero)
     let workspace: WorkspaceView
+    /// Breite, auf die der Baum beim nächsten Einblenden zurückkommt.
+    private var lastSidebarWidth: CGFloat = 260
+
+    /// Ausgeblendet heißt: der Baum ist nicht mehr Teil des Splits (kein Trenner übrig).
+    var isSidebarHidden: Bool { sidebarScroll.superview == nil }
 
     static func suffix(_ index: Int) -> String { index == 0 ? "" : ".\(index + 1)" }
 
@@ -73,6 +78,20 @@ final class MainWindowController: NSObject {
         window.makeFirstResponder(workspace)
     }
 
+    /// Baum ein/aus (Cmd+B): ausgeblendet nehmen wir ihn ganz aus dem Split, dann bleibt kein Trenner übrig –
+    /// weder als Linie noch zum Herausziehen. Zurück kommt er nur hierüber, auf der zuletzt genutzten Breite.
+    func toggleSidebar() {
+        if isSidebarHidden {
+            split.insertArrangedSubview(sidebarScroll, at: 0)
+            split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
+            split.setPosition(lastSidebarWidth, ofDividerAt: 0)
+        } else {
+            lastSidebarWidth = max(sidebarScroll.frame.width, 120)
+            sidebarScroll.removeFromSuperview()
+        }
+        window.invalidateCursorRects(for: split)
+    }
+
     /// Darstellung aus den Einstellungen: Farben nur bei neuem Theme, Leiste und Split folgen der UI-Größe.
     func applyAppearance(themeChanged: Bool) {
         if themeChanged {
@@ -96,19 +115,14 @@ extension MainWindowController: NSSplitViewDelegate {
         min(proposedMaximumPosition, splitView.bounds.width / 2)
     }
 
-    /// Der ausgeblendete Baum behält seinen Frame: ohne das zeichnet der Split den Trenner weiter an seiner alten Kante.
-    func splitView(_ splitView: NSSplitView, shouldHideDividerAt dividerIndex: Int) -> Bool {
-        sidebarScroll.isHidden
-    }
-
-    /// Ziehen startet nur im effektiven Rechteck, ohne das hier ist es die 1-px-Linie: so breit wie die Griffzone.
+    /// Ziehen startet nur im effektiven Rechteck, so breit wie die Griffzone.
     func splitView(_ splitView: NSSplitView, effectiveRect proposedEffectiveRect: NSRect, forDrawnRect drawnRect: NSRect, ofDividerAt dividerIndex: Int) -> NSRect {
         drawnRect.insetBy(dx: -ThinSplitView.grabWidth / 2, dy: 0)
     }
 
     func splitViewDidResizeSubviews(_ notification: Notification) {
         let half = split.bounds.width / 2
-        if !sidebarScroll.isHidden, sidebarScroll.frame.width > half + 1 { split.setPosition(half, ofDividerAt: 0) }
+        if !isSidebarHidden, sidebarScroll.frame.width > half + 1 { split.setPosition(half, ofDividerAt: 0) }
         // Der Trenner ist gewandert (Ziehen, UI-Größe, Baum ein/aus): Griffzone für Cursor und Mausbewegung nachziehen.
         split.updateTrackingAreas()
         window.invalidateCursorRects(for: split)

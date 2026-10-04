@@ -56,6 +56,8 @@ enum Settings {
     static var sounds: Feedback.Level { get { enumValue("sounds", .all) } set { store("sounds", newValue.rawValue) } }
     /// Systembenachrichtigungen bei wartenden/fertigen Sessions, Default nur wartet.
     static var notifications: Notifications.Level { get { enumValue("notifications", .waiting) } set { store("notifications", newValue.rawValue) } }
+    /// Wie das Menüleisten-Item erscheint, Default Symbol und Text.
+    static var statusBar: StatusMenu.Display { get { enumValue("statusBar.display", .full) } set { store("statusBar.display", newValue.rawValue) } }
     /// Beim Start und danach alle 24 h ohne Tracking-Parameter auf eine neuere Version prüfen, Default an.
     static var checkForUpdates: Bool { get { value("checkForUpdates", true) } set { store("checkForUpdates", newValue) } }
     /// Stack-Zeilen zeigen zusätzlich den Pfad der Session, Default an.

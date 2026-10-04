@@ -901,11 +901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let m = (item.representedObject as? String).flatMap(LayoutMode.init) { workspace.setMode(m) }
     }
     @objc private func menuAuto() { workspace.toggleAuto() }
-    @objc private func menuSidebar() {
-        sidebarScroll.isHidden.toggle()
-        split.adjustSubviews()
-        split.needsDisplay = true   // sonst bleibt der alte Trenner als Linie stehen, wo der Baum endete
-    }
+    @objc private func menuSidebar() { current.toggleSidebar() }
     @objc private func menuToggleGroups() { sidebar.toggleAllGroups() }
     @objc private func menuHotkey(_ sender: NSMenuItem) {
         if let raw = sender.representedObject as? String, let a = HotkeyAction(rawValue: raw) { perform(a) }
@@ -967,7 +963,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func focusSidebar() {
-        if sidebarScroll.isHidden { menuSidebar() }
+        if current.isSidebarHidden { menuSidebar() }
         window.makeFirstResponder(sidebar)
     }
 
@@ -1231,7 +1227,7 @@ final class ThinSplitView: NSSplitView {
     override var dividerThickness: CGFloat { 1 }
 
     private var grabRect: CGRect {
-        guard arrangedSubviews.count > 1, !arrangedSubviews[0].isHidden else { return .zero }
+        guard arrangedSubviews.count > 1 else { return .zero }
         let x = arrangedSubviews[0].frame.maxX
         return CGRect(x: x - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
     }

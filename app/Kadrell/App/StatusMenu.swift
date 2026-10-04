@@ -2,6 +2,18 @@ import AppKit
 
 /// Reine Aufbereitung fürs Menüleisten-Menü (`StatusItemController`), ohne AppKit: testbar ohne Fenster.
 enum StatusMenu {
+    /// Wie das Menüleisten-Item erscheint (Einstellung „Menüleiste“).
+    enum Display: String, CaseIterable {
+        case full, icon, hidden
+        var title: String {
+            switch self {
+            case .full: String(localized: "Symbol und Text", bundle: Bundle.app)
+            case .icon: String(localized: "nur Symbol", bundle: Bundle.app)
+            case .hidden: String(localized: "aus", bundle: Bundle.app)
+            }
+        }
+    }
+
     /// Wartende zuerst, danach ungesehen fertige (nicht wartende), beide in Baumreihenfolge, keine Dopplungen.
     static func rows(order: [String], waiting: Set<String>, unseen: Set<String>) -> (waiting: [String], done: [String]) {
         (order.filter { waiting.contains($0) }, order.filter { unseen.contains($0) && !waiting.contains($0) })
@@ -10,6 +22,11 @@ enum StatusMenu {
     /// „3 warten · 1 neu“, leer ohne beides.
     static func title(waiting: Int, done: Int) -> String {
         waiting == 0 && done == 0 ? "" : String(localized: "  \(waiting) warten · \(done) neu", bundle: Bundle.app)
+    }
+
+    /// Menüleisten-Text je nach Modus: nur `.full` zeigt „3 warten · 1 neu“, `.icon`/`.hidden` bleiben leer (nur Symbol).
+    static func title(_ display: Display, waiting: Int, done: Int) -> String {
+        display == .full ? title(waiting: waiting, done: done) : ""
     }
 }
 
@@ -31,12 +48,16 @@ final class StatusItemController: NSObject {
         item.menu = menu(rows: (waiting: [], done: []), sessions: [:])
     }
 
-    /// "3 warten · 1 neu" im Menüleisten-Icon (ungesehen fertige zählen als „neu“ mit), und sein Menü.
+    /// "3 warten · 1 neu" im Menüleisten-Icon (ungesehen fertige zählen als „neu“ mit), und sein Menü. Modus aus den
+    /// Einstellungen: `.hidden` blendet das Item aus, `.icon` zeigt nur das Symbol, `.full` zusätzlich den Kurzstatus.
     func update(_ sessions: [Session], unseen: Set<String>) {
+        let display = Settings.statusBar
+        item.isVisible = display != .hidden
+        guard display != .hidden else { return }
         let byKey = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
         let waiting = Set(sessions.filter { $0.status == .waiting }.map(\.id))
         let rows = StatusMenu.rows(order: store.groups.flatMap(\.sessionIds), waiting: waiting, unseen: unseen)
-        item.button?.title = StatusMenu.title(waiting: rows.waiting.count, done: rows.done.count)
+        item.button?.title = StatusMenu.title(display, waiting: rows.waiting.count, done: rows.done.count)
         item.menu = menu(rows: rows, sessions: byKey)
     }
 
