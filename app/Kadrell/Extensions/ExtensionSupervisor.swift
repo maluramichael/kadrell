@@ -62,6 +62,8 @@ struct ExtensionSupervisor {
     }
 
     private mutating func reload() -> [SupervisorAction] {
+        // Neue Dateiversion nach einem Fehler: zählt als neuer Versuch, wie ein erneutes Einschalten.
+        if isFailed { return enable() }
         guard state == .starting || state == .running else { return [] }
         state = .reloading
         readyAt = nil

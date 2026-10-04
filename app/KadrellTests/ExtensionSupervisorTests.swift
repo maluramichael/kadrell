@@ -120,4 +120,66 @@ final class ExtensionSupervisorTests: XCTestCase {
         XCTAssertEqual(s.handle(.disable, now: at(0.5)), [.clearUI])
         XCTAssertEqual(s.handle(.restartDue, now: at(1)), [])
     }
+
+    private func failedPermanently() -> ExtensionSupervisor {
+        var s = running()
+        _ = crashAndRecover(&s, at: 0)
+        _ = crashAndRecover(&s, at: 10)
+        _ = s.handle(.exited(expected: false, reason: "boom"), now: at(20))
+        return s
+    }
+
+    func testReloadInFailedWithPendingRestartSpawnsAndCancelsRestart() {
+        var s = running()
+        _ = s.handle(.exited(expected: false, reason: "boom"), now: t0)
+        XCTAssertEqual(s.handle(.reload, now: at(0.5)), [.spawn])
+        XCTAssertEqual(s.state, .starting)
+        XCTAssertEqual(s.handle(.restartDue, now: at(1)), [])
+    }
+
+    func testReloadInPermanentFailedSpawns() {
+        var s = failedPermanently()
+        XCTAssertEqual(s.handle(.reload, now: at(30)), [.spawn])
+        XCTAssertEqual(s.state, .starting)
+    }
+
+    func testReloadInFailedResetsCounters() {
+        var s = failedPermanently()
+        _ = s.handle(.reload, now: at(30))
+        _ = s.handle(.spawned, now: at(30))
+        XCTAssertEqual(s.handle(.exited(expected: false, reason: "boom"), now: at(31)), [.clearUI, .scheduleRestart(1)])
+    }
+
+    func testReloadInOffIsNoop() {
+        var s = ExtensionSupervisor()
+        XCTAssertEqual(s.handle(.reload, now: t0), [])
+        XCTAssertEqual(s.state, .off)
+    }
+
+    func testReloadWhileStartingBehavesLikeRunning() {
+        var s = ExtensionSupervisor()
+        _ = s.handle(.enable, now: t0)
+        XCTAssertEqual(s.handle(.reload, now: t0), [.terminate, .clearUI])
+        XCTAssertEqual(s.state, .reloading)
+    }
+
+    func testEnableWhileRunningIsNoop() {
+        var s = running()
+        XCTAssertEqual(s.handle(.enable, now: t0), [])
+        XCTAssertEqual(s.state, .running)
+    }
+
+    func testReadyIsIgnoredOutsideStarting() {
+        var off = ExtensionSupervisor()
+        XCTAssertEqual(off.handle(.ready, now: t0), [])
+        XCTAssertEqual(off.state, .off)
+        var failed = failedPermanently()
+        let before = failed.state
+        XCTAssertEqual(failed.handle(.ready, now: at(30)), [])
+        XCTAssertEqual(failed.state, before)
+        var reloading = running()
+        _ = reloading.handle(.reload, now: t0)
+        XCTAssertEqual(reloading.handle(.ready, now: t0), [])
+        XCTAssertEqual(reloading.state, .reloading)
+    }
 }
