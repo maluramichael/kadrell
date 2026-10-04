@@ -102,12 +102,69 @@ final class ExtensionProcessTests: XCTestCase {
         XCTAssertTrue(exits.first?.reason.contains("5 s") == true)
     }
 
+    /// Aus Lua lässt sich keine Flut mehr erzeugen (Panel und Status zusammengefasst, run zählt nicht), also ein fremdes
+    /// Programm, das 1000 Statuszeilen schreibt.
     func testFloodIsKilled() async throws {
-        _ = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 1000 do kadrell.status.set{text = tostring(i)} end end)"#)
+        _ = try launchScript(#"echo '{"t":"ready"}'; i=0; while [ $i -lt 1000 ]; do echo '{"t":"status","item":null}'; i=$((i+1)); done; exec sleep 30"#)
         await until(3) { !self.exits.isEmpty }
         XCTAssertEqual(exits.first?.expected, false)
         XCTAssertEqual(exits.first?.reason, ExtensionProcess.Kill.flood.reason)
         XCTAssertLessThanOrEqual(messages.count, 51, "nach der Grenze kommt nichts mehr durch")
+    }
+
+    /// Ruling 19: tausend panel.set in einem Handler gehen als ein Panel raus, kein Flut-Kill.
+    func testPanelSetLoopIsCoalesced() async throws {
+        _ = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 1000 do kadrell.panel.set{title = tostring(i)} end end)"#)
+        let arrived = await until(3) { self.messages.contains { if case .panel(let t) = $0 { t?["title"]?.string == "1000" } else { false } } }
+        XCTAssertTrue(arrived, "\(events.suffix(3))")
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(exits.count, 0)
+        XCTAssertEqual(messages.filter { if case .panel = $0 { true } else { false } }.count, 1)
+    }
+
+    /// Ruling 19: run wartet auf sein Ergebnis und zählt nicht zur Flutgrenze, auch 200 hintereinander nicht.
+    func testSequentialRunsAreNotFlood() async throws {
+        let p = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 200 do kadrell.run("x", i) end kadrell.log("fertig") end)"#)
+        p.onMessage = { [unowned self, unowned p] m in
+            events.append(.message(m))
+            if case .run(let id, _) = m { p.send(.result(id: id, status: 0, stdout: "", stderr: "")) }
+        }
+        let done = await until(5) { self.messages.contains(.log(level: "info", text: "fertig")) || !self.exits.isEmpty }
+        XCTAssertTrue(done)
+        XCTAssertEqual(exits.count, 0, "\(exits)")
+        XCTAssertTrue(messages.contains(.log(level: "info", text: "fertig")))
+    }
+
+    /// Direkte Kinder des Helpers, sobald welche da sind.
+    private func execChild(of p: ExtensionProcess) async -> pid_t? {
+        await until(3) { !ExtFixture.children(of: p.pid).isEmpty }
+        return ExtFixture.children(of: p.pid).first
+    }
+
+    /// A1: ein laufendes kadrell.exec stirbt mit dem Helper, auch beim Abschalten.
+    func testStopKillsExecChildren() async throws {
+        let p = try await launchReady(#"kadrell.on("app.ready", function() kadrell.exec({"sleep", "77"}) end)"#)
+        let found = await execChild(of: p)
+        let child = try XCTUnwrap(found)
+        p.stop()
+        await until(3) { !self.exits.isEmpty }
+        let gone = await until(3) { !ExtFixture.alive(child) }
+        XCTAssertTrue(gone, "sleep 77 (\(child)) lebt nach stop() weiter")
+    }
+
+    /// A1: auch beim harten Kill wegen Hängers (kein Pong) bleibt kein Kind übrig.
+    func testPingKillKillsExecChildren() async throws {
+        let p = try await launchReady("""
+            kadrell.on("app.ready", function() kadrell.exec({"sleep", "77"}) end)
+            kadrell.on("hang", function() while true do end end)
+            """)
+        let found = await execChild(of: p)
+        let child = try XCTUnwrap(found)
+        p.send(.event(name: "hang", data: .object([:])))
+        await until(12) { !self.exits.isEmpty }
+        XCTAssertEqual(exits.first?.reason, ExtensionProcess.Kill.noPong.reason)
+        let gone = await until(3) { !ExtFixture.alive(child) }
+        XCTAssertTrue(gone, "sleep 77 (\(child)) lebt nach dem Kill weiter")
     }
 
     /// Log-Zeilen zählen nicht zur Flutgrenze, sie werden gedrosselt wie stderr: höchstens 50 pro Sekunde plus Sammelzeile.

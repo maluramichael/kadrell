@@ -325,8 +325,9 @@ private struct Throttle {
     }
 }
 
-/// Zerlegt stdout in Zeilen und dekodiert sie. Log-Nachrichten laufen durch die Drossel, alle anderen zählen gegen
-/// die Flutgrenze. Nach einem Verstoß wird alles verworfen, der Main-Thread killt dann den Prozess.
+/// Zerlegt stdout in Zeilen und dekodiert sie. Log-Nachrichten laufen durch die Drossel, `run` wartet in Lua auf sein
+/// Ergebnis und zählt nicht, alle anderen zählen gegen die Flutgrenze. Nach einem Verstoß wird alles verworfen, der
+/// Main-Thread killt dann den Prozess.
 private struct ProtocolLines {
     var logs = Throttle()
     private var pending = Data()
@@ -355,6 +356,7 @@ private struct ProtocolLines {
             if logs.admit(now, &events) { events.append(.message(message)) }
             return
         }
+        if let message, case .run = message { return events.append(.message(message)) }
         recent.removeAll { now.timeIntervalSince($0) >= 1 }
         recent.append(now)
         if recent.count > ExtensionProcess.maxMessagesPerSecond { return events.append(violation(.flood)) }

@@ -58,7 +58,7 @@ end
 -- Sendet eine Anfrage an den Host oder an Kadrell und wartet auf das `result` mit derselben id.
 local function request(name, msg)
     if not coroutine.isyieldable() then
-        error("kadrell." .. name .. ": nur in Handlern (kadrell.on, every, after)", 3)
+        error("kadrell." .. name .. ": only allowed inside handlers (kadrell.on, every, after)", 3)
     end
     nextId = nextId + 1
     msg.id = nextId
@@ -80,8 +80,16 @@ function kadrell.exec(argv, opts)
     return request("exec", { t = "exec", argv = strings(argv), cwd = opts.cwd, timeout = opts.timeout })
 end
 
+-- Header-Werte einzeln als String: eine Zahl (Content-Length = 12) ließe sonst alle Header wegfallen.
+local function headers(list)
+    if type(list) ~= "table" then return list end
+    local out = {}
+    for k, v in pairs(list) do out[tostring(k)] = tostring(v) end
+    return out
+end
+
 function kadrell.http(req)
-    return request("http", { t = "http", method = req.method or "GET", url = req.url, headers = req.headers,
+    return request("http", { t = "http", method = req.method or "GET", url = req.url, headers = headers(req.headers),
         body = req.body, timeout = req.timeout })
 end
 
@@ -142,14 +150,24 @@ function kadrell.storage.set(key, value)
     assert(os.rename(tmp, storagePath()))
 end
 
+-- Panel und Statuseintrag: nur der letzte Stand geht raus, einmal am Ende jedes Dispatch. Eine Schleife mit set
+-- flutet Kadrell so nicht. Kodiert wird sofort, damit ein Fehler im Baum beim Aufrufer auftaucht.
 -- clear sendet ein echtes null, json.encode lässt nil-Felder weg.
-function kadrell.panel.set(tree) emit({ t = "panel", tree = tree }) end
+local latest = {}
 
-function kadrell.panel.clear() send('{"t":"panel","tree":null}') end
+local function flush()
+    if latest.panel then send(latest.panel) end
+    if latest.status then send(latest.status) end
+    latest = {}
+end
 
-function kadrell.status.set(item) emit({ t = "status", item = item }) end
+function kadrell.panel.set(tree) latest.panel = json.encode({ t = "panel", tree = tree }) end
 
-function kadrell.status.clear() send('{"t":"status","item":null}') end
+function kadrell.panel.clear() latest.panel = '{"t":"panel","tree":null}' end
+
+function kadrell.status.set(item) latest.status = json.encode({ t = "status", item = item }) end
+
+function kadrell.status.clear() latest.status = '{"t":"status","item":null}' end
 
 local messages = {}
 
@@ -197,4 +215,5 @@ function __kadrell_dispatch(line)
     local m = json.decode(line)
     local handle = messages[m.t]
     if handle then handle(m) end
+    flush()
 end

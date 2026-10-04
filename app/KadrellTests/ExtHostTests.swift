@@ -94,6 +94,16 @@ final class ExtHostTests: XCTestCase {
         XCTAssertTrue(p.waitForExit(timeout: 1))
     }
 
+    /// A1: Kadrell schließt nur stdin (etwa beim Absturz der App). Ein laufendes kadrell.exec stirbt mit dem Helper.
+    func testStdinEofKillsExecChildren() throws {
+        let p = try startReady(#"kadrell.on("app.ready", function() kadrell.exec({"sleep", "77"}) end)"#)
+        XCTAssertTrue(ExtFixture.wait(3) { !ExtFixture.children(of: p.process.processIdentifier).isEmpty })
+        let child = try XCTUnwrap(ExtFixture.children(of: p.process.processIdentifier).first)
+        p.closeStdin()
+        XCTAssertTrue(p.waitForExit(timeout: 2))
+        XCTAssertTrue(ExtFixture.wait(3) { !ExtFixture.alive(child) }, "sleep 77 (\(child)) lebt nach EOF weiter")
+    }
+
     /// Startet die Extension, wartet auf `ready` und schickt `app.ready`.
     private func startReady(_ initLua: String, storageDir: String = NSTemporaryDirectory()) throws -> HostPipe {
         let p = try start(initLua, storageDir: storageDir)
@@ -172,7 +182,8 @@ final class ExtHostTests: XCTestCase {
         let p = try start("kadrell.exec({\"/bin/echo\"})")
         let log = p.next(timeout: 3)
         XCTAssertEqual(log?["level"] as? String, "error")
-        XCTAssertTrue((log?["text"] as? String ?? "").contains("nur in Handlern"), "\(String(describing: log))")
+        XCTAssertTrue((log?["text"] as? String ?? "").contains("kadrell.exec: only allowed inside handlers (kadrell.on, every, after)"),
+                      "\(String(describing: log))")
         XCTAssertTrue(p.waitForExit(timeout: 3))
         XCTAssertNotEqual(p.process.terminationStatus, 0)
     }
@@ -229,14 +240,21 @@ final class ExtHostTests: XCTestCase {
         XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "1 true\n")
     }
 
+    /// Ruling 17: sessions() liefert das Objekt von `kadrell ls --json` unverändert.
     func testSessionsParsesLsJson() throws {
         let p = try startReady("""
-            kadrell.on("app.ready", function() kadrell.log(kadrell.sessions()[1].key) end)
+            kadrell.on("app.ready", function()
+                local s = kadrell.sessions()
+                kadrell.log(s.layout .. " " .. s.focused .. " " .. s.groups[1].name .. " " .. s.groups[1].sessions[1].key)
+            end)
             """)
         let run = p.next(timeout: 3)
         XCTAssertEqual(run?["argv"] as? [String], ["ls", "--json"])
-        p.send(["t": "result", "id": try XCTUnwrap(run?["id"] as? Int), "status": 0, "stdout": #"[{"key":"a1"}]"#, "stderr": ""])
-        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "a1")
+        let ls = #"{"focused":"a1","groups":[{"color":"blue","cwd":"/tmp","favorite":false,"id":"g1","name":"G","#
+            + #""sessions":[{"branch":null,"cwd":"/tmp","focused":true,"key":"a1","running":true,"sessionId":"s1","shown":true,"#
+            + #""status":"idle","title":"T"}]}],"layout":"grid"}"#
+        p.send(["t": "result", "id": try XCTUnwrap(run?["id"] as? Int), "status": 0, "stdout": ls, "stderr": ""])
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "grid a1 G a1")
     }
 
     func testHttpRoundtrip() throws {
@@ -253,6 +271,22 @@ final class ExtHostTests: XCTestCase {
         XCTAssertTrue(request.lowercased().contains("x-t: 1"), request)
     }
 
+    /// Eine Zahl als Header-Wert darf die übrigen Header nicht mitnehmen.
+    func testHttpNumericHeaderKeepsOthers() throws {
+        let server = try OneShotHTTPServer(response: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nhi")
+        let p = try startReady("""
+            kadrell.on("app.ready", function()
+                local r = kadrell.http{url = "http://127.0.0.1:\(server.port)/x", method = "POST", body = "hello world!",
+                    headers = {["Content-Length"] = 12, Authorization = "Bearer t"}}
+                kadrell.log(r.status)
+            end)
+            """)
+        XCTAssertEqual(p.next(timeout: 5)?["text"] as? String, "200")
+        let request = server.request().lowercased()
+        XCTAssertTrue(request.contains("authorization: bearer t"), request)
+        XCTAssertTrue(request.contains("content-length: 12"), request)
+    }
+
     func testStorageSurvivesRestart() throws {
         let storage = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-st-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
@@ -264,21 +298,27 @@ final class ExtHostTests: XCTestCase {
         XCTAssertEqual(second.next(timeout: 3)?["text"] as? String, "1")
     }
 
+    /// Panel und Status gehen je Handler-Lauf einmal raus, mit dem letzten Stand, nach allem anderen.
     func testPanelAndStatusAreForwarded() throws {
         let p = try startReady("""
             kadrell.on("app.ready", function()
-                kadrell.panel.set{title = "T"}
+                for i = 1, 1000 do kadrell.panel.set{title = "T" .. i} end
+                kadrell.status.set{text = "s"}
                 kadrell.status.clear()
-                kadrell.panel.clear()
+                kadrell.log("x")
             end)
+            kadrell.on("clear", function() kadrell.panel.clear() end)
             """)
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "x")
         let panel = p.next(timeout: 3)
         XCTAssertEqual(panel?["t"] as? String, "panel")
-        XCTAssertEqual((panel?["tree"] as? [String: Any])?["title"] as? String, "T")
+        XCTAssertEqual((panel?["tree"] as? [String: Any])?["title"] as? String, "T1000")
         let status = p.next(timeout: 3)
         XCTAssertEqual(status?["t"] as? String, "status")
         XCTAssertTrue(status?["item"] is NSNull, "\(String(describing: status))")
+        p.send(["t": "event", "name": "clear", "data": [:]])
         XCTAssertTrue(p.next(timeout: 3)?["tree"] is NSNull)
+        assertAlive(p)
     }
 }
 
