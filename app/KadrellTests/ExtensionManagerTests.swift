@@ -195,6 +195,67 @@ final class ExtensionManagerTests: XCTestCase {
         XCTAssertTrue(manager.panels.isEmpty)
     }
 
+    /// Das Quick-start-Beispiel von https://kadrell.malura.de/extensions, Byte für Byte wie auf der Seite.
+    /// Ändert sich die Seite oder dieser Test allein, stimmt die Doku nicht mehr.
+    func testDocsQuickStartShowsPanelAndStatus() async throws {
+        let manifest = """
+        {
+          "name": "hello",
+          "version": "0.1.0",
+          "description": "Counts sessions in the right sidebar and the status bar",
+          "apiVersion": 1
+        }
+        """
+        let initLua = """
+        local function count()
+          local n = 0
+          for _, group in ipairs(kadrell.sessions().groups) do n = n + #group.sessions end
+          return n
+        end
+
+        local function render()
+          local text = count() .. " sessions"
+          kadrell.panel.set{
+            title = "Hello",
+            children = {
+              { type = "text", text = text, color = "muted" },
+              { type = "button", label = "Refresh", action = "refresh" },
+            },
+          }
+          kadrell.status.set{ text = text, color = "ok", action = "refresh" }
+        end
+
+        kadrell.on("app.ready", render)
+        kadrell.on("session.new", render)
+        kadrell.on("session.remove", render)
+        kadrell.on("ui.action", render)
+        """
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-ext-\(UUID().uuidString)")
+        let dir = root.appendingPathComponent("hello")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(manifest.utf8).write(to: dir.appendingPathComponent("kadrell.json"))
+        try Data(initLua.utf8).write(to: dir.appendingPathComponent("init.lua"))
+        catalog = root
+        var sessions = 2
+        manager = ExtensionManager(environment: environment, control: { _ in
+            // Form von `kadrell ls --json`: Gruppen mit Sessions.
+            .ok(#"{"layout":"grid","groups":[{"sessions":[\#(Array(repeating: "{}", count: sessions).joined(separator: ","))]}]}"#)
+        }, sessions: { [] }, catalogDir: root)
+        manager.start()
+        XCTAssertNil(manager.found.first?.problem)
+        manager.setEnabled("hello", true)
+        manager.emit("app.ready", .object([:]))
+        let shown = await until(3) { self.manager.statusItems.first?.text == "2 sessions" }
+        XCTAssertTrue(shown, "\(manager.log("hello"))")
+        XCTAssertEqual(manager.panels.first?.tree.title, "Hello")
+        XCTAssertEqual(manager.panels.first?.tree.nodes, [.text("2 sessions", .muted), .button(label: "Refresh", action: "refresh")])
+        XCTAssertEqual(manager.statusItems.first?.color, .ok)
+        sessions = 3
+        manager.action("hello", id: "refresh")
+        let refreshed = await until(3) { self.manager.statusItems.first?.text == "3 sessions" }
+        XCTAssertTrue(refreshed, "\(manager.log("hello"))")
+    }
+
     func testSessionEvents() {
         func s(_ id: String, _ status: String) -> Session {
             var s = Session(id: id, cwd: "/tmp", startedAt: 0, sessionId: id, name: id)
