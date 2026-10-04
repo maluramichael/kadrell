@@ -191,6 +191,7 @@ im Stil des Baums, mit UI-Größe und Theme von Kadrell.
 ```lua
 kadrell.panel.set{
   title = "Jira",
+  children = {
   { type = "section", title = "In progress", children = {
       { type = "item", text = "PROJ-123 Login broken", detail = "High", color = "warn",
         actions = { {id = "open:PROJ-123", label = "Open in browser"},
@@ -198,8 +199,11 @@ kadrell.panel.set{
   }},
   { type = "text", text = "Updated 14:02", color = "muted" },
   { type = "button", label = "Reload", action = "refresh" },
+  },
 }
 ```
+
+Die Kinder der Wurzel stehen unter `children`, nicht im Array-Teil neben `title`: json.lua kodiert gemischte Tabellen nicht.
 
 - Knoten v1: `section` (title, children, collapsed), `item` (text, detail, color, actions), `text` (text, color),
   `button` (label, action).
