@@ -94,6 +94,8 @@ final class ExtensionPanelTests: XCTestCase {
         wc.split.layoutSubtreeIfNeeded()
         XCTAssertEqual(wc.rightScroll.frame.width, 300, accuracy: 1)
         wc.toggleSidebar()
+        wc.split.layoutSubtreeIfNeeded()
+        XCTAssertEqual(wc.rightScroll.frame.width, 300, accuracy: 2, "Baum aus: die rechte Sidebar bleibt gleich breit")
         wc.toggleSidebar()
         wc.split.layoutSubtreeIfNeeded()
         XCTAssertEqual(wc.rightScroll.frame.width, 300, accuracy: 1, "Baum ein/aus lässt die rechte Sidebar stehen")
@@ -125,6 +127,43 @@ final class ExtensionPanelTests: XCTestCase {
         again.restoreSidebarWidth()
         again.split.layoutSubtreeIfNeeded()
         XCTAssertEqual(again.sidebarScroll.frame.width, 300, accuracy: 1)
+    }
+
+    /// ⌘⇧T, wenn schon Panels da sind: sie kommen vor `restoreSidebarWidth`. Die Baumbreite muss trotzdem gespeichert
+    /// werden, sonst fehlt sie nach dem nächsten Start.
+    func testTreeWidthStoredWhenPanelsComeFirst() {
+        let wc = controller()
+        wc.updateExtensionPanels(twoTabs)
+        wc.restoreSidebarWidth()
+        wc.split.layoutSubtreeIfNeeded()
+        let width = wc.sidebarScroll.frame.width
+        XCTAssertEqual(Profile.defaults.object(forKey: "sidebar.width" + suffix) as? Double ?? -1, Double(width), accuracy: 1)
+
+        let again = controller()
+        again.updateExtensionPanels(twoTabs)
+        again.restoreSidebarWidth()
+        again.split.layoutSubtreeIfNeeded()
+        XCTAssertEqual(again.sidebarScroll.frame.width, width, accuracy: 1)
+    }
+
+    /// B4: ein panel.set bei offenem Kontextmenü darf die Aktion nicht an einen anderen Tab oder Eintrag schicken.
+    func testContextMenuKeepsTabAndAction() throws {
+        let v = ExtensionPanelView(frame: NSRect(x: 0, y: 0, width: 300, height: 400))
+        let w = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 300, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        w.contentView = v
+        defer { w.close() }
+        var got: [String] = []
+        v.onAction = { name, id in got.append(name + "|" + id) }
+        v.panels = twoTabs
+        let r = v.rect(0).scaled(Theme.scale)
+        let p = v.convert(CGPoint(x: r.midX, y: r.midY), to: nil)
+        let click = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: p, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber,
+                                                     context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        let menu = try XCTUnwrap(v.menu(for: click))
+        v.panels = [twoTabs[1]]
+        menu.performActionForItem(at: 1)
+        XCTAssertEqual(got, ["a|claude:1"])
     }
 
     func testFocusFallsBackWhenTabVanishes() {

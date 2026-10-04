@@ -105,6 +105,8 @@ final class MainWindowController: NSObject {
         if let w = Profile.defaults.object(forKey: sidebarWidthKey) as? Double { split.setPosition(CGFloat(w), ofDividerAt: 0) }
         else if split.arrangedSubviews[0].frame.width < 120 { split.setPosition(260, ofDividerAt: 0) }
         sidebarWidthRestored = true
+        // Einmal sichern: kamen die Panels schon vorher (⌘⇧T), gab es danach womöglich kein Verschieben mehr, das speichert.
+        if !isSidebarHidden { Profile.defaults.set(Double(sidebarScroll.frame.width), forKey: sidebarWidthKey) }
     }
 
     /// Baum ein/aus (Cmd+B): ausgeblendet nehmen wir ihn ganz aus dem Split, dann bleibt kein Trenner übrig –

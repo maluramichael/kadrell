@@ -144,20 +144,21 @@ final class ExtensionPanelView: ClipWidthView {
         if let tab = selectedTab { onAction(tab, id) }
     }
 
+    /// Tab und Aktion werden beim Bauen festgehalten: ein panel.set bei offenem Menü darf sie nicht umlenken.
     private func actionMenu(_ i: Int) -> NSMenu? {
-        guard case .item(_, _, _, let actions) = lines[i].node, !actions.isEmpty else { return nil }
+        guard case .item(_, _, _, let actions) = lines[i].node, !actions.isEmpty, let tab = selectedTab else { return nil }
         let menu = NSMenu()
         for a in actions {
             let m = NSMenuItem(title: a.label, action: #selector(menuAction(_:)), keyEquivalent: "")
             m.target = self
-            m.representedObject = a.id
+            m.representedObject = [tab, a.id]
             menu.addItem(m)
         }
         return menu
     }
 
     @objc private func menuAction(_ sender: NSMenuItem) {
-        if let id = sender.representedObject as? String { fire(id) }
+        if let target = sender.representedObject as? [String], target.count == 2 { onAction(target[0], target[1]) }
     }
 
     private func showActions(_ i: Int) {
