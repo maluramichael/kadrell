@@ -169,6 +169,9 @@ final class AttachManager {
                 + ClaudeHook.launchArgs
             AttachManager.log.info("claude \(claudeArgs.joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
             if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { claudeArgs += ClaudeCLI.promptArgs(prompt) }
+            // Fullscreen-Renderer: Claude zeichnet im Alternate-Screen statt den Verlauf in den Scrollback zu streamen,
+            // sonst wiederholt sich beim Scrollen der doppelt gezeichnete Text des klassischen Renderers.
+            if Settings.claudeFullscreen { env["CLAUDE_CODE_NO_FLICKER"] = "1" }
             (executable, args, execName) = (cli.binary, claudeArgs, "claude")
         }
         t.startProcess(executable: executable, args: args, environment: env.map { "\($0.key)=\($0.value)" }, execName: execName, currentDirectory: session.cwd)

@@ -86,6 +86,10 @@ enum Settings {
     static var claudeMode: String { get { value("claude.mode", "") } set { store("claude.mode", newValue) } }
     static var claudeModel: String { get { value("claude.model", "") } set { store("claude.model", newValue) } }
     static var claudeEffort: String { get { value("claude.effort", "") } set { store("claude.effort", newValue) } }
+    /// Claude im Fullscreen-Renderer (Alternate-Screen) starten statt im klassischen Puffer, Default an. Verhindert,
+    /// dass die wiederholten Neuzeichnungen des klassischen Renderers beim Scrollen als doppelter Text im Scrollback
+    /// auftauchen. Setzt `CLAUDE_CODE_NO_FLICKER=1` für neu gestartete Claude-Prozesse.
+    static var claudeFullscreen: Bool { get { value("claude.fullscreen", true) } set { store("claude.fullscreen", newValue) } }
     /// `kadrell` aus einer Session heraus darf Sessions anderer Gruppen lesen und steuern (send, capture, kill …).
     /// Default an: Agenten, die andere Sessions steuern, sollen ohne Umweg laufen. Aus: nur die eigene Gruppe.
     static var controlOtherSessions: Bool { get { value("control.otherSessions", true) } set { store("control.otherSessions", newValue) } }
