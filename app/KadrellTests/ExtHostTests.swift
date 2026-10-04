@@ -141,6 +141,16 @@ final class ExtHostTests: XCTestCase {
         assertAlive(p)
     }
 
+    func testExecReturnsStderrSeparately() throws {
+        let p = try startReady("""
+            kadrell.on("app.ready", function()
+                local r = kadrell.exec({"/bin/sh", "-c", "echo e >&2; exit 3"})
+                kadrell.log(r.status .. "|" .. r.stdout .. "|" .. r.stderr)
+            end)
+            """)
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "3||e\n")
+    }
+
     func testExecResolvesViaPath() throws {
         let p = try startReady("""
             kadrell.on("app.ready", function() kadrell.log(kadrell.exec({"echo", "x"}).stdout) end)

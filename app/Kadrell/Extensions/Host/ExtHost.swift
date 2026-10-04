@@ -80,10 +80,10 @@ enum ExtHost {
             do {
                 guard let first = argv.first else { throw CocoaError(.fileNoSuchFile) }
                 let viaEnv = !first.contains("/")
-                let r = try await ProcessRunner.run(viaEnv ? "/usr/bin/env" : first, viaEnv ? argv : Array(argv.dropFirst()),
+                let r = try await ProcessRunner.runCapturingStderr(viaEnv ? "/usr/bin/env" : first, viaEnv ? argv : Array(argv.dropFirst()),
                                                     environment: ProcessInfo.processInfo.environment, cwd: cwd,
-                                                    timeout: timeout, mergeStderr: false)
-                fields = ["status": Int(r.status), "stdout": r.output, "stderr": ""]
+                                                    timeout: timeout)
+                fields = ["status": Int(r.status), "stdout": r.output, "stderr": r.stderr]
             } catch {
                 fields = ["status": 127, "stdout": "", "stderr": error.localizedDescription]
             }
