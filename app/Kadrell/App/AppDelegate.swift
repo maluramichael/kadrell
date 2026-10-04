@@ -389,6 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let code = event.keyCode, mods = event.modifierFlags.intersection(Hotkey.modMask)
         if code == KeyCode.f1, sheets.isPanel(.about, event.window) { sheets.dismiss(); return nil }
         if code == KeyCode.f3, sheets.isPanel(.stats, event.window) { sheets.dismiss(); return nil }
+        if handleExtensionsPanelKey(event) { return nil }
         guard controller(for: event.window) != nil else { return event }
         if code == KeyCode.escape, sheets.cancelVisible() { return nil }
         // Vorschau offen: ⏎ übernimmt die Session als Auswahl, Esc zeigt wieder die alte.
@@ -401,6 +402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if code == KeyCode.returnKey, mods == .command { newSessionInFocusedFolder(); return nil }
         if code == KeyCode.f1 { sheets.togglePanel(.about); return nil }
         if code == KeyCode.f3 { sheets.togglePanel(.stats); return nil }
+        if code == KeyCode.f4 { sheets.togglePanel(.extensions); return nil }
         forwardSync(event, mods: mods)
         return event
     }
@@ -730,6 +732,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: String(localized: "Über Kadrell", bundle: Bundle.app), action: #selector(menuAbout), keyEquivalent: "")
         appMenu.addItem(withTitle: String(localized: "Was ist neu", bundle: Bundle.app), action: #selector(menuWhatsNew), keyEquivalent: "")
         appMenu.addItem(withTitle: String(localized: "Statistik", bundle: Bundle.app), action: #selector(menuStats), keyEquivalent: "")
+        appMenu.addItem(withTitle: String(localized: "Extensions …", bundle: Bundle.app), action: #selector(menuExtensions), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: String(localized: "Einstellungen …", bundle: Bundle.app), action: #selector(menuSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: String(localized: "Kommandozeilen-Tool installieren …", bundle: Bundle.app), action: #selector(menuInstallCLI), keyEquivalent: "")
@@ -854,6 +857,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func menuAbout() { sheets.togglePanel(.about) }
     @objc private func menuStats() { sheets.togglePanel(.stats) }
+    @objc private func menuExtensions() { sheets.togglePanel(.extensions) }
     @objc private func menuWhatsNew() { showWhatsNew(version: Settings.version, fallback: String(localized: "Keine Einträge gefunden.", bundle: Bundle.app)) }
     @objc private func menuTemporaryInstance() { Profile.launchTemporary() }
     @objc private func menuSettings() {
@@ -1048,6 +1052,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (String(localized: "Gruppe bearbeiten (der fokussierten Session)", bundle: Bundle.app), { [weak self] in
                 if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
             (String(localized: "Statistik", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.stats) }),
+            (String(localized: "Extensions", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.extensions) }),
             (String(localized: "Reload", bundle: Bundle.app), { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
             (String(localized: "Konto hinzufügen (aktuell angemeldetes)", bundle: Bundle.app), { [weak self] in self?.addAccount() }),
         ]

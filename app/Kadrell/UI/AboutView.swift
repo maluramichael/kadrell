@@ -27,6 +27,7 @@ struct AboutView: View {
                 ("⌘M", String(localized: "Im Dock ablegen", bundle: Bundle.app)), (String(localized: "⌘ Mausrad", bundle: Bundle.app), String(localized: "Terminal-Schrift aller Sessions größer/kleiner", bundle: Bundle.app)),
                 ("⌘,", String(localized: "Einstellungen: Projektordner, Darstellung, Tastenkürzel", bundle: Bundle.app)), ("F1", String(localized: "diese Hilfe", bundle: Bundle.app)),
                 ("F3", String(localized: "Statistik: Nachrichten, Sessions, Kachelwechsel, Rekord", bundle: Bundle.app)),
+                ("F4", String(localized: "Extensions: an- und abschalten, neu laden, Einstellungen, Log", bundle: Bundle.app)),
             ]),
         ]
     }
@@ -55,6 +56,11 @@ struct AboutView: View {
             HStack(spacing: 6) {
                 Text("von Michael Malura ·").foregroundStyle(Theme.mutedColor)
                 Link("malura.de", destination: URL(string: "https://malura.de")!).foregroundStyle(Theme.runningColor)
+            }
+            .font(Theme.ui(12)).padding(.horizontal, 16).padding(.top, 4)
+            HStack(spacing: 6) {
+                Text("Eigene Erweiterungen in Lua:").foregroundStyle(Theme.mutedColor)
+                Link("kadrell.malura.de/extensions", destination: ExtensionsView.docs).foregroundStyle(Theme.runningColor)
             }
             .font(Theme.ui(12)).padding(.horizontal, 16).padding(.top, 4)
             Divider().overlay(Theme.lineColor).padding(.top, 14)

@@ -7985,6 +7985,281 @@
           }
         }
       }
+    },
+    "Noch keine Extensions. Ordner hineinlegen oder per git clone holen, sie erscheinen sofort.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Extensions. Ordner hineinlegen oder per git clone holen, sie erscheinen sofort."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No extensions yet. Drop a folder in or git clone one, it shows up right away."
+          }
+        }
+      }
+    },
+    "↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑↓ select · Space on/off · R reload · L log · Esc or F4 closes"
+          }
+        }
+      }
+    },
+    "Extensions-Ordner öffnen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions-Ordner öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open extensions folder"
+          }
+        }
+      }
+    },
+    "Doku": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doku"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Docs"
+          }
+        }
+      }
+    },
+    "Rechte: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permissions: %@"
+          }
+        }
+      }
+    },
+    "Neu laden  R": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu laden  R"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload  R"
+          }
+        }
+      }
+    },
+    "Ordner öffnen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open folder"
+          }
+        }
+      }
+    },
+    "Log ausblenden  L": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ausblenden  L"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide log  L"
+          }
+        }
+      }
+    },
+    "Log  L": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log  L"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log  L"
+          }
+        }
+      }
+    },
+    "gesetzt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gesetzt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set"
+          }
+        }
+      }
+    },
+    "nicht gesetzt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nicht gesetzt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "not set"
+          }
+        }
+      }
+    },
+    "neuer Wert": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "neuer Wert"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "new value"
+          }
+        }
+      }
+    },
+    "Eigene Erweiterungen in Lua:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigene Erweiterungen in Lua:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your own extensions in Lua:"
+          }
+        }
+      }
+    },
+    "Noch keine Logzeilen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Logzeilen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No log lines yet."
+          }
+        }
+      }
+    },
+    "Extensions …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions …"
+          }
+        }
+      }
+    },
+    "Extensions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions"
+          }
+        }
+      }
+    },
+    "Extensions: an- und abschalten, neu laden, Einstellungen, Log": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions: an- und abschalten, neu laden, Einstellungen, Log"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions: turn on and off, reload, settings, log"
+          }
+        }
+      }
+    },
+    "kadrell.malura.de/extensions": {
+      "shouldTranslate": false
     }
   },
   "version": "1.0"

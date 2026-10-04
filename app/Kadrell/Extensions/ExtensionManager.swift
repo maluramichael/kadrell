@@ -27,7 +27,7 @@ final class ExtensionManager {
     private let environment: [String: String]
     private let control: ([String]) async -> ControlResponse
     private let sessions: () -> [JSONValue]
-    private let catalogDir: URL
+    let catalogDir: URL
     private var watcher: FolderWatcher?
     private var supervisors: [String: ExtensionSupervisor] = [:]
     /// Aktueller Prozess je Extension, eingetragen bis zu seinem Ende, auch während `stop()`.

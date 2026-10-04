@@ -12,6 +12,7 @@ extension AppDelegate {
         })
         extensions = manager
         manager.onChange = { [weak self] in self?.extensionsChanged() }
+        sheets.extensionsModel = ExtensionsModel(manager: manager)
         manager.start()
     }
 
@@ -21,6 +22,16 @@ extension AppDelegate {
         guard let extensions else { return }
         let panels = extensions.panels, items = extensions.statusItems
         for c in windows { c.updateExtensionPanels(panels); c.bar.extensionItems = items }
+    }
+
+    /// Tasten im offenen F4-Panel: F4 schließt, ↑↓, Leertaste, R und L gehen ans Modell. Nicht, solange ein Textfeld
+    /// oder ein Schalter die Tastatur hat: Leertaste und Buchstaben gehören dann dem Feld.
+    func handleExtensionsPanelKey(_ event: NSEvent) -> Bool {
+        guard sheets.isPanel(.extensions, event.window), let model = sheets.extensionsModel else { return false }
+        if event.keyCode == KeyCode.f4 { sheets.dismiss(); return true }
+        let responder = event.window?.firstResponder
+        guard !(responder is NSText || responder is NSControl), let key = ExtensionsModel.key(for: event) else { return false }
+        return model.handleKey(key)
     }
 
     /// ⌘3 und ⌘⌥B im Fenster `c`; false bei allen anderen Kürzeln. ⌘3 ohne Panels: nur ein Ton.

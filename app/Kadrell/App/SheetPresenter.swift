@@ -9,13 +9,15 @@ final class SheetPresenter {
     /// Eine offene Palette macht dem Dialog Platz.
     private let palette: () -> PaletteWindow?
     private var overlay: OverlayPanel?
-    /// Offenes Panel (F1, F3) nicht stillschweigend verdrängen: wer gerade ⏎ drückt, um es zu schließen, soll nicht
+    /// Offenes Panel (F1, F3, F4) nicht stillschweigend verdrängen: wer gerade ⏎ drückt, um es zu schließen, soll nicht
     /// aus Versehen einen anderen Dialog bestätigen. Der neue Dialog kommt erst dran, wenn das Panel zu ist.
     private var pending: (() -> Void)?
 
     /// Panels, die sich mit ihrer eigenen Taste wieder schließen, im Gegensatz zu Rückfragen und Sheets.
-    enum Panel { case about, stats }
+    enum Panel { case about, stats, extensions }
     private var openPanel: Panel?
+    /// Für F4, gesetzt mit dem Start der Extensions. Lebt so lange wie die App und sammelt die Meldungen des Managers.
+    var extensionsModel: ExtensionsModel?
 
     init(host: @escaping () -> MainWindowController?, palette: @escaping () -> PaletteWindow?) {
         self.host = host
@@ -48,13 +50,17 @@ final class SheetPresenter {
         if let pending { self.pending = nil; pending() }
     }
 
-    /// F1 und F3: Panel auf, dasselbe Panel noch einmal schließt es wieder.
+    /// F1, F3 und F4: Panel auf, dasselbe Panel noch einmal schließt es wieder.
     func togglePanel(_ panel: Panel) {
         if overlay?.isVisible == true, openPanel == panel { dismiss(); return }
         let close: () -> Void = { [weak self] in self?.dismiss() }
         switch panel {
         case .about: present(AboutView(), onPrimary: close)
         case .stats: present(StatsView(), onPrimary: close)
+        case .extensions:
+            guard let model = extensionsModel else { return NSSound.beep() }
+            // ⏎ gehört den Textfeldern der Einstellungen (speichern), schließen mit Esc, F4 oder ⌘⏎.
+            present(ExtensionsView(model: model), plainReturn: false, onPrimary: close)
         }
         openPanel = panel   // erst nach present: das räumt über dismiss den alten Wert ab
     }
