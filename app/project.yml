@@ -30,6 +30,14 @@ targets:
     platform: macOS
     sources:
       - path: Kadrell
+        excludes: ["Extensions/Host/*.lua"]
+      - path: Kadrell/Extensions/Host
+        includes: ["*.lua"]
+        buildPhase: resources
+      # Lua-Quellen unverändert von lua.org, kein eigener Code: Warnungen aus.
+      - path: Vendor/lua
+        excludes: [lua.c, luac.c, Makefile, LICENSE]
+        compilerFlags: ["-w", "-DLUA_USE_POSIX"]
       - path: ../CHANGELOG.md
         buildPhase: resources
     dependencies:
@@ -56,6 +64,7 @@ targets:
         # Hardened Runtime auch im Debug-Build: ohne sie lädt das Binary fremde dylibs mit den TCC-Rechten der App.
         CODE_SIGN_ENTITLEMENTS: Kadrell/Kadrell.entitlements
         PRODUCT_NAME: Kadrell
+        SWIFT_OBJC_BRIDGING_HEADER: Kadrell/Extensions/Host/Kadrell-Bridging-Header.h
   KadrellTests:
     type: bundle.unit-test
     platform: macOS
