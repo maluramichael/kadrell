@@ -6,16 +6,20 @@ enum ExtHost {
     /// Protokollkanal: eine Kopie des ursprünglichen stdout. fd 1 zeigt danach auf stderr, damit `io.write` oder
     /// ein anderer Schreiber auf stdout das Protokoll nicht zerschießt, sondern im Log der Extension landet.
     nonisolated(unsafe) private static var out: Int32 = -1
+    /// Der Lua-Zustand; nur auf dem Main-Thread benutzt.
+    nonisolated(unsafe) private static var lua: OpaquePointer?
     private static let outLock = NSLock()
 
     static func run(dir: String) -> Never {
-        out = dup(STDOUT_FILENO)
+        // close-on-exec: Prozesse aus kadrell.exec dürfen den Protokollkanal nicht erben.
+        out = fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0)
         dup2(STDERR_FILENO, STDOUT_FILENO)
         guard let state = kl_new(64 << 20) else { fail("Lua startet nicht") }
-        nonisolated(unsafe) let L = state
+        let L = state
+        lua = L
         kl_set_sender { json, len in
             guard let json else { return }
-            ExtHost.writeLine(json, len)
+            ExtHost.route(json, len)
         }
         guard let prelude = Bundle.main.path(forResource: "prelude", ofType: "lua") else { fail("prelude.lua fehlt") }
         if let err = call({ kl_run_file(L, prelude, $0, $1) }) { fail(err) }
@@ -25,15 +29,88 @@ enum ExtHost {
         // Eigener Lese-Thread: bei EOF endet der Prozess hier, auch wenn Lua gerade in einer Endlosschleife hängt.
         Thread {
             while let line = readLine() {
-                DispatchQueue.main.async {
-                    if let err = call({ kl_dispatch(L, line, $0, $1) }) { FileHandle.standardError.write(Data((err + "\n").utf8)) }
-                }
+                DispatchQueue.main.async { dispatch(line) }
             }
             exit(0)
         }.start()
         // Nicht dispatchMain(): das beendet den Main-Thread, die Main-Queue liefe dann wieder auf einem GCD-Worker.
         CFRunLoopRun()
         exit(0)
+    }
+
+    /// Nur auf dem Main-Thread: Lua bekommt eine Zeile von Kadrell oder ein Ergebnis aus dem Helper.
+    private static func dispatch(_ line: String) {
+        guard let L = lua else { return }
+        if let err = call({ kl_dispatch(L, line, $0, $1) }) { FileHandle.standardError.write(Data((err + "\n").utf8)) }
+    }
+
+    /// Ergebnis einer Hintergrundarbeit zurück in Lua, immer über die Main-Queue.
+    private static func deliver(id: Int, _ fields: [String: Any]) {
+        let msg = fields.merging(["t": "result", "id": id]) { $1 }
+        guard let data = try? JSONSerialization.data(withJSONObject: msg) else { return }
+        let line = String(decoding: data, as: UTF8.self)
+        DispatchQueue.main.async { dispatch(line) }
+    }
+
+    /// Lua-Ausgang: exec, http und timer erledigt der Helper selbst, alles andere geht an Kadrell.
+    private static func route(_ json: UnsafePointer<CChar>, _ len: Int) {
+        let data = Data(bytes: json, count: len)
+        guard let msg = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let id = msg["id"] as? Int else {
+            return writeLine(json, len)
+        }
+        switch msg["t"] as? String {
+        case "exec": exec(id: id, msg)
+        case "http": http(id: id, msg)
+        case "timer": timer(id: id, after: (msg["after"] as? Double) ?? 0)
+        default: writeLine(json, len)
+        }
+    }
+
+    private static func timer(id: Int, after: Double) {
+        let line = #"{"t":"timer","id":\#(id)}"#
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(after, 0)) { dispatch(line) }
+    }
+
+    /// Ohne „/“ im Namen sucht `env` über PATH, sonst bräuchte Process einen absoluten Pfad. Startfehler heißen wie in der Shell 127.
+    private static func exec(id: Int, _ msg: [String: Any]) {
+        let argv = msg["argv"] as? [String] ?? []
+        let cwd = msg["cwd"] as? String, timeout = (msg["timeout"] as? Double) ?? 30
+        Task.detached {
+            var fields: [String: Any]
+            do {
+                guard let first = argv.first else { throw CocoaError(.fileNoSuchFile) }
+                let viaEnv = !first.contains("/")
+                let r = try await ProcessRunner.run(viaEnv ? "/usr/bin/env" : first, viaEnv ? argv : Array(argv.dropFirst()),
+                                                    environment: ProcessInfo.processInfo.environment, cwd: cwd,
+                                                    timeout: timeout, mergeStderr: false)
+                fields = ["status": Int(r.status), "stdout": r.output, "stderr": ""]
+            } catch {
+                fields = ["status": 127, "stdout": "", "stderr": error.localizedDescription]
+            }
+            deliver(id: id, fields)
+        }
+    }
+
+    private static func http(id: Int, _ msg: [String: Any]) {
+        guard let url = (msg["url"] as? String).flatMap(URL.init(string:)) else {
+            return deliver(id: id, ["status": 0, "headers": [:] as [String: String], "body": "", "error": "ungültige URL"])
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = msg["method"] as? String
+        req.timeoutInterval = (msg["timeout"] as? Double) ?? 30
+        req.httpBody = (msg["body"] as? String).map { Data($0.utf8) }
+        for (k, v) in msg["headers"] as? [String: String] ?? [:] { req.setValue(v, forHTTPHeaderField: k) }
+        let request = req
+        Task.detached {
+            do {
+                let (data, resp) = try await URLSession.shared.data(for: request)
+                let http = resp as? HTTPURLResponse
+                let headers = (http?.allHeaderFields ?? [:]).reduce(into: [String: String]()) { $0["\($1.key)"] = "\($1.value)" }
+                deliver(id: id, ["status": http?.statusCode ?? 0, "headers": headers, "body": String(decoding: data, as: UTF8.self)])
+            } catch {
+                deliver(id: id, ["status": 0, "headers": [:] as [String: String], "body": "", "error": error.localizedDescription])
+            }
+        }
     }
 
     /// Ruft die C-Schicht mit einem Fehlerpuffer auf, liefert den Fehlertext oder nil.
