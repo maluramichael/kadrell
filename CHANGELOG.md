@@ -5,9 +5,6 @@ Neueste Version oben.
 ## 1.62.0 (2026-10-03)
 
 - Feature: In den Einstellungen lässt sich jetzt festlegen, wie das Kadrell-Symbol in der Menüleiste erscheint: mit Symbol und Text, nur als Symbol (spart Platz) oder ganz aus.
-
-## 1.61.0 (2026-10-03)
-
 - Fix: Beim Ausblenden der Seitenleiste mit ⌘B bleibt keine vertikale Linie mehr am Rand stehen.
 - Änderung: Die ausgeblendete Seitenleiste lässt sich nicht mehr mit der Maus wieder herausziehen; sie kommt nur noch über ⌘B zurück, und zwar auf ihrer vorherigen Breite.
 
