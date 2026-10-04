@@ -67,9 +67,17 @@ local function request(name, msg)
     return coroutine.yield()
 end
 
+-- Jedes argv-Element als String: eine Zahl ließe Kadrell die Zeile verwerfen, die Coroutine wartete ewig.
+local function strings(list, n)
+    if type(list) ~= "table" then return list end
+    local out = {}
+    for i = 1, n or #list do out[i] = tostring(list[i]) end
+    return out
+end
+
 function kadrell.exec(argv, opts)
     opts = opts or {}
-    return request("exec", { t = "exec", argv = argv, cwd = opts.cwd, timeout = opts.timeout })
+    return request("exec", { t = "exec", argv = strings(argv), cwd = opts.cwd, timeout = opts.timeout })
 end
 
 function kadrell.http(req)
@@ -78,7 +86,8 @@ function kadrell.http(req)
 end
 
 function kadrell.run(...)
-    return request("run", { t = "run", argv = { ... } })
+    local args = table.pack(...)
+    return request("run", { t = "run", argv = strings(args, args.n) })
 end
 
 function kadrell.sessions()

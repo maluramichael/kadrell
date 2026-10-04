@@ -218,6 +218,17 @@ final class ExtHostTests: XCTestCase {
         XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "0{}")
     }
 
+    /// Zahlen im argv gehen als Strings raus, sonst verwürfe Kadrell die Zeile und die Coroutine wartete ewig.
+    func testRunConvertsArgumentsToStrings() throws {
+        let p = try startReady(#"kadrell.on("app.ready", function() kadrell.run("select", "-t", 1) end)"#)
+        XCTAssertEqual(p.next(timeout: 3)?["argv"] as? [String], ["select", "-t", "1"])
+    }
+
+    func testExecConvertsArgumentsToStrings() throws {
+        let p = try startReady(#"kadrell.on("app.ready", function() kadrell.log(kadrell.exec({"/bin/echo", 1, true}).stdout) end)"#)
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "1 true\n")
+    }
+
     func testSessionsParsesLsJson() throws {
         let p = try startReady("""
             kadrell.on("app.ready", function() kadrell.log(kadrell.sessions()[1].key) end)

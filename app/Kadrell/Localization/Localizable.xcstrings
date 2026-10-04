@@ -990,6 +990,38 @@
         }
       }
     },
+    "Beendet durch Signal %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beendet durch Signal %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Killed by signal %lld"
+          }
+        }
+      }
+    },
+    "Beendet mit Status %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beendet mit Status %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exited with status %lld"
+          }
+        }
+      }
+    },
     "Bei diesem Tempo ist das 7-Tage-Limit am %@ voll. Reset ist aber erst am %@, bis dahin wärst du gesperrt.": {
       "localizations": {
         "de": {
@@ -1006,6 +1038,22 @@
         }
       }
     },
+    "Gestoppt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestoppt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped"
+          }
+        }
+      }
+    },
     "Jetzt aktiv: „%@“. Grund: Nutzungslimit erreicht.": {
       "localizations": {
         "de": {
@@ -1018,6 +1066,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Now active: “%@”. Reason: usage limit reached."
+          }
+        }
+      }
+    },
+    "Nachricht zu groß (über 1 MB)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachricht zu groß (über 1 MB)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message too large (over 1 MB)"
           }
         }
       }
@@ -1050,6 +1114,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch on too-fast 7-day usage"
+          }
+        }
+      }
+    },
+    "Nimmt keine Nachrichten mehr an (über 1 MB unverarbeitet)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nimmt keine Nachrichten mehr an (über 1 MB unverarbeitet)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No longer accepts messages (over 1 MB unprocessed)"
           }
         }
       }
@@ -6182,6 +6262,22 @@
         }
       }
     },
+    "Zu viele Nachrichten (mehr als 50 pro Sekunde)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu viele Nachrichten (mehr als 50 pro Sekunde)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many messages (more than 50 per second)"
+          }
+        }
+      }
+    },
     "Zuletzt fokussierte Kachel": {
       "localizations": {
         "de": {
@@ -7061,6 +7157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "tmux session on %@"
+          }
+        }
+      }
+    },
+    "ungültige Nachricht verworfen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ungültige Nachricht verworfen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invalid message discarded"
           }
         }
       }
