@@ -68,6 +68,10 @@ final class ExtensionProcess {
         }
     }
 
+    var pid: pid_t { process.processIdentifier }
+    /// Nach `stop()` oder `kill()`: was der Prozess jetzt noch meldet, zählt nicht mehr.
+    var isStopping: Bool { stopping }
+
     /// Die fds, die Kadrell nach dem Start offen hält (für Tests).
     var parentDescriptors: [Int32] {
         [input.fileHandleForWriting, output.fileHandleForReading, errors.fileHandleForReading].map(\.fileDescriptor)
@@ -145,9 +149,11 @@ final class ExtensionProcess {
     }
 
     /// Nur solange der Prozess lebt: nach dem Einsammeln könnte die pid schon einem anderen Prozess gehören.
+    /// Kinder aus `kadrell.exec` zuerst: sie liegen in eigenen Prozessgruppen und liefen sonst ohne ihren Timeout weiter.
     private func signal(_ sig: Int32) {
         guard !finished, process.isRunning else { return }
-        kill(process.processIdentifier, sig)
+        ProcessRunner.killChildren(of: process.processIdentifier)
+        Darwin.kill(process.processIdentifier, sig)
     }
 
     // MARK: Eingang (Main-Thread)

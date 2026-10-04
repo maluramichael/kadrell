@@ -14,6 +14,8 @@ enum ExtHost {
         // close-on-exec: Prozesse aus kadrell.exec dürfen den Protokollkanal nicht erben.
         out = fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0)
         dup2(STDERR_FILENO, STDOUT_FILENO)
+        // Jedes Ende über exit() (EOF auf stdin, shutdown, os.exit, Ladefehler) nimmt laufende exec-Kinder mit.
+        atexit { ProcessRunner.killChildren(of: getpid()) }
         guard let state = kl_new(64 << 20) else { fail("Lua startet nicht") }
         let L = state
         lua = L

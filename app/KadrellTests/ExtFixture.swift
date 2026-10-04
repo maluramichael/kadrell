@@ -12,6 +12,27 @@ struct ExtFixture {
         try Data(initLua.utf8).write(to: dir.appendingPathComponent("init.lua"))
         return dir
     }
+
+    /// Direkte Kinder eines Prozesses, unabhängig vom Code unter Test.
+    static func children(of pid: pid_t) -> [pid_t] {
+        var buf = [pid_t](repeating: 0, count: 64)
+        let n = proc_listchildpids(pid, &buf, Int32(buf.count * MemoryLayout<pid_t>.size))
+        return Array(buf.prefix(max(0, min(Int(n), buf.count))))
+    }
+
+    /// Lebt der Prozess noch (Zombies zählen nicht, die räumt launchd gleich ab)?
+    static func alive(_ pid: pid_t) -> Bool {
+        var info = proc_bsdinfo()
+        let n = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
+        return n > 0 && info.pbi_status != UInt32(SZOMB)
+    }
+
+    /// Wartet bis zu `seconds`, bis `condition` gilt; blockiert den Aufrufer.
+    static func wait(_ seconds: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        while !condition(), Date() < deadline { usleep(20_000) }
+        return condition()
+    }
 }
 
 /// Startet `Kadrell ext-host <dir>` und spricht mit ihm JSON-Zeilen über stdin/stdout.
