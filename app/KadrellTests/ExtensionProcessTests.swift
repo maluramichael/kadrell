@@ -120,6 +120,45 @@ final class ExtensionProcessTests: XCTestCase {
         XCTAssertEqual(stderr, ["eins", String(repeating: "b", count: 500)])
     }
 
+    /// stderr ist gedrosselt: höchstens 50 Zeilen pro Sekunde, der Rest als Sammelzeile, kein Kill.
+    func testStderrFloodIsThrottledNotKilled() async throws {
+        _ = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 100000 do io.write(i, "\n") end end)"#)
+        // Die genaue Zahl hängt vom Takt ab, geprüft wird das Muster der Sammelzeile (Zahl mit Tausendertrennern).
+        let parts = String(localized: "\(-1) Zeilen übersprungen", bundle: Bundle.app).components(separatedBy: "-1")
+        func isSummary(_ s: String) -> Bool {
+            let number = s.dropFirst(parts[0].count).dropLast(parts[1].count)
+            return s.hasPrefix(parts[0]) && s.hasSuffix(parts[1]) && number.first?.isNumber == true
+                && number.allSatisfy { $0.isNumber || $0.isPunctuation || $0.isWhitespace }
+        }
+        try await Task.sleep(for: .seconds(2))
+        XCTAssertLessThan(stderr.count, 200)
+        XCTAssertTrue(stderr.contains(where: isSummary), "\(stderr.suffix(3))")
+        XCTAssertEqual(exits.count, 0)
+    }
+
+    /// Kein Erbe für fremde Kinder: SwiftTerm startet Sessions per forkpty und schließt nichts. Hielte eine Session
+    /// das stdin-Schreibende des Helpers, sähe der Helper nach Kadrells Ende nie EOF. posix_spawn ohne
+    /// close-Aktionen erbt jeden fd ohne FD_CLOEXEC; die Kontroll-Pipe zeigt, dass die Prüfung Geerbtes erkennt.
+    func testPipesAreNotInheritedBySpawnedChildren() async throws {
+        let p = try await launchReady("")
+        let control = Pipe()
+        let fds = p.parentDescriptors + [control.fileHandleForWriting.fileDescriptor]
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-fds-\(UUID().uuidString)")
+        // `[ -e /dev/fd/N ]` öffnet nichts selbst, anders als `ls /dev/fd`, kann also keine Nummer neu belegen.
+        let script = "for fd in \(fds.map(String.init).joined(separator: " ")); do [ -e /dev/fd/$fd ] && echo $fd; done; true"
+        var actions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&actions)
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        posix_spawn_file_actions_addopen(&actions, 1, out.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        let argv = ["/bin/sh", "-c", script].map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+        var pid: pid_t = 0, status: Int32 = 0
+        XCTAssertEqual(posix_spawn(&pid, "/bin/sh", &actions, nil, argv, environ), 0)
+        waitpid(pid, &status, 0)
+        let seen = try String(contentsOf: out, encoding: .utf8).split(separator: "\n").map { Int32($0) }
+        XCTAssertEqual(seen, [control.fileHandleForWriting.fileDescriptor], "nur die Kontroll-Pipe darf geerbt sein")
+    }
+
     func testMissingReadyIsKilled() async throws {
         _ = try launchScript("exec sleep 30")
         await until(5) { !self.exits.isEmpty }

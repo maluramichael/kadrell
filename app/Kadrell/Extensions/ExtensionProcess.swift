@@ -11,6 +11,7 @@ final class ExtensionProcess {
     nonisolated static let maxLine = 1 << 20
     static let maxInputBuffer = 1 << 20
     nonisolated static let maxText = 500
+    nonisolated static let maxStderrLinesPerSecond = 50
 
     /// Gründe für einen harten Kill.
     enum Kill: Sendable {
@@ -29,7 +30,7 @@ final class ExtensionProcess {
 
     /// Was der Lese-Thread an den Main-Thread meldet.
     fileprivate enum Event: Sendable {
-        case message(ExtensionMessage), garbage, violation(Kill), stderr([String]), eof
+        case message(ExtensionMessage), garbage, violation(Kill), stderr([String]), skipped(Int), eof
     }
 
     var onMessage: (ExtensionMessage) -> Void = { _ in }
@@ -60,6 +61,16 @@ final class ExtensionProcess {
         process.standardInput = input
         process.standardOutput = output
         process.standardError = errors
+        // Nur der Helper soll die Pipes bekommen (Process setzt sie per dup2 ein, das hebt close-on-exec auf). Sonst erbt
+        // jede Terminal-Session sie, SwiftTerm schließt beim Start nichts, und nach Kadrells Ende sähe der Helper nie EOF.
+        for pipe in [input, output, errors] {
+            for h in [pipe.fileHandleForReading, pipe.fileHandleForWriting] { _ = fcntl(h.fileDescriptor, F_SETFD, FD_CLOEXEC) }
+        }
+    }
+
+    /// Die fds, die Kadrell nach dem Start offen hält (für Tests).
+    var parentDescriptors: [Int32] {
+        [input.fileHandleForWriting, output.fileHandleForReading, errors.fileHandleForReading].map(\.fileDescriptor)
     }
 
     /// Ohne `stop()` fallen gelassen: stdin schließen, der Helper beendet sich dann selbst, auch in einer Endlosschleife.
@@ -149,6 +160,7 @@ final class ExtensionProcess {
         case .stderr(let lines):
             lastStderr = lines.last ?? lastStderr
             lines.forEach(onStderr)
+        case .skipped(let n): onStderr(String(localized: "\(n) Zeilen übersprungen", bundle: Bundle.app))
         case .eof:
             eof = true
             finishIfDone()
@@ -231,49 +243,27 @@ final class ExtensionProcess {
     nonisolated private static func pump(out: FileHandle, err: FileHandle, post: @Sendable (Event) -> Void) {
         var fds = [pollfd(fd: err.fileDescriptor, events: Int16(POLLIN), revents: 0),
                    pollfd(fd: out.fileDescriptor, events: Int16(POLLIN), revents: 0)]
-        var protocolLines = ProtocolLines(), errLines = Data()
+        var protocolLines = ProtocolLines(), errLines = StderrLines()
         var buf = [UInt8](repeating: 0, count: 1 << 16)
         while fds.contains(where: { $0.fd >= 0 }) {
-            if poll(&fds, nfds_t(fds.count), -1) < 0 {
+            if poll(&fds, nfds_t(fds.count), errLines.timeout(Date())) < 0 {
                 if errno == EINTR { continue }
                 break
             }
+            errLines.tick(Date()).forEach(post)
             // stderr zuerst: was der Helper vor seinem Ende dorthin schrieb, kommt vor eof an.
             for i in fds.indices where fds[i].fd >= 0 && fds[i].revents != 0 {
                 let n = read(fds[i].fd, &buf, buf.count)
                 if n < 0 && errno == EINTR { continue }
                 if n <= 0 {
                     fds[i].fd = -1
-                    if i == 1 { post(.eof) }
+                    (i == 1 ? [.eof] : errLines.finish()).forEach(post)
                     continue
                 }
                 let chunk = Data(buf[0..<n])
-                if i == 0 {
-                    let lines = stderrLines(&errLines, chunk)
-                    if !lines.isEmpty { post(.stderr(lines)) }
-                } else {
-                    protocolLines.feed(chunk).forEach(post)
-                }
+                (i == 0 ? errLines.feed(chunk, Date()) : protocolLines.feed(chunk)).forEach(post)
             }
         }
-        // Ein Rest ohne Zeilenende geht nicht verloren.
-        if !errLines.isEmpty { post(.stderr([clip(errLines)])) }
-    }
-
-    /// Ganze Zeilen aus stderr, auf `maxText` Zeichen gekürzt. Ein Rest ohne Zeilenende über 4 KB gilt als eigene Zeile,
-    /// damit der Puffer nicht unbegrenzt wächst.
-    nonisolated private static func stderrLines(_ pending: inout Data, _ chunk: Data) -> [String] {
-        pending.append(chunk)
-        var lines: [String] = []
-        while let nl = pending.firstIndex(of: 0x0A) {
-            lines.append(clip(pending[pending.startIndex..<nl]))
-            pending.removeSubrange(pending.startIndex...nl)
-        }
-        if pending.count > 4096 {
-            lines.append(clip(pending))
-            pending = Data()
-        }
-        return lines
     }
 
     nonisolated fileprivate static func clip(_ data: Data) -> String {
@@ -315,5 +305,64 @@ private struct ProtocolLines {
         dead = true
         pending = Data()
         return .violation(why)
+    }
+}
+
+/// stderr in Zeilen, auf `maxText` Zeichen gekürzt und gedrosselt: höchstens 50 Zeilen pro Sekunde gehen an den
+/// Main-Thread, der Rest wird gezählt und einmal pro Sekunde als Sammelzeile gemeldet. Kein Kill, aber eine Extension,
+/// die stderr flutet, legt die App nicht lahm.
+private struct StderrLines {
+    private var pending = Data()
+    private var windowStart = Date.distantPast
+    private var sent = 0
+    private var skipped = 0
+
+    mutating func feed(_ chunk: Data, _ now: Date) -> [ExtensionProcess.Event] {
+        pending.append(chunk)
+        var lines: [String] = []
+        while let nl = pending.firstIndex(of: 0x0A) {
+            lines.append(ExtensionProcess.clip(pending[pending.startIndex..<nl]))
+            pending.removeSubrange(pending.startIndex...nl)
+        }
+        // Ein Rest ohne Zeilenende über 4 KB gilt als eigene Zeile, damit der Puffer nicht unbegrenzt wächst.
+        if pending.count > 4096 {
+            lines.append(ExtensionProcess.clip(pending))
+            pending = Data()
+        }
+        return admit(lines, now)
+    }
+
+    /// Bei EOF: Rest ohne Zeilenende und ausstehende Sammelzeile sofort.
+    mutating func finish() -> [ExtensionProcess.Event] {
+        var events = pending.isEmpty ? [] : admit([ExtensionProcess.clip(pending)], Date())
+        pending = Data()
+        if skipped > 0 { events.append(.skipped(skipped)) }
+        skipped = 0
+        return events
+    }
+
+    /// Wartezeit für poll in ms: bis zum Fensterende, wenn eine Sammelzeile aussteht, sonst unbegrenzt.
+    func timeout(_ now: Date) -> Int32 {
+        guard skipped > 0 else { return -1 }
+        return Int32(max(0, (1 - now.timeIntervalSince(windowStart)) * 1000).rounded(.up))
+    }
+
+    /// Nach Ablauf des Fensters: neues Fenster, ausstehende Sammelzeile raus.
+    mutating func tick(_ now: Date) -> [ExtensionProcess.Event] {
+        guard now.timeIntervalSince(windowStart) >= 1 else { return [] }
+        let n = skipped
+        windowStart = now
+        sent = 0
+        skipped = 0
+        return n > 0 ? [.skipped(n)] : []
+    }
+
+    private mutating func admit(_ lines: [String], _ now: Date) -> [ExtensionProcess.Event] {
+        var events = tick(now)
+        let allowed = min(lines.count, ExtensionProcess.maxStderrLinesPerSecond - sent)
+        sent += allowed
+        skipped += lines.count - allowed
+        if allowed > 0 { events.append(.stderr(Array(lines.prefix(allowed)))) }
+        return events
     }
 }

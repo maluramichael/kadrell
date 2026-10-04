@@ -478,6 +478,22 @@
         }
       }
     },
+    "%lld Zeilen übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Zeilen übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld lines skipped"
+          }
+        }
+      }
+    },
     "%lld trennen": {
       "localizations": {
         "de": {
