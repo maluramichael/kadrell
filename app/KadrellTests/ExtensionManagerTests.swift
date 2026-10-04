@@ -177,22 +177,99 @@ final class ExtensionManagerTests: XCTestCase {
         XCTAssertTrue(reloaded, "\(manager.log("a"))")
     }
 
-    /// Panel über 2000 Knoten: wie ein Absturz, Grund nennt die Grenze, Panel bleibt leer.
+    /// Panel über 2000 Knoten: wie ein Absturz, Grund nennt die Grenze, Panel bleibt leer. Der Prozess stirbt sofort
+    /// (SIGKILL), auch wenn er danach hängt; ein sanftes Stoppen bräuchte hier die Sekunde bis zum SIGTERM.
     func testTooLargePanelCountsAsCrash() async throws {
         try make("a", """
         kadrell.on("app.ready", function()
             local children = {}
             for i = 1, 2001 do children[i] = { type = "text", text = "x" } end
             kadrell.panel.set({ title = "A", children = children })
+            kadrell.after(0, function() while true do end end)
         end)
         """)
         manager.setEnabled("a", true)
         manager.emit("app.ready", .object([:]))
         let failed = await until(3) { if case .failed = self.manager.state("a") { true } else { false } }
         XCTAssertTrue(failed, "\(manager.state("a"))")
+        let killed = await until(0.5) { self.helpers(in: self.catalog) == 0 }
+        XCTAssertTrue(killed, "Helper lebt nach dem zu großen Panel weiter")
         guard case .failed(let reason) = manager.state("a") else { return }
         XCTAssertEqual(reason, String(localized: "Panel zu groß (\(2001) Knoten, höchstens \(PanelValidation.maxNodes))", bundle: Bundle.app))
         XCTAssertTrue(manager.panels.isEmpty)
+    }
+
+    /// A2: Abschalten während des Starts, sofort wieder an. Das späte ready des alten Prozesses darf den neuen Start
+    /// nicht verhindern: am Ende läuft genau ein neuer Prozess, und das Panel kommt von ihm.
+    func testDisableDuringStartThenEnable() async throws {
+        let name = "kadrell-test-\(UUID().uuidString.lowercased())"
+        try make(name, """
+        local n = (kadrell.storage.get("n") or 0) + 1
+        kadrell.storage.set("n", n)
+        local t = os.clock()
+        while os.clock() - t < 0.4 do end
+        kadrell.on("app.ready", function() kadrell.panel.set({ title = "run " .. n, children = {} }) end)
+        """)
+        manager.emit("app.ready", .object([:]))
+        manager.setEnabled(name, true)
+        let launched = await until(3) { self.helpers(in: self.catalog) == 1 }
+        XCTAssertTrue(launched)
+        XCTAssertEqual(manager.state(name), .starting)
+        manager.setEnabled(name, false)
+        // Hauptthread blockieren: das ready des alten Prozesses liegt danach schon in der Main-Queue, vor dem neuen Start.
+        usleep(1_000_000)
+        manager.setEnabled(name, true)
+        let running = await until(5) { self.manager.panels.first?.tree.title == "run 2" && self.helpers(in: self.catalog) == 1 }
+        XCTAssertTrue(running, "state \(manager.state(name)), panels \(manager.panels.map(\.tree.title)), helpers \(helpers(in: catalog))")
+        XCTAssertEqual(manager.state(name), .running)
+    }
+
+    /// A2: ein kadrell.run, das nach dem Abschalten noch ankommt, wird nicht mehr ausgeführt.
+    func testRunAfterDisableIsNotExecuted() async throws {
+        try make("a", """
+        kadrell.on("app.ready", function()
+            local t = os.clock()
+            while os.clock() - t < 0.4 do end
+            kadrell.run("late")
+        end)
+        """)
+        manager.setEnabled("a", true)
+        manager.emit("app.ready", .object([:]))
+        await until(3) { self.manager.state("a") == .running }
+        manager.setEnabled("a", false)
+        let gone = await until(4) { self.helpers(in: self.catalog) == 0 }
+        XCTAssertTrue(gone)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertFalse(calls.contains(["late"]), "\(calls)")
+    }
+
+    /// Spec: session.focus auch beim Start. Eine später eingeschaltete Extension erfährt die fokussierte Session.
+    func testLateStarterGetsCurrentFocus() async throws {
+        try make("a", #"kadrell.on("session.focus", function(d) kadrell.log("focus " .. d.session.key) end)"#)
+        manager.emit("app.ready", .object([:]))
+        manager.emit("session.focus", .object(["session": .object(["key": .string("s1")])]))
+        manager.setEnabled("a", true)
+        let got = await until(3) { self.logContains("a", "focus s1") }
+        XCTAssertTrue(got, "\(manager.log("a"))")
+    }
+
+    /// FSEvents: der Katalog verschwindet und entsteht zweimal hintereinander neu, der Watcher sieht jedes Mal den neuen.
+    func testCatalogDeletedAndRecreatedTwice() async throws {
+        let dir = try make("a", "kadrell.log('v1')")
+        for round in 1...2 {
+            try FileManager.default.removeItem(at: catalog)
+            let empty = await until(2) { self.manager.found.isEmpty }
+            XCTAssertTrue(empty, "Runde \(round): Löschen nicht gesehen")
+            let fresh = try ExtFixture.make(name: "a", initLua: "kadrell.log('v\(round + 1)')")
+            try FileManager.default.moveItem(at: fresh.deletingLastPathComponent(), to: catalog)
+            let seen = await until(2) { self.manager.found.map(\.name) == ["a"] }
+            XCTAssertTrue(seen, "Runde \(round): Neuanlage nicht gesehen")
+        }
+        manager.setEnabled("a", true)
+        await until(3) { self.manager.state("a") == .running }
+        try Data("kadrell.log('changed')".utf8).write(to: dir.appendingPathComponent("init.lua"))
+        let reloaded = await until(2) { self.logContains("a", "changed") }
+        XCTAssertTrue(reloaded, "\(manager.log("a"))")
     }
 
     /// Das Quick-start-Beispiel von https://kadrell.malura.de/extensions, Byte für Byte wie auf der Seite.

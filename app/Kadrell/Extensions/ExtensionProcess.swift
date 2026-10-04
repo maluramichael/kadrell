@@ -115,6 +115,14 @@ final class ExtensionProcess {
                   after(.seconds(2)) { [weak self] in self?.signal(SIGKILL) }]
     }
 
+    /// Sofort SIGKILL ohne `shutdown`, etwa bei einem zu großen Panel. Das Ende kommt wie nach `stop()` über `onExit`.
+    func kill() {
+        guard killed == nil, !finished else { return }
+        stopping = true
+        cancelTimers()
+        signal(SIGKILL)
+    }
+
     // MARK: Überwachung
 
     private func after(_ delay: Duration, repeating: Bool = false, _ body: @escaping @MainActor () -> Void) -> Task<Void, Never> {

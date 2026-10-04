@@ -44,6 +44,8 @@ final class ExtensionManager {
     private var stamps: [String: [String: Date]] = [:]
     /// `app.ready` ist schon gelaufen: jeder später gestartete Prozess bekommt es direkt nach `hello`.
     private var appReady = false
+    /// Letztes `session.focus`: ein später gestarteter Prozess bekommt es nach `app.ready`.
+    private var focus: JSONValue?
 
     init(environment: [String: String], control: @escaping ([String]) async -> ControlResponse,
          sessions: @escaping () -> [JSONValue], catalogDir: URL = ExtensionCatalog.dir) {
@@ -78,6 +80,7 @@ final class ExtensionManager {
 
     func emit(_ event: String, _ data: JSONValue) {
         if event == "app.ready" { appReady = true }
+        if event == "session.focus" { focus = data }
         for (name, p) in procs where isLive(p, name) { p.send(.event(name: event, data: data)) }
     }
 
@@ -202,14 +205,16 @@ final class ExtensionManager {
             procs[name] = nil
             return feed(name, .exited(expected: false, reason: error.localizedDescription))
         }
-        if appReady { p.send(.event(name: "app.ready", data: .object([:]))) }
+        guard appReady else { return }
+        p.send(.event(name: "app.ready", data: .object([:])))
+        if let focus { p.send(.event(name: "session.focus", data: focus)) }
     }
 
-    /// Den aktuellen Prozess ablösen: er stoppt sanft, seine Meldungen zählen nicht mehr.
-    private func retire(_ name: String) {
+    /// Den aktuellen Prozess ablösen: er stoppt sanft (`hard`: sofort SIGKILL), seine Meldungen zählen nicht mehr.
+    private func retire(_ name: String, hard: Bool = false) {
         guard let p = procs.removeValue(forKey: name) else { return }
         retired.append(p)
-        p.stop()
+        if hard { p.kill() } else { p.stop() }
     }
 
     private func exited(_ p: ExtensionProcess, _ name: String, expected: Bool, reason: String) {
@@ -228,21 +233,23 @@ final class ExtensionManager {
 
     // MARK: Nachrichten
 
+    /// Ein Prozess, der gerade stoppt, ist nicht mehr live: sein spätes ready darf keinen neuen Start überholen.
     private func isLive(_ p: ExtensionProcess, _ name: String) -> Bool {
-        procs[name] === p && (state(name) == .starting || state(name) == .running)
+        procs[name] === p && !p.isStopping && (state(name) == .starting || state(name) == .running)
     }
 
     private func received(_ m: ExtensionMessage, from p: ExtensionProcess, _ name: String) {
         switch m {
-        case .ready: if procs[name] === p { feed(name, .ready) }
+        case .ready: if isLive(p, name) { feed(name, .ready) }
         case .pong: break
         case .log(let level, let text):
             append(name, level == "info" ? text : "[\(level)] \(text)")
             onChange()
         case .run(let id, let argv):
-            // Jede Anfrage bekommt eine Antwort, sonst wartet die Coroutine in Lua ewig.
+            // Jede Anfrage bekommt eine Antwort, sonst wartet die Coroutine in Lua ewig. Ein stoppender Prozess führt nichts mehr aus.
+            let live = isLive(p, name)
             Task {
-                let r = await control(argv)
+                let r = live ? await control(argv) : .fail("extension is stopping")
                 p.send(.result(id: id, status: r.status, stdout: r.stdout, stderr: r.stderr))
             }
         case .panel(let v): if isLive(p, name) { setPanel(v, name) }
@@ -262,8 +269,8 @@ final class ExtensionManager {
             trees[name] = result.0
             onChange()
         case .failure(.tooLarge(let count)):
-            // Wie ein Absturz: Prozess weg, Neustart nach Backoff.
-            retire(name)
+            // Wie ein Absturz: Prozess sofort weg, Neustart nach Backoff.
+            retire(name, hard: true)
             let reason = String(localized: "Panel zu groß (\(count) Knoten, höchstens \(PanelValidation.maxNodes))", bundle: Bundle.app)
             feed(name, .exited(expected: false, reason: reason))
         }
