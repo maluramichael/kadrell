@@ -77,6 +77,18 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     var zoomed = false
     var onToggleZoom: (() -> Void)?
 
+    /// Statusanzeigen der Extensions, rechts neben den Nutzungswerten. Der Manager meldet bis zu 50-mal pro Sekunde;
+    /// gezeichnet wird nur bei geändertem Stand. Passt nicht alles in die Leiste, fallen die linken Einträge weg.
+    var extensionItems: [(name: String, text: String, color: ThemeColor?, action: String?)] = [] {
+        didSet { if !Self.sameItems(extensionItems, oldValue) { needsDisplay = true } }
+    }
+    static func sameItems(_ a: [(name: String, text: String, color: ThemeColor?, action: String?)],
+                          _ b: [(name: String, text: String, color: ThemeColor?, action: String?)]) -> Bool {
+        a.count == b.count && zip(a, b).allSatisfy { $0 == $1 }
+    }
+    /// Klick auf einen Eintrag mit Aktion: Name der Extension und Aktions-ID.
+    var onExtensionAction: ((_ name: String, _ id: String) -> Void)?
+
     /// Trefferflächen mit Label und Wert, dieselbe Liste liefert die Knöpfe für VoiceOver.
     private var hitRects: [HitRegion] = []
     /// Tooltip-Text nur für Module ohne eigenen Klick (Nutzungszahlen, Kürzel „läuft x/y“); die anklickbaren
@@ -169,6 +181,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         module(b, &rx, [NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         drawNotices(b, &rx)
         drawUsage(b, &rx)
+        drawExtensionItems(b, &rx, limit: leftEnd + 16)
         drawCrumb(b, from: leftEnd, to: rx)
     }
 
@@ -403,6 +416,20 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             if let plan, pct != nil { value.append(NSAttributedString(string: "\(plan)%/", attributes: fMuted)) }
             value.append(pctString(pct, from: from, plan: plan))
             module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), value], tip: usageTip(label, pct, plan) + resetTip(reset))
+        }
+    }
+
+    /// Einträge der Extensions, der erste ganz links. Von rechts her gezeichnet; was links von `limit` (Ende der linken
+    /// Seite plus Rand fürs Breadcrumb) nicht mehr passt, bleibt weg, die vorhandenen Module rechts bleiben unberührt.
+    private func drawExtensionItems(_ b: CGRect, _ rx: inout CGFloat, limit: CGFloat) {
+        for item in extensionItems.reversed() {
+            let text = NSAttributedString(string: item.text, attributes: Theme.attrs(11, item.color?.nsColor ?? Theme.fg))
+            guard rx - (text.size().width + 20) >= limit else { return }
+            if let action = item.action {
+                module(b, &rx, [text], item.name, value: item.text) { [weak self] in self?.onExtensionAction?(item.name, action) }
+            } else {
+                module(b, &rx, [text], tip: "\(item.name): \(item.text)")
+            }
         }
     }
 

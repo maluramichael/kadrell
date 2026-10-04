@@ -18,8 +18,9 @@ extension AppDelegate {
     /// Feuert bis zu 50-mal pro Sekunde (jede Logzeile). Jedes Fenster vergleicht selbst und fasst die Panels nur an,
     /// wenn sich etwas geändert hat; neu gezeichnet wird über `needsDisplay`, also höchstens einmal pro Runloop-Durchlauf.
     func extensionsChanged() {
-        guard let panels = extensions?.panels else { return }
-        for c in windows { c.updateExtensionPanels(panels) }
+        guard let extensions else { return }
+        let panels = extensions.panels, items = extensions.statusItems
+        for c in windows { c.updateExtensionPanels(panels); c.bar.extensionItems = items }
     }
 
     /// ⌘3 und ⌘⌥B im Fenster `c`; false bei allen anderen Kürzeln. ⌘3 ohne Panels: nur ein Ton.
@@ -32,10 +33,12 @@ extension AppDelegate {
         return true
     }
 
-    /// Aktionen aus der rechten Sidebar gehen als `ui.action` an ihre Extension; ein neues Fenster zeigt gleich die Panels.
+    /// Aktionen aus der rechten Sidebar und der Statusleiste gehen als `ui.action` an ihre Extension; ein neues Fenster zeigt gleich die Panels.
     func wireExtensionPanel(_ c: MainWindowController) {
         c.extensionPanel.onAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
+        c.bar.onExtensionAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
         c.updateExtensionPanels(extensions?.panels ?? [])
+        c.bar.extensionItems = extensions?.statusItems ?? []
     }
 
     /// Session als Event-Daten; `state` wie in `kadrell ls --json`.

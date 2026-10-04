@@ -142,6 +142,92 @@ final class ExtensionPanelTests: XCTestCase {
         XCTAssertTrue(wc.window.firstResponder === wc.workspace)
     }
 
+    // MARK: Statusleiste
+
+    private typealias StatusItem = (name: String, text: String, color: ThemeColor?, action: String?)
+
+    private func barWindow(_ bar: StatusBarView, width: CGFloat) -> NSWindow {
+        let w = NSWindow(contentRect: NSRect(x: 100, y: 100, width: width, height: 30), styleMask: [.borderless], backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        bar.frame = NSRect(x: 0, y: 0, width: width, height: 30)
+        w.contentView = bar
+        return w
+    }
+
+    private func barElements(_ bar: StatusBarView) -> [A11yElement] { (bar.accessibilityChildren() ?? []).compactMap { $0 as? A11yElement } }
+
+    private func click(_ bar: StatusBarView, _ w: NSWindow, on e: A11yElement) {
+        let r = e.accessibilityFrame()
+        let p = w.convertPoint(fromScreen: CGPoint(x: r.midX, y: r.midY))
+        bar.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: p, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber,
+                                               context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+    }
+
+    func testStatusItemClickSendsAction() throws {
+        let bar = StatusBarView(frame: .zero)
+        let w = barWindow(bar, width: 900)
+        defer { w.close() }
+        var got: [String] = []
+        bar.onExtensionAction = { got += [$0, $1] }
+        bar.extensionItems = [("ddev", "ddev 3 up", .ok, "ddev:list"), ("info", "nur Text", nil, nil)]
+        bar.display()
+        let labels = barElements(bar).compactMap { $0.accessibilityLabel() }
+        XCTAssertTrue(labels.contains("ddev"))
+        XCTAssertFalse(labels.contains("info"), "ohne Aktion kein Knopf")
+        click(bar, w, on: try XCTUnwrap(barElements(bar).first { $0.accessibilityLabel() == "ddev" }))
+        XCTAssertEqual(got, ["ddev", "ddev:list"])
+    }
+
+    func testNarrowBarDropsLeftmostItemsAndKeepsModules() throws {
+        let items: [StatusItem] = (1...3).map { ("e\($0)", "Eintrag Nummer \($0)", .ok, "a:\($0)") }
+        func labels(width: CGFloat) -> (ext: [String], rest: [String], frames: [NSRect]) {
+            let bar = StatusBarView(frame: .zero)
+            let w = barWindow(bar, width: width)
+            defer { w.close() }
+            bar.waitingCount = 2
+            bar.extensionItems = items
+            bar.display()
+            let all = barElements(bar)
+            let names = all.compactMap { $0.accessibilityLabel() }
+            return (names.filter { $0.hasPrefix("e") && $0.count == 2 }, names.filter { !($0.hasPrefix("e") && $0.count == 2) }, all.map { $0.accessibilityFrame() })
+        }
+        let wide = labels(width: 1400)
+        XCTAssertEqual(wide.ext.sorted(), ["e1", "e2", "e3"])
+        let narrow = labels(width: 1000)
+        XCTAssertEqual(narrow.rest, wide.rest, "vorhandene Module bleiben vollständig")
+        XCTAssertEqual(narrow.ext.sorted(), ["e2", "e3"])
+        for (i, a) in narrow.frames.enumerated() { for b in narrow.frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "\(a) überlappt \(b)") } }
+    }
+
+    /// Der Manager meldet bis zu 50-mal pro Sekunde; `needsDisplay` ist ohne sichtbares Fenster nicht lesbar, daher der Vergleich selbst.
+    func testUnchangedItemsDoNotRedraw() {
+        let items: [StatusItem] = [("ddev", "ddev 3 up", .ok, nil)]
+        XCTAssertTrue(StatusBarView.sameItems(items, [("ddev", "ddev 3 up", .ok, nil)]))
+        XCTAssertFalse(StatusBarView.sameItems(items, [("ddev", "ddev 4 up", .ok, nil)]))
+        XCTAssertFalse(StatusBarView.sameItems(items, [("ddev", "ddev 3 up", .warn, nil)]))
+        XCTAssertFalse(StatusBarView.sameItems(items, []))
+    }
+
+    /// Mit `KADRELL_RENDER_BAR_OUT=<pfad>.png` entsteht ein Bild der Leiste mit zwei Einträgen.
+    func testRenderStatusBar() throws {
+        let bar = StatusBarView(frame: .zero)
+        let w = barWindow(bar, width: 1200)
+        defer { w.close() }
+        bar.crumb = (group: "kadrell", session: "Statusleiste")
+        bar.counts = StatusCounts(running: 2, waiting: 1, idle: 3, error: 0, detached: 1)
+        bar.extensionItems = [("ddev", "ddev 3 up", .ok, "ddev:list"), ("jira", "2 Tickets", .warn, nil)]
+        bar.display()
+        let rep = try XCTUnwrap(bar.bitmapImageRepForCachingDisplay(in: bar.bounds))
+        bar.cacheDisplay(in: bar.bounds, to: rep)
+        guard let out = ProcessInfo.processInfo.environment["KADRELL_RENDER_BAR_OUT"] else { return }
+        try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: out))
+    }
+
+    func testWarnIsTheYellowDotColorEverywhere() {
+        XCTAssertEqual(ThemeColor.warn.nsColor, Theme.waiting)
+        XCTAssertEqual(ThemeColor.err.nsColor, Theme.error)
+    }
+
     func testRenderSmoke() throws {
         let colors: [ThemeColor] = [.accent, .muted, .ok, .warn, .err]
         let nodes: [PanelNode] = [

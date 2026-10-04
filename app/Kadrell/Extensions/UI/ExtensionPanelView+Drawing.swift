@@ -1,19 +1,22 @@
 import AppKit
 
-/// Zeichnen der rechten Sidebar, im Stil des Baums: gleiche Schriften, Chevrons, Hervorhebung und Tastatur-Rahmen.
-extension ExtensionPanelView {
-    /// Theme-Name einer Extension auf die Farben des Schemas, wie im Baum: Punkte in der Statusfarbe, Text bei `warn`
-    /// in der lesbaren Variante (`waitingText`), sonst wäre Gelb auf hellem Grund unlesbar.
-    static func color(_ c: ThemeColor, text: Bool = true) -> NSColor {
-        switch c {
+/// Theme-Name einer Extension auf die Farben des Schemas, wie im Baum: Punkte in der Statusfarbe. `warn` bleibt auch
+/// als Text das Gelb des Status-Punkts (`waiting`), mit `waitingText` wäre er von `accent` nicht zu unterscheiden.
+/// Gilt für rechte Sidebar und Statusleiste.
+extension ThemeColor {
+    var nsColor: NSColor {
+        switch self {
         case .accent: Theme.running
         case .muted: Theme.muted
         case .ok: Theme.idle
-        case .warn: text ? Theme.waitingText : Theme.waiting
+        case .warn: Theme.waiting
         case .err: Theme.error
         }
     }
+}
 
+/// Zeichnen der rechten Sidebar, im Stil des Baums: gleiche Schriften, Chevrons, Hervorhebung und Tastatur-Rahmen.
+extension ExtensionPanelView {
     override func draw(_ dirty: NSRect) {
         Theme.panel.withAlphaComponent(CGFloat(Settings.tileOpacity)).setFill()
         dirty.fill()
@@ -43,11 +46,11 @@ extension ExtensionPanelView {
             Icons.chevron(in: CGRect(x: x - 6, y: r.midY - 8, width: 16, height: 16), open: isOpen(l), color: Theme.muted)
             text(title, Theme.attrs(11, Theme.running, bold: true), from: x + 14, to: r.maxX - 10, in: r)
         case .item(let title, let detail, let color, _):
-            if let color { Self.color(color, text: false).setFill(); NSBezierPath(ovalIn: CGRect(x: x, y: r.midY - 4, width: 8, height: 8)).fill() }
+            if let color { color.nsColor.setFill(); NSBezierPath(ovalIn: CGRect(x: x, y: r.midY - 4, width: 8, height: 8)).fill() }
             let right = drawDetail(detail, in: r)
             text(title, Theme.attrs(12, hot ? Theme.fg : Theme.sub), from: x + 14, to: right, in: r)
         case .text(let s, let color):
-            text(s, Theme.attrs(11, color.map { Self.color($0) } ?? Theme.muted), from: x, to: r.maxX - 10, in: r)
+            text(s, Theme.attrs(11, color?.nsColor ?? Theme.muted), from: x, to: r.maxX - 10, in: r)
         case .button(let label, _):
             drawButton(label, in: CGRect(x: x, y: r.minY + 4, width: max(0, r.maxX - 10 - x), height: r.height - 8), hot: hot)
         }
