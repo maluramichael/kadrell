@@ -56,9 +56,15 @@ final class FolderWatcher {
     private func fired(rootChanged: Bool) {
         guard stream != nil else { return }
         // Ein Stream auf einen damals fehlenden Ordner meldet nach dessen Entstehen nur das, nichts darin: neu aufsetzen.
+        // Erst nach dem Callback: den eigenen Stream darin freizugeben, zieht FSEvents den Boden unter den Füßen weg.
         if rootChanged {
-            close()
-            open()
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.stream != nil else { return }
+                    self.close()
+                    self.open()
+                }
+            }
         }
         onChange()
     }
