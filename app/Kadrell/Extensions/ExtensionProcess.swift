@@ -11,7 +11,7 @@ final class ExtensionProcess {
     nonisolated static let maxLine = 1 << 20
     static let maxInputBuffer = 1 << 20
     nonisolated static let maxText = 500
-    nonisolated static let maxStderrLinesPerSecond = 50
+    nonisolated static let maxLinesPerSecond = 50
 
     /// Gründe für einen harten Kill.
     enum Kill: Sendable {
@@ -246,22 +246,26 @@ final class ExtensionProcess {
         var protocolLines = ProtocolLines(), errLines = StderrLines()
         var buf = [UInt8](repeating: 0, count: 1 << 16)
         while fds.contains(where: { $0.fd >= 0 }) {
-            if poll(&fds, nfds_t(fds.count), errLines.timeout(Date())) < 0 {
+            // Steht eine Sammelzeile aus, nur bis zum Fensterende warten, damit sie auch ohne weitere Ausgabe rausgeht.
+            let due = [protocolLines.logs.due, errLines.throttle.due].compactMap { $0 }.min()
+            let wait = due.map { Int32(max(0, $0.timeIntervalSinceNow * 1000).rounded(.up)) } ?? -1
+            if poll(&fds, nfds_t(fds.count), wait) < 0 {
                 if errno == EINTR { continue }
                 break
             }
-            errLines.tick(Date()).forEach(post)
+            let now = Date()
+            (protocolLines.logs.tick(now) + errLines.throttle.tick(now)).forEach(post)
             // stderr zuerst: was der Helper vor seinem Ende dorthin schrieb, kommt vor eof an.
             for i in fds.indices where fds[i].fd >= 0 && fds[i].revents != 0 {
                 let n = read(fds[i].fd, &buf, buf.count)
                 if n < 0 && errno == EINTR { continue }
                 if n <= 0 {
                     fds[i].fd = -1
-                    (i == 1 ? [.eof] : errLines.finish()).forEach(post)
+                    (i == 1 ? protocolLines.logs.flush() + [.eof] : errLines.finish()).forEach(post)
                     continue
                 }
                 let chunk = Data(buf[0..<n])
-                (i == 0 ? errLines.feed(chunk, Date()) : protocolLines.feed(chunk)).forEach(post)
+                (i == 0 ? errLines.feed(chunk, now) : protocolLines.feed(chunk)).forEach(post)
             }
         }
     }
@@ -271,9 +275,46 @@ final class ExtensionProcess {
     }
 }
 
-/// Zerlegt stdout in Zeilen, zählt sie gegen die Flutgrenze und dekodiert sie. Nach einem Verstoß wird alles verworfen,
-/// der Main-Thread killt dann den Prozess.
+/// Höchstens 50 Einträge pro Sekunde (festes Fenster), der Rest wird gezählt und einmal pro Sekunde als Sammelzeile
+/// gemeldet. Für Log-Zeilen und stderr: kein Kill, aber eine Extension, die viel ausgibt, legt die App nicht lahm.
+private struct Throttle {
+    private var windowStart = Date.distantPast
+    private var sent = 0
+    private var skipped = 0
+
+    /// Wann die ausstehende Sammelzeile fällig ist, nil ohne übersprungene Einträge.
+    var due: Date? { skipped > 0 ? windowStart.addingTimeInterval(1) : nil }
+
+    /// Darf der Eintrag durch? Eine fällige Sammelzeile des abgelaufenen Fensters landet vorher in `events`.
+    mutating func admit(_ now: Date, _ events: inout [ExtensionProcess.Event]) -> Bool {
+        events += tick(now)
+        guard sent < ExtensionProcess.maxLinesPerSecond else {
+            skipped += 1
+            return false
+        }
+        sent += 1
+        return true
+    }
+
+    /// Nach Ablauf des Fensters: neues Fenster, ausstehende Sammelzeile raus.
+    mutating func tick(_ now: Date) -> [ExtensionProcess.Event] {
+        guard now.timeIntervalSince(windowStart) >= 1 else { return [] }
+        windowStart = now
+        sent = 0
+        return flush()
+    }
+
+    /// Ausstehende Sammelzeile sofort, etwa bei EOF.
+    mutating func flush() -> [ExtensionProcess.Event] {
+        defer { skipped = 0 }
+        return skipped > 0 ? [.skipped(skipped)] : []
+    }
+}
+
+/// Zerlegt stdout in Zeilen und dekodiert sie. Log-Nachrichten laufen durch die Drossel, alle anderen zählen gegen
+/// die Flutgrenze. Nach einem Verstoß wird alles verworfen, der Main-Thread killt dann den Prozess.
 private struct ProtocolLines {
+    var logs = Throttle()
     private var pending = Data()
     private var recent: [Date] = []
     private var dead = false
@@ -286,19 +327,24 @@ private struct ProtocolLines {
             // Erst herausschneiden: ein Verstoß in take leert pending.
             let line = pending[pending.startIndex..<nl]
             pending.removeSubrange(pending.startIndex...nl)
-            events.append(take(line))
+            take(line, &events)
         }
         if !dead && pending.count > ExtensionProcess.maxLine { events.append(violation(.longLine)) }
         return events
     }
 
-    private mutating func take(_ line: Data) -> ExtensionProcess.Event {
-        if line.count > ExtensionProcess.maxLine { return violation(.longLine) }
+    private mutating func take(_ line: Data, _ events: inout [ExtensionProcess.Event]) {
+        if line.count > ExtensionProcess.maxLine { return events.append(violation(.longLine)) }
         let now = Date()
+        let message = ExtensionMessage.decode(line)
+        if let message, case .log = message {
+            if logs.admit(now, &events) { events.append(.message(message)) }
+            return
+        }
         recent.removeAll { now.timeIntervalSince($0) >= 1 }
         recent.append(now)
-        if recent.count > ExtensionProcess.maxMessagesPerSecond { return violation(.flood) }
-        return ExtensionMessage.decode(line).map { .message($0) } ?? .garbage
+        if recent.count > ExtensionProcess.maxMessagesPerSecond { return events.append(violation(.flood)) }
+        events.append(message.map { .message($0) } ?? .garbage)
     }
 
     private mutating func violation(_ why: ExtensionProcess.Kill) -> ExtensionProcess.Event {
@@ -308,14 +354,10 @@ private struct ProtocolLines {
     }
 }
 
-/// stderr in Zeilen, auf `maxText` Zeichen gekürzt und gedrosselt: höchstens 50 Zeilen pro Sekunde gehen an den
-/// Main-Thread, der Rest wird gezählt und einmal pro Sekunde als Sammelzeile gemeldet. Kein Kill, aber eine Extension,
-/// die stderr flutet, legt die App nicht lahm.
+/// stderr in Zeilen, auf `maxText` Zeichen gekürzt und gedrosselt.
 private struct StderrLines {
+    var throttle = Throttle()
     private var pending = Data()
-    private var windowStart = Date.distantPast
-    private var sent = 0
-    private var skipped = 0
 
     mutating func feed(_ chunk: Data, _ now: Date) -> [ExtensionProcess.Event] {
         pending.append(chunk)
@@ -334,35 +376,16 @@ private struct StderrLines {
 
     /// Bei EOF: Rest ohne Zeilenende und ausstehende Sammelzeile sofort.
     mutating func finish() -> [ExtensionProcess.Event] {
-        var events = pending.isEmpty ? [] : admit([ExtensionProcess.clip(pending)], Date())
+        let rest = pending.isEmpty ? [] : [ExtensionProcess.clip(pending)]
         pending = Data()
-        if skipped > 0 { events.append(.skipped(skipped)) }
-        skipped = 0
-        return events
-    }
-
-    /// Wartezeit für poll in ms: bis zum Fensterende, wenn eine Sammelzeile aussteht, sonst unbegrenzt.
-    func timeout(_ now: Date) -> Int32 {
-        guard skipped > 0 else { return -1 }
-        return Int32(max(0, (1 - now.timeIntervalSince(windowStart)) * 1000).rounded(.up))
-    }
-
-    /// Nach Ablauf des Fensters: neues Fenster, ausstehende Sammelzeile raus.
-    mutating func tick(_ now: Date) -> [ExtensionProcess.Event] {
-        guard now.timeIntervalSince(windowStart) >= 1 else { return [] }
-        let n = skipped
-        windowStart = now
-        sent = 0
-        skipped = 0
-        return n > 0 ? [.skipped(n)] : []
+        return admit(rest, Date()) + throttle.flush()
     }
 
     private mutating func admit(_ lines: [String], _ now: Date) -> [ExtensionProcess.Event] {
-        var events = tick(now)
-        let allowed = min(lines.count, ExtensionProcess.maxStderrLinesPerSecond - sent)
-        sent += allowed
-        skipped += lines.count - allowed
-        if allowed > 0 { events.append(.stderr(Array(lines.prefix(allowed)))) }
+        var events: [ExtensionProcess.Event] = []
+        var allowed: [String] = []
+        for line in lines where throttle.admit(now, &events) { allowed.append(line) }
+        if !allowed.isEmpty { events.append(.stderr(allowed)) }
         return events
     }
 }

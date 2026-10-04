@@ -61,6 +61,15 @@ final class ExtensionProcessTests: XCTestCase {
         return try launch(dir, executable: script.path)
     }
 
+    /// Sammelzeile „N Zeilen übersprungen“. Die genaue Zahl hängt vom Takt ab, geprüft wird das Muster
+    /// (Zahl mit Tausendertrennern).
+    private func isSkippedSummary(_ s: String) -> Bool {
+        let parts = String(localized: "\(-1) Zeilen übersprungen", bundle: Bundle.app).components(separatedBy: "-1")
+        let number = s.dropFirst(parts[0].count).dropLast(parts[1].count)
+        return s.hasPrefix(parts[0]) && s.hasSuffix(parts[1]) && number.first?.isNumber == true
+            && number.allSatisfy { $0.isNumber || $0.isPunctuation || $0.isWhitespace }
+    }
+
     /// Startet die Lua-Extension, wartet auf `ready` und schickt `app.ready`.
     private func launchReady(_ initLua: String) async throws -> ExtensionProcess {
         let p = try launchLua(initLua)
@@ -94,11 +103,24 @@ final class ExtensionProcessTests: XCTestCase {
     }
 
     func testFloodIsKilled() async throws {
-        _ = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 1000 do kadrell.log(i) end end)"#)
+        _ = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 1000 do kadrell.status.set{text = tostring(i)} end end)"#)
         await until(3) { !self.exits.isEmpty }
         XCTAssertEqual(exits.first?.expected, false)
         XCTAssertEqual(exits.first?.reason, ExtensionProcess.Kill.flood.reason)
         XCTAssertLessThanOrEqual(messages.count, 51, "nach der Grenze kommt nichts mehr durch")
+    }
+
+    /// Log-Zeilen zählen nicht zur Flutgrenze, sie werden gedrosselt wie stderr: höchstens 50 pro Sekunde plus Sammelzeile.
+    func testLogFloodIsThrottledNotKilled() async throws {
+        let p = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 1000 do kadrell.log(i) end end)"#)
+        try await Task.sleep(for: .milliseconds(1500))
+        let logs = messages.filter { if case .log = $0 { true } else { false } }
+        XCTAssertLessThanOrEqual(logs.count, 50)
+        XCTAssertTrue(stderr.contains(where: isSkippedSummary), "\(stderr)")
+        XCTAssertEqual(exits.count, 0)
+        p.send(.ping(99))
+        let pong = await until(3) { self.messages.contains(.pong(99)) }
+        XCTAssertTrue(pong)
     }
 
     func testLogTextIsClipped() async throws {
@@ -123,16 +145,9 @@ final class ExtensionProcessTests: XCTestCase {
     /// stderr ist gedrosselt: höchstens 50 Zeilen pro Sekunde, der Rest als Sammelzeile, kein Kill.
     func testStderrFloodIsThrottledNotKilled() async throws {
         _ = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 100000 do io.write(i, "\n") end end)"#)
-        // Die genaue Zahl hängt vom Takt ab, geprüft wird das Muster der Sammelzeile (Zahl mit Tausendertrennern).
-        let parts = String(localized: "\(-1) Zeilen übersprungen", bundle: Bundle.app).components(separatedBy: "-1")
-        func isSummary(_ s: String) -> Bool {
-            let number = s.dropFirst(parts[0].count).dropLast(parts[1].count)
-            return s.hasPrefix(parts[0]) && s.hasSuffix(parts[1]) && number.first?.isNumber == true
-                && number.allSatisfy { $0.isNumber || $0.isPunctuation || $0.isWhitespace }
-        }
         try await Task.sleep(for: .seconds(2))
         XCTAssertLessThan(stderr.count, 200)
-        XCTAssertTrue(stderr.contains(where: isSummary), "\(stderr.suffix(3))")
+        XCTAssertTrue(stderr.contains(where: isSkippedSummary), "\(stderr.suffix(3))")
         XCTAssertEqual(exits.count, 0)
     }
 
