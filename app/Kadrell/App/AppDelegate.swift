@@ -7,7 +7,7 @@ import os
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "app")
     /// Offene Hauptfenster. `current` ist das zuletzt aktive: Menü, Kürzel, Palette, Dialoge und Fernsteuerung wirken dort.
-    private var windows: [MainWindowController] = []
+    private(set) var windows: [MainWindowController] = []
     private var current: MainWindowController!
     private var window: NSWindow! { current?.window }
     private var bar: StatusBarView { current.bar }
@@ -228,7 +228,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windows.removeAll { $0 === c }
         if current === c { current = windows.last }
         c.workspace.close()
-        for k in ["workspace.selected", "workspace.mode", "workspace.auto"] { Profile.defaults.removeObject(forKey: k + MainWindowController.suffix(c.index)) }
+        for k in ["workspace.selected", "workspace.mode", "workspace.auto", "sidebar.width", "rightSidebar.width", "rightSidebar.visible"] {
+            Profile.defaults.removeObject(forKey: k + MainWindowController.suffix(c.index))
+        }
         persistWindows()
         syncSidebar()
     }
@@ -297,6 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onManageAccounts = { [weak self] in self?.menuSettings() }
         bar.onToggleAutoswitch = { [weak self] in Settings.autoswitchEnabled.toggle(); self?.refreshAccountBars() }
         applyAccounts(to: c.bar)
+        wireExtensionPanel(c)
     }
 
     /// Konto-Pille aller Fenster auf den aktuellen Stand bringen.
@@ -922,7 +925,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kürzel der Arbeitsfläche erledigt `WorkspaceView.perform`, hier bleiben die mit Baum, Vorschau oder Dialog.
     private func perform(_ action: HotkeyAction) {
         if action != .previewNext, action != .previewPrev { endPreview(commit: false) }
-        guard !workspace.perform(action) else { return }
+        guard !workspace.perform(action), !performRightSidebar(action, in: current) else { return }
         switch action {
         case .previewNext: stepPreview(1)
         case .previewPrev: stepPreview(-1)
@@ -1238,28 +1241,28 @@ final class ThinSplitView: NSSplitView {
     override var dividerColor: NSColor { Theme.line }
     override var dividerThickness: CGFloat { 1 }
 
-    private var grabRect: CGRect {
-        guard arrangedSubviews.count > 1 else { return .zero }
-        let x = arrangedSubviews[0].frame.maxX
-        return CGRect(x: x - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
+    /// Eine Griffzone je Trenner (Baum | Arbeitsfläche | rechte Sidebar).
+    private var grabRects: [CGRect] {
+        arrangedSubviews.dropLast().map { v in
+            CGRect(x: v.frame.maxX - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
+        }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
-        return grabRect.contains(p) ? self : super.hitTest(point)
+        return grabRects.contains { $0.contains(p) } ? self : super.hitTest(point)
     }
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        let r = grabRect
-        if !r.isEmpty { addCursorRect(r, cursor: .resizeLeftRight) }
+        for r in grabRects { addCursorRect(r, cursor: .resizeLeftRight) }
     }
 
     override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
-        addTrackingArea(NSTrackingArea(rect: grabRect, options: [.mouseMoved, .activeInKeyWindow], owner: self))
+        for r in grabRects { addTrackingArea(NSTrackingArea(rect: r, options: [.mouseMoved, .activeInKeyWindow], owner: self)) }
     }
     override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); updateTrackingAreas() }
 }

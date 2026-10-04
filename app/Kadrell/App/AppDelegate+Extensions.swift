@@ -1,6 +1,6 @@
 import AppKit
 
-/// Lua-Extensions: Start, Steuerbefehle aus `kadrell.run` und Session-Events.
+/// Lua-Extensions: Start, Steuerbefehle aus `kadrell.run`, Session-Events und die rechte Sidebar.
 extension AppDelegate {
     /// Steuerbefehle laufen wie von außen (`caller: nil`), also ohne die Gruppen-Grenze für Sessions.
     func startExtensions(environment: [String: String]) {
@@ -11,7 +11,31 @@ extension AppDelegate {
             return registry.sessions.map(extensionSession)
         })
         extensions = manager
+        manager.onChange = { [weak self] in self?.extensionsChanged() }
         manager.start()
+    }
+
+    /// Feuert bis zu 50-mal pro Sekunde (jede Logzeile). Jedes Fenster vergleicht selbst und fasst die Panels nur an,
+    /// wenn sich etwas geändert hat; neu gezeichnet wird über `needsDisplay`, also höchstens einmal pro Runloop-Durchlauf.
+    func extensionsChanged() {
+        guard let panels = extensions?.panels else { return }
+        for c in windows { c.updateExtensionPanels(panels) }
+    }
+
+    /// ⌘3 und ⌘⌥B im Fenster `c`; false bei allen anderen Kürzeln. ⌘3 ohne Panels: nur ein Ton.
+    func performRightSidebar(_ action: HotkeyAction, in c: MainWindowController) -> Bool {
+        switch action {
+        case .focusRightSidebar: if !c.focusRightSidebar() { NSSound.beep() }
+        case .toggleRightSidebar: c.toggleRightSidebar()
+        default: return false
+        }
+        return true
+    }
+
+    /// Aktionen aus der rechten Sidebar gehen als `ui.action` an ihre Extension; ein neues Fenster zeigt gleich die Panels.
+    func wireExtensionPanel(_ c: MainWindowController) {
+        c.extensionPanel.onAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
+        c.updateExtensionPanels(extensions?.panels ?? [])
     }
 
     /// Session als Event-Daten; `state` wie in `kadrell ls --json`.

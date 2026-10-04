@@ -19,6 +19,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case focus1, focus2, focus3, focus4, focus5, focus6, focus7, focus8, focus9
     case zoom, nextLayout, closeFocused, openEditor, renameSession, syncInput
     case focusSidebar, focusWorkspace, cycleSort, toggleGrouping
+    case focusRightSidebar, toggleRightSidebar
 
     /// 0-basiert für focus1…focus9.
     var tileIndex: Int? { rawValue.hasPrefix("focus") ? Int(rawValue.dropFirst(5)).map { $0 - 1 } : nil }
@@ -50,6 +51,8 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .nextLayout: return String(localized: "Layout wechseln: Grid → Haupt + Spalte → Spirale → Frei → Scrollen → Stack", bundle: Bundle.app)
         case .focusSidebar: return String(localized: "Baum: Tastatur hierher, ↑↓ wählt Session", bundle: Bundle.app)
         case .focusWorkspace: return String(localized: "Arbeitsfläche: Tastatur an Claude", bundle: Bundle.app)
+        case .focusRightSidebar: return String(localized: "Rechte Sidebar: Tastatur hierher, ↑↓ wählt Eintrag, ←→ Tab", bundle: Bundle.app)
+        case .toggleRightSidebar: return String(localized: "Rechte Sidebar ein/aus", bundle: Bundle.app)
         case .openEditor: return String(localized: "Ordner im externen Editor öffnen", bundle: Bundle.app)
         case .renameSession: return String(localized: "Session umbenennen", bundle: Bundle.app)
         case .cycleSort: return String(localized: "Baum sortieren: aus → A–Z → Status", bundle: Bundle.app)
@@ -75,6 +78,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .renameSession: return String(localized: "Fokus-Session umbenennen, auch im Baum · Claude überschreibt den Namen danach nicht mehr", bundle: Bundle.app)
         case .syncInput: return String(localized: "Sync: Tippen und ⌘V gehen an alle offenen Kacheln gleichzeitig · Badge „SYNC“", bundle: Bundle.app)
         case .toggleGrouping: return String(localized: "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge", bundle: Bundle.app)
+        case .focusRightSidebar: return String(localized: "Rechte Sidebar der Extensions: ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ alle Aktionen, Esc zurück", bundle: Bundle.app)
         default: return title
         }
     }
@@ -106,6 +110,8 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .nextLayout: return Hotkey(.command, "l")
         case .focusSidebar: return Hotkey(.command, "1")
         case .focusWorkspace: return Hotkey(.command, "2")
+        case .focusRightSidebar: return Hotkey(.command, "3")
+        case .toggleRightSidebar: return Hotkey([.command, .option], "b")
         case .openEditor: return Hotkey(.option, "e")
         case .renameSession: return Hotkey([], "F2")
         case .cycleSort: return Hotkey(.option, "o")

@@ -7921,6 +7921,70 @@
           }
         }
       }
+    },
+    "Rechte Sidebar: Tastatur hierher, ↑↓ wählt Eintrag, ←→ Tab": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte Sidebar: Tastatur hierher, ↑↓ wählt Eintrag, ←→ Tab"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right sidebar: keyboard here, ↑↓ picks an entry, ←→ a tab"
+          }
+        }
+      }
+    },
+    "Rechte Sidebar ein/aus": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte Sidebar ein/aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggle Right Sidebar"
+          }
+        }
+      }
+    },
+    "Rechte Sidebar der Extensions: ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ alle Aktionen, Esc zurück": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte Sidebar der Extensions: ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ alle Aktionen, Esc zurück"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions in the right sidebar: ↑↓ entry, ←→ tab, ⏎ first action, ⌥⏎ all actions, Esc back"
+          }
+        }
+      }
+    },
+    "Extensions: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

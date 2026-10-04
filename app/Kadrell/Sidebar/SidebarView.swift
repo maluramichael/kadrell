@@ -1,9 +1,30 @@
 import AppKit
 
+/// Dokument eines NSScrollView, das der Breite des Clip-Views folgt und ihn mindestens ausfüllt. Im NSScrollView passt
+/// niemand die Breite des Dokuments an, sonst wandern Icons und Laufzeiten rechts aus dem sichtbaren Bereich.
+/// Die Höhe setzt die Unterklasse selbst. Baum links und rechte Sidebar.
+class ClipWidthView: NSView {
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        guard let clip = superview as? NSClipView else { return }
+        clip.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.fitWidth() }
+        }
+        fitWidth()
+    }
+
+    private func fitWidth() {
+        guard let clip = superview else { return }
+        let w = clip.bounds.width
+        if frame.width != w { setFrameSize(NSSize(width: w, height: max(frame.height, clip.bounds.height))); needsDisplay = true }
+    }
+}
+
 /// Linke Seite: Baum Gruppe › Sessions, handgezeichnet wie die Leiste. Liegt in einem NSScrollView und
 /// setzt seine Höhe selbst.
 @MainActor
-final class SidebarView: NSView {
+final class SidebarView: ClipWidthView {
     /// Aussehen der Zeilen, umschaltbar in den Einstellungen.
     var renderer: any SidebarRenderer = SidebarStyle.tinted.renderer
     /// Laufzeit („12m“) rechts in jeder Session-Zeile.
@@ -109,24 +130,6 @@ final class SidebarView: NSView {
     }
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
-
-    /// Im NSScrollView passt niemand die Breite des Dokuments an: hier selbst dem Clip-View folgen,
-    /// sonst wandern Icons und Laufzeiten rechts aus dem sichtbaren Bereich.
-    override func viewDidMoveToSuperview() {
-        super.viewDidMoveToSuperview()
-        guard let clip = superview as? NSClipView else { return }
-        clip.postsFrameChangedNotifications = true
-        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.fitWidth() }
-        }
-        fitWidth()
-    }
-
-    private func fitWidth() {
-        guard let clip = superview else { return }
-        let w = clip.bounds.width
-        if frame.width != w { setFrameSize(NSSize(width: w, height: max(frame.height, clip.bounds.height))); needsDisplay = true }
-    }
 
     func reload(groups: [Group], sessions: [Session]) {
         let ids = Set(sessions.map(\.id)), now = CACurrentMediaTime()
