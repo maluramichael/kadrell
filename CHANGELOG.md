@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.63.0 (2026-10-04)
+
+- Feature: Claude-Sessions starten jetzt im Fullscreen-Modus. Dadurch wiederholt sich der Text beim Scrollen durch eine lange Session nicht mehr. In den Einstellungen unter Claude abschaltbar.
+
 ## 1.62.0 (2026-10-03)
 
 - Feature: In den Einstellungen lässt sich jetzt festlegen, wie das Kadrell-Symbol in der Menüleiste erscheint: mit Symbol und Text, nur als Symbol (spart Platz) oder ganz aus.

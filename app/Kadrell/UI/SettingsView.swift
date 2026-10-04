@@ -152,6 +152,7 @@ struct SettingsView: View {
 
             heading(String(localized: "Claude", bundle: Bundle.app), note: String(localized: "gilt für neu gestartete Claude-Prozesse", bundle: Bundle.app))
             table {
+                setting(String(localized: "Im Fullscreen starten (kein doppelter Text beim Scrollen)", bundle: Bundle.app)) { onOff(model.binding(\.claudeFullscreen)) }
                 setting(String(localized: "Bypass-Modus erlauben (--allow-dangerously-skip-permissions)", bundle: Bundle.app)) { onOff(model.binding(\.claudeAllowBypass)) }
                 setting(String(localized: "Startmodus", bundle: Bundle.app)) { options(Settings.claudeModes, model.binding(\.claudeMode)) }
                 setting(String(localized: "Modell", bundle: Bundle.app)) { options(Settings.claudeModels, model.binding(\.claudeModel)) }
