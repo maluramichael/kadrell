@@ -165,7 +165,7 @@ final class ExtensionPanelTests: XCTestCase {
 
     func testStatusItemClickSendsAction() throws {
         let bar = StatusBarView(frame: .zero)
-        let w = barWindow(bar, width: 900)
+        let w = barWindow(bar, width: 1200)
         defer { w.close() }
         var got: [String] = []
         bar.onExtensionAction = { got += [$0, $1] }
@@ -193,10 +193,26 @@ final class ExtensionPanelTests: XCTestCase {
         }
         let wide = labels(width: 1400)
         XCTAssertEqual(wide.ext.sorted(), ["e1", "e2", "e3"])
-        let narrow = labels(width: 1000)
+        let narrow = labels(width: 1200)
         XCTAssertEqual(narrow.rest, wide.rest, "vorhandene Module bleiben vollständig")
         XCTAssertEqual(narrow.ext.sorted(), ["e2", "e3"])
         for (i, a) in narrow.frames.enumerated() { for b in narrow.frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "\(a) überlappt \(b)") } }
+    }
+
+    /// Über viele Breiten (um 1000 px), damit der Rest nach dem letzten passenden Eintrag mal klein ausfällt.
+    func testExtensionItemsLeaveRoomForBreadcrumb() {
+        let natural = NSAttributedString(string: "kadrell › Eine ziemlich lange Session", attributes: Theme.attrs(11.5, Theme.fg, bold: true)).size().width
+        for width in stride(from: 900 as CGFloat, through: 1100, by: 9) {
+            let bar = StatusBarView(frame: .zero)
+            let w = barWindow(bar, width: width)
+            defer { w.close() }
+            bar.crumb = (group: "kadrell", session: "Eine ziemlich lange Session")
+            bar.extensionItems = (1...6).map { ("e\($0)", "Ein langer Eintrag Nummer \($0)", .ok, "a:\($0)") }
+            bar.display()
+            XCTAssertGreaterThanOrEqual(bar.crumbWidth, min(natural, StatusBarView.minCrumbWidth) - 1, "Breite \(width)")
+            let frames = barElements(bar).map { $0.accessibilityFrame() }
+            for (i, a) in frames.enumerated() { for b in frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "Breite \(width)") } }
+        }
     }
 
     /// Der Manager meldet bis zu 50-mal pro Sekunde; `needsDisplay` ist ohne sichtbares Fenster nicht lesbar, daher der Vergleich selbst.

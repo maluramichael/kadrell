@@ -181,7 +181,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         module(b, &rx, [NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         drawNotices(b, &rx)
         drawUsage(b, &rx)
-        drawExtensionItems(b, &rx, limit: leftEnd + 16)
+        drawExtensionItems(b, &rx, limit: leftEnd + 16 + min(crumbText().size().width, Self.minCrumbWidth))
         drawCrumb(b, from: leftEnd, to: rx)
     }
 
@@ -435,22 +435,31 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     // MARK: Mitte
 
-    /// Breadcrumb mittig zwischen linker und rechter Seite, gekürzt, wenn der Platz fehlt.
-    private func drawCrumb(_ b: CGRect, from leftEnd: CGFloat, to rx: CGFloat) {
+    /// So viel Breite behält das Breadcrumb mindestens (oder seine natürliche Breite, wenn kürzer): Einträge der
+    /// Extensions dürfen die Mitte nicht verdrängen, nur kürzen lassen. Rund 20 Zeichen.
+    static let minCrumbWidth: CGFloat = 160
+    /// Breite des Breadcrumbs beim letzten Zeichnen.
+    private(set) var crumbWidth: CGFloat = 0
+
+    private func crumbText() -> NSAttributedString {
         let fMuted = Theme.attrs(11.5, Theme.muted)
-        let mid: NSAttributedString
         if let c = crumb {
             let m = NSMutableAttributedString(string: c.group + " › ", attributes: crumbGroupAttrs ?? fMuted)
             m.append(NSAttributedString(string: c.session, attributes: Theme.attrs(11.5, Theme.fg, bold: true)))
             if openCount > 1 { m.append(NSAttributedString(string: String(localized: " · \(openCount) offen", bundle: Bundle.app), attributes: fMuted)) }
-            mid = m
+            return m
         } else if let e = errorText {
-            mid = NSAttributedString(string: String(localized: "kadrell · \(e)", bundle: Bundle.app), attributes: Theme.attrs(11.5, Theme.error))
-        } else {
-            mid = NSAttributedString(string: String(localized: "kadrell · \(sessionCount) sessions", bundle: Bundle.app), attributes: fMuted)
+            return NSAttributedString(string: String(localized: "kadrell · \(e)", bundle: Bundle.app), attributes: Theme.attrs(11.5, Theme.error))
         }
+        return NSAttributedString(string: String(localized: "kadrell · \(sessionCount) sessions", bundle: Bundle.app), attributes: fMuted)
+    }
+
+    /// Breadcrumb mittig zwischen linker und rechter Seite, gekürzt, wenn der Platz fehlt.
+    private func drawCrumb(_ b: CGRect, from leftEnd: CGFloat, to rx: CGFloat) {
+        let mid = crumbText()
         let avail = rx - leftEnd - 16
         let mw = min(mid.size().width, max(0, avail))
+        crumbWidth = mw
         mid.draw(with: CGRect(x: leftEnd + (avail - mw) / 2, y: b.midY - 8, width: mw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
