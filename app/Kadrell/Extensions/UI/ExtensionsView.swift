@@ -19,7 +19,7 @@ struct ExtensionsView: View {
                 if i > 0 { Divider().overlay(Theme.lineColor) }
                 ExtensionRow(model: model, ext: ext, selected: i == model.selected)
                     .contentShape(Rectangle())
-                    .onTapGesture { model.select(i) }
+                    .onTapGesture { model.click(i) }
             }
             if let ext = model.current {
                 Divider().overlay(Theme.lineColor)

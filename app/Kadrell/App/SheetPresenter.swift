@@ -15,7 +15,10 @@ final class SheetPresenter {
 
     /// Panels, die sich mit ihrer eigenen Taste wieder schließen, im Gegensatz zu Rückfragen und Sheets.
     enum Panel { case about, stats, extensions }
-    private var openPanel: Panel?
+    /// Das F4-Modell kennt sein Fenster nur, solange das Panel offen ist (danach verfallen Formular-Entwürfe).
+    private(set) var openPanel: Panel? {
+        didSet { extensionsModel?.window = openPanel == .extensions ? overlay : nil }
+    }
     /// Für F4, gesetzt mit dem Start der Extensions. Lebt so lange wie die App und sammelt die Meldungen des Managers.
     var extensionsModel: ExtensionsModel?
 
@@ -24,10 +27,11 @@ final class SheetPresenter {
         self.palette = palette
     }
 
-    /// Ohne `onCancel` schließt Esc einfach den Dialog.
-    func present<V: View>(_ view: V, plainReturn: Bool = true, onCancel: (() -> Void)? = nil, onPrimary: @escaping () -> Void) {
+    /// Ohne `onCancel` schließt Esc einfach den Dialog. `panel` merkt sich, welches Panel offen ist, auch wenn es
+    /// erst nach dem Schließen eines anderen drankommt.
+    func present<V: View>(_ view: V, plainReturn: Bool = true, panel: Panel? = nil, onCancel: (() -> Void)? = nil, onPrimary: @escaping () -> Void) {
         if openPanel != nil {
-            pending = { [weak self] in self?.present(view, plainReturn: plainReturn, onCancel: onCancel, onPrimary: onPrimary) }
+            pending = { [weak self] in self?.present(view, plainReturn: plainReturn, panel: panel, onCancel: onCancel, onPrimary: onPrimary) }
             return
         }
         dismiss()
@@ -37,15 +41,17 @@ final class SheetPresenter {
         p.onPrimary = onPrimary
         p.primaryOnPlainReturn = plainReturn
         overlay = p
+        openPanel = panel
         if let window = host()?.window { p.open(over: window) }
     }
 
     func applyTheme() { overlay?.applyTheme() }
 
+    /// `openPanel` zuerst: was beim Schließen an Fokuswechseln im F4-Formular nachläuft, speichert nichts mehr.
     func dismiss() {
+        openPanel = nil
         overlay?.dismiss()
         overlay = nil
-        openPanel = nil
         if let c = host() { c.window.makeFirstResponder(c.workspace) }
         if let pending { self.pending = nil; pending() }
     }
@@ -55,14 +61,13 @@ final class SheetPresenter {
         if overlay?.isVisible == true, openPanel == panel { dismiss(); return }
         let close: () -> Void = { [weak self] in self?.dismiss() }
         switch panel {
-        case .about: present(AboutView(), onPrimary: close)
-        case .stats: present(StatsView(), onPrimary: close)
+        case .about: present(AboutView(), panel: panel, onPrimary: close)
+        case .stats: present(StatsView(), panel: panel, onPrimary: close)
         case .extensions:
             guard let model = extensionsModel else { return NSSound.beep() }
             // ⏎ gehört den Textfeldern der Einstellungen (speichern), schließen mit Esc, F4 oder ⌘⏎.
-            present(ExtensionsView(model: model), plainReturn: false, onPrimary: close)
+            present(ExtensionsView(model: model), plainReturn: false, panel: panel, onPrimary: close)
         }
-        openPanel = panel   // erst nach present: das räumt über dismiss den alten Wert ab
     }
 
     /// Ein offenes Panel hat selbst die Tastatur: seine eigene Taste im Panel-Fenster schließt es wieder.

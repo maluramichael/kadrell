@@ -13,6 +13,9 @@ final class ExtensionsModel: ObservableObject {
     /// Gespeicherte Werte der gewählten Extension ohne Geheimnisse. Von denen steht nur hier, ob sie gesetzt sind.
     @Published private(set) var stored: [String: JSONValue] = [:]
     @Published private(set) var secretsSet: Set<String> = []
+    /// Fenster des offenen Dialogs, vom `SheetPresenter` gesetzt; nil heißt zu. Formularwerte zählen nur, solange es da ist:
+    /// was nach dem Schließen noch an Fokuswechseln nachläuft, verwirft seinen Entwurf.
+    weak var window: NSWindow?
     private var lastPublish = Date.distantPast
     private var pending = false
 
@@ -38,6 +41,16 @@ final class ExtensionsModel: ObservableObject {
         selected = i
         Task { await load() }
     }
+
+    /// Klick auf eine Zeile beendet ein offenes Textfeld (Entwurf verworfen), sonst behielte es die Tastatur
+    /// und ↑↓, Leertaste, R und L gingen ins Feld.
+    func click(_ index: Int) {
+        window?.makeFirstResponder(nil)
+        select(index)
+    }
+
+    /// Fokus ging in ein anderes Textfeld (Tab, Klick): dann speichert das verlassene Feld wie mit ⏎.
+    var editingAnotherField: Bool { window?.firstResponder is NSText }
 
     func toggle(_ ext: FoundExtension) {
         guard canToggle(ext) else { return NSSound.beep() }
@@ -82,6 +95,14 @@ final class ExtensionsModel: ObservableObject {
         }
     }
 
+    /// Taste für das offene Panel, nil wenn sie nicht dem Dialog gehört: mit Modifier oder solange ein Textfeld
+    /// oder Schalter die Tastatur hat, dort gehören Leertaste und Buchstaben dem Feld.
+    static func panelKey(_ event: NSEvent, in window: NSWindow?) -> KeyEquivalent? {
+        let responder = window?.firstResponder
+        guard !(responder is NSText || responder is NSControl) else { return nil }
+        return key(for: event)
+    }
+
     func load() async {
         guard let ext = current else { return }
         let values = await ExtensionSettings.values(for: ext)
@@ -89,6 +110,12 @@ final class ExtensionsModel: ObservableObject {
         let secrets = Set((ext.manifest?.settings ?? []).filter { $0.type == "secret" }.map(\.key))
         stored = values.filter { !secrets.contains($0.key) }
         secretsSet = secrets.filter { values[$0] != nil }
+    }
+
+    /// Aus dem Formular, nur bei offenem Dialog. Schließen (Esc, F4, ⌘⏎) heißt abbrechen, nicht speichern.
+    func commit(_ key: String, _ value: JSONValue, in ext: FoundExtension) {
+        guard window != nil else { return }
+        Task { await save(key, value, in: ext) }
     }
 
     /// Eine eingeschaltete Extension startet danach neu, sonst sähe sie den neuen Wert in `kadrell.config` nicht.

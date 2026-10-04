@@ -143,20 +143,22 @@ final class ExtensionManagerTests: XCTestCase {
     }
 
     func testSecretSettingIsPassedInConfig() async throws {
-        let manifest: [String: Any] = ["name": "a", "apiVersion": 1, "settings": [
+        // Eindeutiger Name: der Teardown löscht den Schlüsselbund-Eintrag, nie den einer echten Extension „a“.
+        let a = "kadrell-test-\(UUID().uuidString.lowercased())"
+        let manifest: [String: Any] = ["name": a, "apiVersion": 1, "settings": [
             ["key": "token", "type": "secret", "label": "Token"],
             ["key": "mine", "type": "bool", "label": "Mine", "default": true],
         ]]
-        try make("a", "kadrell.log('token=' .. tostring(kadrell.config.token) .. ' mine=' .. tostring(kadrell.config.mine))",
+        try make(a, "kadrell.log('token=' .. tostring(kadrell.config.token) .. ' mine=' .. tostring(kadrell.config.mine))",
                  manifest: manifest)
         let ext = try XCTUnwrap(manager.found.first)
         addTeardownBlock { await ExtensionSettings.set(.null, for: ext, key: "token") }
         await ExtensionSettings.set(.string("abc"), for: ext, key: "token")
-        manager.setEnabled("a", true)
-        let passed = await until(5) { self.logContains("a", "token=abc mine=true") }
-        XCTAssertTrue(passed, "\(manager.log("a"))")
+        manager.setEnabled(a, true)
+        let passed = await until(5) { self.logContains(a, "token=abc mine=true") }
+        XCTAssertTrue(passed, "\(manager.log(a))")
         await ExtensionSettings.set(.null, for: ext, key: "token")
-        let left = await Keychain.read(service: ExtensionSettings.keychainService, account: ExtensionSettings.account("a", "token"))
+        let left = await Keychain.read(service: ExtensionSettings.keychainService, account: ExtensionSettings.account(a, "token"))
         XCTAssertNil(left, "null löscht den Eintrag im Schlüsselbund")
     }
 

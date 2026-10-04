@@ -24,13 +24,11 @@ extension AppDelegate {
         for c in windows { c.updateExtensionPanels(panels); c.bar.extensionItems = items }
     }
 
-    /// Tasten im offenen F4-Panel: F4 schließt, ↑↓, Leertaste, R und L gehen ans Modell. Nicht, solange ein Textfeld
-    /// oder ein Schalter die Tastatur hat: Leertaste und Buchstaben gehören dann dem Feld.
+    /// Tasten im offenen F4-Panel: F4 schließt, ↑↓, Leertaste, R und L gehen ans Modell (siehe `ExtensionsModel.panelKey`).
     func handleExtensionsPanelKey(_ event: NSEvent) -> Bool {
         guard sheets.isPanel(.extensions, event.window), let model = sheets.extensionsModel else { return false }
         if event.keyCode == KeyCode.f4 { sheets.dismiss(); return true }
-        let responder = event.window?.firstResponder
-        guard !(responder is NSText || responder is NSControl), let key = ExtensionsModel.key(for: event) else { return false }
+        guard let key = ExtensionsModel.panelKey(event, in: event.window) else { return false }
         return model.handleKey(key)
     }
 

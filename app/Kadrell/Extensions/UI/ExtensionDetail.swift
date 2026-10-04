@@ -46,7 +46,7 @@ struct ExtensionDetail: View {
 
     @ViewBuilder
     private func control(_ s: ExtensionManifest.Setting) -> some View {
-        let save: (JSONValue) -> Void = { v in Task { await model.save(s.key, v, in: ext) } }
+        let save: (JSONValue) -> Void = { model.commit(s.key, $0, in: ext) }
         switch s.type {
         case "bool":
             Toggle("", isOn: Binding(get: { model.stored[s.key]?.bool ?? false }, set: { save(.bool($0)) }))
@@ -54,10 +54,10 @@ struct ExtensionDetail: View {
         case "secret":
             HStack(spacing: 8) {
                 (model.secretsSet.contains(s.key) ? Text("gesetzt") : Text("nicht gesetzt")).foregroundStyle(Theme.mutedColor).lineLimit(1)
-                SettingField(initial: "", secure: true) { save(.string($0)) }
+                SettingField(model: model, initial: "", secure: true) { save(.string($0)) }
             }
         default:
-            SettingField(initial: model.stored[s.key]?.string ?? "", secure: false) { save(.string($0)) }
+            SettingField(model: model, initial: model.stored[s.key]?.string ?? "", secure: false) { save(.string($0)) }
         }
     }
 
@@ -75,9 +75,10 @@ struct ExtensionDetail: View {
     }
 }
 
-/// Textfeld, das erst beim Verlassen oder mit ⏎ speichert: jede gespeicherte Änderung startet die Extension neu,
-/// pro Tastendruck wäre das ein Neustart je Zeichen. Ein Geheimnis zeigt nie seinen Wert, das Feld ersetzt es nur.
+/// Textfeld, das erst mit ⏎ oder beim Wechsel in ein anderes Feld speichert: jede gespeicherte Änderung startet die
+/// Extension neu, pro Tastendruck wäre das ein Neustart je Zeichen. Ein Geheimnis zeigt nie seinen Wert, das Feld ersetzt es nur.
 private struct SettingField: View {
+    @ObservedObject var model: ExtensionsModel
     let initial: String
     let secure: Bool
     let commit: (String) -> Void
@@ -92,8 +93,12 @@ private struct SettingField: View {
         .textFieldStyle(.plain).foregroundStyle(Theme.fgColor).focused($focused)
         .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
         .onSubmit(apply)
-        .onChange(of: focused) { if !focused { apply() } }
-        .onDisappear(perform: apply)
+        .onChange(of: focused) { if !focused { left() } }
+    }
+
+    /// Fokus anders verloren als an ein anderes Feld (Klick auf eine Zeile, Dialog geschlossen): Entwurf verworfen.
+    private func left() {
+        if model.editingAnotherField { apply() } else { draft = nil }
     }
 
     /// Nur Geändertes; ein leeres Geheimnisfeld heißt „nicht angefasst“, nicht „löschen“.
