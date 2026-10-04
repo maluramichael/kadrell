@@ -4,10 +4,10 @@ Neueste Version oben.
 
 ## 1.64.0 (2026-10-04)
 
-- Feature: Anleitung für eigene Extensions unter kadrell.malura.de/extensions.
-- Feature: Extensions können eigene Einträge in der Statusleiste zeigen.
-- Feature: Rechte Seitenleiste für Inhalte aus Extensions, Fokus mit ⌘3, ein- und ausblenden mit ⌘⌥B.
 - Feature: Extensions in Lua erweitern Kadrell um eigene Funktionen, an- und abschaltbar im neuen Extensions-Dialog (F4).
+- Feature: Rechte Seitenleiste für Inhalte aus Extensions, Fokus mit ⌘3, ein- und ausblenden mit ⌘⌥B.
+- Feature: Extensions können eigene Einträge in der Statusleiste zeigen.
+- Feature: Anleitung für eigene Extensions unter kadrell.malura.de/extensions.
 
 ## 1.63.0 (2026-10-04)
 
