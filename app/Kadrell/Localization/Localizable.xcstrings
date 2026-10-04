@@ -862,6 +862,22 @@
         }
       }
     },
+    "Aus": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        }
+      }
+    },
     "Aus Ansicht nehmen": {
       "localizations": {
         "de": {
@@ -1054,6 +1070,22 @@
         }
       }
     },
+    "Fehler: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehler: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error: %@"
+          }
+        }
+      }
+    },
     "Gestoppt": {
       "localizations": {
         "de": {
@@ -1082,6 +1114,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Now active: “%@”. Reason: usage limit reached."
+          }
+        }
+      }
+    },
+    "Lädt neu": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lädt neu"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reloading"
+          }
+        }
+      }
+    },
+    "Läuft": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
           }
         }
       }
@@ -1146,6 +1210,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "No longer accepts messages (over 1 MB unprocessed)"
+          }
+        }
+      }
+    },
+    "Panel zu groß (%lld Knoten, höchstens %lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panel zu groß (%lld Knoten, höchstens %lld)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panel too large (%lld nodes, at most %lld)"
+          }
+        }
+      }
+    },
+    "Startet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting"
           }
         }
       }

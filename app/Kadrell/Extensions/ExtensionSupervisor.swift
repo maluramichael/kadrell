@@ -5,14 +5,15 @@ enum ExtensionState: Equatable { case off, starting, running, failed(String), re
 enum SupervisorInput {
     case enable, disable, reload, spawned, ready
     case exited(expected: Bool, reason: String)
-    case pingTimeout, readyTimeout, flood(String), restartDue
+    case restartDue
 }
 
 enum SupervisorAction: Equatable { case spawn, terminate, scheduleRestart(TimeInterval), clearUI }
 
 /// Reine Zustandsmaschine einer Extension: bekommt Ereignisse, liefert Aktionen, startet und misst selbst nichts.
+/// Hänger, fehlendes Ready und Flut erkennt `ExtensionProcess`, killt selbst und meldet sie als unerwartetes Ende.
 /// Ein Absturz zählt nur in `starting` und `running`; in `failed`, `off` und `reloading` ist der Prozess schon
-/// abgeschrieben, ein nachgereichtes Ende oder Timeout darf nicht doppelt zählen.
+/// abgeschrieben, ein nachgereichtes Ende darf nicht doppelt zählen.
 struct ExtensionSupervisor {
     static let backoff: [TimeInterval] = [1, 5, 30]
     static let crashWindow: TimeInterval = 120
@@ -33,11 +34,6 @@ struct ExtensionSupervisor {
         case .spawned: return []
         case .ready: return ready(now)
         case .exited(let expected, let reason): return exited(expected: expected, reason: reason, now: now)
-        case .pingTimeout:
-            return crash(String(localized: "Antwortet nicht mehr (kein Pong binnen 5 s)", bundle: Bundle.app), kill: true, now: now)
-        case .readyTimeout:
-            return crash(String(localized: "Startet nicht (kein Ready binnen 3 s)", bundle: Bundle.app), kill: true, now: now)
-        case .flood(let reason): return crash(reason, kill: true, now: now)
         case .restartDue: return restartDue()
         }
     }
@@ -82,7 +78,7 @@ struct ExtensionSupervisor {
             state = .starting
             return [.spawn]
         }
-        return expected ? [] : crash(reason, kill: false, now: now)
+        return expected ? [] : crash(reason, now: now)
     }
 
     private mutating func restartDue() -> [SupervisorAction] {
@@ -92,20 +88,19 @@ struct ExtensionSupervisor {
         return [.spawn]
     }
 
-    private mutating func crash(_ reason: String, kill: Bool, now: Date) -> [SupervisorAction] {
+    private mutating func crash(_ reason: String, now: Date) -> [SupervisorAction] {
         guard state == .starting || state == .running else { return [] }
-        let lead: [SupervisorAction] = (kill ? [.terminate] : []) + [.clearUI]
         let ranStable = readyAt.map { now.timeIntervalSince($0) >= Self.stableRun } ?? false
         readyAt = nil
         consecutive = (ranStable ? 0 : consecutive) + 1
         crashes = crashes.filter { now.timeIntervalSince($0) < Self.crashWindow } + [now]
         if crashes.count >= Self.maxCrashesInWindow {
             state = .failed(String(localized: "3 Abstürze in 2 min, bleibt aus", bundle: Bundle.app))
-            return lead
+            return [.clearUI]
         }
         state = .failed(reason)
         restartPending = true
-        return lead + [.scheduleRestart(Self.backoff[min(consecutive, Self.backoff.count) - 1])]
+        return [.clearUI, .scheduleRestart(Self.backoff[min(consecutive, Self.backoff.count) - 1])]
     }
 
     private var isFailed: Bool {

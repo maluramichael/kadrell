@@ -79,24 +79,6 @@ final class ExtensionSupervisorTests: XCTestCase {
         XCTAssertEqual(s.state, .off)
     }
 
-    func testPingTimeoutCountsAsCrash() {
-        var s = running()
-        XCTAssertEqual(s.handle(.pingTimeout, now: t0), [.terminate, .clearUI, .scheduleRestart(1)])
-        guard case .failed(let reason) = s.state else { return XCTFail("\(s.state)") }
-        XCTAssertTrue(reason.contains("5 s"), reason)
-        XCTAssertEqual(s.handle(.exited(expected: true, reason: ""), now: t0), [], "das erwartete Ende danach zählt nicht doppelt")
-    }
-
-    func testReadyTimeoutAndFloodCountAsCrash() {
-        var s = ExtensionSupervisor()
-        _ = s.handle(.enable, now: t0)
-        XCTAssertEqual(s.handle(.readyTimeout, now: t0), [.terminate, .clearUI, .scheduleRestart(1)])
-        _ = s.handle(.restartDue, now: at(1))
-        _ = s.handle(.ready, now: at(1))
-        XCTAssertEqual(s.handle(.flood("zu viele"), now: at(2)), [.terminate, .clearUI, .scheduleRestart(5)])
-        XCTAssertEqual(s.state, .failed("zu viele"))
-    }
-
     func testEnableFromFailedResetsCounter() {
         var s = running()
         _ = crashAndRecover(&s, at: 0)

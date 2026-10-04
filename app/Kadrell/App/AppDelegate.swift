@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Sprache, in der die Palette gebaut wurde.
     private var paletteLanguage = Settings.language
     var controlServer: ControlServer?
+    var extensions: ExtensionManager?
+    /// Sessions beim letzten `registry.onChange`, Vergleichsbasis für die Session-Events der Extensions.
+    var extensionSessions: [String: Session] = [:]
     /// claude läuft, ist aber älter als `ClaudeCLI.minVersion`: nicht blockierend, nur die Leiste warnt (`recheckCLI`).
     private var versionWarning: String?
     /// Seit wann eine Session fertig (grün) ist, für das automatische Trennen. Kein Eintrag = arbeitet oder ist getrennt.
@@ -139,6 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Nur noch Reste (z. B. Abmelden ohne Prozesse): SIGHUP, beim nächsten Start setzt `--resume` fort.
         attach?.detachAll()
         controlServer?.stop()
+        extensions?.shutdownAll()
         Profile.cleanUp()
     }
 
@@ -437,7 +441,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func boot() async {
         cli = await ClaudeCLI.resolve()
-        attention.fireFocusHook = { [cli] s in Hooks.fire(.sessionFocus, s, environment: cli!.environment) }
+        attention.fireFocusHook = { [weak self, cli] s in
+            Hooks.fire(.sessionFocus, s, environment: cli!.environment)
+            self?.emitSessionFocus(s)
+        }
         attach = AttachManager(cli: cli)
         for c in windows { c.workspace.attach = attach; c.sidebar.attach = attach }
         attach.onChange = { [weak self] in self?.windows.forEach { $0.workspace.relayout() } }
@@ -452,7 +459,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         registry = SessionRegistry(cli: cli)
         registry.pids = { [weak attach] in attach?.pids ?? [:] }
-        registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
+        registry.onChange = { [weak self] sessions in
+            self?.sessionsChanged(sessions)
+            self?.emitSessionEvents(sessions)
+        }
         // Fenster versteckt (Menüleisten-Betrieb) oder App im Hintergrund: seltener pollen, siehe `updatePollBackground`.
         // Aktiviert sich die App wieder und steht noch der alte Fehler (claude fehlt/zu alt), gleich nochmal prüfen:
         // ohne das bleibt „claude nicht gefunden“ auch nach einer Installation bis zum Neustart stehen.
@@ -471,10 +481,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
             await registry.pollNow()
+            extensions?.emit("app.ready", .object([:]))
             await offerAdopt()
             registry.start()
         }
         startControlServer()
+        startExtensions(environment: cli.environment)
         usage.onChange = { [weak self] u in
             guard let self else { return }
             self.bar.usage = u

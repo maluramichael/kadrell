@@ -89,6 +89,9 @@ enum Settings {
     /// `kadrell` aus einer Session heraus darf Sessions anderer Gruppen lesen und steuern (send, capture, kill …).
     /// Default an: Agenten, die andere Sessions steuern, sollen ohne Umweg laufen. Aus: nur die eigene Gruppe.
     static var controlOtherSessions: Bool { get { value("control.otherSessions", true) } set { store("control.otherSessions", newValue) } }
+    /// Eingeschaltete Extensions (Ordnernamen). Bleibt auch für verschwundene oder kaputte stehen: taucht der Ordner
+    /// wieder auf, läuft sie wieder.
+    static var enabledExtensions: [String] { get { value("extensions.enabled", []) } set { store("extensions.enabled", newValue) } }
 
     /// Hinterlegte Claude-Accounts (nur Metadaten, das OAuth-Geheimnis liegt im Schlüsselbund), JSON-kodiert.
     static var accountsData: Data? { get { Profile.defaults.data(forKey: "accounts.index") } set { store("accounts.index", newValue) } }

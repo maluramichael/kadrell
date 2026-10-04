@@ -15,12 +15,17 @@ extension AppDelegate {
         }
     }
 
+    func handleControl(_ req: ControlRequest, peer: pid_t) async -> ControlResponse {
+        var req = req
+        req.caller = attach.flatMap { ControlCaller.session(pid: peer, terminals: $0.pids) }
+        return await runControl(req)
+    }
+
+    /// Parsen und ausführen, jeder Fehler wird zur Antwort mit Status 1; auch der Weg für `kadrell.run` aus Extensions.
     /// `registry`/`attach` fehlen nur kurz beim Start (`boot()` läuft noch): eigener Status statt harter Fehler,
     /// den `ControlClient.run` mit abwartet statt sofort „läuft, lauscht aber nicht“ zu melden.
-    func handleControl(_ req: ControlRequest, peer: pid_t) async -> ControlResponse {
+    func runControl(_ req: ControlRequest) async -> ControlResponse {
         guard registry != nil, attach != nil else { return ControlResponse(status: ControlResponse.startingStatus, stdout: "", stderr: "Kadrell startet noch\n") }
-        var req = req
-        req.caller = ControlCaller.session(pid: peer, terminals: attach.pids)
         do {
             return try await runControl(ControlCommand.parse(req.argv), req)
         } catch let e as ControlError {
