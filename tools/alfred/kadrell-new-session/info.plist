@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>de.malura.kadrell.alfred.newsession</string>
+	<key>connections</key>
+	<dict>
+		<key>6A1C0F10-0001-4000-8000-000000000001</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>6A1C0F10-0002-4000-8000-000000000002</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+		<key>6A1C0F10-0002-4000-8000-000000000002</key>
+		<array/>
+	</dict>
+	<key>createdby</key>
+	<string>Michael Malura</string>
+	<key>description</key>
+	<string>Listet die Kadrell-Projekte und startet im gewählten Projekt eine neue Session (wie Command+N).</string>
+	<key>disabled</key>
+	<false/>
+	<key>name</key>
+	<string>Kadrell New Session</string>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>alfredfiltersresults</key>
+				<true/>
+				<key>alfredfiltersresultsmatchmode</key>
+				<integer>0</integer>
+				<key>argumenttrimmode</key>
+				<integer>0</integer>
+				<key>argumenttype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>0</integer>
+				<key>keyword</key>
+				<string>kn</string>
+				<key>queuedelaycustom</key>
+				<integer>3</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>2</integer>
+				<key>runningsubtext</key>
+				<string>Projekte laden …</string>
+				<key>script</key>
+				<string></string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string>scripts/list.py</string>
+				<key>subtext</key>
+				<string>Kadrell-Projekt wählen, Enter startet eine neue Session</string>
+				<key>title</key>
+				<string>Kadrell New Session</string>
+				<key>type</key>
+				<integer>8</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>6A1C0F10-0001-4000-8000-000000000001</string>
+			<key>version</key>
+			<integer>3</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>0</integer>
+				<key>script</key>
+				<string></string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string>scripts/new.sh</string>
+				<key>type</key>
+				<integer>8</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>6A1C0F10-0002-4000-8000-000000000002</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+	</array>
+	<key>readme</key>
+	<string>Keyword `kn` zeigt die Kadrell-Projekte (Gruppen des Standardprofils).
+Enter startet im gewählten Projekt eine neue Session und holt Kadrell nach vorn.
+
+Setzt Kadrell.app voraus. Schneller wird es, wenn in Kadrell einmal die CLI installiert wurde (Menü), dann liegt ~/.local/bin/kadrell bereit.</string>
+	<key>uidata</key>
+	<dict>
+		<key>6A1C0F10-0001-4000-8000-000000000001</key>
+		<dict>
+			<key>xpos</key>
+			<real>180.0</real>
+			<key>ypos</key>
+			<real>120.0</real>
+		</dict>
+		<key>6A1C0F10-0002-4000-8000-000000000002</key>
+		<dict>
+			<key>xpos</key>
+			<real>480.0</real>
+			<key>ypos</key>
+			<real>120.0</real>
+		</dict>
+	</dict>
+	<key>version</key>
+	<string>1.0.0</string>
+	<key>webaddress</key>
+	<string>https://kadrell.malura.de</string>
+</dict>
+</plist>
