@@ -57,6 +57,14 @@ Kadrell keeps them all in a single window:
 
 Grab the signed, notarized build from [kadrell.malura.de/download/Kadrell.dmg](https://kadrell.malura.de/download/Kadrell.dmg) and drag Kadrell into Applications. It needs macOS 15 or newer and runs on Apple Silicon and Intel. Older builds stay available at [kadrell.malura.de/download/](https://kadrell.malura.de/download/).
 
+### Homebrew
+
+```bash
+brew install --cask maluramichael/tap/kadrell
+```
+
+Same DMG, installed into Applications. Kadrell updates itself, so `brew upgrade` leaves it alone unless you pass `--greedy`.
+
 ### Build from source
 
 Kadrell is a Swift 6 / AppKit app. The Xcode project is generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen) from `app/project.yml` (the `.xcodeproj` is gitignored). The only third-party dependency is [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm), which Swift Package Manager resolves automatically.
