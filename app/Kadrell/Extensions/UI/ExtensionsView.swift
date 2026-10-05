@@ -89,7 +89,7 @@ private struct StoreRow: View {
             }
             Spacer(minLength: 12)
             if model.installing.contains(remote.id) {
-                ProgressView().controlSize(.mini).scaleEffect(0.7)
+                ProgressView().controlSize(.small)
             } else {
                 Button { Task { await model.install(remote) } } label: {
                     Text(model.isInstalled(remote) ? "Aktualisieren" : "Installieren").foregroundStyle(Theme.fgColor)
