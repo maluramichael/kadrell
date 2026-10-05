@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.65.0 (2026-10-05)
+
+- Feature: Extensions lassen sich jetzt direkt in Kadrell finden und installieren. Im Extensions-Dialog (F4) unter „Entdecken" nach öffentlichen GitHub-Extensions suchen und mit einem Klick installieren oder aktualisieren.
+
 ## 1.64.0 (2026-10-04)
 
 - Feature: Extensions in Lua erweitern Kadrell um eigene Funktionen, an- und abschaltbar im neuen Extensions-Dialog (F4).

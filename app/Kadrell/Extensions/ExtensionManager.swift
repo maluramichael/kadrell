@@ -78,6 +78,9 @@ final class ExtensionManager {
 
     func reload(_ name: String) { feed(name, .reload) }
 
+    /// Nach einer Installation aus dem Marktplatz sofort neu einlesen, statt auf den `FolderWatcher` zu warten.
+    func refresh() { rescan() }
+
     func emit(_ event: String, _ data: JSONValue) {
         if event == "app.ready" { appReady = true }
         if event == "session.focus" { focus = data }

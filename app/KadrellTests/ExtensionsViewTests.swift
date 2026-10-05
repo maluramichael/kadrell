@@ -171,7 +171,9 @@ final class ExtensionsViewTests: XCTestCase {
         }
         try await Task.sleep(for: .milliseconds(300))
         func fields(_ v: NSView) -> [NSTextField] { ((v as? NSTextField).map { $0.isEditable ? [$0] : [] } ?? []) + v.subviews.flatMap(fields) }
-        return (panel, fields(try XCTUnwrap(panel.contentView)))
+        // Das Suchfeld des „Entdecken"-Bereichs ist kein Einstellungsfeld der Extension.
+        let setting = fields(try XCTUnwrap(panel.contentView)).filter { $0.placeholderString?.contains("GitHub") != true }
+        return (panel, setting)
     }
 
     /// Tippt in das Feld wie über die Tastatur (Feldeditor), ohne zu bestätigen.

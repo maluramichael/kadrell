@@ -10,6 +10,12 @@ final class ExtensionsModel: ObservableObject {
     let manager: ExtensionManager
     @Published private(set) var selected = 0
     @Published var showLog = false
+    /// Marktplatz: Suchbegriff, gefundene GitHub-Repos, laufende Suche, gerade installierende und letzter Fehler.
+    @Published var query = ""
+    @Published private(set) var results: [RemoteExtension] = []
+    @Published private(set) var searching = false
+    @Published private(set) var installing: Set<String> = []
+    @Published private(set) var storeError: String?
     /// Gespeicherte Werte der gewählten Extension ohne Geheimnisse. Von denen steht nur hier, ob sie gesetzt sind.
     @Published private(set) var stored: [String: JSONValue] = [:]
     @Published private(set) var secretsSet: Set<String> = []
@@ -64,6 +70,35 @@ final class ExtensionsModel: ObservableObject {
     }
 
     func openFolder(_ ext: FoundExtension) { NSWorkspace.shared.open(ext.dir) }
+
+    /// Ein Repo gilt als installiert, wenn eine Extension so heißt wie das Repo. Heißt der Ordner nach dem Manifest
+    /// anders als das Repo, bietet der Marktplatz eben noch einmal „Installieren" an, das schadet nicht.
+    func isInstalled(_ r: RemoteExtension) -> Bool { items.contains { $0.name == r.repo } }
+
+    func searchStore() async {
+        let q = query
+        searching = true
+        storeError = nil
+        defer { searching = false }
+        do {
+            let found = try await GitHubExtensions.search(q)
+            if query == q { results = found }
+        } catch {
+            storeError = String(localized: "Suche fehlgeschlagen: \(error.localizedDescription)", bundle: Bundle.app)
+        }
+    }
+
+    func install(_ r: RemoteExtension) async {
+        installing.insert(r.id)
+        storeError = nil
+        defer { installing.remove(r.id) }
+        do {
+            try await GitHubExtensions.install(r, into: manager.catalogDir)
+            manager.refresh()
+        } catch {
+            storeError = String(localized: "Installieren fehlgeschlagen: \(error.localizedDescription)", bundle: Bundle.app)
+        }
+    }
 
     /// Legt den Ordner bei Bedarf an: wer noch keine Extension hat, soll trotzdem wissen, wohin damit.
     func openCatalog() {

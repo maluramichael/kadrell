@@ -4,6 +4,66 @@
     "": {
       "shouldTranslate": false
     },
+    "Aktualisieren": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Aktualisieren" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Update" } }
+      }
+    },
+    "Archiv ließ sich nicht entpacken": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Archiv ließ sich nicht entpacken" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Could not extract the archive" } }
+      }
+    },
+    "Auf GitHub suchen (Topic kadrell-extension)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Auf GitHub suchen (Topic kadrell-extension)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search GitHub (topic kadrell-extension)" } }
+      }
+    },
+    "Download von GitHub fehlgeschlagen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Download von GitHub fehlgeschlagen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Download from GitHub failed" } }
+      }
+    },
+    "ENTDECKEN": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "ENTDECKEN" } },
+        "en": { "stringUnit": { "state": "translated", "value": "DISCOVER" } }
+      }
+    },
+    "Installieren": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Installieren" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Install" } }
+      }
+    },
+    "Installieren fehlgeschlagen: %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Installieren fehlgeschlagen: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Install failed: %@" } }
+      }
+    },
+    "Repo enthält keine Extension (kadrell.json fehlt)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Repo enthält keine Extension (kadrell.json fehlt)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Repo contains no extension (kadrell.json missing)" } }
+      }
+    },
+    "Suche fehlgeschlagen: %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Suche fehlgeschlagen: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search failed: %@" } }
+      }
+    },
+    "Suchen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Suchen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search" } }
+      }
+    },
     "  %lld warten · %lld neu": {
       "localizations": {
         "de": {
