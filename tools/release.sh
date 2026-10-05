@@ -1,6 +1,6 @@
 #!/bin/bash
 # Release ohne App Store: Archiv (Release, Hardened Runtime) -> Export mit Developer ID ->
-# DMG -> Notarisierung bei Apple -> Staple -> Upload nach kadrell.malura.de/download/.
+# DMG -> Notarisierung bei Apple -> Staple -> Upload nach kadrell.malura.de/download/ -> Cask im Homebrew-Tap.
 #
 # Einmalig vorher (interaktiv, macht Michael):
 #   1. Zertifikat "Developer ID Application" im Developer-Portal anlegen und in den Schlüsselbund
@@ -106,5 +106,12 @@ if [ "$UPLOAD" = 1 ]; then
   rsync -a --no-o --no-g "$DMG" "$SHA256_FILE" "$OUT/latest.json" "$TARGET/"
   ssh "$DEPLOY_HOST" "cd $DEPLOY_PATH && cp -f Kadrell-$VERSION.dmg Kadrell.dmg && cp -f Kadrell-$VERSION.dmg.sha256 Kadrell.dmg.sha256 && chmod 644 *.dmg *.sha256 latest.json && chown -R www-data:www-data $DEPLOY_PATH"
   echo "==> https://kadrell.malura.de/download/Kadrell-$VERSION.dmg (und /download/Kadrell.dmg, /download/latest.json)"
+
+  echo "==> Homebrew-Tap (brew install --cask maluramichael/tap/kadrell)"
+  TAP=$(mktemp -d)
+  git clone -q --depth 1 git@github.com:maluramichael/homebrew-tap.git "$TAP"
+  sed -i '' -e "s/^  version \".*\"/  version \"$VERSION\"/" -e "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" "$TAP/Casks/kadrell.rb"
+  git -C "$TAP" diff --quiet || { git -C "$TAP" commit -qam "Kadrell $VERSION" && git -C "$TAP" push -q; }
+  rm -rf "$TAP"
 fi
 echo "==> fertig: $DMG"
