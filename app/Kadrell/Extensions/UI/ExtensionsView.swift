@@ -11,6 +11,7 @@ struct ExtensionsView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(Theme.lineColor).padding(.top, 12)
+            if let ext = model.confirmEnable { enableWarning(ext) }
             if model.items.isEmpty {
                 Text("Noch keine Extensions. Ordner hineinlegen oder per git clone holen, sie erscheinen sofort.")
                     .font(Theme.ui(12)).foregroundStyle(Theme.mutedColor).padding(16)
@@ -45,6 +46,26 @@ struct ExtensionsView: View {
             Link("Doku", destination: Self.docs).foregroundStyle(Theme.runningColor)
         }
         .font(Theme.ui(11)).padding(.horizontal, 16).padding(.top, 12)
+    }
+
+    /// Einmalige Warnung vor dem ersten Einschalten: fremder Code läuft ohne Sandbox mit den Rechten des Nutzers.
+    private func enableWarning(_ ext: FoundExtension) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(ext.name) läuft ohne Sandbox und darf auf Dateien, Netzwerk und Programme zugreifen. Wirklich einschalten?")
+                .foregroundStyle(Theme.fgColor).fixedSize(horizontal: false, vertical: true)
+            if let p = ext.manifest?.permissions, !p.isEmpty {
+                Text("Angegebene Rechte: \(p.joined(separator: ", ")) (nicht erzwungen)").foregroundStyle(Theme.mutedColor)
+            }
+            HStack(spacing: 14) {
+                Button { model.confirmEnableYes() } label: { Text("Einschalten").foregroundStyle(Theme.errorColor) }
+                    .buttonStyle(.plain).kbdFocusRing()
+                Button { model.confirmEnableNo() } label: { Text("Abbrechen").foregroundStyle(Theme.fgColor) }
+                    .buttonStyle(.plain).kbdFocusRing()
+            }
+        }
+        .font(Theme.ui(12)).padding(12)
+        .overlay(Rectangle().stroke(Theme.errorColor, lineWidth: 1))
+        .padding(.horizontal, 16).padding(.top, 8)
     }
 
     /// Marktplatz: ein Suchfeld sucht GitHub-Repos mit Topic `kadrell-extension`, jeder Treffer lässt sich installieren.

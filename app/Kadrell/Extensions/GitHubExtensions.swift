@@ -16,14 +16,19 @@ struct RemoteExtension: Equatable, Identifiable {
 /// Ordner wie von Hand gelegte Extensions, der `FolderWatcher` lässt sie danach erscheinen.
 enum GitHubExtensions {
     static let topic = "kadrell-extension"
+    /// Obergrenze für den heruntergeladenen Tarball: eine Extension ist klein, ein riesiges Repo würde sonst den
+    /// Speicher des Einzelprozesses erschöpfen (alle Sessions hängen daran).
+    static let maxDownloadBytes = 25 * 1024 * 1024
 
     enum InstallError: LocalizedError {
-        case download, extract, empty
+        case download, extract, empty, tooLarge, occupied(String)
         var errorDescription: String? {
             switch self {
             case .download: String(localized: "Download von GitHub fehlgeschlagen", bundle: Bundle.app)
             case .extract: String(localized: "Archiv ließ sich nicht entpacken", bundle: Bundle.app)
             case .empty: String(localized: "Repo enthält keine Extension (kadrell.json fehlt)", bundle: Bundle.app)
+            case .tooLarge: String(localized: "Repo ist zu groß (über \(maxDownloadBytes / 1024 / 1024) MB)", bundle: Bundle.app)
+            case .occupied(let name): String(localized: "Name \(name) ist schon von einer anderen Extension belegt, erst entfernen", bundle: Bundle.app)
             }
         }
     }
@@ -50,24 +55,42 @@ enum GitHubExtensions {
     }
 
     static func search(_ query: String) async throws -> [RemoteExtension] {
-        let (data, _) = try await URLSession.shared.data(for: request(searchURL(query)))
+        let (data, resp) = try await URLSession.shared.data(for: request(searchURL(query)))
+        // Ohne Status-Prüfung sähe der Nutzer bei 403 (Rate-Limit) „keine Treffer“ statt eines Fehlers.
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw InstallError.download }
         return parse(data)
     }
 
     /// Lädt den Tarball des Repos (Standard-Branch), entpackt ihn und legt die Extension unter `<catalogDir>/<name>`
-    /// ab. Ein vorhandener Ordner gleichen Namens wird ersetzt (Aktualisieren). Liefert den Ordnernamen.
+    /// ab. `knownOrigins` (name → owner/repo) verhindert, dass ein fremdes Repo einen belegten Namen überschreibt.
+    /// Liefert den Ordnernamen.
     @discardableResult
-    static func install(_ remote: RemoteExtension, into catalogDir: URL) async throws -> String {
+    static func install(_ remote: RemoteExtension, into catalogDir: URL, knownOrigins: [String: String] = [:]) async throws -> String {
         let url = URL(string: "https://api.github.com/repos/\(remote.owner)/\(remote.repo)/tarball")!
-        let (data, resp) = try await URLSession.shared.data(for: request(url))
-        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw InstallError.download }
-        return try await installTarball(data, fallbackName: remote.repo, into: catalogDir)
+        let data = try await download(url)
+        return try await installTarball(data, fallbackName: remote.repo, into: catalogDir,
+                                        origin: remote.fullName, knownOrigins: knownOrigins)
+    }
+
+    /// Streamt den Tarball mit harter Byte-Obergrenze, statt ihn unbegrenzt in den Speicher zu laden.
+    static func download(_ url: URL) async throws -> Data {
+        let (stream, resp) = try await URLSession.shared.bytes(for: request(url))
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else { throw InstallError.download }
+        if http.expectedContentLength > maxDownloadBytes { throw InstallError.tooLarge }
+        var data = Data()
+        for try await byte in stream {
+            data.append(byte)
+            if data.count > maxDownloadBytes { throw InstallError.tooLarge }
+        }
+        return data
     }
 
     /// Entpackt einen heruntergeladenen `tar.gz` und legt die Extension in den Katalog. Getrennt von `install`,
     /// damit die Ablage ohne Netz prüfbar ist. Der Repo-Ordner im Archiv wird abgeschnitten (`--strip-components 1`).
+    /// `tar` (libarchive) wehrt `../`, absolute Pfade und Symlinks nach außen selbst ab.
     @discardableResult
-    static func installTarball(_ data: Data, fallbackName: String, into catalogDir: URL) async throws -> String {
+    static func installTarball(_ data: Data, fallbackName: String, into catalogDir: URL,
+                               origin: String = "", knownOrigins: [String: String] = [:]) async throws -> String {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent("kadrell-install-\(UUID().uuidString)")
         let dest = tmp.appendingPathComponent("x")
@@ -84,7 +107,11 @@ enum GitHubExtensions {
         _ = try await ProcessRunner.run("/bin/chmod", ["-R", "go-w", dest.path])
         let target = catalogDir.appendingPathComponent(name)
         try fm.createDirectory(at: catalogDir, withIntermediateDirectories: true)
-        if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+        if fm.fileExists(atPath: target.path) {
+            // Nur das Repo, das den Namen vorher installiert hat, darf ihn aktualisieren.
+            guard knownOrigins[name] == origin else { throw InstallError.occupied(name) }
+            try fm.removeItem(at: target)
+        }
         try fm.moveItem(at: dest, to: target)
         return name
     }

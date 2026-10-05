@@ -10,12 +10,15 @@ final class ExtensionsViewTests: XCTestCase {
     private var manager: ExtensionManager!
     private var catalog: URL!
     private var savedEnabled: [String] = []
+    private var savedAcknowledged: [String] = []
     private let environment = ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin"]
 
     override func setUp() async throws {
         try await super.setUp()
         savedEnabled = Settings.enabledExtensions
+        savedAcknowledged = Settings.acknowledgedExtensions
         Settings.enabledExtensions = []
+        Settings.acknowledgedExtensions = []
         catalog = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-cat-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: catalog, withIntermediateDirectories: true)
     }
@@ -27,6 +30,7 @@ final class ExtensionsViewTests: XCTestCase {
         }
         try? FileManager.default.removeItem(at: catalog)
         Settings.enabledExtensions = savedEnabled
+        Settings.acknowledgedExtensions = savedAcknowledged
         manager = nil
         try await super.tearDown()
     }
@@ -38,10 +42,12 @@ final class ExtensionsViewTests: XCTestCase {
         return condition()
     }
 
-    private func add(_ name: String, _ initLua: String, manifest: [String: Any]? = nil) throws {
+    /// `acknowledge` vorab gesetzt, damit das Einschalten in den meisten Tests ohne die einmalige Sicherheitsabfrage läuft.
+    private func add(_ name: String, _ initLua: String, manifest: [String: Any]? = nil, acknowledge: Bool = true) throws {
         let dir = try ExtFixture.make(name: name, initLua: initLua, manifest: manifest)
         try FileManager.default.moveItem(at: dir, to: catalog.appendingPathComponent(name))
         try? FileManager.default.removeItem(at: dir.deletingLastPathComponent())
+        if acknowledge { Settings.acknowledgedExtensions += [name] }
     }
 
     /// Ordner ohne Manifest: wird gefunden, hat ein Problem und lädt nicht.
@@ -87,6 +93,39 @@ final class ExtensionsViewTests: XCTestCase {
         XCTAssertTrue(model.handleKey("l"))
         XCTAssertTrue(model.showLog)
         XCTAssertFalse(model.handleKey("x"), "fremde Tasten gehen weiter")
+    }
+
+    /// H1: eine noch nicht bestätigte Extension schaltet erst nach „Einschalten“ im Warnhinweis an.
+    func testFirstEnableAsksForConfirmation() throws {
+        try add("a", "", acknowledge: false)
+        let model = startModel()
+        model.select(0)
+        XCTAssertTrue(model.handleKey(" "))
+        XCTAssertEqual(model.confirmEnable?.name, "a", "Leertaste zeigt erst die Warnung")
+        XCTAssertFalse(model.isEnabled("a"), "noch nicht eingeschaltet")
+        model.confirmEnableYes()
+        XCTAssertNil(model.confirmEnable)
+        XCTAssertTrue(model.isEnabled("a"))
+        XCTAssertTrue(Settings.acknowledgedExtensions.contains("a"))
+        // Bestätigt: aus und wieder an ohne erneute Nachfrage.
+        XCTAssertTrue(model.handleKey(" "))
+        XCTAssertFalse(model.isEnabled("a"))
+        XCTAssertTrue(model.handleKey(" "))
+        XCTAssertNil(model.confirmEnable, "nach dem Bestätigen keine weitere Abfrage")
+        XCTAssertTrue(model.isEnabled("a"))
+    }
+
+    /// Abbrechen im Warnhinweis schaltet nicht ein und merkt keine Bestätigung.
+    func testCancelEnableLeavesExtensionOff() throws {
+        try add("a", "", acknowledge: false)
+        let model = startModel()
+        model.select(0)
+        model.toggle(model.items[0])
+        XCTAssertNotNil(model.confirmEnable)
+        model.confirmEnableNo()
+        XCTAssertNil(model.confirmEnable)
+        XCTAssertFalse(model.isEnabled("a"))
+        XCTAssertFalse(Settings.acknowledgedExtensions.contains("a"))
     }
 
     /// Aus dem Tasten-Monitor: nur Tasten ohne Modifier, Pfeile über ihren Code.

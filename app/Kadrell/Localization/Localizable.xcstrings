@@ -4,6 +4,36 @@
     "": {
       "shouldTranslate": false
     },
+    "%@ läuft ohne Sandbox und darf auf Dateien, Netzwerk und Programme zugreifen. Wirklich einschalten?": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ läuft ohne Sandbox und darf auf Dateien, Netzwerk und Programme zugreifen. Wirklich einschalten?" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@ runs without a sandbox and can access files, network and programs. Enable anyway?" } }
+      }
+    },
+    "Angegebene Rechte: %@ (nicht erzwungen)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Angegebene Rechte: %@ (nicht erzwungen)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Declared permissions: %@ (not enforced)" } }
+      }
+    },
+    "Einschalten": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Einschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Enable" } }
+      }
+    },
+    "Name %@ ist schon von einer anderen Extension belegt, erst entfernen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Name %@ ist schon von einer anderen Extension belegt, erst entfernen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Name %@ is already taken by another extension, remove it first" } }
+      }
+    },
+    "Repo ist zu groß (über %lld MB)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Repo ist zu groß (über %lld MB)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Repo is too large (over %lld MB)" } }
+      }
+    },
     "Aktualisieren": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "Aktualisieren" } },

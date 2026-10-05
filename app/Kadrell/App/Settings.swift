@@ -96,6 +96,10 @@ enum Settings {
     /// Eingeschaltete Extensions (Ordnernamen). Bleibt auch für verschwundene oder kaputte stehen: taucht der Ordner
     /// wieder auf, läuft sie wieder.
     static var enabledExtensions: [String] { get { value("extensions.enabled", []) } set { store("extensions.enabled", newValue) } }
+    /// Extensions, deren ungesandboxten Codelauf der Nutzer einmal bestätigt hat. Ohne Eintrag fragt das Einschalten nach.
+    static var acknowledgedExtensions: [String] { get { value("extensions.acknowledged", []) } set { store("extensions.acknowledged", newValue) } }
+    /// Herkunft je aus dem Marktplatz installierter Extension (`owner/repo`), damit kein fremdes Repo einen Namen kapert.
+    static var extensionOrigins: [String: String] { get { value("extensions.origins", [:]) } set { store("extensions.origins", newValue) } }
 
     /// Hinterlegte Claude-Accounts (nur Metadaten, das OAuth-Geheimnis liegt im Schlüsselbund), JSON-kodiert.
     static var accountsData: Data? { get { Profile.defaults.data(forKey: "accounts.index") } set { store("accounts.index", newValue) } }

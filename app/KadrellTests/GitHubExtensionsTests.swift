@@ -61,11 +61,46 @@ final class GitHubExtensionsTests: XCTestCase {
         } catch GitHubExtensions.InstallError.empty {}
     }
 
-    func testInstallTarballOverwritesOnUpdate() async throws {
+    func testInstallTarballOverwritesOnUpdateFromSameOrigin() async throws {
         let catalog = root.appendingPathComponent("catalog")
-        _ = try await GitHubExtensions.installTarball(try makeTarball(repo: "r", extName: "demo", version: "1.0.0"), fallbackName: "r", into: catalog)
-        _ = try await GitHubExtensions.installTarball(try makeTarball(repo: "r", extName: "demo", version: "2.0.0"), fallbackName: "r", into: catalog)
+        _ = try await GitHubExtensions.installTarball(try makeTarball(repo: "r", extName: "demo", version: "1.0.0"),
+                                                      fallbackName: "r", into: catalog, origin: "a/x")
+        _ = try await GitHubExtensions.installTarball(try makeTarball(repo: "r", extName: "demo", version: "2.0.0"),
+                                                      fallbackName: "r", into: catalog, origin: "a/x", knownOrigins: ["demo": "a/x"])
         XCTAssertEqual(ExtensionCatalog.scan(catalog).first?.manifest?.version, "2.0.0")
+    }
+
+    /// H2: ein fremdes Repo darf einen schon belegten Namen nicht überschreiben.
+    func testInstallTarballRefusesHijackFromDifferentOrigin() async throws {
+        let catalog = root.appendingPathComponent("catalog")
+        _ = try await GitHubExtensions.installTarball(try makeTarball(repo: "jira", extName: "jira", version: "1.0.0"),
+                                                      fallbackName: "jira", into: catalog, origin: "a/jira")
+        do {
+            _ = try await GitHubExtensions.installTarball(try makeTarball(repo: "jira-fork", extName: "jira", version: "9.9.9"),
+                                                          fallbackName: "jira-fork", into: catalog,
+                                                          origin: "b/jira-fork", knownOrigins: ["jira": "a/jira"])
+            XCTFail("fremde Herkunft darf den Namen nicht kapern")
+        } catch GitHubExtensions.InstallError.occupied {}
+        XCTAssertEqual(ExtensionCatalog.scan(catalog).first?.manifest?.version, "1.0.0", "das Original bleibt unangetastet")
+    }
+
+    /// Ein Manifest-Name mit Pfadtrennern bleibt im Katalog (safeName), bricht nicht aus.
+    func testInstallTarballSanitizesTraversalName() async throws {
+        let catalog = root.appendingPathComponent("catalog")
+        let name = try await GitHubExtensions.installTarball(try makeTarball(repo: "r", extName: "../../evil"),
+                                                             fallbackName: "r", into: catalog)
+        XCTAssertEqual(name, "evil")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: catalog.appendingPathComponent("evil").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("evil").path), "nichts außerhalb des Katalogs")
+    }
+
+    /// Ein Name nur aus Punkten wird nach safeName leer und abgelehnt.
+    func testInstallTarballRejectsDotOnlyName() async throws {
+        do {
+            _ = try await GitHubExtensions.installTarball(try makeTarball(repo: "r", extName: ".."),
+                                                          fallbackName: "", into: root.appendingPathComponent("c"))
+            XCTFail("leerer Name nach safeName muss abgelehnt werden")
+        } catch GitHubExtensions.InstallError.empty {}
     }
 
     /// Baut ein `tar.gz` wie GitHub: ein oberster Ordner `<repo>-main/` mit `kadrell.json` und `init.lua`.

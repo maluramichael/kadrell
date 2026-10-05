@@ -16,12 +16,14 @@ final class ExtensionsModel: ObservableObject {
     @Published private(set) var searching = false
     @Published private(set) var installing: Set<String> = []
     @Published private(set) var storeError: String?
+    /// Gesetzt, solange der Nutzer das erste Einschalten einer Extension bestätigen soll (fremder Code ohne Sandbox).
+    @Published var confirmEnable: FoundExtension?
     /// Gespeicherte Werte der gewählten Extension ohne Geheimnisse. Von denen steht nur hier, ob sie gesetzt sind.
     @Published private(set) var stored: [String: JSONValue] = [:]
     @Published private(set) var secretsSet: Set<String> = []
     /// Fenster des offenen Dialogs, vom `SheetPresenter` gesetzt; nil heißt zu. Formularwerte zählen nur, solange es da ist:
     /// was nach dem Schließen noch an Fokuswechseln nachläuft, verwirft seinen Entwurf.
-    weak var window: NSWindow?
+    weak var window: NSWindow? { didSet { if window == nil { confirmEnable = nil } } }
     private var lastPublish = Date.distantPast
     private var pending = false
 
@@ -60,9 +62,26 @@ final class ExtensionsModel: ObservableObject {
 
     func toggle(_ ext: FoundExtension) {
         guard canToggle(ext) else { return NSSound.beep() }
-        manager.setEnabled(ext.name, !isEnabled(ext.name))
+        let enabling = !isEnabled(ext.name)
+        // Vor dem ersten Einschalten einmal bestätigen: fremder Code läuft ohne Sandbox mit den Rechten des Nutzers.
+        if enabling, !Settings.acknowledgedExtensions.contains(ext.name) {
+            confirmEnable = ext
+            return
+        }
+        manager.setEnabled(ext.name, enabling)
         publish()
     }
+
+    /// „Einschalten“ im Warnhinweis: Bestätigung merken und wirklich einschalten.
+    func confirmEnableYes() {
+        guard let ext = confirmEnable else { return }
+        confirmEnable = nil
+        if !Settings.acknowledgedExtensions.contains(ext.name) { Settings.acknowledgedExtensions += [ext.name] }
+        manager.setEnabled(ext.name, true)
+        publish()
+    }
+
+    func confirmEnableNo() { confirmEnable = nil }
 
     func reload(_ ext: FoundExtension) {
         guard canToggle(ext), isEnabled(ext.name) else { return NSSound.beep() }
@@ -93,7 +112,10 @@ final class ExtensionsModel: ObservableObject {
         storeError = nil
         defer { installing.remove(r.id) }
         do {
-            try await GitHubExtensions.install(r, into: manager.catalogDir)
+            let name = try await GitHubExtensions.install(r, into: manager.catalogDir, knownOrigins: Settings.extensionOrigins)
+            var origins = Settings.extensionOrigins
+            origins[name] = r.fullName
+            Settings.extensionOrigins = origins
             manager.refresh()
         } catch {
             storeError = String(localized: "Installieren fehlgeschlagen: \(error.localizedDescription)", bundle: Bundle.app)

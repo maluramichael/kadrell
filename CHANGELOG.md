@@ -5,6 +5,7 @@ Neueste Version oben.
 ## 1.65.0 (2026-10-05)
 
 - Feature: Extensions lassen sich jetzt direkt in Kadrell finden und installieren. Im Extensions-Dialog (F4) unter „Entdecken" nach öffentlichen GitHub-Extensions suchen und mit einem Klick installieren oder aktualisieren.
+- Feature: Vor dem ersten Einschalten einer Extension fragt Kadrell einmal nach, weil Extensions fremden Code ohne Sandbox mit deinen Rechten ausführen.
 
 ## 1.64.0 (2026-10-04)
 
