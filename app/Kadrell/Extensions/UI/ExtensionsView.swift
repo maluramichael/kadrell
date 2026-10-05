@@ -53,7 +53,7 @@ struct ExtensionsView: View {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("ENTDECKEN").kerning(0.6).foregroundStyle(Theme.mutedColor)
                 Spacer()
-                if model.searching { ProgressView().controlSize(.mini).scaleEffect(0.7) }
+                if model.searching { ProgressView().controlSize(.small) }
             }.font(Theme.ui(11))
             HStack(spacing: 10) {
                 TextField("Auf GitHub suchen (Topic kadrell-extension)", text: $model.query)

@@ -172,21 +172,22 @@ final class MainWindowController: NSObject {
     private func applyRightSidebar() {
         let show = !isRightSidebarHidden && !extensionPanel.panels.isEmpty
         guard show != (rightScroll.superview != nil) else { return }
+        // Der Split verteilt beim Ein- und Ausfügen auf alle Bereiche: die Baumbreite vorher merken und danach halten,
+        // sonst wächst der Baum bei jedem Reload (Panel weg, Panel wieder da) ein Stück.
+        let tree = isSidebarHidden ? nil : sidebarScroll.frame.width
         if show {
             let width = CGFloat(max(Profile.defaults.object(forKey: rightWidthKey) as? Double ?? 260, 120))
-            // Beim Einfügen verteilt der Split die Breite auf alle Bereiche: den Baum danach auf seine Breite zurück.
-            let tree = isSidebarHidden ? nil : sidebarScroll.frame.width
             rightScroll.frame.size = NSSize(width: width, height: split.bounds.height)
             split.addArrangedSubview(rightScroll)
             split.layoutSubtreeIfNeeded()
             let last = split.arrangedSubviews.count - 1
             split.setHoldingPriority(.defaultLow + 1, forSubviewAt: last)
             split.setPosition(split.bounds.width - width - split.dividerThickness, ofDividerAt: last - 1)
-            if let tree { split.setPosition(tree, ofDividerAt: 0) }
         } else {
             if window.firstResponder === extensionPanel { leaveRightSidebar() }
             rightScroll.removeFromSuperview()
         }
+        if let tree { split.setPosition(tree, ofDividerAt: 0) }
         window.invalidateCursorRects(for: split)
     }
 

@@ -94,6 +94,8 @@ private struct SettingField: View {
         .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
         .onSubmit(apply)
         .onChange(of: focused) { if !focused { left() } }
+        // Der Wert wurde von außen gespeichert (eigenes ⏎, Reload): solange hier nicht getippt wird, den neuen Wert zeigen.
+        .onChange(of: initial) { if !focused { draft = nil } }
     }
 
     /// Fokus anders verloren als an ein anderes Feld (Klick auf eine Zeile, Dialog geschlossen): Entwurf verworfen.
