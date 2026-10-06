@@ -11,6 +11,12 @@ war der verworfene erste Entwurf), kein eigener Daemon oder Server, keine App-St
 tastaturbedienbar, kein zweites Tool neben Kadrell (weitere Fenster derselben Instanz sind ok), Bedienung folgt tmux-Gewohnheiten statt eigener
 Erfindungen. Passt ein Vorschlag da nicht rein, erst nachfragen statt bauen.
 
+## Lua-Extensions schreiben
+
+Soll eine Lua-Extension entstehen oder geändert werden, zuerst `docs/lua-extension-api.md` lesen: vollständige API
+(apiVersion 1), Panel-Baum, harte Regeln und ein Gerüst. Nicht im Code danach suchen. Quelle der Wahrheit bleibt
+`app/Kadrell/Extensions/Host/prelude.lua`; ändert sich dort die API, die Doku im selben Arbeitsgang nachziehen.
+
 ## Changelog und Version bei jedem Commit/Merge
 
 1. Nutzersichtbare Änderungen oben in `CHANGELOG.md` unter `## Unreleased` eintragen (Abschnitt anlegen,
