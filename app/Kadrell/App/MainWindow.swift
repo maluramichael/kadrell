@@ -34,6 +34,10 @@ final class MainWindowController: NSObject {
     /// Ausgeblendet heißt: die linke Spalte ist nicht mehr Teil des Splits (kein Trenner übrig).
     var isSidebarHidden: Bool { leftColumn.superview == nil }
 
+    /// Mindesthöhen im linken Dock: der Baum oben und das Dock unten bleiben greifbar, keiner kollabiert auf 0.
+    static let treeMin: CGFloat = 80
+    static let dockMin: CGFloat = 60
+
     static func suffix(_ index: Int) -> String { index == 0 ? "" : ".\(index + 1)" }
 
     /// `cascade`: Fenster, gegen das ein neues ohne gespeicherte Lage versetzt aufgeht.
@@ -67,6 +71,7 @@ final class MainWindowController: NSObject {
         leftColumn.isVertical = false   // waagerechter Trenner: Baum oben, Dock darunter
         leftColumn.dividerStyle = .thin
         leftColumn.autosaveName = "KadrellLeftDock" + Self.suffix(index)
+        leftColumn.delegate = self      // eigene Min-Höhen und Greifzone, sonst gälten nur die des äußeren Splits
         leftColumn.addArrangedSubview(sidebarScroll)
         configureDockScroll(rightScroll, panel: extensionPanel)
         extensionPanel.onLeave = { [weak self] in self?.leaveRightSidebar() }
@@ -256,19 +261,30 @@ final class MainWindowController: NSObject {
 /// Baum und rechte Sidebar sind je höchstens halb so breit wie das Fenster: beim Ziehen und wenn das Fenster schmaler wird.
 extension MainWindowController: NSSplitViewDelegate {
     func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        isRightDivider(dividerIndex) ? proposedMaximumPosition : min(proposedMaximumPosition, splitView.bounds.width / 2)
+        if splitView === leftColumn { return splitView.bounds.height - Self.dockMin } // Dock behält seine Mindesthöhe
+        return isRightDivider(dividerIndex) ? proposedMaximumPosition : min(proposedMaximumPosition, splitView.bounds.width / 2)
     }
 
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        isRightDivider(dividerIndex) ? max(proposedMinimumPosition, splitView.bounds.width / 2) : proposedMinimumPosition
+        if splitView === leftColumn { return Self.treeMin } // Baum behält seine Mindesthöhe, das Dock kann nicht auf 0 kollabieren
+        return isRightDivider(dividerIndex) ? max(proposedMinimumPosition, splitView.bounds.width / 2) : proposedMinimumPosition
     }
 
-    /// Ziehen startet nur im effektiven Rechteck, so breit wie die Griffzone.
+    /// Ziehen startet nur im effektiven Rechteck, so breit wie die Griffzone. Beim linken Dock liegt der Trenner waagerecht.
     func splitView(_ splitView: NSSplitView, effectiveRect proposedEffectiveRect: NSRect, forDrawnRect drawnRect: NSRect, ofDividerAt dividerIndex: Int) -> NSRect {
-        drawnRect.insetBy(dx: -ThinSplitView.grabWidth / 2, dy: 0)
+        splitView === leftColumn
+            ? drawnRect.insetBy(dx: 0, dy: -ThinSplitView.grabWidth / 2)
+            : drawnRect.insetBy(dx: -ThinSplitView.grabWidth / 2, dy: 0)
     }
 
     func splitViewDidResizeSubviews(_ notification: Notification) {
+        // Das linke Dock hält sich per Min-Constraints selbst; nur seine Greifzone nach dem Ziehen nachziehen.
+        if notification.object as? NSSplitView === leftColumn {
+            leftColumn.updateTrackingAreas()
+            window.invalidateCursorRects(for: leftColumn)
+            return
+        }
+        guard notification.object as? NSSplitView === split else { return }
         let half = split.bounds.width / 2
         if !isSidebarHidden, leftColumn.frame.width > half + 1 { split.setPosition(half, ofDividerAt: 0) }
         if !isSidebarHidden, sidebarWidthRestored { Profile.defaults.set(Double(leftColumn.frame.width), forKey: sidebarWidthKey) }

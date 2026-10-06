@@ -1249,10 +1249,16 @@ final class ThinSplitView: NSSplitView {
     override var dividerColor: NSColor { Theme.line }
     override var dividerThickness: CGFloat { 1 }
 
-    /// Eine Griffzone je Trenner (Baum | Arbeitsfläche | rechte Sidebar).
+    /// Resize-Cursor passend zur Ausrichtung: senkrechter Trenner zieht links/rechts, waagerechter hoch/runter.
+    private var resizeCursor: NSCursor { isVertical ? .resizeLeftRight : .resizeUpDown }
+
+    /// Eine Griffzone je Trenner. Senkrecht: ein breiter Streifen an der rechten Kante des Bereichs. Waagerecht
+    /// (linkes Dock): ein breiter Streifen an seiner Unterkante. Ohne den waagerechten Fall bliebe nur der 1px-Trenner.
     private var grabRects: [CGRect] {
         arrangedSubviews.dropLast().map { v in
-            CGRect(x: v.frame.maxX - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
+            isVertical
+                ? CGRect(x: v.frame.maxX - Self.grabWidth / 2, y: 0, width: Self.grabWidth + dividerThickness, height: bounds.height)
+                : CGRect(x: 0, y: v.frame.minY - Self.grabWidth / 2, width: bounds.width, height: Self.grabWidth + dividerThickness)
         }
     }
 
@@ -1263,10 +1269,10 @@ final class ThinSplitView: NSSplitView {
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        for r in grabRects { addCursorRect(r, cursor: .resizeLeftRight) }
+        for r in grabRects { addCursorRect(r, cursor: resizeCursor) }
     }
 
-    override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseMoved(with event: NSEvent) { resizeCursor.set() }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
