@@ -60,6 +60,13 @@ Claude Code, `$3` Titel; Umgebung wie Claude (Login-Shell) plus `KADRELL_EVENT`,
 `KADRELL_SESSION_ID`, `KADRELL_SESSION_KEY`, `KADRELL_TITLE`, `KADRELL_BRANCH`. Fehlt das Skript, passiert nichts.
 Skripte (und der Ordner), die nicht dem eigenen Benutzer gehören oder für Gruppe/andere beschreibbar sind, laufen nicht.
 
+Extensions (Lua): Ordner mit `kadrell.json` und `init.lua` unter `~/.config/kadrell/extensions/<name>/`, je Extension ein eigener
+Helper-Prozess (`Kadrell ext-host`). Sie reagieren auf Session-Events, steuern Kadrell wie die CLI, füllen einen Tab in der rechten
+Sidebar (⌘3 Tastatur dorthin, ⌘⌥B ein/aus) und einen Eintrag in der Statusleiste. F4 öffnet den Extensions-Dialog zum An- und
+Abschalten, Neuladen, Log und für die Einstellungen; geänderte Dateien lädt Kadrell selbst neu. Unter „Entdecken" sucht der
+Dialog öffentliche GitHub-Repos mit dem Topic `kadrell-extension` und installiert oder aktualisiert sie per Klick in den
+Katalog. Aufbau, API und Grenzen: https://kadrell.malura.de/extensions
+
 Statusmeldung per Hook statt Polling: jeder von Kadrell gestartete Claude-Prozess bekommt per `--settings '<json>'` fünf
 Hooks mit (SessionStart, UserPromptSubmit, PermissionRequest, Notification, Stop), Kommando
 `[ -n "$KADRELL_SOCKET" ] && exec "$KADRELL" hook claude || exit 0`. `kadrell hook claude` liest das Hook-JSON von stdin

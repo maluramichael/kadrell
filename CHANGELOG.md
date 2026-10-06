@@ -2,6 +2,18 @@
 
 Neueste Version oben.
 
+## 1.65.0 (2026-10-05)
+
+- Feature: Extensions lassen sich jetzt direkt in Kadrell finden und installieren. Im Extensions-Dialog (F4) unter „Entdecken" nach öffentlichen GitHub-Extensions suchen und mit einem Klick installieren oder aktualisieren.
+- Feature: Vor dem ersten Einschalten einer Extension fragt Kadrell einmal nach, weil Extensions fremden Code ohne Sandbox mit deinen Rechten ausführen.
+
+## 1.64.0 (2026-10-04)
+
+- Feature: Extensions in Lua erweitern Kadrell um eigene Funktionen, an- und abschaltbar im neuen Extensions-Dialog (F4).
+- Feature: Rechte Seitenleiste für Inhalte aus Extensions, Fokus mit ⌘3, ein- und ausblenden mit ⌘⌥B.
+- Feature: Extensions können eigene Einträge in der Statusleiste zeigen.
+- Feature: Anleitung für eigene Extensions unter kadrell.malura.de/extensions.
+
 ## 1.63.0 (2026-10-04)
 
 - Feature: Claude-Sessions starten jetzt im Fullscreen-Modus. Dadurch wiederholt sich der Text beim Scrollen durch eine lange Session nicht mehr. In den Einstellungen unter Claude abschaltbar.

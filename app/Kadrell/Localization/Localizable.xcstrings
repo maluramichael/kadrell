@@ -4,6 +4,96 @@
     "": {
       "shouldTranslate": false
     },
+    "%@ läuft ohne Sandbox und darf auf Dateien, Netzwerk und Programme zugreifen. Wirklich einschalten?": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ läuft ohne Sandbox und darf auf Dateien, Netzwerk und Programme zugreifen. Wirklich einschalten?" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@ runs without a sandbox and can access files, network and programs. Enable anyway?" } }
+      }
+    },
+    "Angegebene Rechte: %@ (nicht erzwungen)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Angegebene Rechte: %@ (nicht erzwungen)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Declared permissions: %@ (not enforced)" } }
+      }
+    },
+    "Einschalten": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Einschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Enable" } }
+      }
+    },
+    "Name %@ ist schon von einer anderen Extension belegt, erst entfernen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Name %@ ist schon von einer anderen Extension belegt, erst entfernen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Name %@ is already taken by another extension, remove it first" } }
+      }
+    },
+    "Repo ist zu groß (über %lld MB)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Repo ist zu groß (über %lld MB)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Repo is too large (over %lld MB)" } }
+      }
+    },
+    "Aktualisieren": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Aktualisieren" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Update" } }
+      }
+    },
+    "Archiv ließ sich nicht entpacken": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Archiv ließ sich nicht entpacken" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Could not extract the archive" } }
+      }
+    },
+    "Auf GitHub suchen (Topic kadrell-extension)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Auf GitHub suchen (Topic kadrell-extension)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search GitHub (topic kadrell-extension)" } }
+      }
+    },
+    "Download von GitHub fehlgeschlagen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Download von GitHub fehlgeschlagen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Download from GitHub failed" } }
+      }
+    },
+    "ENTDECKEN": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "ENTDECKEN" } },
+        "en": { "stringUnit": { "state": "translated", "value": "DISCOVER" } }
+      }
+    },
+    "Installieren": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Installieren" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Install" } }
+      }
+    },
+    "Installieren fehlgeschlagen: %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Installieren fehlgeschlagen: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Install failed: %@" } }
+      }
+    },
+    "Repo enthält keine Extension (kadrell.json fehlt)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Repo enthält keine Extension (kadrell.json fehlt)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Repo contains no extension (kadrell.json missing)" } }
+      }
+    },
+    "Suche fehlgeschlagen: %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Suche fehlgeschlagen: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search failed: %@" } }
+      }
+    },
+    "Suchen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Suchen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search" } }
+      }
+    },
     "  %lld warten · %lld neu": {
       "localizations": {
         "de": {
@@ -478,6 +568,22 @@
         }
       }
     },
+    "%lld Zeilen übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Zeilen übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld lines skipped"
+          }
+        }
+      }
+    },
     "%lld trennen": {
       "localizations": {
         "de": {
@@ -570,6 +676,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 Claude session is running interactively in other terminals · Import: tools/tmux-dump.py"
+          }
+        }
+      }
+    },
+    "3 Abstürze in 2 min, bleibt aus": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 Abstürze in 2 min, bleibt aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 crashes in 2 min, stays off"
           }
         }
       }
@@ -782,6 +904,22 @@
         }
       }
     },
+    "Antwortet nicht mehr (kein Pong binnen 5 s)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antwortet nicht mehr (kein Pong binnen 5 s)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not responding (no pong within 5 s)"
+          }
+        }
+      }
+    },
     "Arbeitsfläche": {
       "localizations": {
         "de": {
@@ -810,6 +948,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workspace: keyboard to Claude"
+          }
+        }
+      }
+    },
+    "Aus": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
           }
         }
       }
@@ -958,6 +1112,38 @@
         }
       }
     },
+    "Beendet durch Signal %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beendet durch Signal %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Killed by signal %lld"
+          }
+        }
+      }
+    },
+    "Beendet mit Status %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beendet mit Status %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exited with status %lld"
+          }
+        }
+      }
+    },
     "Bei diesem Tempo ist das 7-Tage-Limit am %@ voll. Reset ist aber erst am %@, bis dahin wärst du gesperrt.": {
       "localizations": {
         "de": {
@@ -974,6 +1160,38 @@
         }
       }
     },
+    "Fehler: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehler: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error: %@"
+          }
+        }
+      }
+    },
+    "Gestoppt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestoppt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped"
+          }
+        }
+      }
+    },
     "Jetzt aktiv: „%@“. Grund: Nutzungslimit erreicht.": {
       "localizations": {
         "de": {
@@ -986,6 +1204,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Now active: “%@”. Reason: usage limit reached."
+          }
+        }
+      }
+    },
+    "Lädt neu": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lädt neu"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reloading"
+          }
+        }
+      }
+    },
+    "Läuft": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
+          }
+        }
+      }
+    },
+    "Nachricht zu groß (über 1 MB)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachricht zu groß (über 1 MB)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message too large (over 1 MB)"
           }
         }
       }
@@ -1018,6 +1284,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Switch on too-fast 7-day usage"
+          }
+        }
+      }
+    },
+    "Nimmt keine Nachrichten mehr an (über 1 MB unverarbeitet)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nimmt keine Nachrichten mehr an (über 1 MB unverarbeitet)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No longer accepts messages (over 1 MB unprocessed)"
+          }
+        }
+      }
+    },
+    "Panel zu groß (%lld Knoten, höchstens %lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panel zu groß (%lld Knoten, höchstens %lld)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panel too large (%lld nodes, at most %lld)"
+          }
+        }
+      }
+    },
+    "Startet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting"
           }
         }
       }
@@ -5142,6 +5456,22 @@
         }
       }
     },
+    "Startet nicht (kein Ready binnen 3 s)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet nicht (kein Ready binnen 3 s)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Does not start (no ready within 3 s)"
+          }
+        }
+      }
+    },
     "Startmodus": {
       "localizations": {
         "de": {
@@ -6150,6 +6480,22 @@
         }
       }
     },
+    "Zu viele Nachrichten (mehr als 50 pro Sekunde)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu viele Nachrichten (mehr als 50 pro Sekunde)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many messages (more than 50 per second)"
+          }
+        }
+      }
+    },
     "Zuletzt fokussierte Kachel": {
       "localizations": {
         "de": {
@@ -7033,6 +7379,22 @@
         }
       }
     },
+    "ungültige Nachricht verworfen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ungültige Nachricht verworfen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invalid message discarded"
+          }
+        }
+      }
+    },
     "unten": {
       "localizations": {
         "de": {
@@ -7505,6 +7867,537 @@
     },
     "☑": {
       "shouldTranslate": false
+    },
+    "kadrell.json fehlt oder ist kaputt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kadrell.json fehlt oder ist kaputt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kadrell.json is missing or broken"
+          }
+        }
+      }
+    },
+    "Name im Manifest („%@“) passt nicht zum Ordnernamen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name im Manifest („%@“) passt nicht zum Ordnernamen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name in the manifest (“%@”) does not match the folder name"
+          }
+        }
+      }
+    },
+    "Braucht neueres Kadrell (API %lld, unterstützt: %lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Braucht neueres Kadrell (API %lld, unterstützt: %lld)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs a newer Kadrell (API %lld, supported: %lld)"
+          }
+        }
+      }
+    },
+    "init.lua fehlt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "init.lua fehlt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "init.lua is missing"
+          }
+        }
+      }
+    },
+    "%@ gehört nicht dir oder ist für andere beschreibbar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ gehört nicht dir oder ist für andere beschreibbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is not owned by you or is writable by others"
+          }
+        }
+      }
+    },
+    "Knoten ohne Typ übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knoten ohne Typ übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped a node without a type"
+          }
+        }
+      }
+    },
+    "Unbekannter Knotentyp „%@“ übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannter Knotentyp „%@“ übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped unknown node type “%@”"
+          }
+        }
+      }
+    },
+    "Aktion ohne id oder label übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktion ohne id oder label übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped an action without id or label"
+          }
+        }
+      }
+    },
+    "Unbekannte Farbe ignoriert (erlaubt: accent, muted, ok, warn, err)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannte Farbe ignoriert (erlaubt: accent, muted, ok, warn, err)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignored unknown color (allowed: accent, muted, ok, warn, err)"
+          }
+        }
+      }
+    },
+    "Knoten „%@“ ohne Feld „%@“ übersprungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Knoten „%@“ ohne Feld „%@“ übersprungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped “%@” node without field “%@”"
+          }
+        }
+      }
+    },
+    "Rechte Sidebar: Tastatur hierher, ↑↓ wählt Eintrag, ←→ Tab": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte Sidebar: Tastatur hierher, ↑↓ wählt Eintrag, ←→ Tab"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right sidebar: keyboard here, ↑↓ picks an entry, ←→ a tab"
+          }
+        }
+      }
+    },
+    "Rechte Sidebar ein/aus": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte Sidebar ein/aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggle Right Sidebar"
+          }
+        }
+      }
+    },
+    "Rechte Sidebar der Extensions: ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ alle Aktionen, Esc zurück": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte Sidebar der Extensions: ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ alle Aktionen, Esc zurück"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions in the right sidebar: ↑↓ entry, ←→ tab, ⏎ first action, ⌥⏎ all actions, Esc back"
+          }
+        }
+      }
+    },
+    "Extensions: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions: %@"
+          }
+        }
+      }
+    },
+    "Noch keine Extensions. Ordner hineinlegen oder per git clone holen, sie erscheinen sofort.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Extensions. Ordner hineinlegen oder per git clone holen, sie erscheinen sofort."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No extensions yet. Drop a folder in or git clone one, it shows up right away."
+          }
+        }
+      }
+    },
+    "↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑↓ select · Space on/off · R reload · L log · Esc or F4 closes"
+          }
+        }
+      }
+    },
+    "Extensions-Ordner öffnen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions-Ordner öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open extensions folder"
+          }
+        }
+      }
+    },
+    "Doku": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doku"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Docs"
+          }
+        }
+      }
+    },
+    "Rechte: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechte: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permissions: %@"
+          }
+        }
+      }
+    },
+    "Neu laden  R": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu laden  R"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload  R"
+          }
+        }
+      }
+    },
+    "Ordner öffnen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner öffnen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open folder"
+          }
+        }
+      }
+    },
+    "Log ausblenden  L": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ausblenden  L"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide log  L"
+          }
+        }
+      }
+    },
+    "Log  L": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log  L"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log  L"
+          }
+        }
+      }
+    },
+    "gesetzt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gesetzt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "set"
+          }
+        }
+      }
+    },
+    "nicht gesetzt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nicht gesetzt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "not set"
+          }
+        }
+      }
+    },
+    "neuer Wert": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "neuer Wert"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "new value"
+          }
+        }
+      }
+    },
+    "Eigene Erweiterungen in Lua:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigene Erweiterungen in Lua:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your own extensions in Lua:"
+          }
+        }
+      }
+    },
+    "Noch keine Logzeilen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Logzeilen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No log lines yet."
+          }
+        }
+      }
+    },
+    "Extensions …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions …"
+          }
+        }
+      }
+    },
+    "Extensions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions"
+          }
+        }
+      }
+    },
+    "Extensions: an- und abschalten, neu laden, Einstellungen, Log": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions: an- und abschalten, neu laden, Einstellungen, Log"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions: turn on and off, reload, settings, log"
+          }
+        }
+      }
+    },
+    "kadrell.malura.de/extensions": {
+      "shouldTranslate": false
+    },
+    "… und %lld weitere Warnungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "… und %lld weitere Warnungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "… and %lld more warnings"
+          }
+        }
+      }
+    },
+    "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Includes Lua 5.5.1 (MIT, lua.org) and json.lua (MIT, rxi)"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

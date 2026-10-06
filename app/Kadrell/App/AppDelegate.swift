@@ -7,7 +7,7 @@ import os
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "app")
     /// Offene Hauptfenster. `current` ist das zuletzt aktive: Menü, Kürzel, Palette, Dialoge und Fernsteuerung wirken dort.
-    private var windows: [MainWindowController] = []
+    private(set) var windows: [MainWindowController] = []
     private var current: MainWindowController!
     private var window: NSWindow! { current?.window }
     private var bar: StatusBarView { current.bar }
@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Sprache, in der die Palette gebaut wurde.
     private var paletteLanguage = Settings.language
     var controlServer: ControlServer?
+    var extensions: ExtensionManager?
+    /// Sessions beim letzten `registry.onChange`, Vergleichsbasis für die Session-Events der Extensions.
+    var extensionSessions: [String: Session] = [:]
     /// claude läuft, ist aber älter als `ClaudeCLI.minVersion`: nicht blockierend, nur die Leiste warnt (`recheckCLI`).
     private var versionWarning: String?
     /// Seit wann eine Session fertig (grün) ist, für das automatische Trennen. Kein Eintrag = arbeitet oder ist getrennt.
@@ -139,6 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Nur noch Reste (z. B. Abmelden ohne Prozesse): SIGHUP, beim nächsten Start setzt `--resume` fort.
         attach?.detachAll()
         controlServer?.stop()
+        extensions?.shutdownAll()
         Profile.cleanUp()
     }
 
@@ -224,7 +228,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windows.removeAll { $0 === c }
         if current === c { current = windows.last }
         c.workspace.close()
-        for k in ["workspace.selected", "workspace.mode", "workspace.auto"] { Profile.defaults.removeObject(forKey: k + MainWindowController.suffix(c.index)) }
+        for k in ["workspace.selected", "workspace.mode", "workspace.auto", "sidebar.width", "rightSidebar.width", "rightSidebar.visible"] {
+            Profile.defaults.removeObject(forKey: k + MainWindowController.suffix(c.index))
+        }
         persistWindows()
         syncSidebar()
     }
@@ -293,6 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onManageAccounts = { [weak self] in self?.menuSettings() }
         bar.onToggleAutoswitch = { [weak self] in Settings.autoswitchEnabled.toggle(); self?.refreshAccountBars() }
         applyAccounts(to: c.bar)
+        wireExtensionPanel(c)
     }
 
     /// Konto-Pille aller Fenster auf den aktuellen Stand bringen.
@@ -382,6 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let code = event.keyCode, mods = event.modifierFlags.intersection(Hotkey.modMask)
         if code == KeyCode.f1, sheets.isPanel(.about, event.window) { sheets.dismiss(); return nil }
         if code == KeyCode.f3, sheets.isPanel(.stats, event.window) { sheets.dismiss(); return nil }
+        if handleExtensionsPanelKey(event) { return nil }
         guard controller(for: event.window) != nil else { return event }
         if code == KeyCode.escape, sheets.cancelVisible() { return nil }
         // Vorschau offen: ⏎ übernimmt die Session als Auswahl, Esc zeigt wieder die alte.
@@ -394,6 +402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if code == KeyCode.returnKey, mods == .command { newSessionInFocusedFolder(); return nil }
         if code == KeyCode.f1 { sheets.togglePanel(.about); return nil }
         if code == KeyCode.f3 { sheets.togglePanel(.stats); return nil }
+        if code == KeyCode.f4 { sheets.togglePanel(.extensions); return nil }
         forwardSync(event, mods: mods)
         return event
     }
@@ -437,7 +446,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func boot() async {
         cli = await ClaudeCLI.resolve()
-        attention.fireFocusHook = { [cli] s in Hooks.fire(.sessionFocus, s, environment: cli!.environment) }
+        attention.fireFocusHook = { [weak self, cli] s in
+            Hooks.fire(.sessionFocus, s, environment: cli!.environment)
+            self?.emitSessionFocus(s)
+        }
         attach = AttachManager(cli: cli)
         for c in windows { c.workspace.attach = attach; c.sidebar.attach = attach }
         attach.onChange = { [weak self] in self?.windows.forEach { $0.workspace.relayout() } }
@@ -452,7 +464,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         registry = SessionRegistry(cli: cli)
         registry.pids = { [weak attach] in attach?.pids ?? [:] }
-        registry.onChange = { [weak self] sessions in self?.sessionsChanged(sessions) }
+        registry.onChange = { [weak self] sessions in
+            self?.sessionsChanged(sessions)
+            self?.emitSessionEvents(sessions)
+        }
         // Fenster versteckt (Menüleisten-Betrieb) oder App im Hintergrund: seltener pollen, siehe `updatePollBackground`.
         // Aktiviert sich die App wieder und steht noch der alte Fehler (claude fehlt/zu alt), gleich nochmal prüfen:
         // ohne das bleibt „claude nicht gefunden“ auch nach einer Installation bis zum Neustart stehen.
@@ -471,10 +486,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !registry.sessions.isEmpty { sessionsChanged(registry.sessions) }
         Task {
             await registry.pollNow()
+            extensions?.emit("app.ready", .object([:]))
             await offerAdopt()
             registry.start()
         }
         startControlServer()
+        startExtensions(environment: cli.environment)
         usage.onChange = { [weak self] u in
             guard let self else { return }
             self.bar.usage = u
@@ -715,6 +732,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: String(localized: "Über Kadrell", bundle: Bundle.app), action: #selector(menuAbout), keyEquivalent: "")
         appMenu.addItem(withTitle: String(localized: "Was ist neu", bundle: Bundle.app), action: #selector(menuWhatsNew), keyEquivalent: "")
         appMenu.addItem(withTitle: String(localized: "Statistik", bundle: Bundle.app), action: #selector(menuStats), keyEquivalent: "")
+        appMenu.addItem(withTitle: String(localized: "Extensions …", bundle: Bundle.app), action: #selector(menuExtensions), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: String(localized: "Einstellungen …", bundle: Bundle.app), action: #selector(menuSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: String(localized: "Kommandozeilen-Tool installieren …", bundle: Bundle.app), action: #selector(menuInstallCLI), keyEquivalent: "")
@@ -839,6 +857,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func menuAbout() { sheets.togglePanel(.about) }
     @objc private func menuStats() { sheets.togglePanel(.stats) }
+    @objc private func menuExtensions() { sheets.togglePanel(.extensions) }
     @objc private func menuWhatsNew() { showWhatsNew(version: Settings.version, fallback: String(localized: "Keine Einträge gefunden.", bundle: Bundle.app)) }
     @objc private func menuTemporaryInstance() { Profile.launchTemporary() }
     @objc private func menuSettings() {
@@ -910,7 +929,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kürzel der Arbeitsfläche erledigt `WorkspaceView.perform`, hier bleiben die mit Baum, Vorschau oder Dialog.
     private func perform(_ action: HotkeyAction) {
         if action != .previewNext, action != .previewPrev { endPreview(commit: false) }
-        guard !workspace.perform(action) else { return }
+        guard !workspace.perform(action), !performRightSidebar(action, in: current) else { return }
         switch action {
         case .previewNext: stepPreview(1)
         case .previewPrev: stepPreview(-1)
@@ -1033,6 +1052,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (String(localized: "Gruppe bearbeiten (der fokussierten Session)", bundle: Bundle.app), { [weak self] in
                 if let s = focusedSession, let g = self?.workspace.group(forSession: s.id) { self?.openEditGroup(g.id) } }),
             (String(localized: "Statistik", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.stats) }),
+            (String(localized: "Extensions", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.extensions) }),
             (String(localized: "Reload", bundle: Bundle.app), { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
             (String(localized: "Konto hinzufügen (aktuell angemeldetes)", bundle: Bundle.app), { [weak self] in self?.addAccount() }),
         ]
@@ -1226,28 +1246,28 @@ final class ThinSplitView: NSSplitView {
     override var dividerColor: NSColor { Theme.line }
     override var dividerThickness: CGFloat { 1 }
 
-    private var grabRect: CGRect {
-        guard arrangedSubviews.count > 1 else { return .zero }
-        let x = arrangedSubviews[0].frame.maxX
-        return CGRect(x: x - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
+    /// Eine Griffzone je Trenner (Baum | Arbeitsfläche | rechte Sidebar).
+    private var grabRects: [CGRect] {
+        arrangedSubviews.dropLast().map { v in
+            CGRect(x: v.frame.maxX - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
+        }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
-        return grabRect.contains(p) ? self : super.hitTest(point)
+        return grabRects.contains { $0.contains(p) } ? self : super.hitTest(point)
     }
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        let r = grabRect
-        if !r.isEmpty { addCursorRect(r, cursor: .resizeLeftRight) }
+        for r in grabRects { addCursorRect(r, cursor: .resizeLeftRight) }
     }
 
     override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
-        addTrackingArea(NSTrackingArea(rect: grabRect, options: [.mouseMoved, .activeInKeyWindow], owner: self))
+        for r in grabRects { addTrackingArea(NSTrackingArea(rect: r, options: [.mouseMoved, .activeInKeyWindow], owner: self)) }
     }
     override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); updateTrackingAreas() }
 }
