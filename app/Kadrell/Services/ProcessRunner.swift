@@ -68,13 +68,17 @@ enum ProcessRunner {
         return got
     }
 
-    /// SIGKILL an die direkten Kinder von `pid`. Process legt jedes Kind in eine eigene Prozessgruppe, ein Signal an
-    /// die Gruppe der Eltern erreicht sie nicht, und stirbt der Elternprozess, laufen sie unter launchd weiter.
+    /// SIGKILL an den ganzen Prozessbaum unter `pid`. Process legt jedes Kind in eine eigene Prozessgruppe, ein Signal an
+    /// die Gruppe der Eltern erreicht sie nicht, und stirbt der Elternprozess, laufen sie unter launchd weiter. Ein über
+    /// `kadrell.exec` gestartetes Kind kann selbst Kinder forken (`sh -c "a & b"`), darum rekursiv bis zu den Enkeln.
     static func killChildren(of pid: pid_t) {
-        // ponytail: höchstens 256 Kinder, mehr startet ein Extension-Helper nicht gleichzeitig.
+        // ponytail: höchstens 256 direkte Kinder je Ebene, mehr startet ein Extension-Helper nicht gleichzeitig.
         var buf = [pid_t](repeating: 0, count: 256)
         let n = proc_listchildpids(pid, &buf, Int32(buf.count * MemoryLayout<pid_t>.size))
-        for child in buf.prefix(max(0, min(Int(n), buf.count))) where child > 0 { kill(child, SIGKILL) }
+        for child in buf.prefix(max(0, min(Int(n), buf.count))) where child > 0 {
+            killChildren(of: child) // Enkel zuerst, solange das Kind sie noch als Elter ausweist.
+            kill(child, SIGKILL)
+        }
     }
 
     /// Startet ohne Warten, stdin leer. `discardOutput`: stdout und stderr ins Leere statt geerbt.

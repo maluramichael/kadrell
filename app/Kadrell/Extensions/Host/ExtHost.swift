@@ -94,8 +94,10 @@ enum ExtHost {
     }
 
     private static func http(id: Int, _ msg: [String: Any]) {
-        guard let url = (msg["url"] as? String).flatMap(URL.init(string:)) else {
-            return deliver(id: id, ["status": 0, "headers": [:] as [String: String], "body": "", "error": "ungültige URL"])
+        // Nur http/https: file:// und andere Schemata würden lokale Dateien oder Dienste erreichbar machen (SSRF).
+        guard let url = (msg["url"] as? String).flatMap(URL.init(string:)),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return deliver(id: id, ["status": 0, "headers": [:] as [String: String], "body": "", "error": "URL muss http oder https sein"])
         }
         var req = URLRequest(url: url)
         req.httpMethod = msg["method"] as? String

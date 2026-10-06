@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.65.1 (2026-10-06)
+
+- Fix: Extensions laufen sicherer und sauberer: von Extensions gestartete Programme werden vollständig beendet, Netzwerkzugriffe gehen nur noch über http/https, und eine Extension kann Kadrell nicht mehr selbst beenden.
+
 ## 1.65.0 (2026-10-05)
 
 - Feature: Extensions lassen sich jetzt direkt in Kadrell finden und installieren. Im Extensions-Dialog (F4) unter „Entdecken" nach öffentlichen GitHub-Extensions suchen und mit einem Klick installieren oder aktualisieren.

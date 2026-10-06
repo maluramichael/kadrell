@@ -94,6 +94,14 @@ final class GitHubExtensionsTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("evil").path), "nichts außerhalb des Katalogs")
     }
 
+    /// N6: Nicht-ASCII-Zeichen (Homoglyphen) fallen aus dem Ordnernamen.
+    func testInstallTarballStripsNonAsciiFromName() async throws {
+        let catalog = root.appendingPathComponent("catalog")
+        let name = try await GitHubExtensions.installTarball(try makeTarball(repo: "r", extName: "café-x"),
+                                                             fallbackName: "r", into: catalog)
+        XCTAssertEqual(name, "caf-x")
+    }
+
     /// Ein Name nur aus Punkten wird nach safeName leer und abgelehnt.
     func testInstallTarballRejectsDotOnlyName() async throws {
         do {

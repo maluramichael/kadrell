@@ -222,6 +222,8 @@ final class ExtensionManager {
         retired.removeAll { $0 === p }
         guard procs[name] === p else { return }
         procs[name] = nil
+        // Ist die Extension inzwischen verschwunden (Ordner weg), keinen Supervisor-Eintrag wieder anlegen.
+        guard found.contains(where: { $0.name == name }) else { return }
         feed(name, .exited(expected: expected, reason: reason))
     }
 

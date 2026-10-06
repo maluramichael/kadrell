@@ -11,14 +11,17 @@ final class ExtensionsViewTests: XCTestCase {
     private var catalog: URL!
     private var savedEnabled: [String] = []
     private var savedAcknowledged: [String] = []
+    private var savedOrigins: [String: String] = [:]
     private let environment = ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin"]
 
     override func setUp() async throws {
         try await super.setUp()
         savedEnabled = Settings.enabledExtensions
         savedAcknowledged = Settings.acknowledgedExtensions
+        savedOrigins = Settings.extensionOrigins
         Settings.enabledExtensions = []
         Settings.acknowledgedExtensions = []
+        Settings.extensionOrigins = [:]
         catalog = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-cat-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: catalog, withIntermediateDirectories: true)
     }
@@ -31,6 +34,7 @@ final class ExtensionsViewTests: XCTestCase {
         try? FileManager.default.removeItem(at: catalog)
         Settings.enabledExtensions = savedEnabled
         Settings.acknowledgedExtensions = savedAcknowledged
+        Settings.extensionOrigins = savedOrigins
         manager = nil
         try await super.tearDown()
     }
@@ -126,6 +130,20 @@ final class ExtensionsViewTests: XCTestCase {
         XCTAssertNil(model.confirmEnable)
         XCTAssertFalse(model.isEnabled("a"))
         XCTAssertFalse(Settings.acknowledgedExtensions.contains("a"))
+    }
+
+    /// N7: „installiert" erkennt den Ordner über die erfasste Herkunft, auch wenn er anders heißt als das Repo.
+    func testIsInstalledUsesRecordedOrigin() throws {
+        try add("mytool", "")
+        let model = startModel()
+        Settings.extensionOrigins = ["mytool": "owner/repo-name"]
+        func remote(_ owner: String, _ repo: String) -> RemoteExtension {
+            RemoteExtension(owner: owner, repo: repo, description: "", stars: 0,
+                            htmlURL: URL(string: "https://github.com/\(owner)/\(repo)")!)
+        }
+        XCTAssertTrue(model.isInstalled(remote("owner", "repo-name")), "über Herkunft erkannt trotz abweichendem Ordnernamen")
+        XCTAssertTrue(model.isInstalled(remote("x", "mytool")), "Fallback über den Repo-Namen für von Hand gelegte")
+        XCTAssertFalse(model.isInstalled(remote("y", "unbekannt")))
     }
 
     /// Aus dem Tasten-Monitor: nur Tasten ohne Modifier, Pfeile über ihren Code.

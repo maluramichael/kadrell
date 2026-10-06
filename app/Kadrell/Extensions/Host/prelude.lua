@@ -8,6 +8,10 @@ local json = dofile(here .. "json.lua")
 local send = __kadrell_send
 __kadrell_send = nil
 
+-- Eine Extension soll den Helfer nicht selbst beenden; die Prelude behält os.exit intern.
+local osexit = os.exit
+os.exit = nil
+
 local function emit(msg)
     send(json.encode(msg))
 end
@@ -178,7 +182,7 @@ function messages.hello(m)
     local ok, err = xpcall(dofile, debug.traceback, m.dir .. "/init.lua")
     if not ok then
         log("error", err)
-        os.exit(1)
+        osexit(1)
     end
     emit({ t = "ready" })
 end
@@ -208,7 +212,7 @@ function messages.timer(m)
 end
 
 function messages.shutdown()
-    os.exit(0)
+    osexit(0)
 end
 
 function __kadrell_dispatch(line)

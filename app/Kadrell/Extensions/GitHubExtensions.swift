@@ -130,9 +130,10 @@ enum GitHubExtensions {
         return name
     }
 
-    /// Nur harmlose Zeichen und keine führenden Punkte: ein Name mit „/" oder „.." darf nicht aus dem Katalog ausbrechen.
+    /// Nur harmlose ASCII-Zeichen und keine führenden Punkte: ein Name mit „/" oder „.." darf nicht aus dem Katalog
+    /// ausbrechen, und Unicode-Homoglyphen sollen keinen fremden Namen nachahmen.
     private static func safeName(_ s: String) -> String {
-        let kept = s.filter { $0.isLetter || $0.isNumber || "._-".contains($0) }
+        let kept = s.filter { ($0.isASCII && ($0.isLetter || $0.isNumber)) || "._-".contains($0) }
         return String(kept.drop { $0 == "." })
     }
 

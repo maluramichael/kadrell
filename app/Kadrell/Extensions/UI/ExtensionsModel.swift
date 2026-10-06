@@ -90,9 +90,15 @@ final class ExtensionsModel: ObservableObject {
 
     func openFolder(_ ext: FoundExtension) { NSWorkspace.shared.open(ext.dir) }
 
-    /// Ein Repo gilt als installiert, wenn eine Extension so heißt wie das Repo. Heißt der Ordner nach dem Manifest
-    /// anders als das Repo, bietet der Marktplatz eben noch einmal „Installieren" an, das schadet nicht.
-    func isInstalled(_ r: RemoteExtension) -> Bool { items.contains { $0.name == r.repo } }
+    /// Installiert, wenn der aus diesem Repo angelegte Ordner (über die erfasste Herkunft) noch da ist; sonst ersatzweise
+    /// ein Ordner mit dem Repo-Namen (von Hand gelegt). So stimmt „Installieren" vs. „Aktualisieren" auch bei abweichendem
+    /// Manifest-Namen.
+    func isInstalled(_ r: RemoteExtension) -> Bool {
+        if let name = Settings.extensionOrigins.first(where: { $0.value == r.fullName })?.key {
+            return items.contains { $0.name == name }
+        }
+        return items.contains { $0.name == r.repo }
+    }
 
     func searchStore() async {
         let q = query
