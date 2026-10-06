@@ -20,8 +20,12 @@ extension AppDelegate {
     /// wenn sich etwas geändert hat; neu gezeichnet wird über `needsDisplay`, also höchstens einmal pro Runloop-Durchlauf.
     func extensionsChanged() {
         guard let extensions else { return }
-        let panels = extensions.panels, items = extensions.statusItems
-        for c in windows { c.updateExtensionPanels(panels); c.bar.extensionItems = items }
+        let right = extensions.panels(in: .right), left = extensions.panels(in: .left), items = extensions.statusItems
+        for c in windows {
+            c.updateExtensionPanels(right)
+            c.updateLeftDock(left)
+            c.bar.extensionItems = items
+        }
     }
 
     /// Tasten im offenen F4-Panel: F4 schließt, ↑↓, Leertaste, R und L gehen ans Modell (siehe `ExtensionsModel.panelKey`).
@@ -45,8 +49,10 @@ extension AppDelegate {
     /// Aktionen aus der rechten Sidebar und der Statusleiste gehen als `ui.action` an ihre Extension; ein neues Fenster zeigt gleich die Panels.
     func wireExtensionPanel(_ c: MainWindowController) {
         c.extensionPanel.onAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
+        c.leftDockPanel.onAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
         c.bar.onExtensionAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
-        c.updateExtensionPanels(extensions?.panels ?? [])
+        c.updateExtensionPanels(extensions?.panels(in: .right) ?? [])
+        c.updateLeftDock(extensions?.panels(in: .left) ?? [])
         c.bar.extensionItems = extensions?.statusItems ?? []
     }
 

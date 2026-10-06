@@ -2,7 +2,7 @@ import Foundation
 
 /// Nachrichten einer Extension an Kadrell (eine JSON-Zeile, Unterscheidung über `t`).
 enum ExtensionMessage: Equatable {
-    case ready, pong(Int), panel(JSONValue?), status(JSONValue?), run(id: Int, argv: [String]), log(level: String, text: String)
+    case ready, pong(Int), panel(JSONValue?, dock: String?), status(JSONValue?), run(id: Int, argv: [String]), log(level: String, text: String)
 
     /// Kaputtes JSON, Binärmüll, unbekanntes `t` oder falsche Feldtypen ergeben `nil`; der Aufrufer verwirft die Zeile.
     static func decode(_ line: Data) -> ExtensionMessage? {
@@ -10,7 +10,7 @@ enum ExtensionMessage: Equatable {
         switch t {
         case "ready": return .ready
         case "pong": return v["id"]?.int.map { .pong($0) }
-        case "panel": return .panel(v["tree"].flatMap(nonNull))
+        case "panel": return .panel(v["tree"].flatMap(nonNull), dock: v["dock"]?.string)
         case "status": return .status(v["item"].flatMap(nonNull))
         case "run": return decodeRun(v)
         case "log": return v["text"]?.string.map { .log(level: v["level"]?.string ?? "info", text: $0) }

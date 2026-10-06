@@ -86,10 +86,13 @@ Mehrere Handler pro Event möglich. `fn` bekommt `data`. Events:
 
 ### Daten und Konfiguration
 - `kadrell.config.<key>` – Werte aus `settings` (read-only).
+- `kadrell.locale` – Sprachcode der Oberfläche (`"de"` / `"en"`), zum Übersetzen eigener Texte.
 - `kadrell.storage.get(key)` / `kadrell.storage.set(key, value)` – JSON-Datei im Profil, überlebt Reload und Neustart.
 
 ### Oberfläche
-- `kadrell.panel.set(tree)` / `kadrell.panel.clear()` – füllt den Tab der Extension in der rechten Sidebar.
+- `kadrell.panel.set(tree, opts)` / `kadrell.panel.clear()` – füllt den Tab der Extension mit dem Panel.
+  `opts.dock` wählt die Seite: `"right"` (Default, wie bisher) oder `"left"` (Dock unter dem Session-Baum).
+  `"top"`/`"bottom"` sind reserviert, landen in dieser Version noch rechts. Unbekanntes `dock` → rechts.
 - `kadrell.status.set(item)` / `kadrell.status.clear()` – ein Eintrag in der Statusleiste.
 
 ## Panel-Baum

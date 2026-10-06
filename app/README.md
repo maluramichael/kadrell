@@ -62,7 +62,7 @@ Skripte (und der Ordner), die nicht dem eigenen Benutzer gehören oder für Grup
 
 Extensions (Lua): Ordner mit `kadrell.json` und `init.lua` unter `~/.config/kadrell/extensions/<name>/`, je Extension ein eigener
 Helper-Prozess (`Kadrell ext-host`). Sie reagieren auf Session-Events, steuern Kadrell wie die CLI, füllen einen Tab in der rechten
-Sidebar (⌘3 Tastatur dorthin, ⌘⌥B ein/aus) und einen Eintrag in der Statusleiste. F4 öffnet den Extensions-Dialog zum An- und
+Sidebar (⌘3 Tastatur dorthin, ⌘⌥B ein/aus) oder ein Dock links unter dem Baum (`panel.set(tree, { dock = "left" })`), und einen Eintrag in der Statusleiste. F4 öffnet den Extensions-Dialog zum An- und
 Abschalten, Neuladen, Log und für die Einstellungen; geänderte Dateien lädt Kadrell selbst neu. Unter „Entdecken" sucht der
 Dialog öffentliche GitHub-Repos mit dem Topic `kadrell-extension` und installiert oder aktualisiert sie per Klick in den
 Katalog. Aufbau, API und Grenzen: https://kadrell.malura.de/extensions
@@ -79,9 +79,9 @@ an den Socket der eigenen Kachel; ohne Socket endet der Hook sofort. Eine so gem
 Fernsteuerung (wie das `tmux`-Kommando): Menü Kadrell › „Kommandozeilen-Tool installieren …“ legt
 `~/.local/bin/kadrell` als Symlink auf das App-Binary an. `kadrell <befehl>` spricht über den Unix-Socket
 `~/Library/Application Support/de.malura.kadrell/kadrell.sock` (0600) mit der laufenden App und startet sie, falls
-sie nicht läuft. Befehle: `ls [--json]`, `new-group`, `new [-t gruppe] [-c ordner] [-d] [prompt]`, `select`, `layout`,
-`zoom`, `rename`, `move`, `set-group`, `stop`, `resume`, `kill`, `kill-group`, `send [-k]`, `capture [--all]`, alles in
-`kadrell help`. Ziele per `-t` (Key-Anfang, Titel, Gruppenname); ohne `-t` gilt die Session, in der das Kommando
+sie nicht läuft. Befehle: `ls [--json]`, `ssh-hosts [--json]`, `new-group`, `new [-t gruppe] [-c ordner] [-d] [prompt]`,
+`new --host H [--tmux S]` (Remote-Kachel per ssh), `select`, `layout`, `zoom`, `rename`, `move`, `set-group`,
+`stop`, `resume`, `kill`, `kill-group`, `send [-k]`, `capture [--all]`, alles in `kadrell help`. Ziele per `-t` (Key-Anfang, Titel, Gruppenname); ohne `-t` gilt die Session, in der das Kommando
 läuft: jede Kachel hat `KADRELL_SESSION_KEY`, `KADRELL_SOCKET` und `KADRELL` (Pfad zum Binary) in der Umgebung.
 Per CLI angelegte Gruppen sind Favoriten, sonst räumt der Abgleich sie leer wieder weg. Rückfragen entfallen.
 Welche Kachel aufruft, bestimmt die App selbst über die pid am Socket (`LOCAL_PEERPID`) und den Prozessbaum bzw. die

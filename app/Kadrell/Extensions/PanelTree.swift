@@ -2,6 +2,20 @@ import Foundation
 
 enum ThemeColor: String, Equatable { case accent, muted, ok, warn, err }
 
+/// Wohin eine Extension ihr Panel hängt. `right` ist der alte Ort (Default, rückwärtskompatibel).
+/// `top`/`bottom` sind reserviert, aber in dieser Version noch nicht platziert (fallen auf `right` zurück).
+enum Dock: String, Equatable {
+    case left, right, top, bottom
+
+    /// Unbekanntes oder fehlendes `dock` → rechts, wie bisher. Noch nicht platzierte Docks ebenfalls nach rechts.
+    static func placed(_ raw: String?) -> Dock {
+        switch Dock(rawValue: raw ?? "") {
+        case .left: .left
+        default: .right
+        }
+    }
+}
+
 struct PanelAction: Equatable { var id, label: String }
 
 indirect enum PanelNode: Equatable {

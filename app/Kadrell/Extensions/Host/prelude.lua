@@ -165,7 +165,8 @@ local function flush()
     latest = {}
 end
 
-function kadrell.panel.set(tree) latest.panel = json.encode({ t = "panel", tree = tree }) end
+-- opts.dock: "left" oder "right" (Default rechts). Unbekanntes Dock landet rechts.
+function kadrell.panel.set(tree, opts) latest.panel = json.encode({ t = "panel", tree = tree, dock = opts and opts.dock or nil }) end
 
 function kadrell.panel.clear() latest.panel = '{"t":"panel","tree":null}' end
 
@@ -178,6 +179,7 @@ local messages = {}
 function messages.hello(m)
     ext.name, ext.dir, ext.storageDir = m.name, m.dir, m.storageDir
     kadrell.config = m.config or {}
+    kadrell.locale = m.locale or "en"
     package.path = m.dir .. "/?.lua"
     local ok, err = xpcall(dofile, debug.traceback, m.dir .. "/init.lua")
     if not ok then

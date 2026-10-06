@@ -834,7 +834,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuRemote() { togglePalette(prefix: "@") }
 
     /// Remote-Kachel: Gruppe je Host, der Schlüssel trägt das ssh-Präfix wie Shells das ihre.
-    private func startRemote(host: String, tmuxSession: String?) {
+    /// `show: false` startet im Hintergrund (Auswahl bleibt), für `kadrell new --host -d`.
+    @discardableResult
+    func startRemote(host: String, tmuxSession: String?, show: Bool = true) -> String {
         let g = store.group(forHost: host) ?? { let g = store.makeGroup(host: host); store.add(g); return g }()
         let id = Session.remotePrefix + UUID().uuidString.lowercased()
         store.attach(sessionId: id, to: g.id)
@@ -843,7 +845,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         session.host = host
         session.tmuxSession = tmuxSession
         registry.add(session)
-        workspace.select([id], add: !workspace.selected.isEmpty)
+        if show { workspace.select([id], add: !workspace.selected.isEmpty) } else { attach.attachNow(session) }
+        return id
     }
 
     /// ⌘T: Login-Shell im Ordner der fokussierten Session, sonst im Startordner.

@@ -81,7 +81,7 @@ final class ExtensionProcessTests: XCTestCase {
 
     func testHelloDeliversReadyAndPanel() async throws {
         _ = try await launchReady(#"kadrell.on("app.ready", function() kadrell.panel.set{title = "A", children = {}} end)"#)
-        let panel = await until(3) { self.messages.contains { if case .panel(let t) = $0 { t?["title"]?.string == "A" } else { false } } }
+        let panel = await until(3) { self.messages.contains { if case .panel(let t, _) = $0 { t?["title"]?.string == "A" } else { false } } }
         XCTAssertTrue(panel, "\(events)")
         XCTAssertEqual(messages.first, .ready)
     }
@@ -115,7 +115,7 @@ final class ExtensionProcessTests: XCTestCase {
     /// Ruling 19: tausend panel.set in einem Handler gehen als ein Panel raus, kein Flut-Kill.
     func testPanelSetLoopIsCoalesced() async throws {
         _ = try await launchReady(#"kadrell.on("app.ready", function() for i = 1, 1000 do kadrell.panel.set{title = tostring(i)} end end)"#)
-        let arrived = await until(3) { self.messages.contains { if case .panel(let t) = $0 { t?["title"]?.string == "1000" } else { false } } }
+        let arrived = await until(3) { self.messages.contains { if case .panel(let t, _) = $0 { t?["title"]?.string == "1000" } else { false } } }
         XCTAssertTrue(arrived, "\(events.suffix(3))")
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(exits.count, 0)

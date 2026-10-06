@@ -10,8 +10,13 @@ final class MainWindowController: NSObject {
     let bar = StatusBarView(frame: .zero)
     let wallpaper = WallpaperView(frame: .zero)
     let split = ThinSplitView(frame: .zero)
+    /// Linke Spalte: Session-Baum oben, darunter optional ein Dock mit Extension-Panels (vertikal geteilt).
+    /// Nimmt den Platz ein, den früher `sidebarScroll` direkt im Split hatte.
+    let leftColumn = ThinSplitView(frame: .zero)
     let sidebarScroll = NSScrollView(frame: .zero)
     let sidebar = SidebarView(frame: .zero)
+    let leftDockScroll = NSScrollView(frame: .zero)
+    let leftDockPanel = ExtensionPanelView(frame: .zero)
     let workspace: WorkspaceView
     /// Rechte Sidebar mit den Panels der Extensions, dritter Bereich im Split.
     let rightScroll = NSScrollView(frame: .zero)
@@ -26,8 +31,8 @@ final class MainWindowController: NSObject {
         }
     }
 
-    /// Ausgeblendet heißt: der Baum ist nicht mehr Teil des Splits (kein Trenner übrig).
-    var isSidebarHidden: Bool { sidebarScroll.superview == nil }
+    /// Ausgeblendet heißt: die linke Spalte ist nicht mehr Teil des Splits (kein Trenner übrig).
+    var isSidebarHidden: Bool { leftColumn.superview == nil }
 
     static func suffix(_ index: Int) -> String { index == 0 ? "" : ".\(index + 1)" }
 
@@ -57,15 +62,17 @@ final class MainWindowController: NSObject {
         sidebarScroll.drawsBackground = false   // der Baum malt sein Panel selbst, mit der Deckkraft der Kacheln
         sidebar.autoresizingMask = [.width]
         sidebar.frame = NSRect(x: 0, y: 0, width: 260, height: 10)
-        rightScroll.documentView = extensionPanel
-        rightScroll.hasVerticalScroller = true
-        rightScroll.autohidesScrollers = true
-        rightScroll.drawsBackground = false
-        extensionPanel.frame = NSRect(x: 0, y: 0, width: 260, height: 10)
+        configureDockScroll(leftDockScroll, panel: leftDockPanel)
+        leftDockPanel.onLeave = { [weak self] in self?.leaveLeftDock() }
+        leftColumn.isVertical = false   // waagerechter Trenner: Baum oben, Dock darunter
+        leftColumn.dividerStyle = .thin
+        leftColumn.autosaveName = "KadrellLeftDock" + Self.suffix(index)
+        leftColumn.addArrangedSubview(sidebarScroll)
+        configureDockScroll(rightScroll, panel: extensionPanel)
         extensionPanel.onLeave = { [weak self] in self?.leaveRightSidebar() }
         split.isVertical = true
         split.dividerStyle = .thin
-        split.addArrangedSubview(sidebarScroll)
+        split.addArrangedSubview(leftColumn)
         split.addArrangedSubview(workspace)
         split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
         split.autosaveName = "KadrellSplit" + Self.suffix(index)
@@ -89,6 +96,15 @@ final class MainWindowController: NSObject {
         }
     }
 
+    /// Scrollbereich eines Extension-Docks: wie der rechte, der Baum malt sein eigenes Panel.
+    private func configureDockScroll(_ scroll: NSScrollView, panel: ExtensionPanelView) {
+        scroll.documentView = panel
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        panel.frame = NSRect(x: 0, y: 0, width: 260, height: 10)
+    }
+
     func show() {
         window.makeKeyAndOrderFront(nil)
         restoreSidebarWidth()
@@ -106,19 +122,19 @@ final class MainWindowController: NSObject {
         else if split.arrangedSubviews[0].frame.width < 120 { split.setPosition(260, ofDividerAt: 0) }
         sidebarWidthRestored = true
         // Einmal sichern: kamen die Panels schon vorher (⌘⇧T), gab es danach womöglich kein Verschieben mehr, das speichert.
-        if !isSidebarHidden { Profile.defaults.set(Double(sidebarScroll.frame.width), forKey: sidebarWidthKey) }
+        if !isSidebarHidden { Profile.defaults.set(Double(leftColumn.frame.width), forKey: sidebarWidthKey) }
     }
 
     /// Baum ein/aus (Cmd+B): ausgeblendet nehmen wir ihn ganz aus dem Split, dann bleibt kein Trenner übrig –
     /// weder als Linie noch zum Herausziehen. Zurück kommt er nur hierüber, auf der zuletzt genutzten Breite.
     func toggleSidebar() {
         if isSidebarHidden {
-            split.insertArrangedSubview(sidebarScroll, at: 0)
+            split.insertArrangedSubview(leftColumn, at: 0)
             split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
             split.setPosition(lastSidebarWidth, ofDividerAt: 0)
         } else {
-            lastSidebarWidth = max(sidebarScroll.frame.width, 120)
-            sidebarScroll.removeFromSuperview()
+            lastSidebarWidth = max(leftColumn.frame.width, 120)
+            leftColumn.removeFromSuperview()
         }
         window.invalidateCursorRects(for: split)
     }
@@ -138,6 +154,45 @@ final class MainWindowController: NSObject {
         bar.needsDisplay = true
         sidebar.needsDisplay = true
         extensionPanel.layoutRows()
+        leftDockPanel.layoutRows()
+    }
+
+    // MARK: Linkes Dock (Extension-Panels unter dem Baum)
+
+    /// Neue Panels fürs linke Dock. Wie die rechte Sidebar: nur anfassen, wenn sich etwas geändert hat.
+    func updateLeftDock(_ panels: [(name: String, tree: PanelTree)]) {
+        guard !ExtensionPanelView.same(leftDockPanel.panels, panels) else { return }
+        let tab = leftDockPanel.selectedTab
+        if window.firstResponder === leftDockPanel, !panels.contains(where: { $0.name == tab }) { leaveLeftDock() }
+        leftDockPanel.panels = panels
+        applyLeftDock()
+    }
+
+    /// Dock rein oder raus aus der linken Spalte. Beim ersten Erscheinen bekommt es unten einen Standardanteil,
+    /// eine gezogene oder gespeicherte Höhe (`autosaveName`) bleibt.
+    private func applyLeftDock() {
+        let show = !leftDockPanel.panels.isEmpty
+        guard show != (leftDockScroll.superview != nil) else { return }
+        if show {
+            leftColumn.addArrangedSubview(leftDockScroll)
+            leftColumn.setHoldingPriority(.defaultLow + 1, forSubviewAt: 1)
+            leftColumn.layoutSubtreeIfNeeded()
+            if leftDockScroll.frame.height < 60 { leftColumn.setPosition(max(leftColumn.bounds.height - 220, leftColumn.bounds.height / 2), ofDividerAt: 0) }
+        } else {
+            if window.firstResponder === leftDockPanel { leaveLeftDock() }
+            leftDockScroll.removeFromSuperview()
+        }
+    }
+
+    /// ⌘⇧3: Tastatur ins linke Dock, false wenn es keine Panels gibt.
+    func focusLeftDock() -> Bool {
+        guard !leftDockPanel.panels.isEmpty else { return false }
+        return window.makeFirstResponder(leftDockPanel)
+    }
+
+    /// Esc im linken Dock: Tastatur zurück an die Kachel.
+    func leaveLeftDock() {
+        if let f = workspace.focused { workspace.setFocus(f) } else { window.makeFirstResponder(workspace) }
     }
 
     // MARK: Rechte Sidebar
@@ -174,7 +229,7 @@ final class MainWindowController: NSObject {
         guard show != (rightScroll.superview != nil) else { return }
         // Der Split verteilt beim Ein- und Ausfügen auf alle Bereiche: die Baumbreite vorher merken und danach halten,
         // sonst wächst der Baum bei jedem Reload (Panel weg, Panel wieder da) ein Stück.
-        let tree = isSidebarHidden ? nil : sidebarScroll.frame.width
+        let tree = isSidebarHidden ? nil : leftColumn.frame.width
         if show {
             let width = CGFloat(max(Profile.defaults.object(forKey: rightWidthKey) as? Double ?? 260, 120))
             rightScroll.frame.size = NSSize(width: width, height: split.bounds.height)
@@ -215,8 +270,8 @@ extension MainWindowController: NSSplitViewDelegate {
 
     func splitViewDidResizeSubviews(_ notification: Notification) {
         let half = split.bounds.width / 2
-        if !isSidebarHidden, sidebarScroll.frame.width > half + 1 { split.setPosition(half, ofDividerAt: 0) }
-        if !isSidebarHidden, sidebarWidthRestored { Profile.defaults.set(Double(sidebarScroll.frame.width), forKey: sidebarWidthKey) }
+        if !isSidebarHidden, leftColumn.frame.width > half + 1 { split.setPosition(half, ofDividerAt: 0) }
+        if !isSidebarHidden, sidebarWidthRestored { Profile.defaults.set(Double(leftColumn.frame.width), forKey: sidebarWidthKey) }
         if rightScroll.superview != nil {
             if rightScroll.frame.width > half + 1 { split.setPosition(split.bounds.width - half, ofDividerAt: split.arrangedSubviews.count - 2) }
             if rightScroll.frame.width > 0 { Profile.defaults.set(Double(rightScroll.frame.width), forKey: rightWidthKey) }

@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.66.0 (2026-10-06)
+
+- Feature: Extensions können ihr Panel jetzt auch in einem Dock links unter dem Baum zeigen, nicht nur rechts.
+- Feature: Neue SSH-Extension: listet die Hosts aus ~/.ssh/config links in der Sidebar, ein Klick öffnet eine Remote-Kachel.
+- Feature: Fernsteuerung kann Remote-Kacheln öffnen (`kadrell new --host <Host> [--tmux <Session>]`) und die Hosts aus ~/.ssh/config auflisten (`kadrell ssh-hosts`).
+
 ## 1.65.1 (2026-10-06)
 
 - Fix: Extensions laufen sicherer und sauberer: von Extensions gestartete Programme werden vollständig beendet, Netzwerkzugriffe gehen nur noch über http/https, und eine Extension kann Kadrell nicht mehr selbst beenden.

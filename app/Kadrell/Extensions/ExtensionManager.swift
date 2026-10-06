@@ -38,6 +38,8 @@ final class ExtensionManager {
     /// Zählt Starts: ein Start, der noch auf seine Einstellungen wartet, verfällt, sobald ein neuerer begonnen hat.
     private var launches: [String: Int] = [:]
     private var trees: [String: PanelTree] = [:]
+    /// Ziel-Dock je Extension (`kadrell.panel.set(tree, { dock = … })`), Default rechts.
+    private var docks: [String: Dock] = [:]
     private var statuses: [String: (text: String, color: ThemeColor?, action: String?)] = [:]
     private var logs: [String: [String]] = [:]
     /// Änderungszeiten der Lua-Dateien und des Manifests je Extension, um nach einer Dateimeldung die geänderten zu finden.
@@ -55,7 +57,13 @@ final class ExtensionManager {
         self.catalogDir = catalogDir
     }
 
+    /// Alle Panels, Dock-übergreifend, in Fundreihenfolge.
     var panels: [(name: String, tree: PanelTree)] { found.compactMap { f in trees[f.name].map { (f.name, $0) } } }
+
+    /// Panels eines Docks, in Fundreihenfolge. Ohne gesetztes Dock gilt rechts (wie bisher).
+    func panels(in dock: Dock) -> [(name: String, tree: PanelTree)] {
+        found.compactMap { f in (docks[f.name] ?? .right) == dock ? trees[f.name].map { (f.name, $0) } : nil }
+    }
 
     var statusItems: [(name: String, text: String, color: ThemeColor?, action: String?)] {
         found.compactMap { f in statuses[f.name].map { (f.name, $0.text, $0.color, $0.action) } }
@@ -172,6 +180,7 @@ final class ExtensionManager {
             }
         case .clearUI:
             trees[name] = nil
+            docks[name] = nil
             statuses[name] = nil
         }
     }
@@ -255,14 +264,15 @@ final class ExtensionManager {
                 let r = live ? await control(argv) : .fail("extension is stopping")
                 p.send(.result(id: id, status: r.status, stdout: r.stdout, stderr: r.stderr))
             }
-        case .panel(let v): if isLive(p, name) { setPanel(v, name) }
+        case .panel(let v, let dock): if isLive(p, name) { setPanel(v, dock: dock, name) }
         case .status(let v): if isLive(p, name) { setStatus(v, name) }
         }
     }
 
-    private func setPanel(_ v: JSONValue?, _ name: String) {
+    private func setPanel(_ v: JSONValue?, dock: String?, _ name: String) {
         guard let v else {
             trees[name] = nil
+            docks[name] = nil
             return onChange()
         }
         switch PanelValidation.tree(v) {
@@ -270,6 +280,7 @@ final class ExtensionManager {
             var seen = Set<String>()
             for w in result.warnings where seen.insert(w).inserted { append(name, w) }
             trees[name] = result.0
+            docks[name] = Dock.placed(dock)
             onChange()
         case .failure(.tooLarge(let count)):
             // Wie ein Absturz: Prozess sofort weg, Neustart nach Backoff.
