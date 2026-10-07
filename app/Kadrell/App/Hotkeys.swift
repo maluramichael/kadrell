@@ -117,7 +117,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .cycleSort: return Hotkey(.option, "o")
         case .toggleGrouping: return Hotkey(.option, "g")
         case .syncInput: return Hotkey(.option, "i")
-        default: return Hotkey(.command, "Esc")
+        default: return Hotkey(.option, "Esc")
         }
     }
 }

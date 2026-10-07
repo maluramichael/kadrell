@@ -40,6 +40,20 @@ final class KadrellTerminalView: LocalProcessTerminalView {
         super.processTerminated(source, exitCode: exitCode)
         onExit?(exitCode)
     }
+
+    /// SwiftTerm erkennt Dateipfade als Links, zieht aber einen abschließenden Satzpunkt mit hinein
+    /// (die Pfad-Zweige der Ghostty-Regex haben kein `noTrailingPunctuation`). `~/…/datei.txt.` zeigt
+    /// dann auf eine Datei, die es nicht gibt, und der Klick öffnet nichts. Punkt und Komma am Ende
+    /// vor dem Öffnen abschneiden.
+    static func trimmedLink(_ link: String) -> String {
+        var s = link
+        while let last = s.last, last == "." || last == "," { s.removeLast() }
+        return s
+    }
+
+    override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+        super.requestOpenLink(source: source, link: Self.trimmedLink(link), params: params)
+    }
 }
 
 /// Hält pro Session höchstens einen Claude-Prozess im Terminal (Kind von Kadrell), startet gestaffelt

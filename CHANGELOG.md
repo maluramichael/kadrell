@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.65.2 (2026-10-06)
+
+- Fix: Dateipfade in der Ausgabe lassen sich jetzt auch anklicken, wenn direkt ein Satzpunkt dahinter steht. Der Punkt gehört nicht mehr zum Link.
+- Fix: Das Kürzel zum Ausblenden der fokussierten Kachel liegt jetzt auf ⌥Esc und funktioniert wieder. Die alte Belegung ⌘Esc wurde von macOS abgefangen und hat nie ausgelöst.
+
 ## 1.65.1 (2026-10-06)
 
 - Fix: Extensions laufen sicherer und sauberer: von Extensions gestartete Programme werden vollständig beendet, Netzwerkzugriffe gehen nur noch über http/https, und eine Extension kann Kadrell nicht mehr selbst beenden.

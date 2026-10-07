@@ -33,6 +33,14 @@ final class HotkeyTests: XCTestCase {
         XCTAssertEqual(Hotkey(event: z), HotkeyAction.zoom.defaultKey)
     }
 
+    func testCloseFocusedAvoidsCommandEscape() throws {
+        // macOS fängt ⌘Esc systemweit ab, der Event-Monitor sieht es nie. Deshalb darf der Standard das nicht sein.
+        XCTAssertNotEqual(HotkeyAction.closeFocused.defaultKey, Hotkey(.command, "Esc"))
+        let esc = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .option, timestamp: 0,
+                                                 windowNumber: 0, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        XCTAssertEqual(Hotkey(event: esc), HotkeyAction.closeFocused.defaultKey)
+    }
+
     func testTileIndex() {
         XCTAssertEqual(HotkeyAction.focus1.tileIndex, 0)
         XCTAssertEqual(HotkeyAction.focus9.tileIndex, 8)

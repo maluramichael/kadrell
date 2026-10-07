@@ -19,6 +19,14 @@ final class AttachManagerTests: XCTestCase {
         XCTAssertNil(weakTerminal)
     }
 
+    /// Ein Satzpunkt (oder Komma) hinter einem erkannten Dateipfad gehört nicht zum Link, sonst öffnet der Klick nichts.
+    func testTrimmedLinkDropsTrailingPunctuation() {
+        XCTAssertEqual(KadrellTerminalView.trimmedLink("~/.claude/texte/fragen-an-rapp.txt."), "~/.claude/texte/fragen-an-rapp.txt")
+        XCTAssertEqual(KadrellTerminalView.trimmedLink("~/a/b.txt,"), "~/a/b.txt")
+        XCTAssertEqual(KadrellTerminalView.trimmedLink("https://example.com/path"), "https://example.com/path")
+        XCTAssertEqual(KadrellTerminalView.trimmedLink("file.swift:12"), "file.swift:12")
+    }
+
     /// Hintergrundjob, der die Pipe erbt, blockiert `ProcessRunner.run` nicht; ein hängender Prozess endet per Timeout.
     func testProcessRunnerReturnsAtProcessExitAndTimesOut() async throws {
         let t0 = Date()
