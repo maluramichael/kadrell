@@ -68,6 +68,7 @@ Mehrere Handler pro Event möglich. `fn` bekommt `data`. Events:
 | `session.status` | `{ session, state }` – `state` = `working` \| `waiting` \| `idle` |
 | `session.remove` | `{ session }`                           |
 | `ui.action`      | `{ id }` – aus Panel-Button/-Item oder Statuseintrag |
+| `palette.select` | `{ id }` – ein über `kadrell.palette` beigesteuerter ⌘N-Eintrag wurde gewählt |
 
 `session` = `{ key, title, cwd, branch, sessionId, state, group }`.
 
@@ -87,10 +88,18 @@ Mehrere Handler pro Event möglich. `fn` bekommt `data`. Events:
 ### Daten und Konfiguration
 - `kadrell.config.<key>` – Werte aus `settings` (read-only).
 - `kadrell.storage.get(key)` / `kadrell.storage.set(key, value)` – JSON-Datei im Profil, überlebt Reload und Neustart.
+- `kadrell.secret.get(key)` → Wert oder `nil` / `kadrell.secret.set(key, value)` / `kadrell.secret.delete(key)` – Schlüsselbund
+  (nur in Handlern). Pro Profil und Extension genamespaced, eine Extension sieht nur ihre eigenen Schlüssel. Für Secrets,
+  die zur Laufzeit entstehen (OAuth-Token, mehrere Instanz-Token); das statische `secret`-Setting bleibt für vom Nutzer
+  eingegebene Werte.
 
 ### Oberfläche
 - `kadrell.panel.set(tree)` / `kadrell.panel.clear()` – füllt den Tab der Extension in der rechten Sidebar.
 - `kadrell.status.set(item)` / `kadrell.status.clear()` – ein Eintrag in der Statusleiste.
+- `kadrell.palette.set(items)` / `kadrell.palette.clear()` – steuert Einträge zum Neue-Session-Dialog (⌘N) bei.
+  `items` ist eine Liste von `{ id, title, detail, group }` (`id`, `title` Pflicht). Auswahl kommt als Event
+  `palette.select` mit der `id` zurück; die Extension handelt dann selbst (z. B. klonen und `kadrell.run{"new","-c",…}`).
+  Wie `panel.set`: ersetzt immer die ganze Liste, nur der letzte Stand pro Dispatch geht raus.
 
 ## Panel-Baum
 

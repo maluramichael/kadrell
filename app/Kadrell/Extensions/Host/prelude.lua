@@ -23,7 +23,7 @@ end
 local ext = {}
 local handlers = {}
 
-kadrell = { json = json, config = {}, storage = {}, panel = {}, status = {} }
+kadrell = { json = json, config = {}, storage = {}, panel = {}, status = {}, palette = {}, secret = {} }
 
 function kadrell.log(text) log("info", text) end
 
@@ -107,6 +107,21 @@ function kadrell.sessions()
     return json.decode(r.stdout)
 end
 
+-- Schlüsselbund: get gibt den Wert oder nil (Eintrag fehlt), set/delete das Ergebnis. Pro Profil und Extension
+-- genamespaced, eine Extension sieht nur ihre eigenen Schlüssel.
+function kadrell.secret.get(key)
+    local r = request("secret", { t = "secret", op = "get", key = tostring(key) })
+    return r.status == 0 and r.stdout or nil
+end
+
+function kadrell.secret.set(key, value)
+    return request("secret", { t = "secret", op = "set", key = tostring(key), value = tostring(value) })
+end
+
+function kadrell.secret.delete(key)
+    return request("secret", { t = "secret", op = "delete", key = tostring(key) })
+end
+
 -- Timer: der Host meldet den Ablauf mit {"t":"timer","id"}, every plant sich nach jedem Lauf neu.
 local timers = {}
 local Handle = {}
@@ -162,12 +177,19 @@ local latest = {}
 local function flush()
     if latest.panel then send(latest.panel) end
     if latest.status then send(latest.status) end
+    if latest.palette then send(latest.palette) end
     latest = {}
 end
 
 function kadrell.panel.set(tree) latest.panel = json.encode({ t = "panel", tree = tree }) end
 
 function kadrell.panel.clear() latest.panel = '{"t":"panel","tree":null}' end
+
+-- Einträge für den Neue-Session-Dialog (⌘N). items = { { id=, title=, detail=, group= }, … }. Auswahl kommt als
+-- Event palette.select mit der id zurück. Wie panel: nur der letzte Stand, einmal pro Dispatch.
+function kadrell.palette.set(items) latest.palette = json.encode({ t = "palette", items = items }) end
+
+function kadrell.palette.clear() latest.palette = '{"t":"palette","items":null}' end
 
 function kadrell.status.set(item) latest.status = json.encode({ t = "status", item = item }) end
 

@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.66.0 (2026-10-09)
+
+- Feature: Der Neue-Session-Dialog (⌘N) kann jetzt Einträge von Extensions anbieten, zum Beispiel entfernte Repositories zum Klonen. Die Auswahl übernimmt die jeweilige Extension.
+
 ## 1.65.2 (2026-10-06)
 
 - Fix: Dateipfade in der Ausgabe lassen sich jetzt auch anklicken, wenn direkt ein Satzpunkt dahinter steht. Der Punkt gehört nicht mehr zum Link.

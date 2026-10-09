@@ -2,7 +2,8 @@ import Foundation
 
 /// Nachrichten einer Extension an Kadrell (eine JSON-Zeile, Unterscheidung über `t`).
 enum ExtensionMessage: Equatable {
-    case ready, pong(Int), panel(JSONValue?), status(JSONValue?), run(id: Int, argv: [String]), log(level: String, text: String)
+    case ready, pong(Int), panel(JSONValue?), status(JSONValue?), palette(JSONValue?)
+    case run(id: Int, argv: [String]), secret(id: Int, op: String, key: String, value: String?), log(level: String, text: String)
 
     /// Kaputtes JSON, Binärmüll, unbekanntes `t` oder falsche Feldtypen ergeben `nil`; der Aufrufer verwirft die Zeile.
     static func decode(_ line: Data) -> ExtensionMessage? {
@@ -12,7 +13,9 @@ enum ExtensionMessage: Equatable {
         case "pong": return v["id"]?.int.map { .pong($0) }
         case "panel": return .panel(v["tree"].flatMap(nonNull))
         case "status": return .status(v["item"].flatMap(nonNull))
+        case "palette": return .palette(v["items"].flatMap(nonNull))
         case "run": return decodeRun(v)
+        case "secret": return decodeSecret(v)
         case "log": return v["text"]?.string.map { .log(level: v["level"]?.string ?? "info", text: $0) }
         default: return nil
         }
@@ -24,6 +27,11 @@ enum ExtensionMessage: Equatable {
         guard let id = v["id"]?.int, let items = v["argv"]?.array else { return nil }
         let argv = items.compactMap(\.string)
         return argv.count == items.count ? .run(id: id, argv: argv) : nil
+    }
+
+    private static func decodeSecret(_ v: JSONValue) -> ExtensionMessage? {
+        guard let id = v["id"]?.int, let op = v["op"]?.string, let key = v["key"]?.string else { return nil }
+        return .secret(id: id, op: op, key: key, value: v["value"]?.string)
     }
 }
 

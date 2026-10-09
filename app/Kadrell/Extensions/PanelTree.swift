@@ -16,6 +16,9 @@ struct PanelTree: Equatable {
     var nodes: [PanelNode]
 }
 
+/// Ein von einer Extension beigesteuerter Eintrag für den Neue-Session-Dialog (⌘N).
+struct PaletteItem: Equatable { var id, title: String; var detail, group: String? }
+
 enum PanelError: Error, Equatable { case tooLarge(Int) }
 
 /// Prüft, was eine Extension als Panel oder Statuseintrag schickt: unbekannte Knoten und Felder werden übersprungen
@@ -39,6 +42,17 @@ enum PanelValidation {
         guard let text = v["text"]?.string else { return nil }
         let color = v["color"]?.string.flatMap(ThemeColor.init(rawValue:))
         return (clip(text, maxStatus), color, v["action"]?.string.map { clip($0, maxText) })
+    }
+
+    /// Palette-Einträge für ⌘N. `null` oder Nicht-Array heißt leer; Einträge ohne `id`/`title` werden übersprungen,
+    /// die Anzahl gedeckelt wie der Panel-Baum. Fremdes JSON darf nie abstürzen.
+    static func palette(_ v: JSONValue?) -> [PaletteItem] {
+        (v?.array ?? []).prefix(maxNodes).compactMap { item in
+            guard let id = item["id"]?.string, let title = item["title"]?.string else { return nil }
+            return PaletteItem(id: clip(id, maxText), title: clip(title, maxText),
+                               detail: item["detail"]?.string.map { clip($0, maxText) },
+                               group: item["group"]?.string.map { clip($0, maxStatus) })
+        }
     }
 
     fileprivate static func clip(_ s: String, _ limit: Int) -> String { String(s.prefix(limit)) }

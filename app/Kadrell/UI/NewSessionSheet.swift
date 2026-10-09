@@ -10,11 +10,17 @@ final class NewSessionModel {
         let group: Group?
         /// Herkunft rechts in der Zeile, wenn es keine Gruppe ist: „Finder“, „Zwischenablage“, „Git“.
         let tag: String
+        /// Von einer Extension gelieferter Eintrag (z. B. Repo zum Klonen): Anzeige und Auswahl weichen vom Ordner ab.
+        var title: String?
+        var detail: String?
+        var select: (() -> Void)?
         var id: String { path }
     }
 
     let groups: [Group]
     let counts: [String: Int]
+    /// Von Extensions beigesteuerte Einträge (Repos zum Klonen). Auswahl ruft `select` statt `onStart`.
+    let cloneCandidates: [Candidate]
     var query = "" { didSet { if query != oldValue { notFoundPath = nil; update() } } }
     private(set) var candidates: [Candidate] = []
     var selected = 0
@@ -27,9 +33,11 @@ final class NewSessionModel {
     var scanning: Bool { index.scanning }
 
     /// `askFinder: false` in Tests: sonst fragt macOS nach der Erlaubnis, den Finder zu steuern.
-    init(groups: [Group], counts: [String: Int], index: FolderIndex = .shared, askFinder: Bool = true) {
+    init(groups: [Group], counts: [String: Int], index: FolderIndex = .shared, askFinder: Bool = true,
+         cloneCandidates: [Candidate] = []) {
         self.groups = groups
         self.counts = counts
+        self.cloneCandidates = cloneCandidates
         self.index = index
         if let c = FolderIndex.clipboardFolder() { context.append((c, String(localized: "Zwischenablage", bundle: Bundle.app))) }
         update()
@@ -69,15 +77,28 @@ final class NewSessionModel {
                 let groupBonus = g.map { 0.5 + Double(counts[$0.id] ?? 0) * 0.1 } ?? 0
                 return (p, contextPaths.contains(p), r, index.frecency(p) + groupBonus)
             }
-            candidates = scored.sorted {
+            let folders = scored.sorted {
                 if $0.ctx != $1.ctx { return $0.ctx }
                 if $0.rank != $1.rank { return $0.rank < $1.rank }
                 if $0.score != $1.score { return $0.score > $1.score }
                 return $0.path.lowercased() < $1.path.lowercased()
             }
             .prefix(60).map { Candidate(path: $0.path, group: byCwd[$0.path], tag: tags[$0.path] ?? "") }
+            // Klon-Einträge der Extensions: bei leerer Eingabe hinter den Ordnern, beim Tippen davor (dann sucht man gezielt ein Repo).
+            let clones = cloneMatches(q)
+            candidates = q.isEmpty ? folders + clones : clones + folders
         }
         selected = 0
+    }
+
+    /// Von Extensions gelieferte Einträge, bei Eingabe nach Titel und Gruppe gefiltert und sortiert.
+    private func cloneMatches(_ q: String) -> [Candidate] {
+        guard !cloneCandidates.isEmpty else { return [] }
+        if q.isEmpty { return cloneCandidates }
+        return cloneCandidates
+            .compactMap { c in FolderIndex.rank(q, path: (c.title ?? "") + " " + c.tag).map { (c, $0) } }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
     }
 
     /// Neuer Stand aus dem Index (Repo-Scan fertig), ohne eine schon getroffene Auswahl umzuwerfen.
@@ -93,7 +114,9 @@ final class NewSessionModel {
 
     func pick(_ i: Int) {
         guard candidates.indices.contains(i) else { return }
-        onStart?(candidates[i].group, candidates[i].path)
+        let c = candidates[i]
+        if let select = c.select { select(); return }
+        onStart?(c.group, c.path)
     }
 
     /// ⏎: markierten Treffer starten, ohne Treffer einen ausgeschrieben getippten Ordner; existiert der nicht,
@@ -200,8 +223,8 @@ struct NewSessionView: View {
     private func row(_ c: NewSessionModel.Candidate, on: Bool) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(c.group?.name ?? (c.path as NSString).lastPathComponent).foregroundStyle(Theme.fgColor).lineLimit(1)
-                Text(Theme.shortPath(c.path)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).lineLimit(1).truncationMode(.head)
+                Text(c.title ?? c.group?.name ?? (c.path as NSString).lastPathComponent).foregroundStyle(Theme.fgColor).lineLimit(1)
+                Text(c.detail ?? Theme.shortPath(c.path)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).lineLimit(1).truncationMode(.head)
             }
             Spacer()
             Text(c.group.map { String(localized: "\(model.counts[$0.id] ?? 0) Sessions", bundle: Bundle.app) } ?? c.tag).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)

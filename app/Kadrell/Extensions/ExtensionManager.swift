@@ -39,6 +39,7 @@ final class ExtensionManager {
     private var launches: [String: Int] = [:]
     private var trees: [String: PanelTree] = [:]
     private var statuses: [String: (text: String, color: ThemeColor?, action: String?)] = [:]
+    private var palettes: [String: [PaletteItem]] = [:]
     private var logs: [String: [String]] = [:]
     /// Änderungszeiten der Lua-Dateien und des Manifests je Extension, um nach einer Dateimeldung die geänderten zu finden.
     private var stamps: [String: [String: Date]] = [:]
@@ -59,6 +60,17 @@ final class ExtensionManager {
 
     var statusItems: [(name: String, text: String, color: ThemeColor?, action: String?)] {
         found.compactMap { f in statuses[f.name].map { (f.name, $0.text, $0.color, $0.action) } }
+    }
+
+    /// Alle von Extensions gelieferten ⌘N-Einträge, mit ihrer Extension.
+    var paletteEntries: [(name: String, item: PaletteItem)] {
+        found.flatMap { f in (palettes[f.name] ?? []).map { (f.name, $0) } }
+    }
+
+    /// Auswahl eines Palette-Eintrags: geht als Event `palette.select` an die liefernde Extension.
+    func paletteSelect(_ name: String, id: String) {
+        guard let p = procs[name], isLive(p, name) else { return }
+        p.send(.event(name: "palette.select", data: .object(["id": .string(id)])))
     }
 
     func state(_ name: String) -> ExtensionState { supervisors[name]?.state ?? .off }
@@ -173,6 +185,7 @@ final class ExtensionManager {
         case .clearUI:
             trees[name] = nil
             statuses[name] = nil
+            palettes[name] = nil
         }
     }
 
@@ -245,18 +258,49 @@ final class ExtensionManager {
         switch m {
         case .ready: if isLive(p, name) { feed(name, .ready) }
         case .pong: break
-        case .log(let level, let text):
-            append(name, level == "info" ? text : "[\(level)] \(text)")
-            onChange()
-        case .run(let id, let argv):
-            // Jede Anfrage bekommt eine Antwort, sonst wartet die Coroutine in Lua ewig. Ein stoppender Prozess führt nichts mehr aus.
-            let live = isLive(p, name)
-            Task {
-                let r = live ? await control(argv) : .fail("extension is stopping")
-                p.send(.result(id: id, status: r.status, stdout: r.stdout, stderr: r.stderr))
-            }
+        case .log(let level, let text): appendLog(name, level, text)
+        case .run(let id, let argv): answerRun(p, name, id: id, argv: argv)
         case .panel(let v): if isLive(p, name) { setPanel(v, name) }
         case .status(let v): if isLive(p, name) { setStatus(v, name) }
+        case .palette(let v): if isLive(p, name) { palettes[name] = PanelValidation.palette(v); onChange() }
+        case .secret(let id, let op, let key, let value): answerSecret(p, name, id: id, op: op, key: key, value: value)
+        }
+    }
+
+    private func appendLog(_ name: String, _ level: String, _ text: String) {
+        append(name, level == "info" ? text : "[\(level)] \(text)")
+        onChange()
+    }
+
+    /// Steuerbefehl aus `kadrell.run`. Jede Anfrage bekommt eine Antwort, sonst wartet die Coroutine in Lua ewig; ein
+    /// stoppender Prozess führt nichts mehr aus.
+    private func answerRun(_ p: ExtensionProcess, _ name: String, id: Int, argv: [String]) {
+        let live = isLive(p, name)
+        Task {
+            let r = live ? await control(argv) : .fail("extension is stopping")
+            p.send(.result(id: id, status: r.status, stdout: r.stdout, stderr: r.stderr))
+        }
+    }
+
+    /// Schlüsselbund-Zugriff aus `kadrell.secret`, wie `answerRun` mit garantierter Antwort.
+    private func answerSecret(_ p: ExtensionProcess, _ name: String, id: Int, op: String, key: String, value: String?) {
+        let live = isLive(p, name)
+        Task {
+            let r = live ? await Self.secretOp(name: name, op: op, key: key, value: value) : (Int32(1), "")
+            p.send(.result(id: id, status: r.0, stdout: r.1, stderr: ""))
+        }
+    }
+
+    /// Schlüsselbund-Zugriff für `kadrell.secret`, pro Profil und Extension genamespaced (eigenes Account-Präfix,
+    /// kollidiert nicht mit den `secret`-Einstellungen). `get`: Status 0 und Wert, 1 wenn der Eintrag fehlt.
+    private static func secretOp(name: String, op: String, key: String, value: String?) async -> (Int32, String) {
+        let service = ExtensionSettings.keychainService
+        let account = ExtensionSettings.account(name, "ext-secret/\(key)")
+        switch op {
+        case "get": return await Keychain.read(service: service, account: account).map { (Int32(0), $0) } ?? (1, "")
+        case "set": return (await Keychain.write(service: service, account: account, value: value ?? "") ? 0 : 1, "")
+        case "delete": await Keychain.delete(service: service, account: account); return (0, "")
+        default: return (1, "")
         }
     }
 

@@ -320,6 +320,45 @@ final class ExtHostTests: XCTestCase {
         XCTAssertTrue(p.next(timeout: 3)?["tree"] is NSNull)
         assertAlive(p)
     }
+
+    /// Palette geht wie Panel einmal pro Handler-Lauf mit dem letzten Stand raus; die Auswahl kommt als Event zurück.
+    func testPaletteIsForwardedAndSelectDelivered() throws {
+        let p = try startReady("""
+            kadrell.on("app.ready", function()
+                for i = 1, 100 do kadrell.palette.set{{id = "r" .. i, title = "R" .. i}} end
+                kadrell.log("x")
+            end)
+            kadrell.on("palette.select", function(d) kadrell.log("sel:" .. d.id) end)
+            """)
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "x")
+        let palette = p.next(timeout: 3)
+        XCTAssertEqual(palette?["t"] as? String, "palette")
+        XCTAssertEqual((palette?["items"] as? [[String: Any]])?.first?["id"] as? String, "r100")
+        p.send(["t": "event", "name": "palette.select", "data": ["id": "r100"]])
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "sel:r100")
+        assertAlive(p)
+    }
+
+    /// kadrell.secret.get fragt den Host und gibt bei Status 0 den Wert zurück (Host-Antwort hier injiziert, kein Schlüsselbund).
+    func testSecretGetReturnsValue() throws {
+        let p = try startReady(#"kadrell.on("app.ready", function() kadrell.log("got:" .. tostring(kadrell.secret.get("tok"))) end)"#)
+        let req = p.next(timeout: 3)
+        XCTAssertEqual(req?["t"] as? String, "secret")
+        XCTAssertEqual(req?["op"] as? String, "get")
+        XCTAssertEqual(req?["key"] as? String, "tok")
+        p.send(["t": "result", "id": try XCTUnwrap(req?["id"] as? Int), "status": 0, "stdout": "s3cr3t", "stderr": ""])
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "got:s3cr3t")
+        assertAlive(p)
+    }
+
+    /// Fehlt der Eintrag (Status 1), gibt get nil zurück.
+    func testSecretGetMissingReturnsNil() throws {
+        let p = try startReady(#"kadrell.on("app.ready", function() kadrell.log("got:" .. tostring(kadrell.secret.get("none"))) end)"#)
+        let req = p.next(timeout: 3)
+        p.send(["t": "result", "id": try XCTUnwrap(req?["id"] as? Int), "status": 1, "stdout": "", "stderr": ""])
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "got:nil")
+        assertAlive(p)
+    }
 }
 
 /// Beantwortet genau eine HTTP-Anfrage auf 127.0.0.1 (freier Port) mit dem vorgegebenen Text.

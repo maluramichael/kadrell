@@ -95,6 +95,34 @@ final class ExtensionModelTests: XCTestCase {
         XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"status","item":{"text":"a"}}"#.utf8)), .status(.object(["text": .string("a")])))
     }
 
+    func testDecodePaletteAndSecret() {
+        XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"palette","items":null}"#.utf8)), .palette(nil))
+        XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"palette","items":[{"id":"a","title":"A"}]}"#.utf8)),
+                       .palette(.array([.object(["id": .string("a"), "title": .string("A")])])))
+        XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"secret","id":5,"op":"get","key":"tok"}"#.utf8)),
+                       .secret(id: 5, op: "get", key: "tok", value: nil))
+        XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"secret","id":6,"op":"set","key":"tok","value":"v"}"#.utf8)),
+                       .secret(id: 6, op: "set", key: "tok", value: "v"))
+        XCTAssertNil(ExtensionMessage.decode(Data(#"{"t":"secret","op":"get","key":"tok"}"#.utf8)), "ohne id verworfen")
+        XCTAssertNil(ExtensionMessage.decode(Data(#"{"t":"secret","id":1,"op":"get"}"#.utf8)), "ohne key verworfen")
+    }
+
+    func testPaletteValidation() throws {
+        let long = String(repeating: "a", count: 600)
+        let v = try JSONDecoder().decode(JSONValue.self, from: Data("""
+        [{"id":"gh:a/web","title":"a/web","detail":"GitHub","group":"GitHub"},
+         {"title":"ohne id"},
+         {"id":"x"},
+         {"id":"\(long)","title":"\(long)"}]
+        """.utf8))
+        let items = PanelValidation.palette(v)
+        XCTAssertEqual(items.count, 2, "Einträge ohne id oder title übersprungen")
+        XCTAssertEqual(items[0], PaletteItem(id: "gh:a/web", title: "a/web", detail: "GitHub", group: "GitHub"))
+        XCTAssertEqual(items[1].id.count, 500, "id auf maxText gekürzt")
+        XCTAssertEqual(PanelValidation.palette(nil), [])
+        XCTAssertEqual(PanelValidation.palette(.object([:])), [], "Nicht-Array heißt leer")
+    }
+
     func testHostMessageLineEndsWithNewline() throws {
         let line = HostMessage.hello(api: 1, name: "x", dir: "/a/b", storageDir: "/s", config: ["k": .string("v\nw")], locale: "de", sessions: [])
             .line()

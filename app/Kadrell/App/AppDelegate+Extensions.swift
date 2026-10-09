@@ -50,6 +50,16 @@ extension AppDelegate {
         c.bar.extensionItems = extensions?.statusItems ?? []
     }
 
+    /// Von Extensions gelieferte ⌘N-Einträge (z. B. Repos zum Klonen). Auswahl schließt den Dialog und geht als
+    /// `palette.select` zurück an die Extension, die dann selbst klont und die Session im Zielordner öffnet.
+    func extensionCloneCandidates() -> [NewSessionModel.Candidate] {
+        extensions?.paletteEntries.map { name, item in
+            NewSessionModel.Candidate(path: "ext:\(name):\(item.id)", group: nil, tag: item.group ?? item.detail ?? "",
+                                      title: item.title, detail: item.detail,
+                                      select: { [weak self] in self?.sheets.dismiss(); self?.extensions?.paletteSelect(name, id: item.id) })
+        } ?? []
+    }
+
     /// Session als Event-Daten; `state` wie in `kadrell ls --json`.
     func extensionSession(_ s: Session) -> JSONValue {
         .object(["key": .string(s.id), "title": .string(s.title), "cwd": .string(s.cwd), "branch": s.branch.map(JSONValue.string) ?? .null,

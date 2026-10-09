@@ -357,6 +357,7 @@ private struct ProtocolLines {
             return
         }
         if let message, case .run = message { return events.append(.message(message)) }
+        if let message, case .secret = message { return events.append(.message(message)) }
         recent.removeAll { now.timeIntervalSince($0) >= 1 }
         recent.append(now)
         if recent.count > ExtensionProcess.maxMessagesPerSecond { return events.append(violation(.flood)) }
