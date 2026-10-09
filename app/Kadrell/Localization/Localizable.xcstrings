@@ -1,6 +1,33 @@
 {
   "sourceLanguage": "de",
   "strings": {
+    "Kadrell neu starten": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kadrell neu starten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Restart Kadrell" } }
+      }
+    },
+    "Neu starten": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neu starten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Restart" } }
+      }
+    },
+    "Kadrell neu starten?": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kadrell neu starten?" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Restart Kadrell?" } }
+      }
+    },
+    "Kadrell neu starten? %lld Session(s) arbeiten gerade!": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kadrell neu starten? %lld Session(s) arbeiten gerade!" } },
+        "en": { "variations": { "plural": {
+          "one": { "stringUnit": { "state": "translated", "value": "Restart Kadrell? %lld session is working right now!" } },
+          "other": { "stringUnit": { "state": "translated", "value": "Restart Kadrell? %lld sessions are working right now!" } }
+        } } }
+      }
+    },
     "": {
       "shouldTranslate": false
     },

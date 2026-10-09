@@ -133,7 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// statt `.terminateLater`: der Dialog ist ein eigenes Overlay und braucht die normale Run-Loop.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !quitConfirmed, let attach, attach.attachedCount > 0 else { return .terminateNow }
-        confirmQuit()
+        confirmShutdown(relaunch: false)
         return .terminateCancel
     }
 
@@ -144,12 +144,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controlServer?.stop()
         extensions?.shutdownAll()
         Profile.cleanUp()
+        // Zuletzt, nach dem Lösen des Profil-Locks: den losgelösten Helfer starten, der neu startet, sobald wir weg sind.
+        if relaunchOnTerminate { Profile.relaunchAfterExit() }
     }
 
     private var quitConfirmed = false
+    private var relaunchOnTerminate = false
     private var signalSources: [DispatchSourceSignal] = []
 
-    private func confirmQuit() {
+    /// Kadrell neu starten: beendet sauber (gleiche Rückfrage wie Beenden) und öffnet denselben Build wieder, die
+    /// Sessions laufen per `--resume` weiter. Ohne laufende Sessions ohne Rückfrage.
+    func restart() {
+        if let attach, attach.attachedCount > 0 { confirmShutdown(relaunch: true) }
+        else { relaunchOnTerminate = true; quitConfirmed = true; NSApp.terminate(nil) }
+    }
+
+    private func shutdownTitle(relaunch: Bool, busy: Int) -> String {
+        if busy == 0 {
+            return relaunch ? String(localized: "Kadrell neu starten?", bundle: Bundle.app) : String(localized: "Kadrell beenden?", bundle: Bundle.app)
+        }
+        return relaunch ? String(localized: "Kadrell neu starten? \(busy) Session(s) arbeiten gerade!", bundle: Bundle.app)
+                        : String(localized: "Kadrell beenden? \(busy) Session(s) arbeiten gerade!", bundle: Bundle.app)
+    }
+
+    private func confirmShutdown(relaunch: Bool) {
         NSApp.unhide(nil)
         window.deminiaturize(nil)
         showMainWindow()
@@ -160,19 +178,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let list = running.map { s in
                 "· \(s.title)" + (s.status == .running ? String(localized: "  ARBEITET", bundle: Bundle.app) : s.status == .waiting ? String(localized: "  WARTET AUF ANTWORT", bundle: Bundle.app) : "")
             }.joined(separator: "\n")
-            let title = busy.isEmpty ? String(localized: "Kadrell beenden?", bundle: Bundle.app) : String(localized: "Kadrell beenden? \(busy.count) Session(s) arbeiten gerade!", bundle: Bundle.app)
             let info = String(localized: "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.", bundle: Bundle.app)
                 + "\n\n\(list)"
-            sheets.confirm(title, info, button: String(localized: "Beenden", bundle: Bundle.app), ask: .quit) { [weak self] in
+            let button = relaunch ? String(localized: "Neu starten", bundle: Bundle.app) : String(localized: "Beenden", bundle: Bundle.app)
+            sheets.confirm(shutdownTitle(relaunch: relaunch, busy: busy.count), info, button: button, ask: .quit) { [weak self] in
                 guard let self else { return }
                 Task {
                     await self.attach.shutdown()
+                    self.relaunchOnTerminate = relaunch
                     self.quitConfirmed = true
                     NSApp.terminate(nil)
                 }
             }
         }
     }
+
+    @objc private func menuRestart() { restart() }
 
     /// `kill` (SIGTERM) und Ctrl-C im Terminal laufen über dieselbe Rückfrage. Force Quit (SIGKILL) lässt sich nicht abfangen.
     private func trapSignals() {
@@ -740,6 +761,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: String(localized: "Kadrell ausblenden", bundle: Bundle.app), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: String(localized: "Kadrell neu starten", bundle: Bundle.app), action: #selector(menuRestart), keyEquivalent: "")
         appMenu.addItem(withTitle: String(localized: "Kadrell beenden", bundle: Bundle.app), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         main.addItem(withTitle: "Kadrell", action: nil, keyEquivalent: "").submenu = appMenu
 
@@ -940,6 +962,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
         case .cycleSort: cycleSort()
         case .toggleGrouping: toggleGrouping()
+        case .restart: restart()
         default: break
         }
     }
@@ -1054,6 +1077,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (String(localized: "Statistik", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.stats) }),
             (String(localized: "Extensions", bundle: Bundle.app), { [weak self] in self?.sheets.togglePanel(.extensions) }),
             (String(localized: "Reload", bundle: Bundle.app), { [weak self] in Task { await self?.registry.pollNow(); self?.workspace.relayout() } }),
+            (String(localized: "Neu starten", bundle: Bundle.app), { [weak self] in self?.restart() }),
             (String(localized: "Konto hinzufügen (aktuell angemeldetes)", bundle: Bundle.app), { [weak self] in self?.addAccount() }),
         ]
         commands += accounts.accounts.map { a in (String(localized: "Zu Konto wechseln: \(a.title)", bundle: Bundle.app), { [weak self] in self?.switchAccount(a.id) }) }

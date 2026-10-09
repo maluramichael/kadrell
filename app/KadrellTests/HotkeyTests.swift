@@ -3,7 +3,8 @@ import XCTest
 
 final class HotkeyTests: XCTestCase {
     func testDefaultsAreUniqueAndUsable() {
-        let keys = HotkeyAction.allCases.map(\.defaultKey)
+        // Absichtlich unbelegte Defaults (leerer Key, z. B. Neu starten) zählen nicht: sie sind weder benutzbar noch kollidieren sie.
+        let keys = HotkeyAction.allCases.map(\.defaultKey).filter { !$0.key.isEmpty }
         XCTAssertEqual(Set(keys).count, keys.count)
         for k in keys { XCTAssertTrue(k.isUsable, k.display) }
     }

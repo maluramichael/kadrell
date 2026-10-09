@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.67.0 (2026-10-09)
+
+- Feature: Kadrell lässt sich jetzt ohne manuelles Beenden neu starten: über das Menü „Kadrell neu starten", die Palette-Suche „Neu starten" oder ein in den Einstellungen belegbares Kürzel. Die laufenden Sessions kommen danach automatisch wieder.
+
 ## 1.66.1 (2026-10-09)
 
 - Feature: Extensions können ihre Texte jetzt in der eingestellten Sprache (Deutsch oder Englisch) anzeigen.

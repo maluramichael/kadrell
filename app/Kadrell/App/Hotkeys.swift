@@ -20,6 +20,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case zoom, nextLayout, closeFocused, openEditor, renameSession, syncInput
     case focusSidebar, focusWorkspace, cycleSort, toggleGrouping
     case focusRightSidebar, toggleRightSidebar
+    case restart
 
     /// 0-basiert für focus1…focus9.
     var tileIndex: Int? { rawValue.hasPrefix("focus") ? Int(rawValue.dropFirst(5)).map { $0 - 1 } : nil }
@@ -58,6 +59,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .cycleSort: return String(localized: "Baum sortieren: aus → A–Z → Status", bundle: Bundle.app)
         case .toggleGrouping: return String(localized: "Baum nach Projekt gruppieren", bundle: Bundle.app)
         case .syncInput: return String(localized: "Sync: Eingabe an alle Kacheln", bundle: Bundle.app)
+        case .restart: return String(localized: "Kadrell neu starten", bundle: Bundle.app)
         default: return String(localized: "Fokus-Kachel schließen", bundle: Bundle.app)
         }
     }
@@ -117,6 +119,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .cycleSort: return Hotkey(.option, "o")
         case .toggleGrouping: return Hotkey(.option, "g")
         case .syncInput: return Hotkey(.option, "i")
+        case .restart: return Hotkey([], "")   // Default unbelegt, in den Einstellungen belegbar
         default: return Hotkey(.option, "Esc")
         }
     }

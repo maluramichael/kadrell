@@ -120,4 +120,19 @@ enum Profile {
     static func launchTemporary() {
         _ = try? ProcessRunner.spawn("/usr/bin/open", ["-n", Bundle.main.bundlePath, "--args", "--profile", "tmp"])
     }
+
+    /// Shell-Befehl, der wartet, bis `pid` weg ist (dann ist der Profil-Lock frei), und danach denselben Build mit
+    /// demselben Profil öffnet. Kein `-n`: die alte Instanz ist dann beendet, `open` startet frisch mit dem Argument.
+    static func relaunchCommand(pid: pid_t, bundlePath: String, profile: String?) -> [String] {
+        let quoted = "'" + bundlePath.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let profileArgs = profile.map { " --args --profile \($0)" } ?? ""
+        return ["/bin/sh", "-c", "while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done; exec /usr/bin/open \(quoted)\(profileArgs)"]
+    }
+
+    /// Losgelöster Helfer, der nach dem Beenden dieser Instanz denselben Build neu startet. Überlebt das Ende der App
+    /// (reparentet zu launchd), wie der Helfer von `launchTemporary`.
+    static func relaunchAfterExit() {
+        let cmd = relaunchCommand(pid: pid, bundlePath: Bundle.main.bundlePath, profile: name)
+        _ = try? ProcessRunner.spawn(cmd[0], Array(cmd.dropFirst()))
+    }
 }
