@@ -23,7 +23,7 @@ end
 local ext = {}
 local handlers = {}
 
-kadrell = { json = json, config = {}, storage = {}, panel = {}, status = {}, palette = {}, secret = {} }
+kadrell = { json = json, config = {}, storage = {}, panel = {}, status = {}, palette = {}, secret = {}, locale = "en" }
 
 function kadrell.log(text) log("info", text) end
 
@@ -200,6 +200,7 @@ local messages = {}
 function messages.hello(m)
     ext.name, ext.dir, ext.storageDir = m.name, m.dir, m.storageDir
     kadrell.config = m.config or {}
+    kadrell.locale = m.locale or "en"
     package.path = m.dir .. "/?.lua"
     local ok, err = xpcall(dofile, debug.traceback, m.dir .. "/init.lua")
     if not ok then

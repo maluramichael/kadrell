@@ -12,10 +12,14 @@ final class ExtensionsViewTests: XCTestCase {
     private var savedEnabled: [String] = []
     private var savedAcknowledged: [String] = []
     private var savedOrigins: [String: String] = [:]
+    /// Der Dialog ist für 100% ausgelegt; feste Skalierung, damit die UI-Größe des laufenden Profils die Tests nicht kippt.
+    private var savedScale: CGFloat = 1
     private let environment = ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin"]
 
     override func setUp() async throws {
         try await super.setUp()
+        savedScale = Theme.scale
+        Theme.scale = 1
         savedEnabled = Settings.enabledExtensions
         savedAcknowledged = Settings.acknowledgedExtensions
         savedOrigins = Settings.extensionOrigins
@@ -35,6 +39,7 @@ final class ExtensionsViewTests: XCTestCase {
         Settings.enabledExtensions = savedEnabled
         Settings.acknowledgedExtensions = savedAcknowledged
         Settings.extensionOrigins = savedOrigins
+        Theme.scale = savedScale
         manager = nil
         try await super.tearDown()
     }

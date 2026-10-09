@@ -87,6 +87,8 @@ Mehrere Handler pro Event möglich. `fn` bekommt `data`. Events:
 
 ### Daten und Konfiguration
 - `kadrell.config.<key>` – Werte aus `settings` (read-only).
+- `kadrell.locale` – die eingestellte Sprache (`"de"` oder `"en"`), zum Lokalisieren eigener Labels. Steht ab Start
+  bereit (auch auf oberster Ebene von `init.lua`).
 - `kadrell.storage.get(key)` / `kadrell.storage.set(key, value)` – JSON-Datei im Profil, überlebt Reload und Neustart.
 - `kadrell.secret.get(key)` → Wert oder `nil` / `kadrell.secret.set(key, value)` / `kadrell.secret.delete(key)` – Schlüsselbund
   (nur in Handlern). Pro Profil und Extension genamespaced, eine Extension sieht nur ihre eigenen Schlüssel. Für Secrets,

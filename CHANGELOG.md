@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.66.1 (2026-10-09)
+
+- Feature: Extensions können ihre Texte jetzt in der eingestellten Sprache (Deutsch oder Englisch) anzeigen.
+
 ## 1.66.0 (2026-10-09)
 
 - Feature: Der Neue-Session-Dialog (⌘N) kann jetzt Einträge von Extensions anbieten, zum Beispiel entfernte Repositories zum Klonen. Die Auswahl übernimmt die jeweilige Extension.

@@ -9,8 +9,17 @@ final class ExtensionPanelTests: XCTestCase {
     private static let index = 11
     /// Wie `MainWindowController.suffix(index)`, hier ohne MainActor, damit `tearDown` es lesen kann.
     private let suffix = ".\(ExtensionPanelTests.index + 1)"
+    /// Die Leisten-Geometrie ist für 100% ausgelegt; feste Skalierung, damit die UI-Größe des laufenden Profils die Tests nicht kippt.
+    private var savedScale: CGFloat = 1
+
+    override func setUp() {
+        super.setUp()
+        savedScale = Theme.scale
+        Theme.scale = 1
+    }
 
     override func tearDown() {
+        Theme.scale = savedScale
         for k in ["sidebar.width", "rightSidebar.width", "rightSidebar.visible", "workspace.selected", "workspace.mode", "workspace.auto",
                   "NSSplitView Subview Frames KadrellSplit"] {
             Profile.defaults.removeObject(forKey: k + suffix)

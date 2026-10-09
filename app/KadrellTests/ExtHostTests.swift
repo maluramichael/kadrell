@@ -23,6 +23,11 @@ final class ExtHostTests: XCTestCase {
         XCTAssertEqual(pong?["id"] as? Int, 7)
     }
 
+    func testLocaleIsAvailableAtLoad() throws {
+        let p = try start("kadrell.log('loc:' .. kadrell.locale)")
+        XCTAssertEqual(p.next(timeout: 3)?["text"] as? String, "loc:de", "hello liefert locale=de")
+    }
+
     func testPrintGoesToLog() throws {
         let p = try start("print('x', 1)")
         let log = p.next(timeout: 3)
