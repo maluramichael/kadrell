@@ -25,6 +25,10 @@ final class ControlTests: XCTestCase {
         XCTAssertEqual(try ControlCommand.parse(["move", "-t", "44a3", "acme skills"]), .move(target: "44a3", group: "acme skills"))
         XCTAssertThrowsError(try ControlCommand.parse(["move", "-t", "44a3"]))
         XCTAssertEqual(try ControlCommand.parse(["layout", "stack"]), .layout(.stack))
+        XCTAssertEqual(try ControlCommand.parse(["ssh-hosts", "--json"]), .sshHosts(json: true))
+        XCTAssertEqual(try ControlCommand.parse(["ssh-hosts"]), .sshHosts(json: false))
+        XCTAssertEqual(try ControlCommand.parse(["new", "--host", "vault"]), .connectRemote(host: "vault"))
+        XCTAssertThrowsError(try ControlCommand.parse(["new", "--host", ""]))
     }
 
     func testParseErrors() {

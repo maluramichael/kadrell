@@ -39,6 +39,7 @@ extension AppDelegate {
         switch cmd {
         case .help: return .ok(ControlCommand.usage)
         case .list(let json): return .ok(try listOutput(json: json))
+        case .sshHosts(let json): return .ok(try sshHostsOutput(json: json))
         case let .newGroup(dir, name, color): return .ok(try controlNewGroup(dir: dir, name: name, color: color, req))
         case let .newSession(t, dir, name, detached, prompt, resume):
             return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, req))
@@ -67,8 +68,19 @@ extension AppDelegate {
         case let .send(t, text, enter, keys): try await controlSend(target: t, text: text, enter: enter, keys: keys, req)
         case let .status(t, state, sessionId, title, waitingFor, message, firstPrompt):
             try controlStatus(target: t, state: state, sessionId: sessionId, title: title, waitingFor: waitingFor, message: message, firstPrompt: firstPrompt, req)
-        case .help, .list, .newGroup, .newSession, .capture: break
+        case .connectRemote(let host): startRemote(host: host, tmuxSession: nil)
+        case .help, .list, .newGroup, .newSession, .capture, .sshHosts: break
         }
+    }
+
+    /// Hosts aus `~/.ssh/config` (folgt `Include`) plus zuletzt verbundene. `--json` für die SSH-Extension.
+    private func sshHostsOutput(json: Bool) throws -> String {
+        let hosts = SSHConfig.hosts()
+        if json {
+            let data = try JSONEncoder().encode(["hosts": hosts, "recent": SSHConfig.recent])
+            return String(decoding: data, as: UTF8.self) + "\n"
+        }
+        return hosts.isEmpty ? "" : hosts.joined(separator: "\n") + "\n"
     }
 
     /// Ohne -t meldet sich die aufrufende Kachel selbst; von außen muss das Ziel genannt sein.

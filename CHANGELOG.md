@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.67.1 (2026-10-10)
+
+- Fix: Die SSH-Hosts aus `~/.ssh/config` erscheinen wieder in der SSH-Extension, auch die über `Include` eingebundenen. Remote-Sessions lassen sich zudem per Kommandozeile öffnen (`kadrell ssh-hosts`, `kadrell new --host <host>`).
+
 ## 1.67.0 (2026-10-09)
 
 - Feature: Kadrell lässt sich jetzt ohne manuelles Beenden neu starten: über das Menü „Kadrell neu starten", die Palette-Suche „Neu starten" oder ein in den Einstellungen belegbares Kürzel. Die laufenden Sessions kommen danach automatisch wieder.

@@ -856,7 +856,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuRemote() { togglePalette(prefix: "@") }
 
     /// Remote-Kachel: Gruppe je Host, der Schlüssel trägt das ssh-Präfix wie Shells das ihre.
-    private func startRemote(host: String, tmuxSession: String?) {
+    func startRemote(host: String, tmuxSession: String?) {
         let g = store.group(forHost: host) ?? { let g = store.makeGroup(host: host); store.add(g); return g }()
         let id = Session.remotePrefix + UUID().uuidString.lowercased()
         store.attach(sessionId: id, to: g.id)
