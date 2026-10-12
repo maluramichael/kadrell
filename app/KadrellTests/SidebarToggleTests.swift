@@ -19,7 +19,7 @@ final class SidebarToggleTests: XCTestCase {
         wc.toggleSidebar()
         XCTAssertTrue(wc.isSidebarHidden)
         XCTAssertEqual(wc.split.arrangedSubviews.count, 1, "ausgeblendet: nur die Arbeitsfläche, kein Trenner")
-        XCTAssertNil(wc.sidebarScroll.superview, "Baum ist nicht mehr im Split, also nichts zu zeichnen oder zu ziehen")
+        XCTAssertNil(wc.leftColumn.superview, "linke Spalte (Baum + Dock) ist nicht mehr im Split, also nichts zu zeichnen oder zu ziehen")
 
         wc.toggleSidebar()
         XCTAssertFalse(wc.isSidebarHidden)

@@ -2,6 +2,13 @@
 
 Neueste Version oben.
 
+## 1.68.0 (2026-10-12)
+
+- Feature: Extensions können ihr Panel jetzt auch in einem Dock links unter dem Baum zeigen, nicht nur rechts. Die SSH-Extension nutzt das und listet die Hosts aus ~/.ssh/config links.
+- Feature: Beim Öffnen einer Remote-Kachel über die Fernsteuerung lässt sich die tmux-Session angeben (`kadrell new --host <Host> --tmux <Session>`).
+- Fix: Die rechte Sidebar klappt beim Ausblenden (⌘⌥B) jetzt vollständig weg. Vorher blieb rechts eine leere Spalte stehen, die Arbeitsfläche wurde nicht breiter.
+- Fix: Im Extensions-Dialog hat die Warnung vor dem ersten Einschalten jetzt Abstand zur Liste, statt direkt daran zu kleben.
+
 ## 1.67.1 (2026-10-10)
 
 - Fix: Die SSH-Hosts aus `~/.ssh/config` erscheinen wieder in der SSH-Extension, auch die über `Include` eingebundenen. Remote-Sessions lassen sich zudem per Kommandozeile öffnen (`kadrell ssh-hosts`, `kadrell new --host <host>`).

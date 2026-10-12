@@ -181,8 +181,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let info = String(localized: "\(running.count) Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.", bundle: Bundle.app)
                 + "\n\n\(list)"
             let button = relaunch ? String(localized: "Neu starten", bundle: Bundle.app) : String(localized: "Beenden", bundle: Bundle.app)
-            sheets.confirm(shutdownTitle(relaunch: relaunch, busy: busy.count), info, button: button, ask: .quit) { [weak self] in
-                guard let self else { return }
+            let title = shutdownTitle(relaunch: relaunch, busy: busy.count)
+            sheets.confirm(title, info, button: button, ask: .quit) {
                 Task {
                     await self.attach.shutdown()
                     self.relaunchOnTerminate = relaunch
@@ -856,7 +856,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuRemote() { togglePalette(prefix: "@") }
 
     /// Remote-Kachel: Gruppe je Host, der Schlüssel trägt das ssh-Präfix wie Shells das ihre.
-    func startRemote(host: String, tmuxSession: String?) {
+    /// `show: false` startet im Hintergrund (Auswahl bleibt), für `kadrell new --host -d`.
+    @discardableResult
+    func startRemote(host: String, tmuxSession: String?, show: Bool = true) -> String {
         let g = store.group(forHost: host) ?? { let g = store.makeGroup(host: host); store.add(g); return g }()
         let id = Session.remotePrefix + UUID().uuidString.lowercased()
         store.attach(sessionId: id, to: g.id)
@@ -865,7 +867,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         session.host = host
         session.tmuxSession = tmuxSession
         registry.add(session)
-        workspace.select([id], add: !workspace.selected.isEmpty)
+        if show { workspace.select([id], add: !workspace.selected.isEmpty) } else { attach.attachNow(session) }
+        return id
     }
 
     /// ⌘T: Login-Shell im Ordner der fokussierten Session, sonst im Startordner.
@@ -1270,10 +1273,16 @@ final class ThinSplitView: NSSplitView {
     override var dividerColor: NSColor { Theme.line }
     override var dividerThickness: CGFloat { 1 }
 
-    /// Eine Griffzone je Trenner (Baum | Arbeitsfläche | rechte Sidebar).
+    /// Resize-Cursor passend zur Ausrichtung: senkrechter Trenner zieht links/rechts, waagerechter hoch/runter.
+    private var resizeCursor: NSCursor { isVertical ? .resizeLeftRight : .resizeUpDown }
+
+    /// Eine Griffzone je Trenner. Senkrecht: ein breiter Streifen an der rechten Kante des Bereichs. Waagerecht
+    /// (linkes Dock): ein breiter Streifen an seiner Unterkante. Ohne den waagerechten Fall bliebe nur der 1px-Trenner.
     private var grabRects: [CGRect] {
         arrangedSubviews.dropLast().map { v in
-            CGRect(x: v.frame.maxX - ThinSplitView.grabWidth / 2, y: 0, width: ThinSplitView.grabWidth + dividerThickness, height: bounds.height)
+            isVertical
+                ? CGRect(x: v.frame.maxX - Self.grabWidth / 2, y: 0, width: Self.grabWidth + dividerThickness, height: bounds.height)
+                : CGRect(x: 0, y: v.frame.minY - Self.grabWidth / 2, width: bounds.width, height: Self.grabWidth + dividerThickness)
         }
     }
 
@@ -1284,10 +1293,10 @@ final class ThinSplitView: NSSplitView {
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        for r in grabRects { addCursorRect(r, cursor: .resizeLeftRight) }
+        for r in grabRects { addCursorRect(r, cursor: resizeCursor) }
     }
 
-    override func mouseMoved(with event: NSEvent) { NSCursor.resizeLeftRight.set() }
+    override func mouseMoved(with event: NSEvent) { resizeCursor.set() }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }

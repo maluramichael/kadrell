@@ -90,7 +90,7 @@ final class ExtensionModelTests: XCTestCase {
     }
 
     func testDecodePanelAndStatusNull() {
-        XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"panel","tree":null}"#.utf8)), .panel(nil))
+        XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"panel","tree":null}"#.utf8)), .panel(nil, dock: nil))
         XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"status","item":null}"#.utf8)), .status(nil))
         XCTAssertEqual(ExtensionMessage.decode(Data(#"{"t":"status","item":{"text":"a"}}"#.utf8)), .status(.object(["text": .string("a")])))
     }

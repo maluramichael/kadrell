@@ -33,8 +33,10 @@ struct ControlError: Error, Equatable {
 enum ControlCommand: Equatable {
     case help
     case list(json: Bool)
+    /// Hosts aus `~/.ssh/config` (folgt `Include`), für die SSH-Extension und die Remote-Palette.
+    case sshHosts(json: Bool)
     case newGroup(dir: String, name: String?, color: String?)
-    case newSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String? = nil)
+    case newSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String? = nil, host: String? = nil, tmux: String? = nil)
     case select(target: String?, add: Bool)
     case layout(LayoutMode)
     case zoom(target: String?)
@@ -49,10 +51,6 @@ enum ControlCommand: Equatable {
     case capture(target: String?, all: Bool)
     /// Zustand einer Session von außen setzen, Quelle sind die Hooks der Agent-CLIs (`ClaudeHook`).
     case status(target: String?, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?)
-    /// Hosts aus `~/.ssh/config` (folgt `Include`), für die SSH-Extension und die Remote-Palette.
-    case sshHosts(json: Bool)
-    /// Remote-Session zu einem Host aus der SSH-Konfiguration öffnen (`new --host <h>`), wie ⌘⇧N.
-    case connectRemote(host: String)
 
     static let states = ["working", "waiting", "idle"]
 
@@ -64,6 +62,7 @@ enum ControlCommand: Equatable {
     Aus einer Session heraus nur Sessions der eigenen Gruppe, außer „Sessions dürfen andere Sessions steuern“ ist an.
 
       kadrell ls [--json]                                  Gruppen und Sessions auflisten
+      kadrell ssh-hosts [--json]                           Hosts aus ~/.ssh/config und zuletzt verbundene
       kadrell new-group <ordner> [--name N] [--color #rrggbb]
                                                            Gruppe anlegen (als Favorit, bleibt auch leer stehen)
       kadrell new [-t gruppe] [-c ordner] [--name N] [-d] [--resume sessionId] [prompt …]
@@ -71,6 +70,8 @@ enum ControlCommand: Equatable {
                                                            -d: im Hintergrund, Auswahl bleibt;
                                                            --resume: bestehende Konversation übernehmen
                                                            (Claude darf dort nicht mehr laufen, -c = ihr Ordner)
+      kadrell new --host H [--tmux S] [-d] [--name N]      Remote-Kachel per ssh zu H (Host aus ~/.ssh/config),
+                                                           hängt sich an dessen tmux (--tmux: Session S)
       kadrell select [-t session|gruppe] [-a]              zeigen (-a: zur Auswahl dazu/weg)
       kadrell layout grid|main|spiral|custom|scroll|stack Layout
       kadrell zoom [-t session]                            Zoom ein/aus
@@ -87,8 +88,6 @@ enum ControlCommand: Equatable {
       kadrell status working|waiting|idle [-t session] [--session-id ID] [--title T] [--waiting-for TEXT]
                      [--message TEXT] [--first-prompt TEXT]   Zustand melden (nutzen die Hooks der CLIs)
       kadrell hook claude                                  Claude-Code-Hook: liest das Hook-JSON von stdin, meldet status
-      kadrell ssh-hosts [--json]                            Hosts aus ~/.ssh/config (folgt Include)
-      kadrell new --host <host>                             Remote-Session (ssh + tmux) wie ⌘⇧N
 
     Die Session-Keys stehen in `kadrell ls`. Exit-Code 1 bei Fehlern, Meldung auf stderr.
     """
@@ -113,21 +112,22 @@ enum ControlCommand: Equatable {
         var t: [String: Parser] = [
             "help": { _ in .help },
             "ls": parser(bools: ["--json"]) { .list(json: $0.has("--json")) },
+            "ssh-hosts": parser(bools: ["--json"]) { .sshHosts(json: $0.has("--json")) },
             "new-group": parser(values: ["--name", "--color"], positional: true) { a in
                 guard a.positional.count == 1 else { throw ControlError("new-group braucht genau einen Ordner") }
                 return .newGroup(dir: a.positional[0], name: a["--name"], color: try color(a["--color"]))
             },
-            "new": parser(values: ["-t", "-c", "--name", "--resume", "--host"], bools: ["-d"], positional: true) { a in
-                if let host = a["--host"] {
-                    guard !host.isEmpty else { throw ControlError("--host braucht einen Hostnamen") }
-                    return .connectRemote(host: host)
-                }
+            "new": parser(values: ["-t", "-c", "--name", "--resume", "--host", "--tmux"], bools: ["-d"], positional: true) { a in
                 let prompt = a.positional.joined(separator: " ")
                 if a["--resume"] != nil, !prompt.isEmpty { throw ControlError("--resume und prompt schließen sich aus") }
                 if let r = a["--resume"], UUID(uuidString: r) == nil { throw ControlError("--resume braucht eine sessionId (UUID)") }
-                return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt, resume: a["--resume"])
+                if a["--host"] != nil, a["--resume"] != nil || !prompt.isEmpty || a["-c"] != nil || a["-t"] != nil {
+                    throw ControlError("--host hat eigenen Ordner und eigene Gruppe, nicht mit -t, -c, --resume oder prompt kombinieren")
+                }
+                if a["--tmux"] != nil, a["--host"] == nil { throw ControlError("--tmux braucht --host") }
+                return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt,
+                                   resume: a["--resume"], host: a["--host"], tmux: a["--tmux"])
             },
-            "ssh-hosts": parser(bools: ["--json"]) { .sshHosts(json: $0.has("--json")) },
             "select": parser(values: ["-t"], bools: ["-a"]) { .select(target: $0["-t"], add: $0.has("-a")) },
             "layout": { rest in
                 guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|main|spiral|custom|scroll|row|stack") }

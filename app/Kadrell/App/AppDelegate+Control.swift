@@ -39,10 +39,10 @@ extension AppDelegate {
         switch cmd {
         case .help: return .ok(ControlCommand.usage)
         case .list(let json): return .ok(try listOutput(json: json))
-        case .sshHosts(let json): return .ok(try sshHostsOutput(json: json))
+        case .sshHosts(let json): return .ok(sshHostsOutput(json: json))
         case let .newGroup(dir, name, color): return .ok(try controlNewGroup(dir: dir, name: name, color: color, req))
-        case let .newSession(t, dir, name, detached, prompt, resume):
-            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, req))
+        case let .newSession(t, dir, name, detached, prompt, resume, host, tmux):
+            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, host: host, tmux: tmux, req))
         case let .capture(t, all): return .ok(try controlCapture(target: t, all: all, req))
         default:
             try await performControl(cmd, req)
@@ -68,19 +68,8 @@ extension AppDelegate {
         case let .send(t, text, enter, keys): try await controlSend(target: t, text: text, enter: enter, keys: keys, req)
         case let .status(t, state, sessionId, title, waitingFor, message, firstPrompt):
             try controlStatus(target: t, state: state, sessionId: sessionId, title: title, waitingFor: waitingFor, message: message, firstPrompt: firstPrompt, req)
-        case .connectRemote(let host): startRemote(host: host, tmuxSession: nil)
-        case .help, .list, .newGroup, .newSession, .capture, .sshHosts: break
+        case .help, .list, .sshHosts, .newGroup, .newSession, .capture: break
         }
-    }
-
-    /// Hosts aus `~/.ssh/config` (folgt `Include`) plus zuletzt verbundene. `--json` für die SSH-Extension.
-    private func sshHostsOutput(json: Bool) throws -> String {
-        let hosts = SSHConfig.hosts()
-        if json {
-            let data = try JSONEncoder().encode(["hosts": hosts, "recent": SSHConfig.recent])
-            return String(decoding: data, as: UTF8.self) + "\n"
-        }
-        return hosts.isEmpty ? "" : hosts.joined(separator: "\n") + "\n"
     }
 
     /// Ohne -t meldet sich die aufrufende Kachel selbst; von außen muss das Ziel genannt sein.
@@ -137,7 +126,13 @@ extension AppDelegate {
     }
 
     /// Ohne -t und -c landet die Session bei der aufrufenden: gleiche Gruppe, gleicher Ordner (wie tmux new-window).
-    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String?, _ req: ControlRequest) throws -> String {
+    /// Mit --host stattdessen eine Remote-Kachel per ssh, wie ⌘⇧N, mit eigener Gruppe je Host.
+    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String?, host: String?, tmux: String?, _ req: ControlRequest) throws -> String {
+        if let host {
+            let key = startRemote(host: host, tmuxSession: tmux, show: !detached)
+            if let name { registry.rename(key, to: name) }
+            return key
+        }
         if let resume { try checkResumable(resume) }
         var g = try target.map { try group($0, req, restricted: false) }
         let caller = req.caller.flatMap { c in registry.sessions.first { $0.id == c } }
@@ -203,6 +198,16 @@ extension AppDelegate {
         var rows = term.terminalStateSnapshot().visibleRows.map { $0.text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }
         while rows.last?.isEmpty == true { rows.removeLast() }
         return rows.joined(separator: "\n")
+    }
+
+    /// Hosts aus `~/.ssh/config` (inkl. `Include`) und die zuletzt verbundenen, für `kadrell new --host` und die SSH-Extension.
+    private func sshHostsOutput(json: Bool) -> String {
+        let hosts = SSHConfig.hosts(), recent = SSHConfig.recent
+        guard json else { return hosts.joined(separator: "\n") }
+        struct Out: Encodable { let hosts, recent: [String] }
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.withoutEscapingSlashes]
+        return (try? String(decoding: enc.encode(Out(hosts: hosts, recent: recent)), as: UTF8.self)) ?? "{}"
     }
 
     private func listOutput(json: Bool) throws -> String {

@@ -27,8 +27,12 @@ final class ControlTests: XCTestCase {
         XCTAssertEqual(try ControlCommand.parse(["layout", "stack"]), .layout(.stack))
         XCTAssertEqual(try ControlCommand.parse(["ssh-hosts", "--json"]), .sshHosts(json: true))
         XCTAssertEqual(try ControlCommand.parse(["ssh-hosts"]), .sshHosts(json: false))
-        XCTAssertEqual(try ControlCommand.parse(["new", "--host", "vault"]), .connectRemote(host: "vault"))
-        XCTAssertThrowsError(try ControlCommand.parse(["new", "--host", ""]))
+        XCTAssertEqual(try ControlCommand.parse(["new", "--host", "vault", "--tmux", "main", "-d"]),
+                       .newSession(target: nil, dir: nil, name: nil, detached: true, prompt: nil, resume: nil, host: "vault", tmux: "main"))
+        // --host hat eigene Gruppe/Ordner: nicht mit -t, -c, prompt oder --resume, und --tmux nur mit --host.
+        XCTAssertThrowsError(try ControlCommand.parse(["new", "--host", "vault", "-c", "/p"]))
+        XCTAssertThrowsError(try ControlCommand.parse(["new", "--host", "vault", "hallo"]))
+        XCTAssertThrowsError(try ControlCommand.parse(["new", "--tmux", "main"]))
     }
 
     func testParseErrors() {

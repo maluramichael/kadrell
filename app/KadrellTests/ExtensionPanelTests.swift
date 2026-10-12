@@ -113,6 +113,8 @@ final class ExtensionPanelTests: XCTestCase {
         wc.toggleRightSidebar()
         XCTAssertTrue(wc.isRightSidebarHidden)
         XCTAssertNil(wc.rightScroll.superview)
+        wc.split.layoutSubtreeIfNeeded()
+        XCTAssertEqual(wc.workspace.frame.maxX, wc.split.bounds.width, accuracy: 1, "Arbeitsfläche füllt die freigewordene Breite, kein leerer Rand rechts")
         XCTAssertTrue(MainWindowController(index: Self.index, cascade: nil).isRightSidebarHidden, "Sichtbarkeit pro Fenster gespeichert")
         wc.toggleRightSidebar()
         XCTAssertTrue(wc.split.arrangedSubviews.last === wc.rightScroll)

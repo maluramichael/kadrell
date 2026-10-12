@@ -181,7 +181,8 @@ local function flush()
     latest = {}
 end
 
-function kadrell.panel.set(tree) latest.panel = json.encode({ t = "panel", tree = tree }) end
+-- opts.dock: "left" oder "right" (Default rechts). Unbekanntes Dock landet rechts.
+function kadrell.panel.set(tree, opts) latest.panel = json.encode({ t = "panel", tree = tree, dock = opts and opts.dock or nil }) end
 
 function kadrell.panel.clear() latest.panel = '{"t":"panel","tree":null}' end
 

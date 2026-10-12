@@ -65,7 +65,7 @@ struct ExtensionsView: View {
         }
         .font(Theme.ui(12)).padding(12)
         .overlay(Rectangle().stroke(Theme.errorColor, lineWidth: 1))
-        .padding(.horizontal, 16).padding(.top, 8)
+        .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     /// Marktplatz: ein Suchfeld sucht GitHub-Repos mit Topic `kadrell-extension`, jeder Treffer lässt sich installieren.
