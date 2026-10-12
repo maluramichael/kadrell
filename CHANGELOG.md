@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.68.1 (2026-10-12)
+
+- Fix: Remote-Kacheln zu Hosts ohne tmux (auch Windows mit PowerShell) öffnen jetzt die normale Shell des Hosts, statt mit einer Fehlermeldung sofort zu schließen.
+- Änderung: Die Extensions für SSH, Git und Jira liegen jetzt in eigenen GitHub-Repos und lassen sich über die Extension-Suche (F4) installieren.
+
 ## 1.68.0 (2026-10-12)
 
 - Feature: Extensions können ihr Panel jetzt auch in einem Dock links unter dem Baum zeigen, nicht nur rechts. Die SSH-Extension nutzt das und listet die Hosts aus ~/.ssh/config links.

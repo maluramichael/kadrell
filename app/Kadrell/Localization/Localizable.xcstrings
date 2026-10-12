@@ -3547,6 +3547,22 @@
         }
       }
     },
+    "Kein tmux auf diesem Host, normale Shell": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein tmux auf diesem Host, normale Shell"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No tmux on this host, plain shell"
+          }
+        }
+      }
+    },
     "Kein Favorit": {
       "localizations": {
         "de": {

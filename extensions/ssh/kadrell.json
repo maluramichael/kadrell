@@ -1,7 +1,0 @@
-{
-  "name": "ssh",
-  "version": "1.0.0",
-  "description": "SSH-Abschnitt in der linken Sidebar: Hosts aus ~/.ssh/config, ein Klick öffnet eine Remote-Kachel.",
-  "apiVersion": 1,
-  "permissions": ["sessions"]
-}

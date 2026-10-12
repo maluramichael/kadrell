@@ -165,13 +165,8 @@ final class AttachManager {
         env["KADRELL"] = Bundle.main.executablePath
         let executable: String, args: [String], execName: String
         if let host = session.host {
-            // Wie das tmux-Popup (M-h): an die laufende Remote-tmux hängen, ohne tmux dort eine Login-Shell.
-            // Endet ssh (Detach, Fehler), bleibt die Kachel mit den letzten Zeilen stehen, Klick verbindet neu.
-            let remote = session.tmuxSession.map { "tmux new -As " + SSHConfig.shellQuote($0) } ?? "tmux attach || tmux new -As main"
-            let cmd = "command -v tmux >/dev/null 2>&1 && { \(remote); } || { echo 'kein tmux auf diesem Host, normale Shell'; exec \"$SHELL\" -l; }"
-            AttachManager.log.info("ssh \(host, privacy: .private): \(remote, privacy: .private)")
-            // `--`: ein Host wie `-oProxyCommand=…` bleibt Hostname und wird keine Option.
-            (executable, args, execName) = ("/usr/bin/ssh", ["-t", "-o", "ConnectTimeout=5", "--", host, cmd], "ssh")
+            AttachManager.log.info("ssh \(host, privacy: .private): \(session.tmuxSession ?? "", privacy: .private)")
+            (executable, args, execName) = AttachManager.sshLaunch(host: host, tmuxSession: session.tmuxSession)
         } else if session.isShell {
             // Login-Shell des Nutzers: argv[0] mit Bindestrich, wie Terminal.app sie startet.
             let shell = env["SHELL"] ?? "/bin/zsh"
@@ -191,6 +186,25 @@ final class AttachManager {
         t.startProcess(executable: executable, args: args, environment: env.map { "\($0.key)=\($0.value)" }, execName: execName, currentDirectory: session.cwd)
         terminals[key] = t
         onChange?()
+    }
+
+    /// Remote-Kachel: wie das tmux-Popup (M-h) an die laufende Remote-tmux hängen, ohne tmux dort die normale Shell.
+    /// Die Remote-Shell kann alles sein (PowerShell, cmd, fish), deshalb läuft kein Shell-Code dort: ein lokales `sh`
+    /// fragt erst per eigener Verbindung `tmux -V` ab und verbindet dann mit tmux-Befehl oder ganz ohne Befehl.
+    /// Geprüft wird die Ausgabe, nicht der Exit-Code: PowerShell macht aus `command -v tmux` ein `Get-Command` mit Exit 0.
+    /// Endet ssh (Detach, Fehler), bleibt die Kachel mit den letzten Zeilen stehen, Klick verbindet neu.
+    /// `--`: ein Host wie `-oProxyCommand=…` bleibt Hostname und wird keine Option.
+    /// shortcut: Hosts nur mit Passwort-Login scheitern an BatchMode und bekommen die normale Shell statt tmux; ändern, falls das jemand braucht.
+    static func sshLaunch(host: String, tmuxSession: String?, ssh: String = "/usr/bin/ssh") -> (String, [String], String) {
+        let remote = tmuxSession.map { "tmux new -As " + SSHConfig.shellQuote($0) } ?? "tmux attach || tmux new -As main"
+        let msg = String(localized: "Kein tmux auf diesem Host, normale Shell", bundle: Bundle.app)
+        let script = """
+            case $("$0" -n -o BatchMode=yes -o ConnectTimeout=5 -- "$1" 'tmux -V' 2>/dev/null) in
+              tmux*) exec "$0" -t -o ConnectTimeout=5 -- "$1" "$2" ;;
+            esac
+            printf '%s\\n' "$3"; exec "$0" -t -o ConnectTimeout=5 -- "$1"
+            """
+        return ("/bin/sh", ["-c", script, ssh, host, remote, msg], "sh")
     }
 
     /// Beendet den Claude-Prozess per `SIGHUP`. Die Konversation liegt im Transcript und lässt sich fortsetzen.

@@ -38,4 +38,22 @@ final class AttachManagerTests: XCTestCase {
         XCTAssertEqual(hung.status, SIGKILL)
         XCTAssertLessThan(Date().timeIntervalSince(t0), 15)
     }
+
+    /// Remote-Kachel: ohne tmux (Windows, PowerShell) geht kein Shell-Code an den Host, ssh startet ohne Befehl.
+    /// Ein Fake-`ssh` beantwortet die Probe und schreibt die Argumente jedes Aufrufs als eine Zeile.
+    func testSSHLaunchFallsBackToPlainShellWithoutTmux() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Probe-Ausgabe zählt, nicht der Exit-Code (PowerShell meldet 0 ohne tmux).
+        for (probe, expected) in [("", "-t -o ConnectTimeout=5 -- win"), ("tmux 3.3a", "-t -o ConnectTimeout=5 -- win tmux new -As 'a b'")] {
+            let log = dir.appendingPathComponent("log\(probe.count)").path
+            let fake = dir.appendingPathComponent("ssh\(probe.count)").path
+            try "#!/bin/sh\ncase \"$*\" in *BatchMode*) echo '\(probe)'; exit 0;; esac\necho \"$*\" >> '\(log)'\n".write(toFile: fake, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fake)
+            let (exe, args, _) = AttachManager.sshLaunch(host: "win", tmuxSession: "a b", ssh: fake)
+            _ = try await ProcessRunner.run(exe, args)
+            XCTAssertEqual(try String(contentsOfFile: log, encoding: .utf8), expected + "\n")
+        }
+    }
 }
