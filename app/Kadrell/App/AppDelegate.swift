@@ -317,7 +317,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onDetachIdle = { [weak self] in self?.detachIdleSessions() }
         bar.onSwitchAccount = { [weak self] id in self?.switchAccount(id) }
         bar.onAddAccount = { [weak self] in self?.addAccount() }
-        bar.onManageAccounts = { [weak self] in self?.menuSettings() }
+        bar.onManageAccounts = { [weak self] in self?.openSettings(page: .accounts) }
+        bar.onHarnessSettings = { [weak self] in
+            guard let self, let k = workspace.focused.flatMap({ self.workspace.session($0) })?.agent else { return }
+            openSettings(page: SettingsPage(agent: k))
+        }
         bar.onToggleAutoswitch = { [weak self] in Settings.autoswitchEnabled.toggle(); self?.refreshAccountBars() }
         applyAccounts(to: c.bar)
         wireExtensionPanel(c)
@@ -419,8 +423,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
         if let action = Hotkeys.action(for: event) { perform(action); return nil }
-        // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
+        // ⌘⏎: neue Session im Ordner der fokussierten, ⌥⌘⏎ mit Harness-Auswahl. Vor dem Terminal abgefangen.
         if code == KeyCode.returnKey, mods == .command { newSessionInFocusedFolder(); return nil }
+        if code == KeyCode.returnKey, mods == [.command, .option] { openAgentPicker(); return nil }
         if code == KeyCode.f1 { sheets.togglePanel(.about); return nil }
         if code == KeyCode.f3 { sheets.togglePanel(.stats); return nil }
         if code == KeyCode.f4 { sheets.togglePanel(.extensions); return nil }
@@ -666,6 +671,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
         let fg = focused.flatMap { workspace.group(forSession: $0.id) }
         bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
+        bar.harness = focused.flatMap(\.agent).flatMap { k in
+            k.usesAccounts ? nil : (k.displayName, focused?.model ?? (k.configuredModel.isEmpty ? nil : k.configuredModel))
+        }
         bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
         bar.errorText = registry?.lastError
         bar.versionWarning = versionWarning
@@ -768,6 +776,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let file = NSMenu(title: String(localized: "Datei", bundle: Bundle.app))
         file.addItem(withTitle: String(localized: "Neue Session", bundle: Bundle.app), action: #selector(menuNewSession), keyEquivalent: "n")
         file.addItem(withTitle: String(localized: "Neue Session im selben Ordner", bundle: Bundle.app), action: #selector(menuNewSessionHere), keyEquivalent: "\r")
+        let pickAgent = file.addItem(withTitle: String(localized: "Neue Session im selben Ordner mit Harness …", bundle: Bundle.app), action: #selector(menuPickAgent), keyEquivalent: "\r")
+        pickAgent.keyEquivalentModifierMask = [.command, .option]
         file.addItem(withTitle: String(localized: "Neues Terminal ohne Claude", bundle: Bundle.app), action: #selector(menuNewShell), keyEquivalent: "t")
         let remote = file.addItem(withTitle: String(localized: "Remote verbinden …", bundle: Bundle.app), action: #selector(menuRemote), keyEquivalent: "n")
         remote.keyEquivalentModifierMask = [.command, .shift]
@@ -847,10 +857,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ⌘N öffnet immer den Gruppen-Dialog, auch mit Fokus im Baum. Ohne Dialog startet nur ⌘⏎ (oder das Plus im Baum).
     @objc private func menuNewSession() { openNewSession(groupId: nil) }
     @objc private func menuNewSessionHere() { newSessionInFocusedFolder() }
-    /// Ohne fokussierte Session gibt es keinen Ordner: dann wie ⌘N.
-    private func newSessionInFocusedFolder() {
+    @objc private func menuPickAgent() { openAgentPicker() }
+    /// Harnesses mit gefundenem Binary, Claude immer (dessen Fehlen zeigt schon der Leerzustand).
+    var availableAgents: [AgentKind] {
+        AgentKind.allCases.filter { k in k == .claude || cli.binary(for: k).map { FileManager.default.isExecutableFile(atPath: $0) } ?? false }
+    }
+    /// Ohne fokussierte Session gibt es keinen Ordner: dann wie ⌘N. Der Harness folgt der fokussierten Kachel
+    /// (Pi-Kachel → Pi), bei Shell und Remote gilt der Standard-Harness.
+    private func newSessionInFocusedFolder(kind: AgentKind? = nil) {
         guard let s = workspace.focused.flatMap({ workspace.session($0) }), !s.cwd.isEmpty else { openNewSession(groupId: nil); return }
-        startSession(group: workspace.group(forSession: s.id), cwd: s.cwd)
+        startSession(group: workspace.group(forSession: s.id), cwd: s.cwd, kind: kind ?? s.agent ?? Settings.defaultAgent)
+    }
+
+    /// ⌥⌘⏎: Harness wählen, dann wie ⌘⏎ im Ordner der fokussierten Session. Die Palette im Kommandomodus mit
+    /// nur diesen Einträgen, der zuletzt gewählte steht oben.
+    private func openAgentPicker() {
+        let last = Settings.lastAgent ?? Settings.defaultAgent
+        let kinds = availableAgents.filter { $0 == last } + availableAgents.filter { $0 != last }
+        palette.source = PaletteWindow.Source(commands: kinds.map { k in
+            (String(localized: "Neue \(k.displayName)-Session · \(k.summary)", bundle: Bundle.app), { [weak self] in
+                Settings.lastAgent = k
+                self?.newSessionInFocusedFolder(kind: k)
+            })
+        })
+        palette.onClose = { [weak self] in self?.workspace.refocusTerminal() }
+        sheets.dismiss()
+        palette.open(over: window, prefix: ">")
     }
     /// ⌘⇧N: Palette im Remote-Modus, `@host` verbindet per ssh mit dessen tmux, `@host:` wählt die Session.
     @objc private func menuRemote() { togglePalette(prefix: "@") }
@@ -885,9 +917,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuExtensions() { sheets.togglePanel(.extensions) }
     @objc private func menuWhatsNew() { showWhatsNew(version: Settings.version, fallback: String(localized: "Keine Einträge gefunden.", bundle: Bundle.app)) }
     @objc private func menuTemporaryInstance() { Profile.launchTemporary() }
-    @objc private func menuSettings() {
+    @objc private func menuSettings() { openSettings() }
+    func openSettings(page: SettingsPage? = nil) {
         let model = SettingsModel()
+        if let page { model.page = page }
         model.accounts = accounts
+        model.cli = cli
         model.onApply = { [weak self] in
             guard let self else { return }
             buildMenu()
@@ -1069,6 +1104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (String(localized: "Trennlinien zurücksetzen (gleich verteilt)", bundle: Bundle.app), { [weak self] in self?.workspace.resetRatios() }),
             (String(localized: "Zoom ein/aus (fokussierte)", bundle: Bundle.app), { [weak self] in self?.workspace.toggleZen() }),
             (String(localized: "Neue Session", bundle: Bundle.app), { [weak self] in self?.openNewSession(groupId: nil) }),
+            (String(localized: "Neue Session im selben Ordner mit Harness …", bundle: Bundle.app), { [weak self] in self?.openAgentPicker() }),
             (String(localized: "Neues Terminal ohne Claude", bundle: Bundle.app), { [weak self] in self?.menuNewShell() }),
             (String(localized: "Remote verbinden (ssh → tmux)", bundle: Bundle.app), { [weak self] in self?.menuRemote() }),
             (String(localized: "Session stoppen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
@@ -1186,14 +1222,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sessions = workspace.sessions
         let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
         // Repos unter dem Startordner und neben allen bekannten Projekten; bis der Scan steht, gilt der gespeicherte Stand.
-        let model = NewSessionModel(groups: store.groups, counts: counts, cloneCandidates: extensionCloneCandidates())
+        let model = NewSessionModel(groups: store.groups, counts: counts, cloneCandidates: extensionCloneCandidates(), agents: availableAgents)
         let known = store.groups.map(\.cwd) + FolderIndex.shared.uses.keys
         FolderIndex.shared.refresh(roots: [Settings.startFolder] + known.map { ($0 as NSString).deletingLastPathComponent }) { [weak model] in
             model?.refreshIfUntouched()
         }
-        let view = NewSessionView(model: model, onOpenSettings: { [weak self] in self?.menuSettings() }) { [weak self] g, cwd in
+        let view = NewSessionView(model: model, onOpenSettings: { [weak self] in self?.openSettings(page: SettingsPage(agent: model.agent)) }) { [weak self] g, cwd in
             self?.sheets.dismiss()
-            self?.startSession(group: g, cwd: cwd)
+            if model.agents.count > 1 { Settings.lastAgent = model.agent }
+            self?.startSession(group: g, cwd: cwd, kind: model.agent)
         }
         sheets.present(view, onPrimary: { model.start() })
     }
@@ -1201,7 +1238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kadrell vergibt die sessionId selbst (`claude --session-id`): die Kachel steht sofort, kein Warten auf `claude agents`.
     /// `show: false` startet Claude im Hintergrund, die Auswahl bleibt. `prompt` ist die erste Nachricht.
     @discardableResult
-    func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil, sessionId: String? = nil) -> String {
+    func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil, sessionId: String? = nil, kind: AgentKind = Settings.defaultAgent) -> String {
         let id = sessionId ?? UUID().uuidString.lowercased()
         var target = group ?? store.group(forCwd: cwd)
         if target == nil {
@@ -1211,7 +1248,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         store.attach(sessionId: id, to: target!.id)
         FolderIndex.shared.recordUse(cwd)
-        let session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
+        var session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
+        // Claude bleibt ohne Eintrag, damit `sessions.json` für ältere Versionen gleich aussieht.
+        if kind != .claude, !session.isShell { session.harness = kind }
         if let prompt { attach.initialPrompts[id] = prompt }
         registry.add(session)
         Feedback.play(.open)

@@ -24,6 +24,8 @@ final class CellView: NSView {
         var exitCode: Int32?
         /// `ended`, aber gar nicht erst gestartet: der Ordner der Session existiert nicht mehr.
         var missingFolder = false
+        /// `ended`, aber gar nicht erst gestartet: das Binary des Harness fehlt (Pi nicht installiert).
+        var missingBinary = false
         /// Vorschau (⌥J/⌥K) startet keinen Prozess: ohne Terminal kein „STARTET …“.
         var previewing = false
         /// Das Terminal hängt gerade in einem anderen Fenster.
@@ -191,6 +193,10 @@ final class CellView: NSView {
             Self.shade.withAlphaComponent(0.72).setFill()
             body.fill()
             drawLabel(String(localized: "ORDNER FEHLT · \(Theme.shortPath(state.session.cwd))", bundle: Bundle.app), in: body, color: Theme.error)
+        } else if state.missingBinary {
+            Self.shade.withAlphaComponent(0.72).setFill()
+            body.fill()
+            drawLabel(String(localized: "\(state.session.kind.binaryName) NICHT GEFUNDEN · PFAD IN DEN EINSTELLUNGEN", bundle: Bundle.app), in: body, color: Theme.error)
         } else if let exitCode = state.exitCode {
             // Startfehler statt normalem `/exit`: keine Schraffur, die letzten Zeilen bleiben lesbar (Kanboard #20).
             Self.shade.withAlphaComponent(0.35).setFill()
@@ -215,7 +221,7 @@ final class CellView: NSView {
 
     private var borderColor: NSColor {
         if state.dropTarget { return Theme.fg }
-        if state.missingFolder || state.exitCode != nil { return Theme.error }
+        if state.missingFolder || state.missingBinary || state.exitCode != nil { return Theme.error }
         if state.focused { return state.groupColor }
         if state.session.status == .waiting, state.attached { return Theme.waiting }
         if state.session.status == .error { return Theme.error }

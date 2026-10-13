@@ -511,6 +511,7 @@ final class WorkspaceView: NSView {
             hovered: hoveredCell == key, dropTarget: dragging && dropTarget == key,
             attached: attach?.isAttached(key) ?? false, ended: attach?.isEnded(key) ?? false,
             exitCode: attach?.exitCode(for: key), missingFolder: attach?.isMissingFolder(key) ?? false,
+            missingBinary: attach?.isMissingBinary(key) ?? false,
             previewing: preview == key,
             // Vor dem Einhängen gleichwertig: `mountTerminal` holt nie ein Terminal aus einem anderen Fenster.
             elsewhere: t.flatMap(host).map { $0 !== self } ?? false,

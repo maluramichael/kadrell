@@ -41,6 +41,11 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     var onAddAccount: (() -> Void)?
     var onManageAccounts: (() -> Void)?
     var onToggleAutoswitch: (() -> Void)?
+    /// Fokussierte Kachel läuft mit einem anderen Harness als Claude: statt Konto und Claude-Nutzung stehen
+    /// Harness und Modell rechts (z. B. „Pi · ollama/qwen3.8“). nil = Claude-Block wie immer.
+    var harness: (name: String, model: String?)?
+    /// Klick auf die Harness-Pille: Einstellungsseite dieses Harness.
+    var onHarnessSettings: (() -> Void)?
     /// Fläche der Konto-Pille beim letzten Zeichnen, damit das Menü darunter aufklappt.
     private var accountRect: CGRect = .zero
     /// Neue Werte zählen vom alten Stand hoch bzw. herunter.
@@ -180,7 +185,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         var rx = b.width
         module(b, &rx, [NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
         drawNotices(b, &rx)
-        drawUsage(b, &rx)
+        if let harness { drawHarness(b, &rx, harness) } else { drawUsage(b, &rx) }
         drawExtensionItems(b, &rx, limit: leftEnd + 16 + min(crumbText().size().width, Self.minCrumbWidth))
         drawCrumb(b, from: leftEnd, to: rx)
     }
@@ -298,6 +303,14 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         module(b, &rx, parts, pill: Theme.surface, String(localized: "Aktives Konto", bundle: Bundle.app), value: title) { [weak self] in self?.showAccountMenu() }
     }
 
+    /// Harness-Pille: Name gedämpft, Modell hell; ohne gemeldetes Modell „Standardmodell“.
+    private func drawHarness(_ b: CGRect, _ rx: inout CGFloat, _ h: (name: String, model: String?)) {
+        let model = h.model ?? String(localized: "Standardmodell", bundle: Bundle.app)
+        let shown = model.count > 40 ? String(model.prefix(39)) + "…" : model
+        module(b, &rx, [NSAttributedString(string: h.name, attributes: Theme.attrs(11, Theme.muted)), NSAttributedString(string: shown, attributes: Theme.attrs(11, Theme.fg))],
+               pill: Theme.surface, String(localized: "Harness der fokussierten Session", bundle: Bundle.app), value: "\(h.name) · \(model)") { [weak self] in self?.onHarnessSettings?() }
+    }
+
     private func showAccountMenu() {
         let menu = NSMenu()
         for a in accounts {
@@ -328,7 +341,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     /// Update, wartende Sessions, laufende Prozesse, Tipp und Versionswarnung.
     private func drawNotices(_ b: CGRect, _ rx: inout CGFloat) {
-        drawAccount(b, &rx)
+        if harness == nil { drawAccount(b, &rx) }
         if let update = updateAvailable {
             // Dezent statt der waiting-Farbe: kein Alarm, nur ein Hinweis.
             module(b, &rx, [NSAttributedString(string: String(localized: "\(update.version) verfügbar", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.fg))], pill: Theme.surface,

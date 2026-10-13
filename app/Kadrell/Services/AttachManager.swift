@@ -76,6 +76,8 @@ final class AttachManager {
     private(set) var exitCodes: [String: Int32] = [:]
     /// Ordner der Session existiert nicht mehr: kein Prozess gestartet, die Kachel zeigt das statt „STARTET …“ endlos.
     private(set) var missingFolder: Set<String> = []
+    /// Binary des Harness fehlt (Pi nicht installiert): kein Prozess, die Kachel sagt das.
+    private(set) var missingBinary: Set<String> = []
     private var queueTask: Task<Void, Never>?
     /// App wird beendet: nichts mehr starten, sonst setzt das Polling die eben beendeten Sessions fort.
     private var shuttingDown = false
@@ -93,6 +95,7 @@ final class AttachManager {
     func isAttached(_ key: String) -> Bool { terminals[key] != nil }
     func isEnded(_ key: String) -> Bool { ended.contains(key) }
     func isMissingFolder(_ key: String) -> Bool { missingFolder.contains(key) }
+    func isMissingBinary(_ key: String) -> Bool { missingBinary.contains(key) }
     func exitCode(for key: String) -> Int32? { exitCodes[key] }
     func terminal(for key: String) -> KadrellTerminalView? { terminals[key] }
     func lines(for key: String) -> [String] { snapshots[key] ?? [] }
@@ -124,6 +127,7 @@ final class AttachManager {
         ended.remove(session.id)
         exitCodes[session.id] = nil
         missingFolder.remove(session.id)
+        missingBinary.remove(session.id)
         snapshots[session.id] = nil
         let key = session.id
         // Ordner weg (gelöscht, Worktree entfernt): kein Prozess, sonst startet der Klick auf „Klick setzt fort“
@@ -171,11 +175,12 @@ final class AttachManager {
             // Login-Shell des Nutzers: argv[0] mit Bindestrich, wie Terminal.app sie startet.
             let shell = env["SHELL"] ?? "/bin/zsh"
             (executable, args, execName) = (shell, [], "-" + URL(fileURLWithPath: shell).lastPathComponent)
+        } else if session.kind == .pi {
+            guard let launch = piLaunch(session) else { return }
+            (executable, args, execName) = launch
         } else {
             let hasTranscript = Transcript.path(sessionId: session.sessionId, configDir: cli.configDir) != nil
-            var claudeArgs = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
-                + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
-                + ClaudeHook.launchArgs
+            var claudeArgs = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript) + AgentKind.claude.launchArgs
             AttachManager.log.info("claude \(claudeArgs.joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
             if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { claudeArgs += ClaudeCLI.promptArgs(prompt) }
             // Fullscreen-Renderer: Claude zeichnet im Alternate-Screen statt den Verlauf in den Scrollback zu streamen,
@@ -186,6 +191,22 @@ final class AttachManager {
         t.startProcess(executable: executable, args: args, environment: env.map { "\($0.key)=\($0.value)" }, execName: execName, currentDirectory: session.cwd)
         terminals[key] = t
         onChange?()
+    }
+
+    /// Pi-Kachel: `--session-id` legt neu an oder setzt fort. Fehlt das Binary, bleibt die Kachel mit Hinweis stehen
+    /// (wie bei fehlendem Ordner), statt die ganze App zu blockieren.
+    private func piLaunch(_ session: Session) -> (String, [String], String)? {
+        guard let binary = cli.binary(for: .pi), FileManager.default.isExecutableFile(atPath: binary) else {
+            ended.insert(session.id)
+            missingBinary.insert(session.id)
+            onChange?()
+            return nil
+        }
+        let resumes = PiCLI.hasSession(sessionId: session.sessionId, environment: cli.environment)
+        var args = PiCLI.sessionArgs(sessionId: session.sessionId) + AgentKind.pi.launchArgs
+        AttachManager.log.info("pi \(args.joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
+        if let prompt = initialPrompts.removeValue(forKey: session.id), !resumes { args += PiCLI.promptArgs(prompt) }
+        return (binary, args, "pi")
     }
 
     /// Remote-Kachel: wie das tmux-Popup (M-h) an die laufende Remote-tmux hängen, ohne tmux dort die normale Shell.
@@ -235,6 +256,7 @@ final class AttachManager {
         for key in terminals.keys where !live.contains(key) { detach(key) }
         ended.formIntersection(live)
         missingFolder.formIntersection(live)
+        missingBinary.formIntersection(live)
         exitCodes = exitCodes.filter { live.contains($0.key) }
         attachStarted = attachStarted.filter { live.contains($0.key) }
     }

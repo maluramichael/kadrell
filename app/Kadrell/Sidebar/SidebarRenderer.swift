@@ -119,6 +119,7 @@ extension SidebarRenderer {
         let iconRect = CGRect(x: 12, y: r.midY - 6, width: 12, height: 12), iconColor = s.selected || s.hover ? Theme.fg : Theme.muted
         if s.session.isRemote { Icons.server(in: iconRect, color: iconColor) }
         else if s.session.isShell { Icons.computer(in: iconRect, color: iconColor) }
+        else if s.session.kind != .claude { drawAgentBadge(s.session.kind, in: iconRect, color: iconColor) }
         var right = r.maxX - 10
         if s.showAge {
             let age = NSAttributedString(string: s.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
@@ -138,6 +139,12 @@ extension SidebarRenderer {
             right -= 8
         }
         sessionTitle(s).draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    /// Kürzel des Harness im Symbolplatz, nur für Nicht-Claude-Kacheln (Claude ist der Normalfall ohne Zeichen).
+    func drawAgentBadge(_ kind: AgentKind, in r: CGRect, color: NSColor) {
+        let t = NSAttributedString(string: kind.badge, attributes: Theme.attrs(12, color, bold: true))
+        t.draw(at: CGPoint(x: r.midX - t.size().width / 2, y: r.midY - t.size().height / 2))
     }
 
     /// Titel der Session, ohne Gruppierung mit „projekt › “ in Gruppenfarbe davor.

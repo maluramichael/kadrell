@@ -120,6 +120,27 @@ enum Settings {
         get { Int(min(max(value("autoswitch.threshold", 90.0), autoswitchRange.lowerBound), autoswitchRange.upperBound)) }
         set { store("autoswitch.threshold", Double(newValue)) }
     }
+    /// Harness für ⌘⏎ ohne Agent-Kachel im Fokus (Shell, Remote, nichts) und als Vorgabe im ⌘N-Dialog. Default Claude.
+    static var defaultAgent: AgentKind { get { enumValue("agent.default", .claude) } set { store("agent.default", newValue.rawValue) } }
+    /// Zuletzt im ⌘N-Dialog oder in der Harness-Auswahl (⌥⌘⏎) gewählter Harness; nil = noch nie gewählt.
+    static var lastAgent: AgentKind? {
+        get { Profile.defaults.string(forKey: "agent.last").flatMap(AgentKind.init(rawValue:)) }
+        set { store("agent.last", newValue?.rawValue) }
+    }
+
+    /// Start-Flags für Pi. "" = Pis eigene Einstellung (`~/.pi/agent/settings.json`), Flag entfällt.
+    static let piThinkingLevels = ["", "off", "minimal", "low", "medium", "high", "xhigh", "max"]
+    /// `provider/id` aus `pi --list-models`.
+    static var piModel: String { get { value("pi.model", "") } set { store("pi.model", newValue) } }
+    static var piThinking: String { get { value("pi.thinking", "") } set { store("pi.thinking", newValue) } }
+    /// Pfad zum `pi`-Binary. "" = automatisch (`~/.local/bin/pi`, sonst `command -v pi` in der Login-Shell).
+    static var piBinary: String { get { value("pi.binary", "") } set { store("pi.binary", newValue) } }
+    static var piSummary: String {
+        var parts = [piModel.isEmpty ? String(localized: "Standardmodell", bundle: Bundle.app) : piModel]
+        if !piThinking.isEmpty { parts.append(piThinking) }
+        return parts.joined(separator: " · ")
+    }
+
     /// Kompakte Zeile für den ⌘N-Dialog: mit welchen Start-Flags eine neue Session gleich läuft (Kanboard #75).
     static var claudeSummary: String {
         var parts = [claudeModel.isEmpty ? String(localized: "Standardmodell", bundle: Bundle.app) : claudeModel,

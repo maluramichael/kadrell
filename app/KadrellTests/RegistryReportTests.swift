@@ -57,3 +57,22 @@ final class RegistryReportTests: XCTestCase {
         XCTAssertTrue(r.sessions.isEmpty)
     }
 }
+
+extension RegistryReportTests {
+    /// Pi meldet sein Modell (auch nach Ctrl+P) mit, die Leiste zeigt es; gespeichert wird es nicht.
+    func testReportedModelIsLiveOnly() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-model-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cli = ClaudeCLI(binary: "/usr/bin/false", environment: ["CLAUDE_CONFIG_DIR": dir.path])
+        let r = SessionRegistry(cli: cli, url: dir.appendingPathComponent("sessions.json"))
+        var s = Session(id: "p1", cwd: dir.path, startedAt: 1, sessionId: "p1", name: "")
+        s.harness = .pi
+        r.add(s)
+        r.report("p1", state: "idle", sessionId: nil, title: nil, waitingFor: nil, message: nil, firstPrompt: nil, model: "ollama/q")
+        XCTAssertEqual(r.sessions[0].model, "ollama/q")
+        let reloaded = SessionRegistry(cli: cli, url: r.url).sessions[0]
+        XCTAssertEqual(reloaded.kind, .pi, "Harness ist gespeichert")
+        XCTAssertNil(reloaded.model, "Modell ist nur live")
+    }
+}

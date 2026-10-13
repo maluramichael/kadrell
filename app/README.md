@@ -37,7 +37,7 @@ Zwei Schalter in der Leiste ordnen den Baum: „GRP“ (⌥G) gruppiert nach Pro
 in einer Liste mit dem Projektnamen vor dem Titel; „SORT“ (⌥O) schaltet aus → A–Z → Status weiter. Status heißt:
 wartet vor Fehler vor arbeitet vor fertig, bei gleichem Stand die neuere Session zuerst. Die beiden Handreihenfolgen
 (gruppiert in `groups.json`, flach in den Einstellungen des Profils) sind getrennt: Umschalten sortiert nichts um.
-⌘B blendet den Baum aus, ⌘N neue Session (Suchfeld über Gruppen, benutzte Ordner und Git-Repos unter dem Projektordner; `~/d/p/kad` kürzt Pfade ab, ⌘O Finder, Ordner aus dem Finder in Dialog oder Baum ziehen), ⌘⏎ neue Session im Ordner der fokussierten, ⌘T Terminal ohne Claude im selben Ordner, ⌘P Suche
+⌘B blendet den Baum aus, ⌘N neue Session (Suchfeld über Gruppen, benutzte Ordner und Git-Repos unter dem Projektordner; `~/d/p/kad` kürzt Pfade ab, ⌘O Finder, Ordner aus dem Finder in Dialog oder Baum ziehen), ⌘⏎ neue Session im Ordner der fokussierten (gleicher Harness wie dort: Claude oder Pi), ⌥⌘⏎ dasselbe mit Harness-Auswahl, ⌘T Terminal ohne Claude im selben Ordner, ⌘P Suche
 (`>` Kommandos, `/` Text in allen laufenden Terminals, direkt per ⌘⇧F), ⌘F Suchleiste im fokussierten Terminal (⌘G / ⌘⇧G weiter), ⌘W beendet die fokussierte Session. Der rote Knopf versteckt nur das Fenster, Kadrell und alle Sessions laufen weiter; das Menüleisten-Icon (Kurzstatus wartend/arbeitend) oder ein Klick aufs Dock-Icon holen es zurück. ⌘⇧T öffnet ein weiteres Fenster mit denselben Sessions, aber eigener Auswahl, eigenem Layout und Fokus (z. B. für einen zweiten Monitor); ein Terminal hängt nur in einem Fenster, die Kachel im anderen zeigt „IN ANDEREM FENSTER“ und holt es per Klick oder Fokus. Zusatzfenster schließen (⌘⇧W, roter Knopf) beendet keine Session, offene Fenster kommen beim Neustart wieder. F1 zeigt die Hilfe, beim ersten Start automatisch. F3 zeigt die Statistik des Profils (geschickte Nachrichten, geöffnete Sessions und Terminals, Kachelwechsel, Rekord gleichzeitig offener Sessions); gezählt wird, solange Kadrell läuft, die Zahlen liegen in den Einstellungen des Profils.
 
 Belegbare Kürzel (⌘, Einstellungen, Defaults wie in der tmux-Config): ⌥-Pfeile Fokus, ⌥⇧-Pfeile Kachel
@@ -75,6 +75,12 @@ an den Socket der eigenen Kachel; ohne Socket endet der Hook sofort. Eine so gem
 (kein Lesen von `sessions/<pid>.json`, kein Transcript-Scan), bis ihr Prozess endet; meldet sich ein Prozess nicht
 (ältere CLI), bleibt es beim alten Weg. Nichts wird in `~/.claude/settings.json` eingetragen.
 `kadrell status` steht auch anderen Agent-CLIs offen, siehe `docs/agenten-plan.md`.
+
+Harnesses: neben Claude startet Kadrell auch Pi (`pi --session-id <uuid>`, neu und fortsetzen mit demselben Argument).
+Jeder Pi-Prozess bekommt per `-e` die Integration `kadrell-pi.js` aus dem App-Bundle, die Zustand, Titel, letzte
+Antwort und Modell über `kadrell status` meldet; in Pis Konfiguration wird nichts eingetragen. Modell und Thinking
+stehen in den Einstellungen unter Harnesses › Pi, die Modellliste kommt aus `pi --list-models`. Konten, Usage und
+Auto-Wechsel gelten nur für Claude; bei fokussierter Pi-Kachel zeigt die Leiste Harness und Modell.
 
 Fernsteuerung (wie das `tmux`-Kommando): Menü Kadrell › „Kommandozeilen-Tool installieren …“ legt
 `~/.local/bin/kadrell` als Symlink auf das App-Binary an. `kadrell <befehl>` spricht über den Unix-Socket

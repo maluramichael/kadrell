@@ -1,7 +1,23 @@
 # Plan: weitere Agent-CLIs als Session-Typ
 
-Stand 2026-09-17. Recherche und Entscheidungen aus der Planungssession; Phase 1 (Claude-Hooks statt Polling,
-`kadrell status`, `kadrell hook claude`) ist umgesetzt. Alles Weitere hier ist noch nicht gebaut.
+Stand 2026-10-13. Phase 1 (Claude-Hooks statt Polling, `kadrell status`, `kadrell hook claude`) und das Gerüst
+aus Phase 2 sind umgesetzt, als erster weiterer Typ **Pi** (statt OpenCode, siehe Reihenfolge). OpenCode, Codex,
+Kimi Code und Hermes sind noch nicht gebaut.
+
+## Umgesetzt (2026-10-13)
+
+- `AgentKind` (`Model/AgentKind.swift`) mit `claude` und `pi`, `Session.harness` (nur bei Nicht-Claude gespeichert,
+  alte `sessions.json` bleibt gültig), `Session.kind`/`agent`/`usesClaudeData`.
+- Pi-Start in `AttachManager.piLaunch`: `pi --session-id <uuid> [--model p/id] [--thinking L] -e <Bundle>/kadrell-pi.js`.
+  `--session-id` legt an oder setzt fort, Kadrell vergibt die Id wie bei Claude. Fehlt das Binary: Kachel mit Hinweis.
+- Statuskanal: `Resources/kadrell-pi.js` per `-e`, meldet `session_start` (sessionId, Titel, Modell), `input`
+  (erste Nachricht), `agent_start` → working, `agent_settled` → idle mit letzter Antwort, `ui_prompt_start/end` →
+  waiting, `model_select` → Modell. `kadrell status` hat dafür `--model` bekommen (live, nicht gespeichert).
+- Start: ⌘⏎ erbt den Harness der fokussierten Kachel, ⌥⌘⏎ Auswahl (Palette), ⌘N mit Harness-Reihe (⌘1/⌘2),
+  `kadrell new --agent claude|pi`, `ls` mit Spalte/Feld `agent`. Standard-Harness in den Einstellungen.
+- Einstellungen mit Seitenleiste (`UI/Settings/`): Allgemein, Darstellung, Tastenkürzel, Harnesses › Claude
+  (› Konten), Pi (Modell aus `pi --list-models --offline`, Thinking, Programmpfad).
+- Statusleiste: bei fokussierter Pi-Kachel Harness und Modell statt Konto-Pille und Claude-Nutzung.
 
 ## Entscheidungen
 
@@ -57,6 +73,7 @@ Client, ungeeignet, solange die CLI im Terminal bleiben soll. OpenCode-SQLite al
 | OpenCode 1.18 | `opencode <dir>` | `opencode -s <ses_…>` | `-m provider/model`, `--agent`, `--auto` | nein | Plugin `session.updated` (`info.title`) |
 | Codex 0.15x | `codex` | `codex resume <thread-id>` | `-m`, `--oss` (`oss_provider` ollama/lmstudio), Provider aus `config.toml` | nein | Hook `Stop` liest `~/.codex/session_index.jsonl` (`thread_name`) |
 | Kimi Code 2.0 | `kimi` | `kimi --session <id>` | `-m`, Provider aus Config (`openai` + `base_url` für Ollama) | nicht dokumentiert | Hook-Payload `session_title` |
+| Pi 1.2 (fertig) | `pi --session-id <uuid>` | `pi --session-id <uuid>` | `--model provider/id`, `--thinking` | ja | Extension `session_info_changed` |
 | Hermes 0.21 | `hermes chat --accept-hooks` | `hermes chat --resume <id> --accept-hooks` | `-m`, `--provider`, `--reasoning` | nein | Hook liest `sessions.title` aus `~/.hermes/state.db` |
 
 OpenCode und Hermes lokal gegen `--help` verifiziert; Codex (learn.chatgpt.com/docs/hooks) und Kimi Code
@@ -69,6 +86,7 @@ Python-`kimi-cli`. `--accept-hooks` bei Hermes: sonst fragt Hermes beim ersten S
 | Typ | Datei von Kadrell | Eintrag in | Ereignisse → Status |
 |---|---|---|---|
 | Claude (fertig) | keine, Shell-Zeile `"$KADRELL" hook claude` | kein Eintrag: `--settings '<json>'` beim Start jedes Prozesses (`ClaudeHook.launchArgs`) | `SessionStart` → session-id; `UserPromptSubmit` → working; `PermissionRequest`, `Notification` (permission_prompt/agent_needs_input/elicitation_dialog) → waiting; `Notification` (idle_prompt) → idle; `Stop` (`last_assistant_message`) → idle |
+| Pi (fertig) | keine, `-e <Bundle>/kadrell-pi.js` je Prozess | kein Eintrag | `session_start` → session-id; `agent_start` → working; `ui_prompt_start` → waiting; `agent_settled` → idle (nicht `agent_end`, danach können Retries/Compaction laufen) |
 | OpenCode | `~/.config/opencode/plugins/kadrell.js` | Datei im Plugin-Ordner genügt; Plugin läuft im eingebetteten Server der TUI, sieht die Kachel-Umgebung | `session.created/updated` → session-id + `info.title`; `session.status` `{type: busy}`, `tool.execute.*` → working; `permission.updated` (1.18) / `permission.asked` (2.x), `question.asked` → waiting; `permission.replied` → working; `session.status` `{type: idle}`, `session.idle` → idle. Kindsessions (`info.parentID`) ignorieren. Strukturvorlage: das herdr-Plugin im selben Ordner |
 | Codex | `~/.config/kadrell/integrations/codex.sh` | `~/.codex/hooks.json` (Claude-kompatibel: `hook_event_name`, `session_id`, `cwd`, `transcript_path`) | `SessionStart` → session-id; `UserPromptSubmit` → working; `PermissionRequest` → waiting; `Stop` (`last_assistant_message`) → idle; `Interrupt` → idle. Kein `Notification`. Falle: fremde Hooks muss der Nutzer einmal per `/hooks` in Codex bestätigen, sonst laufen sie still nicht |
 | Kimi Code | `~/.config/kadrell/integrations/kimi.sh` | Hook-Config laut Doku unter `~/.kimi-code/` (Format bei Installation prüfen) | `SessionStart` → session-id; `TurnStarted` → working; `PermissionRequest` → waiting; `PermissionResult` → working; `Stop`/`Interrupt` → idle; `session_title` in jedem Payload |

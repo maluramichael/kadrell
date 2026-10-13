@@ -148,7 +148,7 @@ final class SessionRegistry {
 
     /// `kadrell status` aus einem Hook der Session (`ClaudeHook`): ab jetzt gilt für diese Kachel das Gemeldete,
     /// der Poll lässt Status, sessionId, Name und Transcript in Ruhe, solange ihr Prozess läuft.
-    func report(_ key: String, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?) {
+    func report(_ key: String, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?, model: String? = nil) {
         guard let i = sessions.firstIndex(where: { $0.id == key }) else { return }
         Self.log.info("status \(state, privacy: .public) für \(key.prefix(8), privacy: .public)\(title == nil ? "" : " · Titel", privacy: .public)\(message == nil ? "" : " · Antwort", privacy: .public)")
         var s = sessions[i]
@@ -157,6 +157,7 @@ final class SessionRegistry {
         s.pid = pids().first { $0.value == key }?.key ?? s.pid
         if let sessionId, !sessionId.isEmpty { s.sessionId = sessionId }
         if let title, !title.isEmpty { s.name = title }
+        if let model, !model.isEmpty { s.model = model }
         if let firstPrompt, firstPrompts[s.sessionId] == nil { firstPrompts[s.sessionId] = firstPrompt }
         s.firstPrompt = firstPrompts[s.sessionId].flatMap { $0.isEmpty ? nil : $0 }
         if let message {
@@ -221,8 +222,8 @@ final class SessionRegistry {
     }
 
     private func fillFirstPrompts(_ merged: inout [Session]) async {
-        // Shell- und Remote-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich scannen.
-        let missing = merged.filter { $0.name.isEmpty && !$0.isShell && !$0.isRemote && !reported.contains($0.id) && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
+        // Shell-, Remote- und Nicht-Claude-Sessions haben nie ein Claude-Transcript, sonst würde jeder Poll erneut vergeblich scannen.
+        let missing = merged.filter { $0.name.isEmpty && $0.usesClaudeData && !reported.contains($0.id) && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
         if !missing.isEmpty {
             let configDir = cli.configDir
             let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
@@ -241,7 +242,7 @@ final class SessionRegistry {
         // Shell- und Remote-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich den ganzen
         // Projektordner scannen (siehe `Transcript.path`).
         // Gemeldete Sessions (Hooks) nur nach einer Antwort (`transcriptDue`), nicht bei jedem Poll.
-        let ids = merged.filter { !$0.isShell && !$0.isRemote && (!reported.contains($0.id) || transcriptDue.contains($0.id)) }.map(\.sessionId)
+        let ids = merged.filter { $0.usesClaudeData && (!reported.contains($0.id) || transcriptDue.contains($0.id)) }.map(\.sessionId)
         transcriptDue.subtract(reported)
         let cache = transcripts, wantText = Settings.showLastMessage, configDir = cli.configDir
         transcripts = await Task.detached { Transcript.refresh(ids, configDir: configDir, cache: cache, wantText: wantText) }.value
@@ -327,7 +328,7 @@ final class SessionRegistry {
 }
 
 private extension Session {
-    var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? ""] }
+    var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? "", harness?.rawValue ?? ""] }
 }
 
 /// Eintrag in `closed.json`: die Session, wie sie beim Schließen zuletzt aussah, plus Zeitpunkt.

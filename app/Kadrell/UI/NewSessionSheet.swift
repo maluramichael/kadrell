@@ -24,6 +24,10 @@ final class NewSessionModel {
     var query = "" { didSet { if query != oldValue { notFoundPath = nil; update() } } }
     private(set) var candidates: [Candidate] = []
     var selected = 0
+    /// Installierte Harnesses; nur bei mehr als einem zeigt der Dialog die Auswahl.
+    let agents: [AgentKind]
+    /// Harness der neuen Session, ⌘1 … ⌘9 wählt. Startwert: zuletzt gewählter.
+    var agent: AgentKind
     var onStart: ((Group?, String) -> Void)?
     /// ⏎ auf einem getippten Pfad ohne Treffer, der auch nicht existiert: Grundlage für ⌘⏎ (anlegen und starten).
     private(set) var notFoundPath: String?
@@ -34,8 +38,11 @@ final class NewSessionModel {
 
     /// `askFinder: false` in Tests: sonst fragt macOS nach der Erlaubnis, den Finder zu steuern.
     init(groups: [Group], counts: [String: Int], index: FolderIndex = .shared, askFinder: Bool = true,
-         cloneCandidates: [Candidate] = []) {
+         cloneCandidates: [Candidate] = [], agents: [AgentKind] = [.claude]) {
         self.groups = groups
+        self.agents = agents
+        let preferred = Settings.lastAgent ?? Settings.defaultAgent
+        self.agent = agents.contains(preferred) ? preferred : agents.first ?? .claude
         self.counts = counts
         self.cloneCandidates = cloneCandidates
         self.index = index
@@ -106,6 +113,11 @@ final class NewSessionModel {
 
     func move(_ d: Int) { selected = max(0, min(max(candidates.count - 1, 0), selected + d)) }
 
+    func chooseAgent(_ i: Int) {
+        guard agents.indices.contains(i) else { return }
+        agent = agents[i]
+    }
+
     /// Tab: markierten Pfad ins Feld übernehmen, ein „/“ danach zeigt seine Unterordner.
     func tab() {
         guard candidates.indices.contains(selected) else { return }
@@ -174,8 +186,9 @@ struct NewSessionView: View {
             Divider().overlay(Theme.lineColor)
             list
             Divider().overlay(Theme.lineColor)
+            if model.agents.count > 1 { agentPicker }
             HStack(spacing: 6) {
-                Text(String(localized: "Startet mit: \(Settings.claudeSummary)", bundle: Bundle.app)).font(Theme.ui(10.5)).foregroundStyle(Theme.mutedColor).lineLimit(1)
+                Text(String(localized: "Startet mit: \(model.agent.summary)", bundle: Bundle.app)).font(Theme.ui(10.5)).foregroundStyle(Theme.mutedColor).lineLimit(1)
                 Spacer()
                 if let onOpenSettings {
                     Button(String(localized: "ändern", bundle: Bundle.app)) { onOpenSettings() }.buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.runningColor)
@@ -188,6 +201,27 @@ struct NewSessionView: View {
         .dropDestination(for: URL.self) { urls, _ in model.drop(urls) } isTargeted: { dropping = $0 }
         .background { Button("", action: model.browse).keyboardShortcut("o", modifiers: .command).opacity(0).accessibilityHidden(true) }
         .background { Button("", action: model.createAndStart).keyboardShortcut(.return, modifiers: .command).opacity(0).accessibilityHidden(true) }
+    }
+
+    /// Harness-Wahl als Reihe von Knöpfen, ⌘1 … ⌘9 schaltet, ohne das Suchfeld zu verlassen (Tab vervollständigt dort Pfade).
+    private var agentPicker: some View {
+        HStack(spacing: 6) {
+            Text("Harness").font(Theme.ui(10.5)).foregroundStyle(Theme.mutedColor)
+            ForEach(Array(model.agents.enumerated()), id: \.element) { i, k in
+                let on = k == model.agent
+                Button { model.chooseAgent(i) } label: {
+                    Text(verbatim: "\(k.displayName)  ⌘\(i + 1)").font(Theme.ui(10.5))
+                        .foregroundStyle(on ? Theme.fgColor : Theme.mutedColor)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(on ? Theme.surfaceColor : .clear)
+                        .overlay { RoundedRectangle(cornerRadius: 3).stroke(on ? Theme.runningColor : Theme.lineColor, lineWidth: 1) }
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: .command)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+            Spacer()
+        }.padding(.horizontal, 16).padding(.top, 8)
     }
 
     private static let rowHeight: CGFloat = 46

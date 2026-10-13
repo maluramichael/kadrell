@@ -1,6 +1,156 @@
 {
   "sourceLanguage": "de",
   "strings": {
+    "Neue Session im Ordner der fokussierten, gleicher Harness": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue Session im Ordner der fokussierten, gleicher Harness" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New session in the focused session's folder, same harness" } }
+      }
+    },
+    "Dasselbe mit Harness-Auswahl (Claude, Pi)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Dasselbe mit Harness-Auswahl (Claude, Pi)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Same, choosing the harness (Claude, Pi)" } }
+      }
+    },
+    "Allgemein": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Allgemein" } },
+        "en": { "stringUnit": { "state": "translated", "value": "General" } }
+      }
+    },
+    "Automatisch wechseln": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Automatisch wechseln" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Automatic switching" } }
+      }
+    },
+    "HARNESSES": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "HARNESSES" } },
+        "en": { "stringUnit": { "state": "translated", "value": "HARNESSES" } }
+      }
+    },
+    "Harness": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Harness" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Harness" } }
+      }
+    },
+    "Harness der fokussierten Session": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Harness der fokussierten Session" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Harness of the focused session" } }
+      }
+    },
+    "Letzte Antwort des Agents im Baum": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Letzte Antwort des Agents im Baum" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Agent's last reply in the tree" } }
+      }
+    },
+    "Modelle mit Zugangsdaten aus Pis eigener Konfiguration (~/.pi/agent). Kadrell gibt jeder Pi-Kachel eine Integration für Status und Titel mit, an Pis Dateien ändert es nichts.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Modelle mit Zugangsdaten aus Pis eigener Konfiguration (~/.pi/agent). Kadrell gibt jeder Pi-Kachel eine Integration für Status und Titel mit, an Pis Dateien ändert es nichts." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Models with credentials from Pi's own configuration (~/.pi/agent). Kadrell gives every Pi tile an integration for status and title, it does not change any of Pi's files." } }
+      }
+    },
+    "Modelle neu einlesen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Modelle neu einlesen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reload models" } }
+      }
+    },
+    "Neue %@-Session · %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue %@-Session · %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New %@ session · %@" } }
+      }
+    },
+    "Neue Session im selben Ordner mit Harness …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue Session im selben Ordner mit Harness …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New Session in Same Folder with Harness …" } }
+      }
+    },
+    "Pi ist nicht installiert oder nicht im PATH der Login-Shell. Installation: pi.dev": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Pi ist nicht installiert oder nicht im PATH der Login-Shell. Installation: pi.dev" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Pi is not installed or not in the login shell's PATH. Install: pi.dev" } }
+      }
+    },
+    "Programm": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Programm" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Program" } }
+      }
+    },
+    "Programm (leer = automatisch)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Programm (leer = automatisch)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Program (empty = automatic)" } }
+      }
+    },
+    "Seiten": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Seiten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Pages" } }
+      }
+    },
+    "Standard (%@)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Standard (%@)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Default (%@)" } }
+      }
+    },
+    "Standard (Pi-Einstellung)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Standard (Pi-Einstellung)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Default (Pi setting)" } }
+      }
+    },
+    "Standard-Harness (⌘N, ⌘⏎ aus Terminal oder Remote)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Standard-Harness (⌘N, ⌘⏎ aus Terminal oder Remote)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Default harness (⌘N, ⌘⏎ from terminal or remote)" } }
+      }
+    },
+    "Thinking": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Thinking" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Thinking" } }
+      }
+    },
+    "Wenn der Agent endet (zweimal ⌃C, /exit)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Wenn der Agent endet (zweimal ⌃C, /exit)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "When the agent exits (⌃C twice, /exit)" } }
+      }
+    },
+    "gilt für neu gestartete Pi-Prozesse": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "gilt für neu gestartete Pi-Prozesse" } },
+        "en": { "stringUnit": { "state": "translated", "value": "applies to newly started Pi processes" } }
+      }
+    },
+    "nicht gefunden": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "nicht gefunden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "not found" } }
+      }
+    },
+    "↑↓ oder ⌘↑↓ Seite · Tab in den Inhalt · Änderungen gelten sofort · Esc schließt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "↑↓ oder ⌘↑↓ Seite · Tab in den Inhalt · Änderungen gelten sofort · Esc schließt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "↑↓ or ⌘↑↓ page · Tab into content · changes apply immediately · Esc closes" } }
+      }
+    },
+    "%@ NICHT GEFUNDEN · PFAD IN DEN EINSTELLUNGEN": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ NICHT GEFUNDEN · PFAD IN DEN EINSTELLUNGEN" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@ NOT FOUND · SET THE PATH IN SETTINGS" } }
+      }
+    },
     "Kadrell neu starten": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "Kadrell neu starten" } },
@@ -4043,22 +4193,6 @@
         }
       }
     },
-    "Letzte Antwort von Claude im Baum": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Letzte Antwort von Claude im Baum"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude's last reply in sidebar"
-          }
-        }
-      }
-    },
     "Mehr Spalten": {
       "localizations": {
         "de": {
@@ -4311,22 +4445,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "New Session Here"
-          }
-        }
-      }
-    },
-    "Neue Session im Ordner der fokussierten": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Neue Session im Ordner der fokussierten"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New session in the focused session's folder"
           }
         }
       }
@@ -6327,22 +6445,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fewer columns"
-          }
-        }
-      }
-    },
-    "Wenn Claude endet (zweimal ⌃C, /exit)": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wenn Claude endet (zweimal ⌃C, /exit)"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When Claude exits (⌃C twice, /exit)"
           }
         }
       }

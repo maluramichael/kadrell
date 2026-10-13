@@ -41,8 +41,8 @@ extension AppDelegate {
         case .list(let json): return .ok(try listOutput(json: json))
         case .sshHosts(let json): return .ok(sshHostsOutput(json: json))
         case let .newGroup(dir, name, color): return .ok(try controlNewGroup(dir: dir, name: name, color: color, req))
-        case let .newSession(t, dir, name, detached, prompt, resume, host, tmux):
-            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, host: host, tmux: tmux, req))
+        case let .newSession(t, dir, name, detached, prompt, resume, host, tmux, agent):
+            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, host: host, tmux: tmux, agent: agent, req))
         case let .capture(t, all): return .ok(try controlCapture(target: t, all: all, req))
         default:
             try await performControl(cmd, req)
@@ -66,16 +66,16 @@ extension AppDelegate {
         case .killSession(let t): closeSession(try session(t, req).id, force: true)
         case .killGroup(let t): closeGroup(try group(t, req).id, force: true)
         case let .send(t, text, enter, keys): try await controlSend(target: t, text: text, enter: enter, keys: keys, req)
-        case let .status(t, state, sessionId, title, waitingFor, message, firstPrompt):
-            try controlStatus(target: t, state: state, sessionId: sessionId, title: title, waitingFor: waitingFor, message: message, firstPrompt: firstPrompt, req)
+        case let .status(t, state, sessionId, title, waitingFor, message, firstPrompt, model):
+            try controlStatus(target: t, state: state, sessionId: sessionId, title: title, waitingFor: waitingFor, message: message, firstPrompt: firstPrompt, model: model, req)
         case .help, .list, .sshHosts, .newGroup, .newSession, .capture: break
         }
     }
 
     /// Ohne -t meldet sich die aufrufende Kachel selbst; von außen muss das Ziel genannt sein.
-    private func controlStatus(target t: String?, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?, _ req: ControlRequest) throws {
+    private func controlStatus(target t: String?, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?, model: String?, _ req: ControlRequest) throws {
         guard t != nil || req.caller != nil else { throw ControlError("status braucht -t, wenn es nicht aus einer Session kommt") }
-        registry.report(try session(t, req).id, state: state, sessionId: sessionId, title: title, waitingFor: waitingFor, message: message, firstPrompt: firstPrompt)
+        registry.report(try session(t, req).id, state: state, sessionId: sessionId, title: title, waitingFor: waitingFor, message: message, firstPrompt: firstPrompt, model: model)
     }
 
     private func controlSelect(target t: String?, add: Bool, _ req: ControlRequest) throws {
@@ -127,25 +127,33 @@ extension AppDelegate {
 
     /// Ohne -t und -c landet die Session bei der aufrufenden: gleiche Gruppe, gleicher Ordner (wie tmux new-window).
     /// Mit --host stattdessen eine Remote-Kachel per ssh, wie ⌘⇧N, mit eigener Gruppe je Host.
-    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String?, host: String?, tmux: String?, _ req: ControlRequest) throws -> String {
+    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String?, host: String?, tmux: String?,
+                                   agent: AgentKind?, _ req: ControlRequest) throws -> String {
         if let host {
             let key = startRemote(host: host, tmuxSession: tmux, show: !detached)
             if let name { registry.rename(key, to: name) }
             return key
         }
-        if let resume { try checkResumable(resume) }
-        var g = try target.map { try group($0, req, restricted: false) }
         let caller = req.caller.flatMap { c in registry.sessions.first { $0.id == c } }
+        // Ohne --agent wie die aufrufende Kachel (⌘⏎), aus Shell, Remote oder von außen der Standard-Harness.
+        let kind = agent ?? caller?.agent ?? Settings.defaultAgent
+        if let resume { try checkResumable(resume, kind: kind) }
+        var g = try target.map { try group($0, req, restricted: false) }
         if target == nil, dir == nil, let caller { g = store.group(forSession: caller.id) }
         let cwd = try dir.map { try existingDir($0, req) } ?? (target == nil ? caller?.cwd : nil) ?? g?.cwd ?? existingDir(req.cwd, req)
-        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt, sessionId: resume)
+        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt, sessionId: resume, kind: kind)
         if let name { registry.rename(key, to: name) }
         return key
     }
 
     /// Dieselbe Konversation in zwei Prozessen schreibt durcheinander ins Transcript: nur übernehmen, was nirgends mehr läuft.
-    private func checkResumable(_ sessionId: String) throws {
+    private func checkResumable(_ sessionId: String, kind: AgentKind) throws {
         guard !registry.sessions.contains(where: { $0.sessionId == sessionId || $0.id == sessionId }) else { throw ControlError("\(sessionId) ist schon in Kadrell") }
+        guard kind == .claude else {
+            // Pi hat kein Gegenstück zu `sessions/<pid>.json`, geprüft wird nur, ob es die Konversation gibt.
+            guard PiCLI.hasSession(sessionId: sessionId, environment: registry.cli.environment) else { throw ControlError("keine Pi-Session \(sessionId)") }
+            return
+        }
         guard Transcript.path(sessionId: sessionId, configDir: registry.cli.configDir) != nil else { throw ControlError("kein Transcript für \(sessionId)") }
         let dir = registry.cli.configDir + "/sessions"
         let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
@@ -211,7 +219,7 @@ extension AppDelegate {
     }
 
     private func listOutput(json: Bool) throws -> String {
-        struct S: Encodable { let key, sessionId, title, cwd, status: String; let branch: String?; let running, shown, focused: Bool }
+        struct S: Encodable { let key, sessionId, title, cwd, status, agent: String; let branch: String?; let running, shown, focused: Bool }
         struct G: Encodable { let id, name, color, cwd: String; let favorite: Bool; let sessions: [S] }
         struct Out: Encodable { let layout: String; let focused: String?; let groups: [G] }
         let byKey = Dictionary(registry.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -220,7 +228,7 @@ extension AppDelegate {
                 let running = attach.isAttached(s.id)
                 return S(key: s.id, sessionId: s.sessionId, title: s.title, cwd: s.cwd,
                          status: running ? s.status.rawValue : attach.isEnded(s.id) ? "ended" : "stopped",
-                         branch: s.branch, running: running, shown: workspace.selected.contains(s.id), focused: workspace.focused == s.id)
+                         agent: s.isShell ? "shell" : s.isRemote ? "remote" : s.kind.rawValue, branch: s.branch, running: running, shown: workspace.selected.contains(s.id), focused: workspace.focused == s.id)
             })
         }
         if json {
@@ -231,7 +239,7 @@ extension AppDelegate {
         return groups.map { g in
             (["\(g.id.prefix(8))  \(g.name)\(g.favorite ? " ★" : "")  \(g.cwd)"] + g.sessions.map { s in
                 let mark = s.focused ? "*" : s.shown ? "+" : " "
-                return "  \(mark) \(s.key.prefix(8))  \(s.status.padding(toLength: 8, withPad: " ", startingAt: 0))  \(s.title)"
+                return "  \(mark) \(s.key.prefix(8))  \(s.status.padding(toLength: 8, withPad: " ", startingAt: 0))  \(s.agent.padding(toLength: 6, withPad: " ", startingAt: 0))  \(s.title)"
             }).joined(separator: "\n")
         }.joined(separator: "\n")
     }

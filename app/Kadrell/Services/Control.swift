@@ -36,7 +36,8 @@ enum ControlCommand: Equatable {
     /// Hosts aus `~/.ssh/config` (folgt `Include`), für die SSH-Extension und die Remote-Palette.
     case sshHosts(json: Bool)
     case newGroup(dir: String, name: String?, color: String?)
-    case newSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String? = nil, host: String? = nil, tmux: String? = nil)
+    case newSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String? = nil, host: String? = nil, tmux: String? = nil,
+                    agent: AgentKind? = nil)
     case select(target: String?, add: Bool)
     case layout(LayoutMode)
     case zoom(target: String?)
@@ -50,7 +51,8 @@ enum ControlCommand: Equatable {
     case send(target: String?, text: String, enter: Bool, keys: Bool)
     case capture(target: String?, all: Bool)
     /// Zustand einer Session von außen setzen, Quelle sind die Hooks der Agent-CLIs (`ClaudeHook`).
-    case status(target: String?, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?)
+    case status(target: String?, state: String, sessionId: String?, title: String?, waitingFor: String?, message: String?, firstPrompt: String?,
+                model: String? = nil)
 
     static let states = ["working", "waiting", "idle"]
 
@@ -65,9 +67,10 @@ enum ControlCommand: Equatable {
       kadrell ssh-hosts [--json]                           Hosts aus ~/.ssh/config und zuletzt verbundene
       kadrell new-group <ordner> [--name N] [--color #rrggbb]
                                                            Gruppe anlegen (als Favorit, bleibt auch leer stehen)
-      kadrell new [-t gruppe] [-c ordner] [--name N] [-d] [--resume sessionId] [prompt …]
+      kadrell new [-t gruppe] [-c ordner] [--name N] [-d] [--agent claude|pi] [--resume sessionId] [prompt …]
                                                            Session starten, optional mit erster Nachricht;
                                                            -d: im Hintergrund, Auswahl bleibt;
+                                                           --agent: Harness (ohne: wie die aufrufende Session);
                                                            --resume: bestehende Konversation übernehmen
                                                            (Claude darf dort nicht mehr laufen, -c = ihr Ordner)
       kadrell new --host H [--tmux S] [-d] [--name N]      Remote-Kachel per ssh zu H (Host aus ~/.ssh/config),
@@ -86,7 +89,8 @@ enum ControlCommand: Equatable {
       kadrell send [-t session] -k <taste …>               Tasten: Enter Escape Tab Up Down Left Right BSpace C-c C-d
       kadrell capture [-t session] [--all]                 Bildschirm ausgeben (--all: mit Verlauf)
       kadrell status working|waiting|idle [-t session] [--session-id ID] [--title T] [--waiting-for TEXT]
-                     [--message TEXT] [--first-prompt TEXT]   Zustand melden (nutzen die Hooks der CLIs)
+                     [--message TEXT] [--first-prompt TEXT] [--model M]
+                                                           Zustand melden (nutzen die Hooks der CLIs)
       kadrell hook claude                                  Claude-Code-Hook: liest das Hook-JSON von stdin, meldet status
 
     Die Session-Keys stehen in `kadrell ls`. Exit-Code 1 bei Fehlern, Meldung auf stderr.
@@ -117,7 +121,7 @@ enum ControlCommand: Equatable {
                 guard a.positional.count == 1 else { throw ControlError("new-group braucht genau einen Ordner") }
                 return .newGroup(dir: a.positional[0], name: a["--name"], color: try color(a["--color"]))
             },
-            "new": parser(values: ["-t", "-c", "--name", "--resume", "--host", "--tmux"], bools: ["-d"], positional: true) { a in
+            "new": parser(values: ["-t", "-c", "--name", "--resume", "--host", "--tmux", "--agent"], bools: ["-d"], positional: true) { a in
                 let prompt = a.positional.joined(separator: " ")
                 if a["--resume"] != nil, !prompt.isEmpty { throw ControlError("--resume und prompt schließen sich aus") }
                 if let r = a["--resume"], UUID(uuidString: r) == nil { throw ControlError("--resume braucht eine sessionId (UUID)") }
@@ -125,8 +129,13 @@ enum ControlCommand: Equatable {
                     throw ControlError("--host hat eigenen Ordner und eigene Gruppe, nicht mit -t, -c, --resume oder prompt kombinieren")
                 }
                 if a["--tmux"] != nil, a["--host"] == nil { throw ControlError("--tmux braucht --host") }
+                let agent = try a["--agent"].map { name in
+                    guard let k = AgentKind(rawValue: name) else { throw ControlError("--agent " + AgentKind.allCases.map(\.rawValue).joined(separator: "|")) }
+                    return k
+                }
+                if agent != nil, a["--host"] != nil { throw ControlError("--agent nicht mit --host kombinieren") }
                 return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt,
-                                   resume: a["--resume"], host: a["--host"], tmux: a["--tmux"])
+                                   resume: a["--resume"], host: a["--host"], tmux: a["--tmux"], agent: agent)
             },
             "select": parser(values: ["-t"], bools: ["-a"]) { .select(target: $0["-t"], add: $0.has("-a")) },
             "layout": { rest in
@@ -155,10 +164,10 @@ enum ControlCommand: Equatable {
                 return .send(target: a["-t"], text: a.positional.joined(separator: " "), enter: !keys && !a.has("--no-enter"), keys: keys)
             },
             "capture": parser(values: ["-t"], bools: ["--all"]) { .capture(target: $0["-t"], all: $0.has("--all")) },
-            "status": parser(values: ["-t", "--session-id", "--title", "--waiting-for", "--message", "--first-prompt"], positional: true) { a in
+            "status": parser(values: ["-t", "--session-id", "--title", "--waiting-for", "--message", "--first-prompt", "--model"], positional: true) { a in
                 guard a.positional.count == 1, states.contains(a.positional[0]) else { throw ControlError("status working|waiting|idle") }
                 return .status(target: a["-t"], state: a.positional[0], sessionId: a["--session-id"], title: a["--title"],
-                               waitingFor: a["--waiting-for"], message: a["--message"], firstPrompt: a["--first-prompt"])
+                               waitingFor: a["--waiting-for"], message: a["--message"], firstPrompt: a["--first-prompt"], model: a["--model"])
             },
         ]
         for (alias, name) in ["-h": "help", "--help": "help", "list": "ls", "new-session": "new", "kill-session": "kill",

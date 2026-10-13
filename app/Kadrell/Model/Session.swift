@@ -6,7 +6,7 @@ enum SessionStatus: String, Codable, CaseIterable, Sendable {
     case running, waiting, idle, error
 }
 
-/// Eine Session, die Kadrell selbst als Claude-Prozess im Terminal startet (`claude --resume`).
+/// Eine Session, die Kadrell selbst als Agent-Prozess (Claude, Pi, siehe `AgentKind`) im Terminal startet.
 /// Gespeichert werden nur Schlüssel, Ordner, Start, sessionId und Name; Status und pid kommen live
 /// aus `<configDir>/sessions/<pid>.json` des eigenen Prozesses (`Agent.local`), solange er läuft.
 struct Session: Codable, Equatable, Sendable, Identifiable {
@@ -38,8 +38,19 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var host: String? = nil
     /// tmux-Session auf dem Host; nil hängt sich an die zuletzt benutzte (`tmux attach`).
     var tmuxSession: String? = nil
+    /// Agent-CLI der Kachel, gespeichert nur für Nicht-Claude: alte `sessions.json` ohne Feld bleibt gültig.
+    var harness: AgentKind? = nil
+    /// Modell, das die Integration zuletzt gemeldet hat (`kadrell status --model`), nicht gespeichert.
+    var model: String? = nil
 
-    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, host, tmuxSession }
+    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, host, tmuxSession, harness }
+
+    /// Shell- und Remote-Kacheln zählen als Claude, haben aber nie dessen Daten (siehe `usesClaudeData`).
+    var kind: AgentKind { harness ?? .claude }
+    /// Harness einer Agent-Kachel, nil bei Shell und Remote: die vererben bei ⌘⏎ keinen.
+    var agent: AgentKind? { isShell || isRemote ? nil : kind }
+    /// Poll über `sessions/<pid>.json` und Transcript unter `~/.claude/projects` ergeben nur hier Sinn.
+    var usesClaudeData: Bool { !isShell && !isRemote && kind.usesClaudeData }
 
     var title: String { customName ?? autoTitle }
     var autoTitle: String {

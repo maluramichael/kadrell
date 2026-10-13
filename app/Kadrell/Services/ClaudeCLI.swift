@@ -12,11 +12,14 @@ struct CLIError: Error, CustomStringConvertible {
 final class ClaudeCLI: Sendable {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "cli")
     let binary: String
+    /// Automatisch gefundenes `pi`, nil = nicht installiert. Ein Pfad in den Einstellungen geht vor (`binary(for:)`).
+    let piBinary: String?
     /// Login-Shell-Umgebung (`/bin/zsh -lc env`), einmal beim Start eingelesen.
     let environment: [String: String]
 
-    init(binary: String, environment: [String: String]) {
+    init(binary: String, environment: [String: String], piBinary: String? = nil) {
         self.binary = binary
+        self.piBinary = piBinary
         // Aus einer Claude-Session heraus gestartet, erben die Prozesse sonst deren Marker: Claude Code
         // speichert dann kein Transcript („inherited CLAUDE_CODE_CHILD_SESSION marker“) und `--resume` findet nichts.
         // Nur die sitzungsbezogenen Variablen, Einstellungen wie CLAUDE_CODE_MAX_OUTPUT_TOKENS bleiben.
@@ -44,14 +47,27 @@ final class ClaudeCLI: Sendable {
                 env[key] = String(line[line.index(after: eq)...])
             }
         }
-        var binary = NSHomeDirectory() + "/.local/bin/claude"
-        if !FileManager.default.isExecutableFile(atPath: binary) {
-            let found = (try? await ProcessRunner.run("/bin/zsh", ["-lc", "command -v claude"], environment: env, timeout: 10).output)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if found.hasPrefix("/") { binary = found }
+        let binary = await findBinary("claude", environment: env) ?? NSHomeDirectory() + "/.local/bin/claude"
+        let pi = await findBinary(AgentKind.pi.binaryName, environment: env)
+        log.info("claude binary: \(binary, privacy: .public), pi: \(pi ?? "-", privacy: .public)")
+        return ClaudeCLI(binary: binary, environment: env, piBinary: pi)
+    }
+
+    /// `~/.local/bin/<name>`, sonst `command -v` in der Login-Shell; nil, wenn beides nichts findet.
+    static func findBinary(_ name: String, environment: [String: String]) async -> String? {
+        let local = NSHomeDirectory() + "/.local/bin/" + name
+        if FileManager.default.isExecutableFile(atPath: local) { return local }
+        let found = (try? await ProcessRunner.run("/bin/zsh", ["-lc", "command -v " + name], environment: environment, timeout: 10).output)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return found.hasPrefix("/") ? found : nil
+    }
+
+    /// Binary je Harness. Pi: Pfad aus den Einstellungen vor dem automatisch gefundenen.
+    func binary(for kind: AgentKind) -> String? {
+        switch kind {
+        case .claude: binary
+        case .pi: Settings.piBinary.isEmpty ? piBinary : (Settings.piBinary as NSString).expandingTildeInPath
         }
-        log.info("claude binary: \(binary, privacy: .public)")
-        return ClaudeCLI(binary: binary, environment: env)
     }
 
     @discardableResult

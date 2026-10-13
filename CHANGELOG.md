@@ -2,6 +2,15 @@
 
 Neueste Version oben.
 
+## 1.69.0 (2026-10-13)
+
+- Feature: Neben Claude Code startet Kadrell jetzt auch Pi-Sessions, mit Status, Titel und letzter Antwort im Baum wie bei Claude. Pi-Sessions tragen ein π im Baum.
+- Feature: ⌥⌘⏎ öffnet eine neue Session im Ordner der fokussierten und fragt vorher nach dem Harness (Claude oder Pi). ⌘⏎ startet automatisch denselben Harness wie die fokussierte Session.
+- Feature: Im Dialog für neue Sessions (⌘N) lässt sich der Harness wählen (⌘1 Claude, ⌘2 Pi), die Wahl bleibt für das nächste Mal.
+- Feature: Für Pi lassen sich Modell und Thinking in den Einstellungen wählen, die Liste kommt aus Pis eigener Modellkonfiguration.
+- Änderung: Die Einstellungen sind in Seiten mit einer Leiste links aufgeteilt (Allgemein, Darstellung, Tastenkürzel, Claude mit Konten, Pi), umschaltbar mit den Pfeiltasten oder ⌘↑/⌘↓.
+- Änderung: Ist eine Pi-Session fokussiert, zeigt die Leiste unten Harness und Modell statt Claude-Konto und Claude-Nutzung.
+
 ## 1.68.1 (2026-10-12)
 
 - Fix: Remote-Kacheln zu Hosts ohne tmux (auch Windows mit PowerShell) öffnen jetzt die normale Shell des Hosts, statt mit einer Fehlermeldung sofort zu schließen.

@@ -30,9 +30,13 @@ targets:
     platform: macOS
     sources:
       - path: Kadrell
-        excludes: ["Extensions/Host/*.lua"]
+        excludes: ["Extensions/Host/*.lua", "Resources/*.js"]
       - path: Kadrell/Extensions/Host
         includes: ["*.lua"]
+        buildPhase: resources
+      # Integrationen, die Kadrell fremden Agent-CLIs beim Start mitgibt (Pi: `pi -e`), kein eigener Code im App-Binary.
+      - path: Kadrell/Resources
+        includes: ["*.js"]
         buildPhase: resources
       # Lua-Quellen unverändert von lua.org, kein eigener Code: Warnungen aus.
       - path: Vendor/lua
@@ -51,8 +55,8 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleName: Kadrell
         CFBundleDisplayName: Kadrell
-        CFBundleShortVersionString: "1.68.1"
-        CFBundleVersion: "122"
+        CFBundleShortVersionString: "1.69.0"
+        CFBundleVersion: "123"
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true
