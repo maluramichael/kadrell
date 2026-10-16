@@ -114,4 +114,24 @@ final class AccountServiceTests: XCTestCase {
         XCTAssertEqual(u.weekly, 60, "laufendes 7d-Fenster behält den Wert")
         XCTAssertEqual(u.fable, 19, "Fable folgt dem 7d-Reset, hier noch offen")
     }
+
+    // MARK: Inaktive Accounts abfragen
+
+    /// Fällig ist ein Account erst, wenn weder sein Stand noch der letzte Versuch jünger als das Intervall ist.
+    func testInactivePollDueness() {
+        let seen = acct("seen", session: 10, weekly: 10, weeklyResetsIn: 84)  // Stand von `now`
+        XCTAssertFalse(AccountService.isDue(seen, lastPoll: nil, maxAge: 1200, now: now.addingTimeInterval(600)))
+        XCTAssertTrue(AccountService.isDue(seen, lastPoll: nil, maxAge: 1200, now: now.addingTimeInterval(1200)))
+        XCTAssertFalse(AccountService.isDue(seen, lastPoll: now.addingTimeInterval(1000), maxAge: 1200,
+                                            now: now.addingTimeInterval(1300)), "gescheiterter Versuch zählt mit")
+        let never = Account(id: "n", alias: "n", email: nil, subscription: nil, usage: nil)
+        XCTAssertTrue(AccountService.isDue(never, lastPoll: nil, maxAge: 1200, now: now))
+    }
+
+    /// Die Leiste graut den Stand erst nach zehn Minuten ohne erfolgreiche Abfrage aus.
+    func testUsageStaleAfterTenMinutes() {
+        XCTAssertNil(StatusBarView.staleMinutes(nil, now: now))
+        XCTAssertNil(StatusBarView.staleMinutes(now.addingTimeInterval(-300), now: now))
+        XCTAssertEqual(StatusBarView.staleMinutes(now.addingTimeInterval(-8460), now: now), 141)
+    }
 }

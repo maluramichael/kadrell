@@ -78,6 +78,11 @@ final class UsageService {
     static let log = Logger(subsystem: "de.malura.kadrell", category: "usage")
     private(set) var usage = Usage.empty
     var onChange: ((Usage) -> Void)?
+    /// Nach jeder erfolgreichen Abfrage, auch wenn sich die Werte nicht geändert haben: die Leiste zeigt daran, ob der
+    /// Stand noch frisch ist (bei 429 kann er stundenlang stehen bleiben). Läuft vor `onChange`.
+    var onMeasured: ((Usage) -> Void)?
+    /// Zeitpunkt der letzten erfolgreichen Abfrage (beim Vorbelegen der des Caches).
+    private(set) var measuredAt: Date?
     private var task: Task<Void, Never>?
     /// Wann der geseedete Stand gemessen wurde, um den ersten Poll entsprechend nach hinten zu schieben.
     private var seededAt: Date?
@@ -89,11 +94,12 @@ final class UsageService {
         guard usage == .empty else { return }
         usage = u
         seededAt = at
+        measuredAt = at
     }
 
-    /// Alle drei Minuten; bei HTTP 429 (der Endpunkt limitiert streng) verdoppelt sich die Pause bis 15 min,
+    /// Alle fünf Minuten; bei HTTP 429 (der Endpunkt limitiert streng) verdoppelt sich die Pause bis 15 min,
     /// `Retry-After` wird beachtet. Ein Fehler verwirft nie die letzten bekannten Werte.
-    func start(interval: TimeInterval = 180) {
+    func start(interval: TimeInterval = 300) {
         task?.cancel()
         task = Task { [weak self] in
             var delay = interval
@@ -109,7 +115,7 @@ final class UsageService {
                     switch r {
                     case .ok(let fresh):
                         delay = interval
-                        if fresh != self.usage { self.usage = fresh; self.onChange?(fresh) }
+                        self.apply(fresh)
                     case .rateLimited(let retryAfter):
                         delay = min(900, max(retryAfter ?? delay * 2, interval))
                         UsageService.log.warning("usage: 429, nächster Versuch in \(Int(delay), privacy: .public) s")
@@ -125,11 +131,16 @@ final class UsageService {
     /// Sofort einmal abfragen, etwa direkt nach einem Account-Wechsel, ohne den laufenden Poll-Takt zu stören.
     func refreshNow() {
         Task { [weak self] in
-            if case .ok(let fresh) = await UsageService.fetch(), let self, fresh != self.usage {
-                self.usage = fresh
-                self.onChange?(fresh)
-            }
+            if case .ok(let fresh) = await UsageService.fetch(), let self { self.apply(fresh) }
         }
+    }
+
+    private func apply(_ fresh: Usage) {
+        let changed = fresh != usage
+        usage = fresh
+        measuredAt = Date()
+        onMeasured?(fresh)
+        if changed { onChange?(fresh) }
     }
 
     enum Result { case ok(Usage), rateLimited(TimeInterval?), failed }
@@ -151,8 +162,11 @@ final class UsageService {
         return t
     }
 
-    static func fetch() async -> Result {
-        guard let t = await token(), let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return .failed }
+    /// Ohne `token` mit dem live angemeldeten Account, sonst mit dem übergebenen (inaktiver Account, siehe `AccountToken`).
+    static func fetch(token given: String? = nil) async -> Result {
+        var t = given
+        if t == nil { t = await token() }
+        guard let t, let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return .failed }
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
         req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")

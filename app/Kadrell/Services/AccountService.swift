@@ -63,8 +63,14 @@ final class AccountService {
     /// Nach einem automatischen Wechsel aufgerufen, mit dem jetzt aktiven Account (für die Meldung an den Nutzer).
     var onAutoSwitch: ((Account) -> Void)?
     private var lastSwitch = Date.distantPast
-    /// Ein Wechsel läuft: kein zweiter parallel (der zweite läse den halb geschriebenen Eintrag).
+    /// Ein Schlüsselbund-Vorgang läuft (Wechsel oder Token-Refresh). Alles Weitere wartet, sonst läse ein Wechsel einen
+    /// halb geschriebenen Eintrag oder einen Refresh-Token, den der Refresh gerade verbraucht hat.
     private var busy = false
+    /// Letzter Abfrageversuch je inaktivem Account, damit ein 429 oder ein toter Token nicht jede Minute neu anklopft.
+    private var lastPoll: [String: Date] = [:]
+    private var pollTask: Task<Void, Never>?
+    /// Ein Auto-Wechsel prüft gerade seine Kandidaten, kein zweiter parallel.
+    private var autoSwitching = false
 
     init() {
         if let data = Settings.accountsData, let list = try? JSONDecoder().decode([Account].self, from: data) { accounts = list }
@@ -97,7 +103,12 @@ final class AccountService {
 
     /// Nutzung des aktiven Accounts aus dem Poll merken, damit das Menü sie später auch für den inaktiven zeigt.
     func recordUsage(_ u: Usage) {
-        guard let activeId, let i = accounts.firstIndex(where: { $0.id == activeId }) else { return }
+        guard let activeId else { return }
+        store(u, for: activeId)
+    }
+
+    private func store(_ u: Usage, for id: String) {
+        guard let i = accounts.firstIndex(where: { $0.id == id }) else { return }
         accounts[i].usage = CachedUsage(session: u.session, weekly: u.weekly, fable: u.fable,
                                         sessionResets: u.sessionResets, weeklyResets: u.weeklyResets, at: Date())
         persist()
@@ -141,9 +152,11 @@ final class AccountService {
     /// aktiven Accounts zurückgeschrieben (die `claude`-CLI rotiert die Tokens im Betrieb).
     @discardableResult
     func switchTo(_ id: String) async -> Bool {
-        guard !busy, id != activeId, accounts.contains(where: { $0.id == id }) else { return false }
-        busy = true
-        defer { busy = false }
+        await exclusive { await swap(to: id) }
+    }
+
+    private func swap(to id: String) async -> Bool {
+        guard id != activeId, accounts.contains(where: { $0.id == id }) else { return false }
         guard let raw = await Keychain.read(service: Self.liveService), var full = Self.object(from: raw) else { return false }
         await captureLive(full)
         guard let targetRaw = await Keychain.read(service: Self.storeService, account: id),
@@ -167,6 +180,83 @@ final class AccountService {
         await Keychain.write(service: Self.storeService, account: curId, value: blob)
     }
 
+    /// Schlüsselbund-Vorgänge nacheinander: wartet, bis der laufende fertig ist.
+    private func exclusive<T>(_ body: () async -> T) async -> T {
+        while busy { try? await Task.sleep(for: .milliseconds(50)) }
+        busy = true
+        defer { busy = false }
+        return await body()
+    }
+
+    // MARK: Inaktive Accounts abfragen
+
+    /// Inaktive Accounts im Hintergrund abfragen, damit ihr Stand stimmt, auch wenn sie anderswo (anderer Rechner,
+    /// claude.ai) weiterlaufen. Geprüft wird jede Minute, abgefragt nur, was älter als `interval` ist.
+    func startInactivePolling(interval: TimeInterval = 1200) {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshInactive(olderThan: interval)
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
+    }
+
+    /// Nutzung jedes inaktiven Accounts, dessen Stand (oder letzter Versuch) älter als `maxAge` ist, mit dessen eigenem
+    /// Token abfragen. Scheitert eine Abfrage, bleibt der alte Stand mit seinem alten Zeitpunkt stehen.
+    func refreshInactive(olderThan maxAge: TimeInterval) async {
+        let now = Date()
+        let due = accounts.filter { $0.id != activeId && Self.isDue($0, lastPoll: lastPoll[$0.id], maxAge: maxAge, now: now) }
+        if !due.isEmpty { Self.log.notice("inaktive Accounts abfragen: \(due.count, privacy: .public)") }
+        for id in due.map(\.id) {
+            lastPoll[id] = now
+            await pollInactive(id)
+        }
+    }
+
+    private func pollInactive(_ id: String) async {
+        guard let token = await exclusive({ await slotToken(id) }) else {
+            Self.log.warning("inaktiver Account: kein gültiger Token")
+            return
+        }
+        var result = await UsageService.fetch(token: token)
+        // Das 429 hängt am Access-Token, nicht am Account: den alten Token des Slots fragen womöglich noch andere
+        // Clients ab, ein frisch erneuerter kommt sofort durch. Deshalb einmal mit neuem Token nachfassen.
+        if case .rateLimited = result, let renewed = await exclusive({ await slotToken(id, renew: true) }) {
+            result = await UsageService.fetch(token: renewed)
+        }
+        switch result {
+        case .ok(let u): if id != activeId { store(u, for: id) }
+        case .rateLimited: Self.log.warning("inaktiver Account: 429, nächster Versuch im nächsten Intervall")
+        case .failed: break   // `fetch` meldet den Grund selbst
+        }
+    }
+
+    /// Fällig, wenn weder ein Stand noch ein Versuch jünger als `maxAge` ist.
+    static func isDue(_ a: Account, lastPoll: Date?, maxAge: TimeInterval, now: Date) -> Bool {
+        let last = max(a.usage?.at ?? .distantPast, lastPoll ?? .distantPast)
+        return now.timeIntervalSince(last) >= maxAge
+    }
+
+    /// Access-Token eines inaktiven Slots; ist er (fast) abgelaufen oder `renew` gesetzt, wird er erneuert und der neue
+    /// Block sofort zurückgeschrieben. Nur innerhalb von `exclusive` aufrufen.
+    private func slotToken(_ id: String, renew: Bool = false) async -> String? {
+        guard id != activeId, let raw = await Keychain.read(service: Self.storeService, account: id),
+              var oauth = Self.object(from: raw) else { return nil }
+        if renew || AccountToken.needsRefresh(oauth) {
+            // Temp-Profile teilen den Schlüsselbund mit dem eigenen Kadrell: dort nie rotieren, sonst verbraucht die
+            // Testinstanz den Refresh-Token, den das eigene Kadrell beim nächsten Wechsel braucht.
+            guard !Profile.isTemporary, let req = AccountToken.refreshRequest(oauth), let data = await AccountToken.send(req),
+                  let renewed = AccountToken.applying(data, to: oauth), let blob = Self.string(from: renewed) else { return nil }
+            guard await Keychain.write(service: Self.storeService, account: id, value: blob) else {
+                Self.log.error("Token erneuert, aber nicht gespeichert")
+                return nil
+            }
+            oauth = renewed
+        }
+        return oauth["accessToken"] as? String
+    }
+
     // MARK: Verwalten
 
     func remove(_ id: String) async {
@@ -187,18 +277,36 @@ final class AccountService {
     /// Hin-und-Her, wenn zwei Accounts ähnlich voll sind.
     private static let hysteresis = 10
 
+    /// So jung muss der Stand eines Ziels sein, damit der Auto-Wechsel ihm traut. Älteres wird vorher live abgefragt.
+    private static let verifyAge: TimeInterval = 120
+
     /// Nach jedem Usage-Update: ist der aktive Account über der Schwelle und die Sperrzeit vorbei, auf den Account
-    /// mit dem meisten Rest wechseln, aber nur wenn der spürbar leerer ist.
+    /// mit dem meisten Rest wechseln, aber nur wenn der spürbar leerer ist. Die Kandidaten werden vorher live
+    /// abgefragt; scheitert das, wird nicht gewechselt (ein alter Stand kann längst voll sein).
     func considerAutoSwitch(_ usage: Usage) {
-        guard Settings.autoswitchEnabled, accounts.count > 1, let activeId,
+        guard Settings.autoswitchEnabled, accounts.count > 1, let activeId, !autoSwitching,
               Date().timeIntervalSince(lastSwitch) >= Self.cooldown,
-              let target = autoSwitchTarget(usage, activeId: activeId) else { return }
+              autoSwitchTarget(usage, activeId: activeId) != nil else { return }
+        autoSwitching = true
         Task {
+            defer { autoSwitching = false }
+            await refreshInactive(olderThan: Self.verifyAge)
+            guard self.activeId == activeId, let target = verifiedTarget(usage, activeId: activeId) else { return }
             if await switchTo(target), let to = accounts.first(where: { $0.id == target }) {
                 Feedback.play(.toggle)
                 onAutoSwitch?(to)
             }
         }
+    }
+
+    /// Das Ziel nach der Live-Abfrage, aber nur, wenn sein Stand dabei wirklich frisch geworden ist.
+    private func verifiedTarget(_ usage: Usage, activeId: String) -> String? {
+        guard let target = autoSwitchTarget(usage, activeId: activeId) else { return nil }
+        guard let at = accounts.first(where: { $0.id == target })?.usage?.at, Date().timeIntervalSince(at) <= Self.verifyAge * 2 else {
+            Self.log.notice("Auto-Wechsel verworfen: Ziel nicht live bestätigt")
+            return nil
+        }
+        return target
     }
 
     /// Ziel des Auto-Wechsels: bei erreichter Füllstand-Schwelle der leerste Account. Zusätzlich, wenn `autoswitchOnPace`

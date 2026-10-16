@@ -49,6 +49,10 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     }
     private var usageFrom = Usage.empty
     private var usageAt: CFTimeInterval = 0
+    /// Wann `usage` zuletzt erfolgreich abgefragt wurde. Ist das länger her als `usageStaleAfter` (etwa weil der
+    /// Endpunkt mit 429 ablehnt), stehen die Werte grau da und der Tooltip nennt das Alter.
+    var usageMeasured: Date?
+    static let usageStaleAfter: TimeInterval = 600
     var layoutMode: LayoutMode = .grid
     /// Klick aufs Layout-Symbol: Auswahl aller Layouts.
     var onPickLayout: ((LayoutMode) -> Void)?
@@ -382,16 +386,25 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// So viele Punkte vor dem Plan wird aus Grün Gelb (bei 7 Tagen rund 8 Stunden Vorlauf).
     static let usagePlanWarning = 5
 
+    /// Minuten seit der letzten Messung, wenn der Stand veraltet ist, sonst nil.
+    static func staleMinutes(_ measured: Date?, now: Date = Date()) -> Int? {
+        guard let measured else { return nil }
+        let age = now.timeIntervalSince(measured)
+        return age > usageStaleAfter ? Int(age / 60) : nil
+    }
+
     /// Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
     /// Vor dem 7-Tage-Wert steht der Plan-Stand („25%/32%“): so viel dürfte bei gleichmäßiger Woche jetzt weg sein.
     private func drawUsage(_ b: CGRect, _ rx: inout CGFloat) {
         let fMuted = Theme.attrs(11.5, Theme.muted)
         let countUp = Feedback.progress(since: usageAt, duration: 0.5)
+        let stale = Self.staleMinutes(usageMeasured)
+        let staleTip = stale.map { " · " + String(localized: "Stand von vor \($0) min", bundle: Bundle.app) } ?? ""
         func pctString(_ target: Int?, from: Int?, plan: Int?) -> NSAttributedString {
             guard let target else { return NSAttributedString(string: "–%", attributes: fMuted) }
             var v = target
             if let countUp, let from { v = from + Int((CGFloat(target - from) * countUp).rounded()) }
-            return NSAttributedString(string: "\(v)%", attributes: Theme.attrs(11.5, Self.usageColor(v, plan: plan)))
+            return NSAttributedString(string: "\(v)%", attributes: stale == nil ? Theme.attrs(11.5, Self.usageColor(v, plan: plan)) : fMuted)
         }
         /// Tooltip: Bezeichnung plus Prozentwert, beim 7-Tage-Wert zusätzlich der Plan-Stand.
         func usageTip(_ label: String, _ pct: Int?, _ plan: Int?) -> String {
@@ -415,7 +428,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             let value = NSMutableAttributedString()
             if let plan, pct != nil { value.append(NSAttributedString(string: "\(plan)%/", attributes: fMuted)) }
             value.append(pctString(pct, from: from, plan: plan))
-            module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), value], tip: usageTip(label, pct, plan) + resetTip(reset))
+            module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), value], tip: usageTip(label, pct, plan) + resetTip(reset) + staleTip)
         }
     }
 

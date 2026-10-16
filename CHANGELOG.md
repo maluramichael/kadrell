@@ -2,6 +2,14 @@
 
 Neueste Version oben.
 
+## 1.69.0 (2026-10-16)
+
+- Fix: Der automatische Account-Wechsel fragt das Ziel vorher live ab und wechselt nicht mehr auf einen Account, der in Wirklichkeit schon am Limit ist.
+- Feature: Nicht aktive Accounts werden alle 20 Minuten im Hintergrund abgefragt. Das Account-Menü zeigt damit auch deren aktuellen Stand, etwa wenn sie gerade auf einem anderen Rechner laufen.
+- Feature: Ist die angezeigte Nutzung älter als 10 Minuten (etwa weil der Server Anfragen drosselt), steht sie grau in der Leiste, der Tooltip nennt das Alter.
+- Änderung: Die Nutzung des aktiven Accounts wird alle 5 statt alle 3 Minuten abgefragt.
+- Fix: Mit mehreren Fenstern zeigt jetzt jedes Fenster den aktuellen Nutzungsstand, nicht nur das zuletzt aktive.
+
 ## 1.68.1 (2026-10-12)
 
 - Fix: Remote-Kacheln zu Hosts ohne tmux (auch Windows mit PowerShell) öffnen jetzt die normale Shell des Hosts, statt mit einer Fehlermeldung sofort zu schließen.

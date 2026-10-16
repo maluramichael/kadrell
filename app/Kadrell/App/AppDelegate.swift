@@ -320,7 +320,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.onManageAccounts = { [weak self] in self?.menuSettings() }
         bar.onToggleAutoswitch = { [weak self] in Settings.autoswitchEnabled.toggle(); self?.refreshAccountBars() }
         applyAccounts(to: c.bar)
+        applyUsage(to: c.bar)
         wireExtensionPanel(c)
+    }
+
+    /// Nutzung und ihr Messzeitpunkt in die Leisten aller Fenster.
+    private func refreshUsageBars() { for c in windows { applyUsage(to: c.bar) } }
+
+    private func applyUsage(to bar: StatusBarView) {
+        bar.usage = usage.usage
+        bar.usageMeasured = usage.measuredAt
+        bar.needsDisplay = true
     }
 
     /// Konto-Pille aller Fenster auf den aktuellen Stand bringen.
@@ -513,21 +523,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         startControlServer()
         startExtensions(environment: cli.environment)
+        usage.onMeasured = { [weak self] u in
+            self?.accounts.recordUsage(u)
+            self?.refreshUsageBars()
+        }
         usage.onChange = { [weak self] u in
-            guard let self else { return }
-            self.bar.usage = u
-            self.bar.needsDisplay = true
-            self.accounts.recordUsage(u)
-            self.accounts.considerAutoSwitch(u)
-            self.notifyPaceIfNeeded(u)
+            self?.accounts.considerAutoSwitch(u)
+            self?.notifyPaceIfNeeded(u)
         }
         if let cached = accounts.active?.usage {
-            let seeded = cached.asUsage()
-            usage.seed(seeded, at: cached.at)
-            bar.usage = seeded
-            bar.needsDisplay = true
+            usage.seed(cached.asUsage(), at: cached.at)
+            refreshUsageBars()
         }
         usage.start()
+        accounts.startInactivePolling()
         accounts.onChange = { [weak self] in self?.refreshAccountBars() }
         accounts.onAutoSwitch = { [weak self] to in self?.notifyAutoSwitch(to) }
         updateChecker.onChange = { [weak self] m in self?.bar.updateAvailable = m; self?.bar.needsDisplay = true }

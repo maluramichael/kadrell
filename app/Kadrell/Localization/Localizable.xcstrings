@@ -5435,6 +5435,22 @@
         }
       }
     },
+    "Stand von vor %lld min": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand von vor %lld min"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "as of %lld min ago"
+          }
+        }
+      }
+    },
     "Standard": {
       "localizations": {
         "de": {
