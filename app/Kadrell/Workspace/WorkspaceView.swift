@@ -498,10 +498,17 @@ final class WorkspaceView: NSView {
 
     private func groupColor(_ g: Group?) -> NSColor { Theme.group(g?.color ?? "#6c7086") }
 
+    /// Radius der Kachel genau in der Ecke oben links: konzentrisch zum Bogen der Modulecke, die 2 pt weiter außen auf
+    /// den Fugen sitzt. Alle anderen Kacheln bleiben eckig.
+    static func moduleCornerRadius(for frame: CGRect, gap: CGFloat) -> CGFloat {
+        frame.origin == CGPoint(x: gap, y: gap) ? max(0, ModuleCornerView.scaledRadius - gap) : 0
+    }
+
     /// Die Kachel zeichnet nur bei echter Änderung ihres Zustands neu (siehe `CellView.State`).
     private func updateCell(_ v: CellView, key: String, frame f: CGRect, session s: Session, multiVisible: Bool, manyTiles: Bool) {
         if v.isHidden { v.isHidden = false; v.needsDisplay = true }
         if v.frame != f { v.frame = f; v.needsDisplay = true }
+        v.moduleCornerRadius = Self.moduleCornerRadius(for: f, gap: CGFloat(Settings.tileGap))
         let g = group(forSession: key), t = attach?.terminal(for: key)
         v.state = CellView.State(
             session: s, groupName: g?.name ?? "", groupColor: groupColor(g),

@@ -1,4 +1,6 @@
 import XCTest
+import Metal
+import QuartzCore
 @testable import Kadrell
 
 /// Bauteile des Instrument-Looks: Fuge, Taste, Display. Gezeichnet wird in ein gespiegeltes Bitmap (1 pt = 1 px,
@@ -219,7 +221,7 @@ final class InstrumentTests: XCTestCase {
         wc.split.layoutSubtreeIfNeeded()
         let root = wc.window.contentView!
         XCTAssertTrue(root.subviews.last === wc.corner, "Ecke liegt zuoberst")
-        let side = (ModuleCornerView.radius * Theme.scale).rounded() + 2
+        let side = ModuleCornerView.scaledRadius + 2
         func expected() -> CGPoint {
             let o = wc.workspace.convert(CGPoint.zero, to: root)
             return CGPoint(x: o.x - 2, y: o.y - 2)
@@ -242,7 +244,218 @@ final class InstrumentTests: XCTestCase {
         XCTAssertGreaterThan(wc.corner.frame.minX, 100, "Baum wieder da, Ecke wieder rechts davon")
     }
 
+    func testScaledRadiusRoundsToWholePoints() {
+        let saved = Theme.scale; defer { Theme.scale = saved }
+        Theme.scale = 1
+        XCTAssertEqual(ModuleCornerView.scaledRadius, 14)
+        Theme.scale = 1.3
+        XCTAssertEqual(ModuleCornerView.scaledRadius, 18)
+    }
+
+    /// Nur die Kachel genau in der Ecke der Arbeitsfläche rundet sich, konzentrisch zum Bogen der Modulecke.
+    func testModuleCornerRadiusOnlyForTopLeftTile() {
+        let saved = Theme.scale; defer { Theme.scale = saved }
+        Theme.scale = 1
+        let r = ModuleCornerView.scaledRadius
+        XCTAssertEqual(WorkspaceView.moduleCornerRadius(for: CGRect(x: 0, y: 0, width: 300, height: 200), gap: 0), r)
+        XCTAssertEqual(WorkspaceView.moduleCornerRadius(for: CGRect(x: 6, y: 6, width: 300, height: 200), gap: 6), r - 6)
+        XCTAssertEqual(WorkspaceView.moduleCornerRadius(for: CGRect(x: 6, y: 6, width: 300, height: 200), gap: 0), 0, "nicht in der Ecke")
+        XCTAssertEqual(WorkspaceView.moduleCornerRadius(for: CGRect(x: 306, y: 0, width: 300, height: 200), gap: 0), 0, "rechts daneben")
+        XCTAssertEqual(WorkspaceView.moduleCornerRadius(for: CGRect(x: 30, y: 30, width: 300, height: 200), gap: 30), 0, "Abstand größer als der Bogen")
+    }
+
+    /// Im Layout bekommt nur die erste Kachel (oben links) den Radius, auch nach Änderung des Abstands.
+    func testWorkspaceRoundsOnlyTopLeftCell() {
+        let oldGap = Settings.tileGap, oldScale = Theme.scale
+        let suffix = ".test-corner"
+        let ws = WorkspaceView(frame: NSRect(x: 0, y: 0, width: 600, height: 400), defaultsSuffix: suffix)
+        defer {
+            Settings.tileGap = oldGap; Theme.scale = oldScale
+            ws.close()
+            for k in ["workspace.selected", "workspace.mode", "workspace.auto"] { Profile.defaults.removeObject(forKey: k + suffix) }
+        }
+        Theme.scale = 1
+        Settings.tileGap = 0
+        let sessions = ["a", "b"].map { Session(id: $0, cwd: "/p", startedAt: 0, sessionId: $0, name: $0) }
+        let group = Group(id: "g", name: "G", color: "#89b4fa", cwd: "/p", sessionIds: ["a", "b"], favorite: false)
+        ws.reload(groups: [group], sessions: sessions)
+        ws.select(["a", "b"], add: false, takeKeyboard: false)
+        func radii() -> [CGFloat] {
+            ws.subviews.compactMap { $0 as? CellView }.filter { !$0.isHidden }.sorted { ($0.frame.minX, $0.frame.minY) < ($1.frame.minX, $1.frame.minY) }
+                .map(\.moduleCornerRadius)
+        }
+        XCTAssertEqual(radii(), [ModuleCornerView.scaledRadius, 0])
+        Settings.tileGap = 6
+        ws.relayout()
+        XCTAssertEqual(radii(), [ModuleCornerView.scaledRadius - 6, 0])
+    }
+
+    /// Kachel `cell` im Fenster anzeigen und die Layer-Ebenen vierfach gerastert abholen: Rahmen, Ecke und Inhalt wie
+    /// auf dem Bildschirm, Zeile 0 oben. Außerhalb der Kachel durchsichtig.
+    private func renderCellLayer(_ cell: CellView, size: CGSize, k: Int = 4) -> NSBitmapImageRep {
+        let win = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered, defer: false)
+        defer { win.close() }
+        win.isReleasedWhenClosed = false
+        let root = FlippedView(frame: CGRect(origin: .zero, size: size)); root.wantsLayer = true
+        win.contentView = root
+        cell.frame = CGRect(origin: .zero, size: size)
+        root.addSubview(cell)
+        root.layoutSubtreeIfNeeded()
+        win.displayIfNeeded()
+        cell.layer!.displayIfNeeded()
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width) * k, pixelsHigh: Int(size.height) * k, bitsPerSample: 8,
+                                   samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let cg = NSGraphicsContext(bitmapImageRep: rep)!.cgContext
+        cg.scaleBy(x: CGFloat(k), y: CGFloat(k))
+        // `render(in:)` übergeht die gespiegelte Geometrie der Arbeitsfläche (`isGeometryFlipped`), Inhalt, Rahmen und
+        // Ecken kämen gemeinsam auf dem Kopf an. Zurückgespiegelt steht alles wie auf dem Bildschirm (Kopfzeile oben,
+        // vom Test geprüft).
+        cg.translateBy(x: 0, y: size.height); cg.scaleBy(x: 1, y: -1)
+        root.layer!.render(in: cg)
+        return rep
+    }
+
+    /// Fokussierte Kachel oben links bei Abstand 0: Der Rahmen (2 pt Gruppenfarbe) folgt dem Bogen der Modulecke, außerhalb
+    /// des Bogens zeichnet die Kachel nichts, sonst schnitte die Ecke den Rahmen ab und bei Deckkraft unter 100 % schiene
+    /// die Kachel durchs Gehäuse. Die anderen drei Ecken bleiben eckig.
+    func testTopLeftTileFrameFollowsModuleCorner() {
+        let oldScale = Theme.scale, oldTheme = Theme.current
+        defer { Theme.scale = oldScale; Theme.current = oldTheme }
+        Theme.current = .named("instrument-dark")
+        let accent = NSColor(hex: 0x6ea8fe), size = CGSize(width: 160, height: 100), k = 4
+        for scale: CGFloat in [1, 1.3] {
+            Theme.scale = scale
+            let r = ModuleCornerView.scaledRadius
+            let cell = CellView(session: Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A"))
+            cell.state.focused = true
+            cell.state.groupColor = accent
+            cell.moduleCornerRadius = WorkspaceView.moduleCornerRadius(for: CGRect(origin: .zero, size: size), gap: 0)
+            let rep = renderCellLayer(cell, size: size, k: k)
+            func px(_ x: CGFloat, _ y: CGFloat) -> (Int, Int) { (Int(x * CGFloat(k)), Int(y * CGFloat(k))) }
+            func at(_ x: CGFloat, _ y: CGFloat) -> NSColor { let p = px(x, y); return pixel(rep, x: p.0, y: p.1) }
+            func alphaAt(_ x: CGFloat, _ y: CGFloat) -> CGFloat { let p = px(x, y); return alpha(rep, x: p.0, y: p.1) }
+            // Ausrichtung: oben liegt die Kopfzeile (Gruppenfarbe 22 % auf surface), nicht der Körper.
+            let head = accent.mixed(0.22, into: Theme.surface)
+            XCTAssertLessThan(distance(at(80, 8), head), 0.03, "\(scale): Kopfzeile oben, \(at(80, 8).hexString)")
+            // Mitte der Rundung bei (r, r); unter 45° nach oben links mitten im 2-pt-Rahmen (Abstand r - 1): Rahmenfarbe.
+            let mid = r - (r - 1) / 2.squareRoot()
+            XCTAssertLessThan(distance(at(mid, mid), accent), 0.05, "\(scale): Rahmen auf dem Bogen, \(at(mid, mid).hexString)")
+            XCTAssertEqual(alphaAt(mid, mid), 1, accuracy: 0.02, "\(scale): Rahmen deckend")
+            // Außerhalb des Bogens (Abstand r + 1) und in der Ecke selbst: nichts.
+            let out = r - (r + 1) / 2.squareRoot()
+            for (x, y) in [(out, out), (0.1, 0.1), (1, 1), (0.1, r / 2), (r / 2, 0.1)] {
+                XCTAssertEqual(alphaAt(x, y), 0, accuracy: 0.02, "\(scale): außerhalb des Bogens bei \(x),\(y)")
+            }
+            // Die geraden Kanten tragen den Rahmen bis an den Bogen.
+            XCTAssertLessThan(distance(at(r + 2, 0.5), accent), 0.05, "\(scale): oben gerade")
+            XCTAssertLessThan(distance(at(0.5, r + 2), accent), 0.05, "\(scale): links gerade")
+            // Nur oben links rund. `render(in:)` übergeht `maskedCorners` und rundet hier alle vier Ecken, auf dem
+            // Bildschirm gilt die Maske (Lage der Ecke prüft `testRoundedCornerIsVisuallyTopLeft`).
+            XCTAssertEqual(cell.layer?.maskedCorners, [.layerMinXMinYCorner])
+            XCTAssertEqual(cell.layer?.cornerRadius, r)
+        }
+    }
+
+    /// `layerMinXMinYCorner` ist in der echten Arbeitsfläche oben links: der Fensterinhalt spiegelt seine Unterebenen
+    /// (`isGeometryFlipped`), lokal minY der Kachelebene liegt also im Fenster oben. Geprüft über die Umrechnung bis zur
+    /// obersten Ebene des Fensters, die wie das Fenster nach oben zählt.
+    func testRoundedCornerIsVisuallyTopLeft() {
+        let wc = MainWindowController(index: 25, cascade: nil)
+        defer { wc.window.close() }
+        wc.window.setContentSize(NSSize(width: 1000, height: 700))
+        wc.split.layoutSubtreeIfNeeded()
+        let cell = CellView(session: Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A"))
+        cell.frame = CGRect(x: 0, y: 0, width: 200, height: 120)
+        wc.workspace.addSubview(cell)
+        defer { cell.removeFromSuperview() }
+        wc.window.displayIfNeeded()
+        guard let layer = cell.layer, let top = wc.window.contentView?.superview?.layer else { return XCTFail("ohne Ebenen") }
+        XCTAssertTrue(layer.superlayer === wc.workspace.layer, "Kachelebene hängt direkt an der Arbeitsfläche")
+        // AppKit spiegelt nur dort, wo sich die Richtung ändert (hier der Fensterinhalt). Ungerade viele gespiegelte
+        // Vorfahren: lokal minY ist oben, genau wie unter der einen gespiegelten Ebene in `testMaskedCornerRendersTopLeftOnly`.
+        let flips = sequence(first: layer, next: { $0.superlayer }).dropFirst().filter(\.isGeometryFlipped).count
+        XCTAssertEqual(flips % 2, 1, "ungerade viele gespiegelte Vorfahren")
+        let minY = layer.convert(CGPoint(x: 0, y: 0), to: top), maxY = layer.convert(CGPoint(x: 0, y: layer.bounds.height), to: top)
+        XCTAssertGreaterThan(minY.y, maxY.y, "lokal minY liegt im Fenster oben")
+        // Gegenprobe über AppKit: die obere linke Ecke der Kachel im Fenster (Fenster zählt nach oben).
+        let viewTopLeft = cell.convert(CGPoint.zero, to: nil)
+        XCTAssertEqual(minY.y - maxY.y, 120, accuracy: 0.01)
+        XCTAssertEqual(viewTopLeft.y - cell.convert(CGPoint(x: 0, y: 120), to: nil).y, 120, accuracy: 0.01, "Kachel ist gespiegelt, y = 0 oben")
+    }
+
+    /// Die Ecken-Maske der Kachel wie auf dem Bildschirm: `render(in:)` übergeht `maskedCorners`, deshalb hier über
+    /// `CARenderer` (Metal), der wie der Fensterserver zeichnet. Rand, Radius und Maske kommen von der echten Kachel,
+    /// die Ebene hängt wie in der App unter einer gespiegelten Ebene; eine Marke bei y = 0 zeigt, wo oben ist.
+    func testMaskedCornerRendersTopLeftOnly() throws {
+        let device = try XCTUnwrap(MTLCreateSystemDefaultDevice())
+        let w = 160, h = 100
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+        desc.usage = [.renderTarget, .shaderRead]
+        desc.storageMode = .managed
+        let texture = try XCTUnwrap(device.makeTexture(descriptor: desc))
+        let cell = CellView(session: Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A"))
+        cell.moduleCornerRadius = 30
+        let real = try XCTUnwrap(cell.layer)
+        // Ohne implizite Animationen: sonst stünden Rand und Flächen beim Zeichnen noch auf ihren Startwerten.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let root = CALayer(); root.frame = CGRect(x: 0, y: 0, width: w, height: h); root.isGeometryFlipped = true
+        let tile = CALayer(); tile.frame = root.bounds
+        tile.masksToBounds = real.masksToBounds; tile.cornerRadius = real.cornerRadius; tile.maskedCorners = real.maskedCorners
+        tile.borderWidth = 2; tile.borderColor = NSColor.green.cgColor; tile.backgroundColor = NSColor.blue.cgColor
+        let mark = CALayer(); mark.frame = CGRect(x: 60, y: 0, width: 40, height: 6); mark.backgroundColor = NSColor.red.cgColor
+        root.addSublayer(tile); root.addSublayer(mark)
+        CATransaction.commit()
+        let renderer = CARenderer(mtlTexture: texture, options: nil)
+        renderer.layer = root
+        renderer.bounds = root.bounds
+        let queue = try XCTUnwrap(device.makeCommandQueue())
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        // Der erste Durchgang kann leer bleiben, solange der Renderer die Ebenen noch nicht übernommen hat.
+        for _ in 0..<5 where !bytes.contains(where: { $0 != 0 }) {
+            CATransaction.flush()
+            renderer.beginFrame(atTime: CACurrentMediaTime(), timeStamp: nil)
+            renderer.addUpdate(renderer.bounds)
+            renderer.render()
+            renderer.endFrame()
+            let buffer = try XCTUnwrap(queue.makeCommandBuffer()), blit = try XCTUnwrap(buffer.makeBlitCommandEncoder())
+            blit.synchronize(resource: texture); blit.endEncoding(); buffer.commit(); buffer.waitUntilCompleted()
+            texture.getBytes(&bytes, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        }
+        // BGRA; die Zeilenrichtung der Textur legt die Marke fest.
+        func bgra(_ x: Int, _ row: Int) -> [UInt8] { let i = (row * w + x) * 4; return Array(bytes[i..<i + 4]) }
+        let topRow = bgra(80, 2)[2] == 255 ? 0 : h - 1
+        XCTAssertEqual(bgra(80, topRow == 0 ? 2 : h - 3), [0, 0, 255, 255], "Marke oben")
+        let bottomRow = h - 1 - topRow
+        XCTAssertEqual(bgra(1, topRow)[3], 0, "oben links rund: außerhalb des Bogens nichts")
+        for (x, row, name) in [(w - 1, topRow, "oben rechts"), (0, bottomRow, "unten links"), (w - 1, bottomRow, "unten rechts")] {
+            XCTAssertEqual(bgra(x, row), [0, 255, 0, 255], "\(name) eckig, Rand bis in die Ecke")
+        }
+    }
+
+    /// Ändert sich eine Einstellung ohne neues Schema (etwa die Kachel-Deckkraft), zeichnen beide Trenner neu.
+    /// Ein unsichtbares Fenster nimmt keine Neuzeichnen-Wünsche an, deshalb steht es (durchsichtig) vorne. `needsDisplay`
+    /// der View meldet bei Ebenen nichts, geprüft wird an der Ebene, vorher dort geleert.
+    func testApplyAppearanceRedrawsSeamDividers() {
+        let wc = MainWindowController(index: 24, cascade: nil)
+        defer { wc.window.close() }
+        wc.window.setContentSize(NSSize(width: 1000, height: 700))
+        wc.window.alphaValue = 0
+        wc.window.orderFront(nil)
+        let views: [(String, NSView)] = [("Trenner Baum/Arbeitsfläche", wc.split), ("Trenner Baum/Dock", wc.leftColumn), ("Ecke", wc.corner)]
+        for themeChanged in [false, true] {
+            wc.applyAppearance(themeChanged: themeChanged)
+            wc.window.displayIfNeeded()
+            for (_, v) in views { v.layer?.displayIfNeeded() }
+            for (name, v) in views { XCTAssertEqual(v.layer?.needsDisplay(), false, "\(name): nach dem Zeichnen sauber") }
+            wc.applyAppearance(themeChanged: themeChanged)
+            for (name, v) in views { XCTAssertEqual(v.layer?.needsDisplay(), true, "Theme neu: \(themeChanged), \(name)") }
+        }
+    }
+
     func testMeterLightsInSteps() {
+        let saved = Feedback.reduceMotion; defer { Feedback.reduceMotion = saved }
+        Feedback.reduceMotion = false
         XCTAssertEqual(Feedback.meterLit(now: 0.00), 1)
         XCTAssertEqual(Feedback.meterLit(now: 0.17), 2)
         XCTAssertEqual(Feedback.meterLit(now: 0.49), 4)

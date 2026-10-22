@@ -159,8 +159,11 @@ final class MainWindowController: NSObject {
         if themeChanged {
             window.appearance = Theme.appearance
             window.backgroundColor = Theme.bg
-            split.needsDisplay = true
         }
+        // Trenner hängen an Schema und Kachel-Deckkraft (Gehäuse unter der Fuge): immer neu zeichnen. Die Ecke zeichnet
+        // `placeCorner` neu.
+        split.needsDisplay = true
+        leftColumn.needsDisplay = true
         let root = window.contentView!.bounds
         bar.frame = NSRect(x: 0, y: 0, width: root.width, height: Theme.barHeight)
         split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.width, height: root.height - Theme.barHeight)
@@ -178,7 +181,7 @@ final class MainWindowController: NSObject {
     func placeCorner() {
         guard let root = window.contentView else { return }
         let o = workspace.convert(CGPoint.zero, to: root)
-        let side = (ModuleCornerView.radius * Theme.scale).rounded() + 2
+        let side = ModuleCornerView.scaledRadius + 2
         corner.frame = CGRect(x: o.x - 2, y: o.y - 2, width: side, height: side)
         corner.needsDisplay = true
     }

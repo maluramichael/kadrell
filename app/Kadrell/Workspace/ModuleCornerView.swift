@@ -8,6 +8,8 @@ final class ModuleCornerView: NSView {
     /// Radius bis zur Innenkante der Fuge, in logischen Punkten. In der App mal `Theme.scale` und auf ganze Punkte
     /// gerundet, sonst hat die Layer-Fläche Bruchteile von Pixeln und zeichnet sich als Viereck ab.
     static let radius: CGFloat = 14
+    /// Radius in der App: einzige Quelle für Ecke und Kachel darunter.
+    static var scaledRadius: CGFloat { (radius * Theme.scale).rounded() }
     /// Breite der Fuge (dunkel + hell) am Rand der View.
     private static let seam: CGFloat = 2
 

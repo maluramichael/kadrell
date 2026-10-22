@@ -36,6 +36,16 @@ final class CellView: NSView {
     }
     var state: State { didSet { if state != oldValue { needsDisplay = true } } }
     var pulse: CGFloat = 1
+    /// Radius der Ecke oben links, wenn die Kachel in der Ecke der Arbeitsfläche liegt, sonst 0. Rahmen, Kopfzeile und
+    /// Terminal folgen dann dem Bogen der Modulecke, statt von ihr abgeschnitten zu werden oder durchs Gehäuse zu scheinen.
+    var moduleCornerRadius: CGFloat = 0 {
+        didSet {
+            guard moduleCornerRadius != oldValue, let layer else { return }
+            layer.cornerRadius = moduleCornerRadius
+            // Der Fensterinhalt spiegelt seine Unterebenen: lokal minY ist auf dem Bildschirm oben (siehe InstrumentTests).
+            layer.maskedCorners = [.layerMinXMinYCorner]
+        }
+    }
     /// Abgedunkelter Körper bei fehlendem Ordner, Startfehler und beendeter Session.
     private static let shade = NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 1)
 
