@@ -50,8 +50,8 @@ enum Settings {
         if d.bool(forKey: "helpShown"), d.object(forKey: "colorTheme") == nil { d.set("mocha", forKey: "colorTheme") }
         d.set(true, forKey: "themePinChecked")
     }
-    /// Aussehen des Baums, Default getönte Gruppen.
-    static var sidebarStyle: SidebarStyle { get { enumValue("sidebar.style", .tinted) } set { store("sidebar.style", newValue.rawValue) } }
+    /// Aussehen des Baums, Default Klassisch. Ein altes „tinted“ fällt über `enumValue` darauf zurück.
+    static var sidebarStyle: SidebarStyle { get { enumValue("sidebar.style", .classic) } set { store("sidebar.style", newValue.rawValue) } }
     /// Sortierung des Baums (Leiste), Default aus = Handreihenfolge.
     static var sidebarSort: SidebarSort { get { enumValue("sidebar.sort", .off) } set { store("sidebar.sort", newValue.rawValue) } }
     /// Gruppierung nach Projekt im Baum (Leiste). Aus = eine flache Liste aller Sessions.

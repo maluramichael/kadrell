@@ -1271,23 +1271,43 @@ final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// Split-View mit 1-px-Trenner in der Linienfarbe des Themes; greifbar ist er 8 px breit.
+/// Split-View, deren Trenner eine Fuge im Gehäuse ist: 1 pt dunkel, 1 pt hell; greifbar ist er 8 pt breit.
 /// Die Unteransichten würden den Klick sonst vorher schlucken, deshalb entscheidet der Hit-Test hier.
 final class ThinSplitView: NSSplitView {
     static let grabWidth: CGFloat = 8
-    override var dividerColor: NSColor { Theme.line }
-    override var dividerThickness: CGFloat { 1 }
+    override var dividerThickness: CGFloat { 2 }
+
+    /// Gehäusefarbe wie der Baum, darauf die Fuge: senkrecht links dunkel, waagerecht oben dunkel. Der Split ist
+    /// unskaliert, die Linien sind also genau 1 pt. Ein ungespiegelter Split hat oben bei maxY.
+    override func drawDivider(in rect: NSRect) {
+        Theme.panel.withAlphaComponent(CGFloat(Settings.tileOpacity)).setFill()
+        rect.fill(using: .sourceOver)
+        let first: CGRect, second: CGRect
+        if isVertical {
+            first = CGRect(x: rect.minX, y: rect.minY, width: 1, height: rect.height)
+            second = first.offsetBy(dx: 1, dy: 0)
+        } else {
+            let top = isFlipped ? rect.minY : rect.maxY - 1
+            first = CGRect(x: rect.minX, y: top, width: rect.width, height: 1)
+            second = first.offsetBy(dx: 0, dy: isFlipped ? 1 : -1)
+        }
+        Instrument.seamDark.setFill()
+        first.fill(using: .sourceOver)
+        Instrument.seamLight.setFill()
+        second.fill(using: .sourceOver)
+    }
 
     /// Resize-Cursor passend zur Ausrichtung: senkrechter Trenner zieht links/rechts, waagerechter hoch/runter.
     private var resizeCursor: NSCursor { isVertical ? .resizeLeftRight : .resizeUpDown }
 
-    /// Eine Griffzone je Trenner. Senkrecht: ein breiter Streifen an der rechten Kante des Bereichs. Waagerecht
-    /// (linkes Dock): ein breiter Streifen an seiner Unterkante. Ohne den waagerechten Fall bliebe nur der 1px-Trenner.
+    /// Eine Griffzone je Trenner, mittig darauf. Senkrecht: ein breiter Streifen an der rechten Kante des Bereichs.
+    /// Waagerecht (linkes Dock): ein breiter Streifen an seiner Unterkante (der Split ist gespiegelt, unten ist maxY).
+    /// Ohne den waagerechten Fall bliebe nur der schmale Trenner.
     private var grabRects: [CGRect] {
         arrangedSubviews.dropLast().map { v in
             isVertical
                 ? CGRect(x: v.frame.maxX - Self.grabWidth / 2, y: 0, width: Self.grabWidth + dividerThickness, height: bounds.height)
-                : CGRect(x: 0, y: v.frame.minY - Self.grabWidth / 2, width: bounds.width, height: Self.grabWidth + dividerThickness)
+                : CGRect(x: 0, y: v.frame.maxY - Self.grabWidth / 2, width: bounds.width, height: Self.grabWidth + dividerThickness)
         }
     }
 

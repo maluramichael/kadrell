@@ -73,9 +73,10 @@ enum Theme {
         }
     }
 
-    /// Noch laufendes Kommando aus dem Bash-Tool: das Blau des Schemas. In Schemata, deren Arbeitsstatus selbst
-    /// blau ist, sieht beides gleich aus, was passt: in beiden Fällen läuft in der Session noch etwas.
-    static var shell: NSColor { current.ansi[4] }
+    /// Noch laufendes Kommando aus dem Bash-Tool: das Blau des Schemas (Instrument: ein ruhiges Grau). In Schemata,
+    /// deren Arbeitsstatus selbst blau ist, sieht beides gleich aus, was passt: in beiden Fällen läuft in der
+    /// Session noch etwas.
+    static var shell: NSColor { current.shell }
 
     /// Statuspunkt: ohne laufenden Prozess grau, egal was der letzte Status war. Wartet Claude schon wieder, läuft
     /// aber noch ein Kommando aus dem Bash-Tool, gilt dessen Farbe (`shell`).
@@ -132,10 +133,10 @@ private func accessibleText(_ c: NSColor, against backgrounds: [NSColor], toward
 /// Farbschema der ganzen Oberfläche. `ansi` sind die acht Terminal-Grundfarben, die hellen Varianten sind dieselben.
 struct ColorTheme {
     let id: String, name: String, dark: Bool
-    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText, accent: NSColor
+    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText, accent, shell: NSColor
     let ansi: [NSColor]
 
-    init(_ id: String, _ name: String, dark: Bool, _ c: [UInt32], ansi: [UInt32], accent: UInt32? = nil) {
+    init(_ id: String, _ name: String, dark: Bool, _ c: [UInt32], ansi: [UInt32], accent: UInt32? = nil, shell: UInt32? = nil) {
         self.id = id; self.name = name; self.dark = dark
         let n = c.map { NSColor(hex: $0) }
         (bg, panel, surface, line, fg) = (n[0], n[1], n[2], n[3], n[4])
@@ -149,6 +150,7 @@ struct ColorTheme {
         muted = accessibleText(n[6], against: textBGs, toward: fg, extreme: extreme)
         waitingText = accessibleText(waiting, against: textBGs, toward: fg, extreme: extreme)
         self.ansi = ansi.map { NSColor(hex: $0) }
+        self.shell = shell.map { NSColor(hex: $0) } ?? self.ansi[4]
     }
 
     static func named(_ id: String) -> ColorTheme { all.first { $0.id == id } ?? all[0] }
@@ -188,10 +190,10 @@ struct ColorTheme {
         // Werte aus Monsters (github.com/Saturday-Company/monsters, Apache-2.0, docs/design.md).
         ColorTheme("instrument-dark", "Instrument Dark", dark: true,
                    [0x1c1c1a, 0x151514, 0x252523, 0x2e2e2b, 0xecebe5, 0xa3a19a, 0x8d8b85, 0x5c5a54, 0xecebe5, 0xff5e14, 0x4fd98a, 0xff3b2f],
-                   ansi: [0x252523, 0xff5a4e, 0x4fd98a, 0xf2c14e, 0x6ea8fe, 0xc792ea, 0x5fd4d0, 0xecebe5], accent: 0xff8a4c),
+                   ansi: [0x252523, 0xff5a4e, 0x4fd98a, 0xf2c14e, 0x6ea8fe, 0xc792ea, 0x5fd4d0, 0xecebe5], accent: 0xff8a4c, shell: 0xa3a19a),
         ColorTheme("instrument-light", "Instrument Light", dark: false,
                    [0xf2f1ec, 0xe3e1db, 0xfbfaf7, 0xcfccc4, 0x1a1a18, 0x5c5a54, 0x6b6963, 0xb5b2a9, 0x1a1a18, 0xff4f00, 0x1f8f4e, 0xd8231a],
-                   ansi: [0x1a1a18, 0xb51c14, 0x16703c, 0x8a6100, 0x1f5fbf, 0x8a3fb0, 0x0f7a78, 0x5c5a54], accent: 0xa83500),
+                   ansi: [0x1a1a18, 0xb51c14, 0x16703c, 0x8a6100, 0x1f5fbf, 0x8a3fb0, 0x0f7a78, 0x5c5a54], accent: 0xa83500, shell: 0x5c5a54),
     ]
 }
 

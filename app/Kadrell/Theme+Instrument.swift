@@ -74,6 +74,19 @@ enum Instrument {
         NSGraphicsContext.restoreGraphicsState()
     }
 
+    /// Vier senkrechte Striche als Arbeits-Anzeige. `lit` = Anzahl leuchtender Striche (1...4), die übrigen stehen
+    /// mit 25 % Deckkraft; nil = alle vier voll. Beide Kanten jedes Strichs rasten aufs Gerätepixel ein, sonst
+    /// verschmiert die Breite von (Breite - 4,5) / 4 die Ränder.
+    @MainActor static func meter(_ r: CGRect, lit: Int?, color: NSColor) {
+        let gap: CGFloat = 1.5, width = (r.width - gap * 3) / 4
+        let dim = color.withAlphaComponent(color.alphaComponent * 0.25)
+        for i in 0..<4 {
+            let on = lit.map { i < $0 } ?? true
+            let x0 = snapped(r.minX + CGFloat(i) * (width + gap)), x1 = snapped(r.minX + CGFloat(i) * (width + gap) + width)
+            fill(CGRect(x: x0, y: r.minY, width: x1 - x0, height: r.height), on ? color : dim)
+        }
+    }
+
     /// Füllt mit Alpha über den Untergrund (`NSRectFill` würde ersetzen statt überblenden).
     private static func fill(_ r: CGRect, _ color: NSColor) {
         color.setFill()

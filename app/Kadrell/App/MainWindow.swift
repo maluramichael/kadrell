@@ -21,6 +21,8 @@ final class MainWindowController: NSObject {
     /// Rechte Sidebar mit den Panels der Extensions, dritter Bereich im Split.
     let rightScroll = NSScrollView(frame: .zero)
     let extensionPanel = ExtensionPanelView(frame: .zero)
+    /// Runde Ecke oben links an der Arbeitsfläche, über Leiste und Split (siehe `placeCorner`).
+    let corner = ModuleCornerView(frame: .zero)
     /// Breite, auf die der Baum beim nächsten Einblenden zurückkommt.
     private var lastSidebarWidth: CGFloat = 260
     /// Vom Nutzer ausgeblendet (⌘⌥B), gespeichert pro Fenster. Ohne Panels fehlt der Bereich unabhängig davon.
@@ -89,7 +91,14 @@ final class MainWindowController: NSObject {
         root.addSubview(wallpaper)
         root.addSubview(split)
         root.addSubview(bar)
+        root.addSubview(corner)
         window.contentView = root
+        // Jede Lageänderung der Arbeitsfläche im Split (Ziehen, Baum oder rechte Sidebar ein/aus, Fenstergröße) zieht
+        // die Ecke nach. Die Leistenhöhe ändert nur `applyAppearance`, das ruft `placeCorner` selbst.
+        workspace.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: workspace, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.placeCorner() }
+        }
         if index == 0 {
             window.center()
         } else {
@@ -113,6 +122,7 @@ final class MainWindowController: NSObject {
     func show() {
         window.makeKeyAndOrderFront(nil)
         restoreSidebarWidth()
+        placeCorner()
         window.makeFirstResponder(workspace)
     }
 
@@ -149,8 +159,11 @@ final class MainWindowController: NSObject {
         if themeChanged {
             window.appearance = Theme.appearance
             window.backgroundColor = Theme.bg
-            split.needsDisplay = true
         }
+        // Trenner hängen an Schema und Kachel-Deckkraft (Gehäuse unter der Fuge): immer neu zeichnen. Die Ecke zeichnet
+        // `placeCorner` neu.
+        split.needsDisplay = true
+        leftColumn.needsDisplay = true
         let root = window.contentView!.bounds
         bar.frame = NSRect(x: 0, y: 0, width: root.width, height: Theme.barHeight)
         split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.width, height: root.height - Theme.barHeight)
@@ -160,6 +173,17 @@ final class MainWindowController: NSObject {
         sidebar.needsDisplay = true
         extensionPanel.layoutRows()
         leftDockPanel.layoutRows()
+        placeCorner()
+    }
+
+    /// Die Ecke sitzt 2 pt links und oberhalb der Arbeitsfläche, also auf den Fugen von Trenner und Leiste, und setzt
+    /// sie als Bogen fort. Neu gezeichnet wird sie mit, weil Schema und Deckkraft sich ändern können.
+    func placeCorner() {
+        guard let root = window.contentView else { return }
+        let o = workspace.convert(CGPoint.zero, to: root)
+        let side = ModuleCornerView.scaledRadius + 2
+        corner.frame = CGRect(x: o.x - 2, y: o.y - 2, width: side, height: side)
+        corner.needsDisplay = true
     }
 
     // MARK: Linkes Dock (Extension-Panels unter dem Baum)

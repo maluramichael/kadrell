@@ -27,6 +27,27 @@ final class ContrastTests: XCTestCase {
         }
     }
 
+    /// Die Strich-Anzeige trägt den Status allein über Form und Farbe: Arbeitsfarbe und Shell-Farbe heben sich als
+    /// Grafik (3:1) vom Gehäuse des Baums und von der Modulfarbe ausgewählter Zeilen ab.
+    @MainActor
+    func testMeterColorsMeetGraphicsContrast() {
+        var busy = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A")
+        busy.rawStatus = "busy"
+        var shell = busy
+        shell.rawStatus = "idle"; shell.hasRunningShell = true
+        let saved = Theme.current
+        defer { Theme.current = saved }
+        for t in ColorTheme.all {
+            Theme.current = t
+            for (name, s) in [("running", busy), ("shell", shell)] {
+                guard let c = SidebarSessionItem.meter(for: s, attached: true, lit: nil)?.color else { XCTFail("\(t.id): \(name) ohne Striche"); continue }
+                for bg in [t.panel, t.bg] {
+                    XCTAssertGreaterThanOrEqual(c.contrastRatio(with: bg), 3, "\(t.id): \(name) \(c.hexString) gegen \(bg.hexString)")
+                }
+            }
+        }
+    }
+
     /// Ohne eigene Angabe ist der Akzent die Arbeitsfarbe, die zehn älteren Schemata sehen also unverändert aus.
     func testAccentDefaultsToRunning() {
         for t in ColorTheme.all where !t.id.hasPrefix("instrument") {
@@ -76,5 +97,11 @@ final class ContrastTests: XCTestCase {
         XCTAssertEqual(c.greenComponent, 0.15, accuracy: 0.001)
         XCTAssertEqual(c.blueComponent, 0, accuracy: 0.001)
         XCTAssertEqual(c.alphaComponent, 0.3, accuracy: 0.001)
+    }
+
+    func testShellDefaultsToBlueExceptInstrument() {
+        for t in ColorTheme.all where !t.id.hasPrefix("instrument") { XCTAssertEqual(t.shell, t.ansi[4], t.id) }
+        XCTAssertEqual(ColorTheme.named("instrument-dark").shell.hexString, "#a3a19a")
+        XCTAssertEqual(ColorTheme.named("instrument-light").shell.hexString, "#5c5a54")
     }
 }

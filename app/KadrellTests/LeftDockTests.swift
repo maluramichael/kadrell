@@ -44,4 +44,16 @@ final class LeftDockTests: XCTestCase {
         XCTAssertEqual(eff.height, 1 + ThinSplitView.grabWidth, "waagerechte Greifzone ist deutlich höher als 1px")
         XCTAssertEqual(eff.width, 200, "waagerecht wird die Höhe aufgeweitet, nicht die Breite")
     }
+
+    /// Die waagerechte Griffzone sitzt auf dem Trenner (Unterkante des Baums), nicht am oberen Rand der Spalte.
+    func testHorizontalGrabZoneSitsOnDivider() {
+        let host = FlippedView(frame: CGRect(x: 0, y: 0, width: 100, height: 200))
+        let split = ThinSplitView(frame: host.bounds); split.isVertical = false
+        host.addSubview(split)
+        split.addArrangedSubview(NSView()); split.addArrangedSubview(NSView())
+        split.adjustSubviews()
+        split.setPosition(100, ofDividerAt: 0)   // Trenner bei y = 100 bis 102
+        for y: CGFloat in [97, 101, 105] { XCTAssertTrue(split.hitTest(CGPoint(x: 50, y: y)) === split, "y \(y) greift den Trenner") }
+        XCTAssertFalse(split.hitTest(CGPoint(x: 50, y: 2)) === split, "oberer Rand des Baums bleibt klickbar")
+    }
 }

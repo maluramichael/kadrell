@@ -26,7 +26,7 @@ class ClipWidthView: NSView {
 @MainActor
 final class SidebarView: ClipWidthView {
     /// Aussehen der Zeilen, umschaltbar in den Einstellungen.
-    var renderer: any SidebarRenderer = SidebarStyle.tinted.renderer
+    var renderer: any SidebarRenderer = SidebarStyle.classic.renderer
     /// Laufzeit („12m“) rechts in jeder Session-Zeile.
     var showAge = true
     /// Sortiert nur die Anzeige. Ziehen ist dann aus, weil die Handreihenfolge unsichtbar bliebe.
@@ -119,11 +119,11 @@ final class SidebarView: ClipWidthView {
                 guard self.window?.occlusionState.contains(.visible) == true else { wasAnimating = false; continue }
                 let now = CACurrentMediaTime(), animating = self.pruneAnimations(now)
                 if animating || wasAnimating { wasAnimating = animating; self.needsDisplay = true; continue }
-                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Punkte laufender Sessions.
+                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Anzeigen laufender Sessions.
                 if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true; continue }
                 for (i, row) in self.rows.enumerated() {
                     guard case .session(let s, _) = row, s.status == .running || s.hasRunningShell else { continue }
-                    self.setNeedsDisplay(self.renderer.dotRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
+                    self.setNeedsDisplay(self.renderer.statusRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
                 }
             }
         }
@@ -202,7 +202,7 @@ final class SidebarView: ClipWidthView {
     }
 
     private func rowHeight(_ r: Row) -> CGFloat {
-        if case .group = r { renderer.groupRow } else { renderer.sessionRow + (showMessages ? 14 : 0) }
+        if case .group = r { renderer.groupRow } else { renderer.sessionRow + (showMessages ? renderer.messageLine : 0) }
     }
 
     func rowRect(_ i: Int) -> CGRect {
@@ -336,6 +336,7 @@ final class SidebarView: ClipWidthView {
         defer { if slide != nil { NSGraphicsContext.restoreGraphicsState() } }
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
                                                 project: grouped ? nil : g.name,
+                                                meter: SidebarSessionItem.meter(for: s, attached: isAttached(s.id), lit: Feedback.meterLit()),
                                                 attached: isAttached(s.id),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,
