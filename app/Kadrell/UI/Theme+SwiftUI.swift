@@ -13,7 +13,11 @@ extension Theme {
     static var fgColor: Color { Color(nsColor: fg) }
     static var mutedColor: Color { Color(nsColor: muted) }
     static var accentColor: Color { Color(nsColor: accent) }
-    static let errorColor = Color(nsColor: error)
+    static var errorColor: Color { Color(nsColor: error) }
+    static var raisedColor: Color { Color(nsColor: raised) }
+    static var wellColor: Color { Color(nsColor: well) }
+    static var accentTextColor: Color { Color(nsColor: accentText) }
+    static var errorTextColor: Color { Color(nsColor: errorText) }
 }
 
 /// Sichtbarer Tastaturfokus für `.buttonStyle(.plain)`-Elemente (Menüs, Icon-Knöpfe, Dialog-Fuß, Farbfelder):

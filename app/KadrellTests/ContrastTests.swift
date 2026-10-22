@@ -104,4 +104,32 @@ final class ContrastTests: XCTestCase {
         XCTAssertEqual(ColorTheme.named("instrument-dark").shell.hexString, "#a3a19a")
         XCTAssertEqual(ColorTheme.named("instrument-light").shell.hexString, "#5c5a54")
     }
+
+    func testRaisedAndWellRoles() {
+        XCTAssertEqual(ColorTheme.named("instrument-dark").raised.hexString, "#252523")
+        XCTAssertEqual(ColorTheme.named("instrument-light").raised.hexString, "#fbfaf7")
+        XCTAssertEqual(ColorTheme.named("github-light").raised.hexString, "#ffffff")
+        XCTAssertEqual(ColorTheme.named("mocha").raised.hexString, "#1e1e2e")
+        XCTAssertEqual(ColorTheme.named("instrument-dark").well.hexString, "#0f0f0e")
+        XCTAssertEqual(ColorTheme.named("instrument-light").well.hexString, "#f2f1ec")
+        XCTAssertEqual(ColorTheme.named("github-light").well.hexString, "#ffffff")
+    }
+
+    /// Alles, was in Dialogen als Text steht, auf jeder Fläche der Dialoge mindestens 4,5:1.
+    func testDialogTextMeetsAA() {
+        for t in ColorTheme.all {
+            for bg in [t.raised, t.well, t.bg] {
+                for (name, c) in [("fg", t.fg), ("sub", t.sub), ("muted", t.muted), ("accentText", t.accentText), ("errorText", t.errorText)] {
+                    XCTAssertGreaterThanOrEqual(c.contrastRatio(with: bg), 4.5, "\(t.id): \(name) gegen \(bg.hexString)")
+                }
+            }
+        }
+    }
+
+    func testAccentTextKeepsCompliantValues() {
+        XCTAssertEqual(ColorTheme.named("instrument-dark").accentText.hexString, "#ff8a4c")
+        XCTAssertEqual(ColorTheme.named("instrument-light").accentText.hexString, "#a83500")
+        XCTAssertEqual(ColorTheme.named("mocha").accentText.hexString, ColorTheme.named("mocha").accent.hexString)
+        XCTAssertNotEqual(ColorTheme.named("solarized-light").accentText.hexString, ColorTheme.named("solarized-light").accent.hexString)
+    }
 }

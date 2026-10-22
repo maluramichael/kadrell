@@ -19,6 +19,14 @@ enum Theme {
     static var detached: NSColor { current.detached }
     /// `waiting`, aber lesbar als Text (Warte-Badge im Baum): in hellen Schemata sonst unter 3:1 auf `panel`.
     static var waitingText: NSColor { current.waitingText }
+    /// Erhabene Fläche der Dialoge: die hellste der drei Schemaflächen.
+    static var raised: NSColor { current.raised }
+    /// Eingelassenes Feld für Werte (Textfelder, Dropdowns, Kürzel).
+    static var well: NSColor { current.well }
+    /// `accent`, aber lesbar als Text auf allen Dialogflächen (Füllungen und Fokusring behalten `accent`).
+    static var accentText: NSColor { current.accentText }
+    /// `error`, aber lesbar als Text auf allen Dialogflächen.
+    static var errorText: NSColor { current.errorText }
     static var appearance: NSAppearance? { NSAppearance(named: current.dark ? .darkAqua : .aqua) }
 
     /// Lesbare Beschriftung auf einer Statusfarbe (Marke „neu“, Z-Badge, Leiste): `bg` reicht in dunklen Schemata,
@@ -133,7 +141,7 @@ private func accessibleText(_ c: NSColor, against backgrounds: [NSColor], toward
 /// Farbschema der ganzen Oberfläche. `ansi` sind die acht Terminal-Grundfarben, die hellen Varianten sind dieselben.
 struct ColorTheme {
     let id: String, name: String, dark: Bool
-    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText, accent, shell: NSColor
+    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText, accent, shell, raised, well, accentText, errorText: NSColor
     let ansi: [NSColor]
 
     init(_ id: String, _ name: String, dark: Bool, _ c: [UInt32], ansi: [UInt32], accent: UInt32? = nil, shell: UInt32? = nil) {
@@ -149,6 +157,14 @@ struct ColorTheme {
         sub = accessibleText(n[5], against: textBGs, toward: fg, extreme: extreme)
         muted = accessibleText(n[6], against: textBGs, toward: fg, extreme: extreme)
         waitingText = accessibleText(waiting, against: textBGs, toward: fg, extreme: extreme)
+        // Dialogflächen: `raised` ist die hellste Schemafläche, `well` in dunklen Schemata `panel` Richtung Schwarz,
+        // in hellen `bg`. Die Text-Rollen gehen gleich Richtung `extreme`, Richtung `fg` kippt der Farbton.
+        let raised = [panel, bg, surface].max { $0.relativeLuminance < $1.relativeLuminance } ?? surface
+        let well = dark ? panel.mixed(0.72, into: NSColor(hex: 0)) : bg
+        let dialogBGs = [panel, surface, raised, well, bg]
+        (self.raised, self.well) = (raised, well)
+        accentText = self.accent.ensuringContrast(4.5, against: dialogBGs, toward: extreme)
+        errorText = error.ensuringContrast(4.5, against: dialogBGs, toward: extreme)
         self.ansi = ansi.map { NSColor(hex: $0) }
         self.shell = shell.map { NSColor(hex: $0) } ?? self.ansi[4]
     }
@@ -236,13 +252,15 @@ extension NSColor {
 
     /// WCAG-Kontrastverhältnis zu `other` (relative Luminanz nach der W3C-Formel), 1...21.
     func contrastRatio(with other: NSColor) -> CGFloat {
-        func luminance(_ c: NSColor) -> CGFloat {
-            let s = c.usingColorSpace(.sRGB) ?? c
-            func lin(_ v: CGFloat) -> CGFloat { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
-            return 0.2126 * lin(s.redComponent) + 0.7152 * lin(s.greenComponent) + 0.0722 * lin(s.blueComponent)
-        }
-        let l1 = luminance(self), l2 = luminance(other)
+        let l1 = relativeLuminance, l2 = other.relativeLuminance
         return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+    }
+
+    /// Relative Luminanz nach der W3C-Formel, 0...1.
+    var relativeLuminance: CGFloat {
+        let s = usingColorSpace(.sRGB) ?? self
+        func lin(_ v: CGFloat) -> CGFloat { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * lin(s.redComponent) + 0.7152 * lin(s.greenComponent) + 0.0722 * lin(s.blueComponent)
     }
 
     /// Verschiebt sich Richtung `target` (bei Bedarf über `target` hinaus), bis der Kontrast zu jeder Fläche in
