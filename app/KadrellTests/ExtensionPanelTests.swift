@@ -267,6 +267,24 @@ final class ExtensionPanelTests: XCTestCase {
         XCTAssertTrue(bar.displayCompact)
     }
 
+    /// Echte Fehlermeldungen sind 80 bis 150 Zeichen lang: das Display kürzt sie, statt über die linken Tasten zu
+    /// wachsen. Tooltip und VoiceOver behalten den ganzen Text.
+    func testLongErrorTextIsShortenedInsteadOfCoveringKeys() throws {
+        let long = String(repeating: "Speichern von sessions.json fehlgeschlagen: Datei gesperrt. ", count: 3)
+        for width in [900 as CGFloat, 1200] {
+            let bar = StatusBarView(frame: .zero)
+            let w = barWindow(bar, width: width); defer { w.close() }
+            bar.errorText = long
+            bar.waitingCount = 2
+            bar.display()
+            let elements = barElements(bar)
+            let frames = elements.map { $0.accessibilityFrame() }
+            for (i, a) in frames.enumerated() { for b in frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "Breite \(width)") } }
+            let status = try XCTUnwrap(elements.first { $0.accessibilityRole() == .staticText })
+            XCTAssertEqual(status.accessibilityValue() as? String, long)
+        }
+    }
+
     /// Der Manager meldet bis zu 50-mal pro Sekunde; `needsDisplay` ist ohne sichtbares Fenster nicht lesbar, daher der Vergleich selbst.
     func testUnchangedItemsDoNotRedraw() {
         let items: [StatusItem] = [("ddev", "ddev 3 up", .ok, nil)]

@@ -170,12 +170,15 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     /// Erst mit der Langform im Display; passt die rechte Seite dann nicht mehr neben die linke, alles noch einmal
     /// mit der Kurzform (die Fläche wird dabei neu gefüllt, vom ersten Durchgang bleibt nichts stehen).
+    /// Eine Fehlermeldung im Display wird dabei um genau das gekürzt, was im ersten Durchgang fehlte.
     private func drawBar(_ b: CGRect) {
-        if !drawPass(b, compact: false) { _ = drawPass(b, compact: true) }
+        let overflow = drawPass(b, compact: false, shrink: 0)
+        if overflow > 0 { _ = drawPass(b, compact: true, shrink: overflow) }
     }
 
-    /// Ein Durchgang über die ganze Leiste. false, wenn die Langform nicht passt; dann fehlen noch die Extensions.
-    private func drawPass(_ b: CGRect, compact: Bool) -> Bool {
+    /// Ein Durchgang über die ganze Leiste. Gibt zurück, wie viel der rechten Seite neben der linken fehlt; nur wenn
+    /// nichts fehlt (oder schon die Kurzform läuft), kommen die Extensions dazu.
+    private func drawPass(_ b: CGRect, compact: Bool, shrink: CGFloat) -> CGFloat {
         hitRects = []
         moduleTips = []
         Theme.panel.setFill(); b.fill()
@@ -183,21 +186,25 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         Instrument.hSeam(x: 0, y: content.maxY, width: b.width)
         let limit = drawLeft(content) + 16
         var rx = b.width - Self.edge
-        drawDisplay(content, &rx, compact: compact)
+        drawDisplay(content, &rx, compact: compact, shrink: shrink)
         drawNotices(content, &rx)
         drawUsage(content, &rx)
-        guard compact || rx >= limit else { return false }
+        guard compact || rx >= limit else { return limit - rx }
         displayCompact = compact
         drawExtensionItems(content, &rx, limit: limit)
-        return true
+        return limit - rx
     }
 
     /// Zeichnet die Zeile senkrecht mittig auf `midY`, für jede Schriftgröße gleich. Die Leiste ist flipped, der
     /// Zeichenpunkt ist also die Oberkante der Textbox. Zentriert werden die Großbuchstaben/Ziffern (capHeight über
     /// der Grundlinie), nicht die volle JetBrains-NF-Box mit ihrem großen Unterlängen-Rand, sonst säße alles zu hoch.
-    private func drawCentered(_ s: NSAttributedString, x: CGFloat, midY: CGFloat) {
+    /// Ist `width` schmaler als der Text, endet er mit „…“.
+    private func drawCentered(_ s: NSAttributedString, x: CGFloat, midY: CGFloat, width: CGFloat = .greatestFiniteMagnitude) {
         let f = (s.length > 0 ? s.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil) ?? Theme.font(11)
-        s.draw(at: CGPoint(x: x, y: midY - f.ascender + f.capHeight / 2))
+        let origin = CGPoint(x: x, y: midY - f.ascender + f.capHeight / 2)
+        guard width < s.size().width else { s.draw(at: origin); return }
+        s.draw(with: CGRect(origin: origin, size: CGSize(width: width, height: ceil(s.size().height))),
+               options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     // MARK: Tasten
@@ -301,18 +308,20 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     // MARK: Rechts, von rechts nach links
 
     /// Schwarzes Display ganz rechts: Lampe, Status in Worten (bzw. die Fehlermeldung) und die Uhr. Tooltip und
-    /// VoiceOver bekommen die Langform aller Zustände.
-    private func drawDisplay(_ b: CGRect, _ rx: inout CGFloat, compact: Bool) {
+    /// VoiceOver bekommen die Langform aller Zustände. Eine Fehlermeldung wird um `shrink` gekürzt, damit sie nicht
+    /// über die linken Tasten wächst; Tooltip und VoiceOver behalten sie ganz.
+    private func drawDisplay(_ b: CGRect, _ rx: inout CGFloat, compact: Bool, shrink: CGFloat) {
         let text = NSAttributedString(string: errorText ?? StatusDisplay.text(counts, compact: compact),
                                       attributes: Theme.attrs(10.5, errorText == nil ? Instrument.screenInk : Self.screenError, bold: true))
         let time = NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(10.5, Instrument.screenMuted))
         let gap: CGFloat = text.length > 0 ? 8 : 0
-        let w = 10 + 7 + 6 + text.size().width + gap + time.size().width + 10
+        let textWidth = errorText == nil ? text.size().width : max(0, text.size().width - shrink)
+        let w = 10 + 7 + 6 + textWidth + gap + time.size().width + 10
         let r = keyRect(x: rx - w, width: w, b)
         Instrument.screen(r)
         lampColor.setFill()
         NSBezierPath(ovalIn: CGRect(x: r.minX + 10, y: r.midY - 3.5, width: 7, height: 7)).fill()
-        drawCentered(text, x: r.minX + 23, midY: r.midY)
+        drawCentered(text, x: r.minX + 23, midY: r.midY, width: textWidth)
         drawCentered(time, x: r.maxX - 10 - time.size().width, midY: r.midY)
         status = (r, errorText ?? StatusDisplay.spoken(counts))
         moduleTips.append(status)
