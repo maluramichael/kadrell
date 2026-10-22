@@ -207,19 +207,77 @@ final class InstrumentTests: XCTestCase {
         let oldOpacity = Settings.tileOpacity
         defer { Settings.tileOpacity = oldOpacity }
         Settings.tileOpacity = 1
-        let c = ModuleCornerView(frame: CGRect(x: 0, y: 0, width: 14, height: 14))
+        let c = ModuleCornerView(frame: CGRect(x: 0, y: 0, width: 16, height: 16))
         XCTAssertNil(c.hitTest(CGPoint(x: 1, y: 1)))
         // Pixel ganz in der Ecke = Gehäusefarbe, Pixel nahe der Gegenecke = durchsichtig
         let rep = render(c)
         XCTAssertEqual(alpha(rep, x: 0, y: 0), 1, accuracy: 0.05)
-        XCTAssertEqual(alpha(rep, x: 13, y: 13), 0, accuracy: 0.05)
+        XCTAssertEqual(alpha(rep, x: 15, y: 15), 0, accuracy: 0.05)
+        // Nur die eigene Fläche: Kreis und Ring reichen rechnerisch weiter, gezeichnet wird außerhalb nichts.
+        let wide = render(theme: Theme.current, width: 40, height: 40, scale: 1) { c.draw(c.bounds) }
+        for (x, y) in [(24, 24), (30, 16), (16, 30), (20, 5)] { XCTAssertEqual(alpha(wide, x: x, y: y), 0, accuracy: 0.01, "\(x),\(y)") }
     }
 
-    func testCornerFollowsWorkspaceOrigin() throws {
-        let ws = WorkspaceView(frame: CGRect(x: 0, y: 0, width: 400, height: 300), defaultsSuffix: ".test-corner")
-        ws.relayout()
-        let corner = try XCTUnwrap(ws.subviews.last as? ModuleCornerView, "Ecke liegt zuoberst")
-        XCTAssertEqual(corner.frame.origin, .zero)   // WorkspaceView ist flipped: oben links
-        XCTAssertEqual(corner.frame.width, ModuleCornerView.radius * Theme.scale, accuracy: 0.01)
+    /// Die Ecke setzt die geraden Fugen fort: Wo der Bogen in die linke Kante (Trenner) bzw. die obere Kante
+    /// (Leiste) übergeht, liegen dunkle und helle Linie genau dort und genau so wie bei der geraden Fuge.
+    func testCornerContinuesStraightSeams() {
+        let oldOpacity = Settings.tileOpacity
+        defer { Settings.tileOpacity = oldOpacity }
+        Settings.tileOpacity = 1
+        let side = ModuleCornerView.radius + 2
+        let c = ModuleCornerView(frame: CGRect(x: 0, y: 0, width: side, height: side))
+        // Vierfach gerastert, damit die Kantenglättung des Bogens die Messpunkte nicht berührt: Spalte 1 liegt mitten
+        // in der dunklen, Spalte 5 mitten in der hellen Linie, die letzte Zeile direkt am Übergang in die Gerade.
+        let k = 4, n = Int(side) * k, last = n - 1
+        for id in ["instrument-dark", "instrument-light"] {
+            let t = ColorTheme.named(id)
+            let split = ThinSplitView(frame: CGRect(x: 0, y: 0, width: 100, height: 40)); split.isVertical = true
+            let seam = renderDivider(split, rect: CGRect(x: 50, y: 0, width: 2, height: 40), theme: t)
+            let dark = luma(seam, x: 50, y: 20), light = luma(seam, x: 51, y: 20)
+            // Untergrund wie im Fenster: oben die Fuge der Leiste, links die des Trenners, die Ecke liegt darüber.
+            let rep = render(theme: t, width: n, height: n, scale: 1) {
+                let zoom = NSAffineTransform(); zoom.scale(by: CGFloat(k)); zoom.concat()
+                panelCanvas(side, side)
+                Instrument.hSeam(x: 0, y: 0, width: side)
+                Instrument.vSeam(x: 0, y: 2, height: side - 2)
+                c.draw(c.bounds)
+            }
+            XCTAssertEqual(luma(rep, x: 1, y: last), dark, accuracy: 0.01, "\(id): links außen dunkel wie der Trenner")
+            XCTAssertEqual(luma(rep, x: 5, y: last), light, accuracy: 0.01, "\(id): links innen hell wie der Trenner")
+            XCTAssertEqual(luma(rep, x: last, y: 1), dark, accuracy: 0.01, "\(id): oben außen dunkel wie die Leiste")
+            XCTAssertEqual(luma(rep, x: last, y: 5), light, accuracy: 0.01, "\(id): oben innen hell wie die Leiste")
+            withTheme(t) { XCTAssertEqual(luma(rep, x: 0, y: 0), luma(Theme.panel), accuracy: 0.01, "\(id): äußere Ecke ist Gehäuse") }
+        }
+    }
+
+    /// Die Ecke hängt im Fenster über Leiste und Split und folgt der Arbeitsfläche: 2 pt nach links und oben versetzt,
+    /// damit sie die Fugen von Trenner und Leiste fortsetzt, auch nach Ziehen und mit ausgeblendetem Baum.
+    func testCornerFollowsWorkspaceOrigin() {
+        let wc = MainWindowController(index: 23, cascade: nil)
+        wc.window.setContentSize(NSSize(width: 1000, height: 700))
+        wc.split.layoutSubtreeIfNeeded()
+        let root = wc.window.contentView!
+        XCTAssertTrue(root.subviews.last === wc.corner, "Ecke liegt zuoberst")
+        let side = (ModuleCornerView.radius * Theme.scale).rounded() + 2
+        func expected() -> CGPoint {
+            let o = wc.workspace.convert(CGPoint.zero, to: root)
+            return CGPoint(x: o.x - 2, y: o.y - 2)
+        }
+
+        wc.split.setPosition(300, ofDividerAt: 0)
+        XCTAssertEqual(wc.corner.frame.origin, expected())
+        XCTAssertEqual(wc.corner.frame.origin, CGPoint(x: 300, y: Theme.barHeight - 2), "Trenner bei 300 bis 302, Leiste darüber")
+        XCTAssertEqual(wc.corner.frame.width, side, accuracy: 0.01)
+        XCTAssertEqual(wc.corner.frame.height, side, accuracy: 0.01)
+
+        // Den Split legt erst der Zeichenzyklus des Fensters neu aus, im Test erzwungen.
+        func relayout() { wc.split.needsLayout = true; wc.split.layoutSubtreeIfNeeded() }
+        wc.toggleSidebar()
+        relayout()
+        XCTAssertEqual(wc.corner.frame.origin, CGPoint(x: -2, y: Theme.barHeight - 2), "ohne Baum ragt die Ecke links aus dem Fenster")
+        wc.toggleSidebar()
+        relayout()
+        XCTAssertEqual(wc.corner.frame.origin, expected())
+        XCTAssertGreaterThan(wc.corner.frame.minX, 100, "Baum wieder da, Ecke wieder rechts davon")
     }
 }
