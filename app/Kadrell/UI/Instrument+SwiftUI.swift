@@ -2,10 +2,12 @@ import SwiftUI
 
 /// SwiftUI-Hülle um `InstrumentSurfaceView`: gezeichnet wird ausschließlich im AppKit-Kit. `themeID` und `scale`
 /// stehen nur hier, damit SwiftUI bei Schema- oder Größenwechsel `updateNSView` ruft und neu gezeichnet wird.
+/// Das greift nur, wenn die umgebende View neu rendert; deshalb hängt sie zusätzlich am Schema-Zähler der Umgebung.
 struct InstrumentSurface: NSViewRepresentable {
     let part: InstrumentSurfaceView.Part
     var themeID = Theme.current.id
     var scale = Theme.scale
+    @Environment(\.instrumentThemeGeneration) private var themeGeneration
 
     func makeNSView(context: Context) -> InstrumentSurfaceView { InstrumentSurfaceView(part: part) }
 
@@ -13,6 +15,12 @@ struct InstrumentSurface: NSViewRepresentable {
         view.part = part
         view.needsDisplay = true
     }
+}
+
+extension EnvironmentValues {
+    /// Zählt Schemawechsel bei offenem Dialog (setzt `OverlayScroll`). Jede `InstrumentSurface` liest ihn: so erreicht
+    /// ein Wechsel auch Flächen in Views, deren Eingaben gleich bleiben und die SwiftUI sonst überspringt (Fuge, Taste).
+    @Entry var instrumentThemeGeneration = 0
 }
 
 /// Waagrechte Fuge: 1 pt dunkel, 1 pt hell.

@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Rahmenloses Overlay über dem Hauptfenster für die SwiftUI-Dialoge: 1 px Linie, keine Rundung.
+/// Rahmenloses Overlay über dem Hauptfenster für die SwiftUI-Dialoge. Das Fenster selbst ist durchsichtig, die
+/// erhabene Fläche mit Fugenrand, Rundung und festem Schatten legt `OverlayScroll` an.
 /// Esc und ⏎ werden hier abgefangen, bevor SwiftUI sie sieht.
 @MainActor
 final class OverlayPanel: ChildPanel {
@@ -13,28 +14,26 @@ final class OverlayPanel: ChildPanel {
     private var anchor = CGPoint.zero   // Mitte des Hauptfensters: Dialog wächst nach oben und unten gleich
     private var resizeObserver: NSObjectProtocol?
 
-    private let limit = OverlayLimit()
+    /// Maximalhöhe und Schema-Zähler für `OverlayScroll`; intern, damit Tests den Zähler sehen.
+    let limit = OverlayLimit()
 
     init<V: View>(rootView: V) {
         let host = NSHostingController(rootView: OverlayScroll(limit: limit, content: rootView).environment(\.locale, Localization.locale))
         host.sizingOptions = [.preferredContentSize]   // Fenster folgt der Inhaltsgröße, kein Zentrieren
         super.init(size: NSSize(width: 640, height: 200))
-        isOpaque = true
-        backgroundColor = Theme.panel
+        isOpaque = false
+        backgroundColor = .clear
         contentViewController = host
-        host.view.wantsLayer = true
-        host.view.layer?.borderColor = Theme.line.cgColor
-        host.view.layer?.borderWidth = 1
         resizeObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: self, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.reanchor() }
         }
     }
 
-    /// Fenster, Hintergrund und Rand ziehen bei einem Themewechsel nach, solange der Dialog offen ist (Einstellungen).
+    /// Fläche, Rand, Felder und Tasten ziehen bei einem Themewechsel nach, solange der Dialog offen ist (Einstellungen):
+    /// `OverlayScroll` reicht den Zähler als Umgebungswert an jede Instrument-Fläche weiter.
     func applyTheme() {
         appearance = Theme.appearance
-        backgroundColor = Theme.panel
-        contentViewController?.view.layer?.borderColor = Theme.line.cgColor
+        limit.themeGeneration += 1
     }
 
     private func reanchor() {
@@ -64,10 +63,13 @@ final class OverlayPanel: ChildPanel {
 @MainActor
 final class OverlayLimit {
     var maxHeight = CGFloat.infinity
+    /// Zählt Schemawechsel bei offenem Dialog. `OverlayScroll` setzt ihn als `instrumentThemeGeneration` in die Umgebung.
+    var themeGeneration = 0
 }
 
-/// Höher als bis je 24 pt an den oberen und unteren Fensterrand wird ein Dialog nicht, der Rest scrollt.
-/// Eine `DialogFoot` im Inhalt steht fest darunter und scrollt nicht mit.
+/// Gemeinsame Hülle aller SwiftUI-Dialoge: erhabene Fläche mit Fugenrand und festem Schatten, die Dialoge malen
+/// keinen eigenen Grund. Höher als bis je 24 pt an den oberen und unteren Fensterrand wird ein Dialog samt Schatten
+/// nicht, der Rest scrollt. Eine `DialogFoot` im Inhalt steht fest darunter und scrollt nicht mit.
 struct OverlayScroll<Content: View>: View {
     let limit: OverlayLimit
     let content: Content
@@ -82,13 +84,19 @@ struct OverlayScroll<Content: View>: View {
                 content.onGeometryChange(for: CGSize.self) { $0.size } action: { height = $0.height; width = $0.width }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(height: height > 0 ? min(height, limit.maxHeight - footHeight) : nil)
+            .frame(height: height > 0 ? min(height, scrollLimit) : nil)
             if let foot {
-                DialogFootBar(foot: foot).frame(width: width > 0 ? width : nil).onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footHeight = $0 }
+                DialogFootBar(foot: foot).frame(width: width > 0 ? width : nil)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footHeight = $0 }
             }
         }
+        .raisedPanel()
         .onPreferenceChange(DialogFootKey.self) { foot = $0 }
+        .environment(\.instrumentThemeGeneration, limit.themeGeneration)   // Schemawechsel erreicht jede Fläche im Dialog
     }
+
+    /// Platz für den scrollenden Inhalt: Maximalhöhe ohne Fußleiste und ohne den Schatten unter der Fläche.
+    private var scrollLimit: CGFloat { limit.maxHeight - footHeight - Instrument.shadowDepth * Theme.scale }
 }
 
 /// Rahmenloses Kindfenster über dem Hauptfenster (Dialoge, ⌘P): wird Key-Fenster und graut das Hauptfenster ab.
@@ -98,7 +106,7 @@ class ChildPanel: NSPanel {
         super.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isFloatingPanel = true
         level = .floating
-        hasShadow = true
+        hasShadow = false   // fester Schatten kommt aus dem Instrument-Kit, kein weicher Systemschatten
         appearance = Theme.appearance
     }
 
