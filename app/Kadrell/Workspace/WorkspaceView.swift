@@ -36,6 +36,8 @@ final class WorkspaceView: NSView {
     private var lastTiles: [String] = []
 
     private var cells: [String: CellView] = [:]
+    /// Runde Gehäuse-Ecke oben links, immer zuoberst (siehe `placeCorner`).
+    private let corner = ModuleCornerView(frame: .zero)
     /// Ziehbare Grenzen der aktuellen Vorlage und die Felder der Kacheln, beides aus `relayout`.
     private var dividers: [SplitLine] = []
     private var tileFrames: [String: CGRect] = [:]
@@ -92,6 +94,7 @@ final class WorkspaceView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         clipsToBounds = true
+        addSubview(corner)
         mode = LayoutMode(rawValue: Profile.defaults.string(forKey: "workspace.mode" + defaultsSuffix) ?? "") ?? .grid
         auto = Profile.defaults.bool(forKey: "workspace.auto" + defaultsSuffix)
         selected = Profile.defaults.stringArray(forKey: "workspace.selected" + defaultsSuffix) ?? []
@@ -444,10 +447,20 @@ final class WorkspaceView: NSView {
         // Terminals nicht sichtbarer Sessions dürfen nirgends hängen.
         for (key, t) in attach?.terminals ?? [:] where frames[key] == nil && t.superview != nil { unmountTerminal(for: key) }
         if let w = window, w.firstResponder === w { w.makeFirstResponder(self) }
+        placeCorner()
         needsDisplay = true
         if refocus { focusTerminal() }
         if released { released = false; onReleaseTerminal?() }
         onChange?()
+    }
+
+    /// Ecke oben links in der Größe der UI-Skala, über allen Kacheln. Neu gezeichnet wird sie mit, weil Schema und
+    /// Deckkraft sich ändern können.
+    private func placeCorner() {
+        let side = ModuleCornerView.radius * Theme.scale
+        corner.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        if subviews.last !== corner { addSubview(corner, positioned: .above, relativeTo: nil) }
+        corner.needsDisplay = true
     }
 
     /// Auto-Modus: ist die Fokus-Kachel weg, bekommt eine neu aufgetauchte (sonst die erste) den Fokus. true: umfokussiert.
@@ -490,7 +503,7 @@ final class WorkspaceView: NSView {
         if let v = cells[id] { return v }
         guard let s = sessions[id] else { return nil }
         let v = CellView(session: s)
-        addSubview(v)
+        addSubview(v, positioned: .below, relativeTo: corner)
         cells[id] = v
         if fadeIn, loaded { v.alphaValue = 0; NSAnimationContext.runAnimationGroup { $0.duration = 0.18; v.animator().alphaValue = 1 } }
         return v
