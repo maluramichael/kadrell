@@ -447,6 +447,46 @@
     "%lld %@": {
       "shouldTranslate": false
     },
+    "%lld ARBEITEN": {
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ARBEITET"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ARBEITEN"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld WORKING"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld WORKING"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.": {
       "localizations": {
         "de": {
@@ -503,6 +543,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld Claude sessions are running interactively in other terminals · Import: tools/tmux-dump.py"
+          }
+        }
+      }
+    },
+    "%lld FEHLER": {
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld FEHLER"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld FEHLER"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ERROR"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ERRORS"
+                }
+              }
+            }
           }
         }
       }
@@ -595,6 +675,46 @@
         }
       }
     },
+    "%lld WARTEN": {
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld WARTET"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld WARTEN"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld WAITING"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld WAITING"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld Zeilen übersprungen": {
       "localizations": {
         "de": {
@@ -639,6 +759,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld waiting"
+          }
+        }
+      }
+    },
+    "%lldA": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lldA"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lldW"
+          }
+        }
+      }
+    },
+    "%lldF": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lldF"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lldE"
+          }
+        }
+      }
+    },
+    "%lldW": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lldW"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lldQ"
           }
         }
       }
