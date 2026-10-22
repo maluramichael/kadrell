@@ -6,44 +6,43 @@ struct ExtensionsView: View {
     static let docs = URL(string: "https://kadrell.malura.de/extensions")!
 
     @ObservedObject var model: ExtensionsModel
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider().overlay(Theme.lineColor).padding(.top, 12)
+            SeamLine().padding(.top, 12)
             if let ext = model.confirmEnable { enableWarning(ext) }
             if model.items.isEmpty {
                 Text("Noch keine Extensions. Ordner hineinlegen oder per git clone holen, sie erscheinen sofort.")
                     .font(Theme.ui(12)).foregroundStyle(Theme.mutedColor).padding(16)
             }
             ForEach(Array(model.items.enumerated()), id: \.element.name) { i, ext in
-                if i > 0 { Divider().overlay(Theme.lineColor) }
+                if i > 0 { SeamLine() }
                 ExtensionRow(model: model, ext: ext, selected: i == model.selected)
-                    .contentShape(Rectangle())
                     .onTapGesture { model.click(i) }
             }
             if let ext = model.current {
-                Divider().overlay(Theme.lineColor)
+                SeamLine()
                 ExtensionDetail(model: model, ext: ext).id(ext.name)
             }
-            Divider().overlay(Theme.lineColor)
+            SeamLine()
             discover
-            Divider().overlay(Theme.lineColor)
+            SeamLine()
             Text("↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .frame(width: 760 * Theme.scale, alignment: .leading)
-        .background(Theme.panelColor)
         .task { await model.load() }
     }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 14) {
-            Text(verbatim: "EXTENSIONS").kerning(0.6).foregroundStyle(Theme.mutedColor)
+            Text(verbatim: "EXTENSIONS").capsLabel()
             Spacer()
-            Button { model.openCatalog() } label: { Text("Extensions-Ordner öffnen").foregroundStyle(Theme.fgColor) }
-                .buttonStyle(.plain).kbdFocusRing()
-            Link("Doku", destination: Self.docs).foregroundStyle(Theme.accentColor)
+            Button { model.openCatalog() } label: { Text("Extensions-Ordner öffnen") }
+                .buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing()
+            Link("Doku", destination: Self.docs).foregroundStyle(Theme.accentTextColor)
         }
         .font(Theme.ui(11)).padding(.horizontal, 16).padding(.top, 12)
     }
@@ -57,14 +56,15 @@ struct ExtensionsView: View {
                 Text("Angegebene Rechte: \(p.joined(separator: ", ")) (nicht erzwungen)").foregroundStyle(Theme.mutedColor)
             }
             HStack(spacing: 14) {
-                Button { model.confirmEnableYes() } label: { Text("Einschalten").foregroundStyle(Theme.errorColor) }
-                    .buttonStyle(.plain).kbdFocusRing()
-                Button { model.confirmEnableNo() } label: { Text("Abbrechen").foregroundStyle(Theme.fgColor) }
-                    .buttonStyle(.plain).kbdFocusRing()
+                Button { model.confirmEnableYes() } label: { Text("Einschalten") }
+                    .buttonStyle(InstrumentKeyStyle(.destructive)).kbdFocusRing()
+                Button { model.confirmEnableNo() } label: { Text("Abbrechen") }
+                    .buttonStyle(InstrumentKeyStyle(.neutral)).kbdFocusRing()
             }
         }
         .font(Theme.ui(12)).padding(12)
-        .overlay(Rectangle().stroke(Theme.errorColor, lineWidth: 1))
+        .instrumentGroup()
+        .overlay(RoundedRectangle(cornerRadius: Instrument.groupRadius * Theme.scale).strokeBorder(Theme.errorTextColor, lineWidth: 1.5))
         .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
@@ -72,19 +72,20 @@ struct ExtensionsView: View {
     private var discover: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("ENTDECKEN").kerning(0.6).foregroundStyle(Theme.mutedColor)
+                Text("ENTDECKEN").sectionTitle()
                 Spacer()
                 if model.searching { ProgressView().controlSize(.small) }
-            }.font(Theme.ui(11))
+            }
             HStack(spacing: 10) {
                 TextField("Auf GitHub suchen (Topic kadrell-extension)", text: $model.query)
-                    .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
+                    .textFieldStyle(.plain).foregroundStyle(Theme.fgColor).focused($searchFocused)
+                    .instrumentWell(focused: searchFocused)
                     .onSubmit { Task { await model.searchStore() } }
-                Button { Task { await model.searchStore() } } label: { Text("Suchen").foregroundStyle(Theme.accentColor) }
-                    .buttonStyle(.plain).kbdFocusRing()
+                Button { Task { await model.searchStore() } } label: { Text("Suchen") }
+                    .buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing()
             }
             if let e = model.storeError {
-                Text(e).foregroundStyle(Theme.errorColor).fixedSize(horizontal: false, vertical: true)
+                Text(e).foregroundStyle(Theme.errorTextColor).fixedSize(horizontal: false, vertical: true)
             }
             ForEach(model.results) { StoreRow(model: model, remote: $0) }
         }
@@ -101,7 +102,7 @@ private struct StoreRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Link(remote.fullName, destination: remote.htmlURL).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.accentColor)
+                    Link(remote.fullName, destination: remote.htmlURL).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.accentTextColor)
                     Text(verbatim: "★ \(remote.stars)").foregroundStyle(Theme.mutedColor)
                 }
                 if !remote.description.isEmpty {
@@ -113,8 +114,8 @@ private struct StoreRow: View {
                 ProgressView().controlSize(.small)
             } else {
                 Button { Task { await model.install(remote) } } label: {
-                    Text(model.isInstalled(remote) ? "Aktualisieren" : "Installieren").foregroundStyle(Theme.fgColor)
-                }.buttonStyle(.plain).kbdFocusRing()
+                    Text(model.isInstalled(remote) ? "Aktualisieren" : "Installieren")
+                }.buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing()
             }
         }
         .font(Theme.ui(12)).frame(maxWidth: .infinity, alignment: .leading)
@@ -158,7 +159,7 @@ private struct ExtensionRow: View {
                         .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Theme.accentColor)
                         .disabled(!model.canToggle(ext))
                 }
-                Text(status.text).foregroundStyle(status.failed ? Theme.errorColor : Theme.mutedColor).fixedSize(horizontal: false, vertical: true)
+                Text(status.text).foregroundStyle(status.failed ? Theme.errorTextColor : Theme.mutedColor).fixedSize(horizontal: false, vertical: true)
                 if let d = ext.manifest?.description, !d.isEmpty { Text(d).foregroundStyle(Theme.fgColor).fixedSize(horizontal: false, vertical: true) }
                 if let p = ext.manifest?.permissions, !p.isEmpty {
                     Text("Rechte: \(p.joined(separator: ", "))").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
@@ -168,7 +169,6 @@ private struct ExtensionRow: View {
         .font(Theme.ui(12))
         .padding(.horizontal, 16).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(selected ? Theme.surfaceColor : .clear)
-        .overlay(alignment: .leading) { if selected { Theme.accentColor.frame(width: 2) } }
+        .instrumentRow(selected: selected)
     }
 }

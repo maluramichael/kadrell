@@ -89,23 +89,6 @@ final class DialogLookTests: XCTestCase {
         assertAccentTextOnly(StatsView())
     }
 
-    /// Im Bild kommt die Akzent-Textfarbe vor, die Akzent-Füllfarbe nicht.
-    private func assertAccentTextOnly<V: View>(_ view: V, line: UInt = #line) {
-        let t = ColorTheme.named("solarized-light")
-        XCTAssertNotEqual(t.accentText.hexString, t.accent.hexString, "Schema trennt Text- und Füllfarbe", line: line)
-        let s = snapshot(view.raisedPanel(), theme: t, scale: 1)
-        var text = 0, fill = 0
-        for y in 0..<s.rep.pixelsHigh {
-            for x in 0..<s.rep.pixelsWide {
-                let c = pixel(s.rep, x: x, y: y)
-                if distance(c, t.accentText) < 0.04 { text += 1 }
-                if distance(c, t.accent) < 0.04 { fill += 1 }
-            }
-        }
-        XCTAssertGreaterThan(text, 0, "Akzent-Textfarbe kommt vor", line: line)
-        XCTAssertEqual(fill, 0, "Akzent-Füllfarbe nicht im Text", line: line)
-    }
-
     // MARK: Gruppe bearbeiten, Umbenennen
 
     func testEditGroupOnRaisedSurface() {
@@ -171,44 +154,10 @@ final class DialogLookTests: XCTestCase {
         return NewSessionView(model: model, onStart: { _, _ in })
     }
 
-    /// Rendert `view` auf der erhabenen Fläche in Instrument Light (dort sind `raised`, `bg` und `panel` verschieden)
-    /// und prüft, dass am Punkt die Fläche selbst zu sehen ist, kein eigener Grund des Dialogs.
-    func assertOnRaised<V: View>(_ view: V, at point: (CGSize) -> CGPoint, file: StaticString = #filePath, line: UInt = #line) {
-        let t = ColorTheme.named("instrument-light")
-        let s = snapshot(view.raisedPanel(), theme: t, scale: 1)
-        let p = point(s.size)
-        XCTAssertLessThan(distance(pixel(s, at: p), t.raised), 0.02, "erhabene Fläche bei \(p)", file: file, line: line)
-    }
-
-    /// Teile aller Instrument-Flächen, die `view` im Hosting anlegt.
-    private func surfaceParts<V: View>(_ view: V) -> [InstrumentSurfaceView.Part] {
-        hostedSurfaces(view).surfaces.map(\.part)
-    }
-
-    /// Hosting-View bei Maßstab 1 in natürlicher Größe samt aller Instrument-Flächen darin (für Lage und Teil).
-    private func hostedSurfaces<V: View>(_ view: V) -> (host: NSView, surfaces: [InstrumentSurfaceView]) {
-        let saved = Theme.scale; defer { Theme.scale = saved }
-        Theme.scale = 1
-        let host = NSHostingView(rootView: view)
-        host.frame = NSRect(origin: .zero, size: host.fittingSize)
-        host.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date() + 0.05)
-        host.layoutSubtreeIfNeeded()
-        return (host, surfaces(in: host))
-    }
-
     /// Genau diese Tasten, unabhängig von der Reihenfolge der Hosting-Views.
     private func assertKeys<V: View>(_ view: V, _ expected: [KeyRole], line: UInt = #line) {
         let roles = surfaceParts(view).compactMap { if case .key(_, let role) = $0 { role } else { nil } }
         XCTAssertEqual(roles.count, expected.count, "Anzahl Tasten", line: line)
         XCTAssertEqual(Set(roles), Set(expected), line: line)
     }
-
-    private func surfaces(in view: NSView) -> [InstrumentSurfaceView] {
-        view.subviews.flatMap { sub in (sub as? InstrumentSurfaceView).map { [$0] } ?? surfaces(in: sub) }
-    }
-}
-
-private extension InstrumentSurfaceView.Part {
-    var isWell: Bool { if case .well = self { true } else { false } }
 }

@@ -380,6 +380,115 @@ final class ExtensionsViewTests: XCTestCase {
         XCTAssertLessThanOrEqual(count, 4, "100 Meldungen in 0,5 s ergeben nur wenige Neuzeichnungen")
     }
 
+    // MARK: Aussehen (Instrument)
+
+    /// Eine Extension mit Formular (Text, Geheimnis, Schalter) und eine kaputte darunter; die erste ist gewählt, der Log offen.
+    /// Nichts eingeschaltet, damit kein getönter Schalter Akzentpixel liefert; nicht bestätigt, damit die Warnung möglich ist.
+    /// Eindeutiger Name wie bei `uniqueName` (Schlüsselbund und Defaults hängen daran), aber kurz, damit der Detailtitel
+    /// einzeilig bleibt.
+    private func lookModel() throws -> ExtensionsModel {
+        let name = "kt-\(UUID().uuidString.prefix(8).lowercased())"
+        try add(name, "", manifest: ["name": name, "version": "1.0.0", "apiVersion": 1, "description": "Zeigt offene Pull-Requests",
+                                     "settings": [["key": "repo", "type": "string", "label": "Repository"],
+                                                  ["key": "token", "type": "secret", "label": "API-Token"],
+                                                  ["key": "drafts", "type": "bool", "label": "Entwürfe zeigen"]]], acknowledge: false)
+        try addBroken("zz-kaputt")
+        let model = startModel()
+        XCTAssertEqual(model.items.map(\.name), [name, "zz-kaputt"])
+        model.showLog = true
+        return model
+    }
+
+    private func keyRoles(_ model: ExtensionsModel) -> [KeyRole] {
+        surfaceParts(ExtensionsView(model: model)).compactMap { if case .key(_, let role) = $0 { role } else { nil } }
+    }
+
+    func testExtensionsOnRaisedSurface() throws {
+        let model = try lookModel()
+        // Fußhinweis steht rechtsbündig: links unten ist Fläche.
+        assertOnRaised(ExtensionsView(model: model), at: { CGPoint(x: 20, y: $0.height - 12) })
+    }
+
+    /// Gewählte Zeile: Fläche mit Umriss in `fg`, kein Akzentbalken mehr am linken Rand.
+    func testSelectionIsOutlineNotBar() throws {
+        let model = try lookModel()
+        XCTAssertEqual(surfaceParts(ExtensionsView(model: model)).filter { $0 == .row(outline: true, ring: false) }.count, 1)
+        let t = ColorTheme.named("instrument-dark")
+        let s = snapshot(ExtensionsView(model: model).raisedPanel(), theme: t, scale: 1)
+        // Der alte Balken lag auf x 0 bis 2, heute liegt dort der Fugenring der Fläche.
+        let accentAt = stride(from: 0.0, to: s.size.height, by: 1).filter { distance(pixel(s, at: CGPoint(x: 1, y: $0)), t.accent) < 0.1 }
+        XCTAssertEqual(accentAt, [], "kein Akzentbalken links")
+        // Die Zeilenfläche rückt 6 pt ein, der Umriss deckt Pixel 6 ganz: eine Spalte in `fg`.
+        let outline = stride(from: 0.0, to: s.size.height, by: 1).filter { distance(pixel(s, at: CGPoint(x: 6.25, y: $0)), t.fg) < 0.15 }
+        XCTAssertGreaterThan(outline.count, 20, "Umriss der Auswahl in fg")
+    }
+
+    /// Werte sitzen in Feldern: Suchfeld, Text- und Geheimnisfeld des Formulars und der Log. Der Schalter bleibt nativ.
+    func testValuesSitInWells() throws {
+        let model = try lookModel()
+        XCTAssertEqual(surfaceParts(ExtensionsView(model: model)).filter(\.isWell).count, 4)
+    }
+
+    /// Fugen statt Divider: unter dem Kopf, zwischen den Zeilen, vor Detail, Entdecken und Fußhinweis, zwischen den
+    /// Formularzeilen. Das Formular ist eine Gruppe.
+    func testSeamsAndGroupInsteadOfLines() throws {
+        let parts = surfaceParts(ExtensionsView(model: try lookModel()))
+        XCTAssertEqual(parts.filter { $0 == .hSeam }.count, 1 + 1 + 3 + 2)
+        XCTAssertEqual(parts.filter { $0 == .group }.count, 1, "Formular")
+    }
+
+    /// Aktionen sind neutrale kompakte Tasten: Ordner im Kopf, Neu laden, Ordner öffnen, Log, Suchen.
+    func testActionsAreNeutralKeys() throws {
+        XCTAssertEqual(keyRoles(try lookModel()), Array(repeating: .neutral, count: 5))
+    }
+
+    /// Warnung vor dem ersten Einschalten: Gruppe mit Rand in der Fehler-Textfarbe, „Einschalten“ destruktiv,
+    /// „Abbrechen“ neutral.
+    func testEnableWarningIsGroupWithDestructiveKey() throws {
+        let model = try lookModel()
+        model.toggle(model.items[0])
+        XCTAssertNotNil(model.confirmEnable)
+        let roles = keyRoles(model)
+        XCTAssertEqual(roles.count, 7)
+        XCTAssertEqual(roles.filter { $0 == .destructive }.count, 1, "Einschalten")
+        XCTAssertEqual(roles.filter { $0 == .neutral }.count, 6, "Abbrechen und die übrigen Aktionen")
+
+        let (host, views) = hostedSurfaces(ExtensionsView(model: model))
+        let groups = views.filter { $0.part == .group }.map { $0.convert($0.bounds, to: host) }.sorted { $0.minY < $1.minY }
+        XCTAssertEqual(groups.count, 2, "Warnung und Formular")
+        guard let warning = groups.first else { return }
+        let t = errorTheme
+        let s = snapshot(ExtensionsView(model: model).raisedPanel(), theme: t, scale: 1)
+        // Der Rand ist 1,5 pt breit und liegt innen: die ersten 1,5 pt ab minX sind ganz bedeckt.
+        for dx in [0.25, 1.25] {
+            XCTAssertLessThan(distance(pixel(s, at: CGPoint(x: warning.minX + dx, y: warning.midY)), t.errorText), 0.04, "Rand in der Fehler-Textfarbe")
+        }
+    }
+
+    /// Der Grund einer kaputten Extension steht in der Fehler-Textfarbe, nicht in der Füllfarbe.
+    func testFailureTextUsesErrorTextColor() throws {
+        let model = try lookModel()
+        let t = errorTheme
+        let s = snapshot(ExtensionsView(model: model).raisedPanel(), theme: t, scale: 1)
+        var text = 0
+        for y in 0..<s.rep.pixelsHigh {
+            for x in 0..<s.rep.pixelsWide where distance(pixel(s.rep, x: x, y: y), t.errorText) < 0.04 { text += 1 }
+        }
+        XCTAssertGreaterThan(text, 0, "Fehler-Textfarbe kommt vor")
+    }
+
+    /// Solarized Light trennt Fehler-Text- und Füllfarbe deutlich (Latte nur um einen Hauch, den das Farbmanagement verwischt).
+    private var errorTheme: ColorTheme {
+        let t = ColorTheme.named("solarized-light")
+        XCTAssertGreaterThan(distance(t.errorText, t.error), 0.1, "Schema trennt Fehler-Text- und Füllfarbe")
+        return t
+    }
+
+    /// Titel und Doku-Link in der Akzent-Textfarbe, nirgends die Akzent-Füllfarbe.
+    func testAccentTextOnly() throws {
+        assertAccentTextOnly(ExtensionsView(model: try lookModel()))
+    }
+
     func testDialogRenderSmoke() async throws {
         let settings: [String: Any] = ["name": "a", "version": "1.2.0", "apiVersion": 1,
                                        "description": "Zeigt offene Pull-Requests", "permissions": ["exec", "http"],
