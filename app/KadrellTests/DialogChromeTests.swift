@@ -85,6 +85,73 @@ final class DialogChromeTests: XCTestCase {
         XCTAssertLessThan(s.rep.colorAt(x: 0, y: s.rep.pixelsHigh - 1)!.alphaComponent, 0.05)
     }
 
+    func testPaletteChromeUsesInstrumentParts() throws {
+        let p = PaletteWindow()
+        let parts = try XCTUnwrap(p.contentView).subviews.compactMap { ($0 as? InstrumentSurfaceView)?.part }
+        XCTAssertEqual(parts.first, .raised)
+        XCTAssertEqual(parts.filter { $0 == .hSeam }.count, 2)
+        XCTAssertTrue(parts.contains(.well(focused: false)))
+    }
+
+    /// Fenster ist um die Schattentiefe höher, Fläche und Feld liegen darin, die Fugen behalten ihre Lage zur Fläche.
+    func testPaletteWindowLeavesRoomForShadow() throws {
+        let saved = Theme.scale; defer { Theme.scale = saved }
+        for s in [1.0, 1.3] as [CGFloat] {
+            Theme.scale = s
+            let p = PaletteWindow()
+            let root = try XCTUnwrap(p.contentView)
+            let d = (Instrument.shadowDepth * s).rounded()
+            XCTAssertEqual(p.frame.height, (420 * s).rounded() + d)
+            XCTAssertEqual(root.subviews.first?.frame, root.bounds)
+            let seams = root.subviews.filter { ($0 as? InstrumentSurfaceView)?.part == .hSeam }
+            XCTAssertEqual(Set(seams.map(\.frame.minY)), [p.frame.height - 56 * s, 34 * s + d])
+            XCTAssertTrue(seams.allSatisfy { $0.frame.height == 2 })
+        }
+    }
+
+    /// Die Palette baut sich bei Schema-, Sprach- und Größenwechsel neu (`applyAppearance`), Flächen und Zeilen lesen
+    /// das Schema beim Zeichnen: ein neues Fenster trägt gleiche Teile, und eine Zeile zeichnet im neuen Schema.
+    func testPaletteRowFollowsThemeChange() {
+        let row = paletteRow(selected: true)
+        let dark = ColorTheme.named("instrument-dark"), light = ColorTheme.named("github-light")
+        let a = render(theme: dark, width: 400, height: 44, scale: 1) { dark.raised.setFill(); NSBezierPath(rect: row.bounds).fill(); row.draw(row.bounds) }
+        let b = render(theme: light, width: 400, height: 44, scale: 1) { light.raised.setFill(); NSBezierPath(rect: row.bounds).fill(); row.draw(row.bounds) }
+        XCTAssertLessThan(distance(pixel(a, x: 380, y: 40), dark.bg), 0.02)
+        XCTAssertLessThan(distance(pixel(b, x: 380, y: 40), light.bg), 0.02)
+        XCTAssertLessThan(distance(pixel(b, x: 6, y: 22), light.fg), 0.15)
+    }
+
+    /// Ausgewählte Zeile: kein Akzentbalken links mehr, Fläche in `bg` mit 1,5-pt-Umriss in `fg` (Zeilenfläche rückt
+    /// 6 pt vom Rand ein, der Umriss belegt Pixel 6 voll).
+    func testPaletteSelectionIsOutlineNotBar() {
+        let t = ColorTheme.named("instrument-dark")
+        let row = paletteRow(selected: true)
+        let rep = render(theme: t, width: 400, height: 44, scale: 1) {
+            t.raised.setFill(); NSBezierPath(rect: row.bounds).fill()
+            row.draw(row.bounds)
+        }
+        XCTAssertLessThan(distance(pixel(rep, x: 1, y: 22), t.raised), 0.02, "kein Akzentbalken")
+        XCTAssertGreaterThan(distance(pixel(rep, x: 1, y: 22), t.accent), 0.1)
+        XCTAssertLessThan(distance(pixel(rep, x: 6, y: 22), t.fg), 0.15, "Umriss")
+        XCTAssertLessThan(distance(pixel(rep, x: 380, y: 40), t.bg), 0.02, "Fläche")
+        XCTAssertLessThan(distance(pixel(rep, x: 200, y: 0), t.raised), 0.02, "Luft über der Fläche")
+        // Nicht ausgewählt bleibt die Zeile blank.
+        let plain = paletteRow(selected: false)
+        let rep2 = render(theme: t, width: 400, height: 44, scale: 1) {
+            t.raised.setFill(); NSBezierPath(rect: plain.bounds).fill()
+            plain.draw(plain.bounds)
+        }
+        XCTAssertLessThan(distance(pixel(rep2, x: 6, y: 22), t.raised), 0.02)
+        XCTAssertLessThan(distance(pixel(rep2, x: 380, y: 40), t.raised), 0.02)
+    }
+
+    private func paletteRow(selected: Bool) -> PaletteRow {
+        let row = PaletteRow(frame: NSRect(x: 0, y: 0, width: 400, height: 44))
+        row.item = PaletteWindow.Item(label: "Alpha", sub: "", group: nil, status: nil, sessionKey: nil, run: {})
+        row.selected = selected
+        return row
+    }
+
     /// Wächter-Prüfung: jede Fläche bekommt ein fremdes `part`, nur `updateNSView` setzt das echte zurück. Eine
     /// Kontrollrunde ohne Änderung zeigt, dass nichts anderes den Wächter entfernt.
     private func assertChangeReachesEverySurface(_ p: OverlayPanel, change: () -> Void, line: UInt = #line) {

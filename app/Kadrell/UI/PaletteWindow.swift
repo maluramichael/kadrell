@@ -51,16 +51,16 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
     private var searchTask: Task<Void, Never>?
 
     init() {
-        let s = Theme.scale, W = (640 * s).rounded(), H = (420 * s).rounded()
+        // Der feste Schatten liegt unter der Fläche: das Fenster ist um seine Tiefe `d` höher, alle Maße von unten rücken hoch.
+        let s = Theme.scale, W = (640 * s).rounded(), d = (Instrument.shadowDepth * s).rounded(), H = (420 * s).rounded() + d
         super.init(size: NSSize(width: W, height: H))
         isOpaque = false
         backgroundColor = .clear
         let root = NSView(frame: contentRect(forFrameRect: frame))
-        root.wantsLayer = true
-        root.layer?.backgroundColor = Theme.panel.cgColor
-        root.layer?.borderColor = Theme.line.cgColor
-        root.layer?.borderWidth = 1
         contentView = root
+        let surface = InstrumentSurfaceView(part: .raised, frame: root.bounds)
+        surface.autoresizingMask = [.width, .height]
+        root.addSubview(surface)
 
         field.cell = CenteredTextFieldCell(textCell: "")   // sonst klebt der Text an der Oberkante des Feldes
         field.isEditable = true
@@ -74,11 +74,12 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         field.delegate = self
         field.frame = NSRect(x: 16 * s, y: H - 44 * s, width: W - 32 * s, height: 24 * s)
         field.autoresizingMask = [.width, .minYMargin]
+        // Der Wert sitzt in einem Feld; das Suchfeld hat beim Öffnen immer die Tastatur, also kein Fokusring.
+        let well = InstrumentSurfaceView(part: .well(focused: false), frame: field.frame.insetBy(dx: -6 * s, dy: -4 * s))
+        well.autoresizingMask = field.autoresizingMask
+        root.addSubview(well)
         root.addSubview(field)
-        let sep = NSView(frame: NSRect(x: 0, y: H - 56 * s, width: W, height: 1))
-        sep.wantsLayer = true; sep.layer?.backgroundColor = Theme.line.cgColor
-        sep.autoresizingMask = [.width, .minYMargin]
-        root.addSubview(sep)
+        root.addSubview(seam(y: H - 56 * s, width: W, mask: [.width, .minYMargin]))
 
         let col = NSTableColumn(identifier: .init("c"))
         col.width = W - 40
@@ -95,20 +96,24 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         scroll.documentView = table
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
-        scroll.frame = NSRect(x: 0, y: 34 * s, width: W, height: H - 90 * s)
+        scroll.frame = NSRect(x: 0, y: 34 * s + d, width: W, height: H - 90 * s - d)
         scroll.autoresizingMask = [.width, .height]
         root.addSubview(scroll)
 
         foot.font = Theme.font(11 * s)
         foot.textColor = Theme.muted
         foot.alignment = .right
-        foot.frame = NSRect(x: 16 * s, y: 10 * s, width: W - 32 * s, height: 16 * s)
+        foot.frame = NSRect(x: 16 * s, y: 10 * s + d, width: W - 32 * s, height: 16 * s)
         foot.autoresizingMask = [.width, .maxYMargin]
         root.addSubview(foot)
-        let sep2 = NSView(frame: NSRect(x: 0, y: 34 * s, width: W, height: 1))
-        sep2.wantsLayer = true; sep2.layer?.backgroundColor = Theme.line.cgColor
-        sep2.autoresizingMask = [.width, .maxYMargin]
-        root.addSubview(sep2)
+        root.addSubview(seam(y: 34 * s + d, width: W, mask: [.width, .maxYMargin]))
+    }
+
+    /// Fuge aus dunkler und heller Linie, 2 pt hoch.
+    private func seam(y: CGFloat, width: CGFloat, mask: NSView.AutoresizingMask) -> NSView {
+        let v = InstrumentSurfaceView(part: .hSeam, frame: NSRect(x: 0, y: y, width: width, height: 2))
+        v.autoresizingMask = mask
+        return v
     }
 
     var isCommandMode: Bool { field.stringValue.hasPrefix(">") }
@@ -350,10 +355,7 @@ final class PaletteRow: NSView {
     override func accessibilityLabel() -> String? { item.map { $0.spoken } ?? String(localized: "Keine Treffer", bundle: Bundle.app) }
 
     private func drawRow(_ b: CGRect) {
-        if selected {
-            Theme.surface.setFill(); b.fill()
-            Theme.accent.setFill(); CGRect(x: 0, y: 0, width: 3, height: b.height).fill()
-        }
+        if selected { Instrument.rowHighlight(b, outline: true, ring: false) }   // Tastatur bleibt im Suchfeld, kein Ring
         guard let item else {
             NSAttributedString(string: String(localized: "Keine Treffer", bundle: Bundle.app), attributes: Theme.attrs(12, Theme.muted)).draw(at: CGPoint(x: 16, y: 14))
             return
