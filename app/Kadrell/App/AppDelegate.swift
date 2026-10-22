@@ -672,15 +672,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.unread = attention.unseen
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
-        let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
-        let fg = focused.flatMap { workspace.group(forSession: $0.id) }
-        bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
-        bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
         bar.errorText = registry?.lastError
         bar.versionWarning = versionWarning
         bar.tip = attention.tip
-        bar.sessionCount = sessions.count
-        bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
         bar.gridColumns = Settings.gridColumns
         bar.scrollColumns = Settings.scrollColumns

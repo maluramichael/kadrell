@@ -1,31 +1,28 @@
 import AppKit
 
-/// 30 px Leiste: Layout-Toggle links, Breadcrumb in der Mitte, rechts Nutzung, Attach und Uhr.
-/// Alles gezeichnet, Hit-Rects von Hand.
 /// Sessions je Status für die Leiste. `detached` = kein laufender Claude-Prozess, egal welcher Status zuletzt galt.
 struct StatusCounts: Equatable {
     var running = 0, waiting = 0, idle = 0, error = 0, detached = 0
     var total: Int { running + waiting + idle + error + detached }
 }
 
+/// 30 pt Leiste im Instrument-Look: links Tasten für Layout und Schalter, rechts das Status-Display mit Uhr,
+/// daneben Tasten und flache Module, getrennt durch Fugen. Die Mitte bleibt frei für Einträge der Extensions.
+/// Alles gezeichnet, Hit-Rects von Hand.
 @MainActor
 final class StatusBarView: NSView, NSViewToolTipOwner {
-    var crumb: (group: String, session: String)?
-    var crumbGroupAttrs: [NSAttributedString.Key: Any]?
-    /// Sessions können nicht geladen werden: steht statt der Session-Zahl in der Mitte, rot.
+    /// Sessions können nicht geladen werden: steht statt des Status im Display, rot.
     var errorText: String?
-    /// claude läuft, ist aber älter als von Kadrell getestet: blockiert nichts, nur ein Hinweis-Badge rechts.
+    /// claude läuft, ist aber älter als von Kadrell getestet: blockiert nichts, nur ein Hinweis rechts.
     var versionWarning: String?
     /// Einmaliger Tipp (zweite Session, Bedeutung von Gelb), verschwindet mit einem Klick darauf.
     var tip: String?
     var onDismissTip: (() -> Void)?
-    var sessionCount = 0
-    var openCount = 0
-    /// Sessions je Status für die farbigen Zahlen rechts; alles außer `detached` hat einen laufenden Claude-Prozess.
+    /// Sessions je Status für das Display; alles außer `detached` hat einen laufenden Claude-Prozess.
     var counts = StatusCounts()
-    /// Fertige Sessions, die sich trennen lassen (ohne Terminals ohne Claude und Remote-Kacheln): Zahl auf der Pille.
+    /// Fertige Sessions, die sich trennen lassen (ohne Terminals ohne Claude und Remote-Kacheln): Zahl auf der Taste.
     var detachableCount = 0
-    /// Klick auf die grüne Pille: alle fertigen Sessions trennen (spart Speicher und CPU).
+    /// Klick auf die grüne Taste: alle fertigen Sessions trennen (spart Speicher und CPU).
     var onDetachIdle: (() -> Void)?
     /// Sessions, die gerade auf dich warten (Status waiting, angehängt). Modul „N warten“ nur bei > 0.
     var waitingCount = 0
@@ -33,7 +30,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Neuere Version als die laufende gefunden (`UpdateChecker`), Klick zeigt Changelog und Download-Link.
     var updateAvailable: UpdateManifest?
     var onShowUpdate: (() -> Void)?
-    /// Hinterlegte Claude-Accounts für die Konto-Pille (Global-Swap). Leer = keine Pille. `detail` = gecachte Nutzung.
+    /// Hinterlegte Claude-Accounts für die Konto-Taste (Global-Swap). Leer = keine Taste. `detail` = gecachte Nutzung.
     var accounts: [(id: String, title: String, active: Bool, detail: String)] = []
     /// Auto-Wechsel aktiv, Häkchen im Konto-Menü.
     var autoswitch = false
@@ -41,7 +38,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     var onAddAccount: (() -> Void)?
     var onManageAccounts: (() -> Void)?
     var onToggleAutoswitch: (() -> Void)?
-    /// Fläche der Konto-Pille beim letzten Zeichnen, damit das Menü darunter aufklappt.
+    /// Fläche der Konto-Taste beim letzten Zeichnen, damit das Menü darunter aufklappt.
     private var accountRect: CGRect = .zero
     /// Neue Werte zählen vom alten Stand hoch bzw. herunter.
     var usage = Usage.empty {
@@ -65,19 +62,19 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Frei: Teilung an der Fokus-Kachel, „r“ → , „d“ ↓, „a“ längere Seite. Klick schaltet reihum.
     var split: Character = "a"
     var onSplit: ((Character) -> Void)?
-    /// Auto-Modus: nur Sessions, die etwas wollen. An = gefülltes Badge.
-    var auto = false { didSet { toggled(auto != oldValue, "auto") } }
+    /// Auto-Modus: nur Sessions, die etwas wollen. An = eingesunkene, gefüllte Taste.
+    var auto = false
     var onToggleAuto: (() -> Void)?
-    /// Sync: Eingaben gehen an alle Kacheln. An = rotes Badge, damit es niemand vergisst.
-    var sync = false { didSet { toggled(sync != oldValue, "sync") } }
+    /// Sync: Eingaben gehen an alle Kacheln. An = rote Taste, damit es niemand vergisst.
+    var sync = false
     var onToggleSync: (() -> Void)?
-    /// Sortierung des Baums: Klick schaltet aus → A–Z → Status weiter. Aktiv = gefülltes Badge.
-    var sort: SidebarSort = .off { didSet { toggled(sort != oldValue, "sort") } }
+    /// Sortierung des Baums: Klick schaltet aus → A–Z → Status weiter. Aktiv = eingesunkene, gefüllte Taste.
+    var sort: SidebarSort = .off
     var onCycleSort: (() -> Void)?
-    /// Gruppierung nach Projekt im Baum. Aus = flache Liste, dann zeigt der Knopf „FLACH“ als gefülltes Badge.
-    var grouped = true { didSet { toggled(grouped != oldValue, "group") } }
+    /// Gruppierung nach Projekt im Baum. Aus = flache Liste, dann zeigt die Taste „FLACH“ eingesunken und gefüllt.
+    var grouped = true
     var onToggleGrouping: (() -> Void)?
-    /// Zoom aktiv: Badge „ZOOM“ links neben dem Breadcrumb, Klick hebt den Zoom auf.
+    /// Zoom aktiv: Taste „ZOOM“ am Ende der linken Seite, Klick hebt den Zoom auf.
     var zoomed = false
     var onToggleZoom: (() -> Void)?
 
@@ -104,20 +101,23 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private var toolTipEntries: [(rect: CGRect, text: String)] = []
     private var toolTipsKey = ""
     private var a11y: [A11yElement] = []
+    /// Display beim letzten Zeichnen: Rahmen und vorgelesener Text (Langform bzw. Fehlermeldung), auch als Tooltip.
+    private var status: (rect: CGRect, text: String) = (.zero, "")
+    private let statusA11y = A11yElement(key: "status-display")
+    /// Welche Form das Display zuletzt gezeichnet hat: kurz, wenn die Langform neben die linke Seite nicht passt.
+    private(set) var displayCompact = false
     private var clockTask: Task<Void, Never>?
     private static let clock: DateFormatter = { let df = DateFormatter(); df.dateFormat = "HH:mm"; return df }()
     /// Relative Reset-Zeit im Tooltip („in 2 Std.“), Sprache folgt der eingestellten Oberfläche.
     private static let relative: RelativeDateTimeFormatter = { let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated; return f }()
-    /// Umgeschaltete Badges: die Füllung wächst aus der Mitte auf.
-    private var toggledAt: [String: CFTimeInterval] = [:]
+    /// Zuletzt geklickte Trefferfläche: ihre Taste sitzt danach kurz eingesunken.
+    private var pressedLabel: String?
+    private var pressedAt: CFTimeInterval = 0
     private var animUntil: CFTimeInterval = 0
     private var animTask: Task<Void, Never>?
 
-    private func toggled(_ changed: Bool, _ key: String) {
-        guard changed else { return }
-        toggledAt[key] = CACurrentMediaTime()
-        animate(0.2)
-    }
+    /// Maße der Tasten und des Displays: 20 pt hoch, 4 pt Abstand untereinander, 6 pt Rand zu den Kanten.
+    private static let keyHeight: CGFloat = 20, keyGap: CGFloat = 4, edge: CGFloat = 6
 
     /// Kurz flüssig neu zeichnen, die Uhr allein tickt nur jede Sekunde.
     private func animate(_ duration: CFTimeInterval) {
@@ -131,13 +131,6 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             self?.needsDisplay = true
             self?.animTask = nil
         }
-    }
-
-    /// Badge-Füllung, während des Umschaltens von der Mitte aus breiter.
-    private func badge(_ r: CGRect, _ key: String) -> CGRect {
-        let b = r.insetBy(dx: 5, dy: 6)
-        guard let t = toggledAt[key], let p = Feedback.progress(since: t, duration: 0.2) else { return b }
-        return b.insetBy(dx: b.width * (1 - p) / 2, dy: b.height * (1 - p) / 2)
     }
 
     override init(frame: NSRect) {
@@ -158,8 +151,6 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     /// Gezeichnet in unskalierten Punkten, die Hit-Rects auch.
     override func draw(_ dirtyRect: NSRect) {
-        hitRects = []
-        moduleTips = []
         Theme.scaled(bounds) { drawBar($0) }
         updateToolTips()
     }
@@ -177,19 +168,29 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         toolTipEntries.first { $0.rect.scaled(Theme.scale).contains(point) }?.text ?? ""
     }
 
+    /// Erst mit der Langform im Display; passt die rechte Seite dann nicht mehr neben die linke, alles noch einmal
+    /// mit der Kurzform (die Fläche wird dabei neu gefüllt, vom ersten Durchgang bleibt nichts stehen).
     private func drawBar(_ b: CGRect) {
-        Theme.panel.setFill(); b.fill()
-        Theme.line.setFill(); CGRect(x: 0, y: b.height - 1, width: b.width, height: 1).fill()
-        let leftEnd = drawLeft(b)
-        var rx = b.width
-        module(b, &rx, [NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(11.5, Theme.fg, bold: true))])
-        drawNotices(b, &rx)
-        drawUsage(b, &rx)
-        drawExtensionItems(b, &rx, limit: leftEnd + 16 + min(crumbText().size().width, Self.minCrumbWidth))
-        drawCrumb(b, from: leftEnd, to: rx)
+        if !drawPass(b, compact: false) { _ = drawPass(b, compact: true) }
     }
 
-    private func divider(_ x: CGFloat, _ b: CGRect) { Theme.line.setFill(); CGRect(x: x, y: 0, width: 1, height: b.height - 1).fill() }
+    /// Ein Durchgang über die ganze Leiste. false, wenn die Langform nicht passt; dann fehlen noch die Extensions.
+    private func drawPass(_ b: CGRect, compact: Bool) -> Bool {
+        hitRects = []
+        moduleTips = []
+        Theme.panel.setFill(); b.fill()
+        let content = CGRect(x: 0, y: 0, width: b.width, height: b.height - 2 * Instrument.hairline)
+        Instrument.hSeam(x: 0, y: content.maxY, width: b.width)
+        let limit = drawLeft(content) + 16
+        var rx = b.width - Self.edge
+        drawDisplay(content, &rx, compact: compact)
+        drawNotices(content, &rx)
+        drawUsage(content, &rx)
+        guard compact || rx >= limit else { return false }
+        displayCompact = compact
+        drawExtensionItems(content, &rx, limit: limit)
+        return true
+    }
 
     /// Zeichnet die Zeile senkrecht mittig auf `midY`, für jede Schriftgröße gleich. Die Leiste ist flipped, der
     /// Zeichenpunkt ist also die Oberkante der Textbox. Zentriert werden die Großbuchstaben/Ziffern (capHeight über
@@ -199,57 +200,85 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         s.draw(at: CGPoint(x: x, y: midY - f.ascender + f.capHeight / 2))
     }
 
+    // MARK: Tasten
+
+    /// Rechteck einer Taste ab `x`, senkrecht mittig in der Leiste.
+    private func keyRect(x: CGFloat, width: CGFloat, _ b: CGRect) -> CGRect {
+        CGRect(x: x, y: b.midY - Self.keyHeight / 2, width: width, height: Self.keyHeight)
+    }
+
+    /// Zeichnet die Taste der Trefferfläche `label`: eingeschaltet (`on`) sinkt sie ein, nach einem Klick kurz auch.
+    /// Gibt die Kappe zurück, dort sitzt die Beschriftung.
+    @discardableResult
+    private func key(_ r: CGRect, _ label: String, on: Bool = false, fill: NSColor? = nil) -> CGRect {
+        Instrument.key(r, pressed: on || isFlashing(label), fill: fill)
+    }
+
+    private func isFlashing(_ label: String) -> Bool {
+        pressedLabel == label && CACurrentMediaTime() - pressedAt < 0.08
+    }
+
+    /// Nach einem Klick sinkt die getroffene Taste 80 ms ein, bei „Bewegung reduzieren“ nicht.
+    private func flash(_ label: String) {
+        guard !Feedback.reduceMotion else { return }
+        pressedLabel = label
+        pressedAt = CACurrentMediaTime()
+        animate(0.08)
+    }
+
     // MARK: Links
 
-    /// Layout-Toggle, Spalten bzw. Teilrichtung, AUTO/SYNC/SORT und ZOOM. Gibt das Ende der linken Seite zurück.
+    /// Layout-Taste, Spalten bzw. Teilrichtung, AUTO/SYNC/GRP/SORT und ZOOM. Gibt das Ende der linken Seite zurück.
     private func drawLeft(_ b: CGRect) -> CGFloat {
-        // Layout-Toggle: zeigt den aktuellen Modus, Klick öffnet die Auswahl.
-        let toggle = CGRect(x: 0, y: 0, width: 36, height: b.height - 1)
-        Icons.layout(layoutMode, in: CGRect(x: 11, y: b.midY - 7, width: 14, height: 14), color: Theme.sub)
-        divider(toggle.maxX, b)
-        hitRects.append(HitRegion(rect: toggle, label: String(localized: "Layout", bundle: Bundle.app), value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: toggle.maxY)) })
-        var x = toggle.maxX + 1
+        // Layout-Taste: zeigt den aktuellen Modus, Klick öffnet die Auswahl.
+        let label = String(localized: "Layout", bundle: Bundle.app)
+        let toggle = keyRect(x: Self.edge, width: 30, b)
+        let cap = key(toggle, label)
+        Icons.layout(layoutMode, in: CGRect(x: cap.midX - 7, y: cap.midY - 7, width: 14, height: 14), color: Theme.sub)
+        hitRects.append(HitRegion(rect: toggle, label: label, value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: b.maxY)) })
+        var x = toggle.maxX + Self.keyGap
         if layoutMode == .grid { drawColumns(b, &x, value: gridColumns, min: 0) { [weak self] c in self?.onGridColumns?(c) } }
         if layoutMode == .scroll { drawColumns(b, &x, value: scrollColumns, min: 1) { [weak self] c in self?.onScrollColumns?(c) } }
         if layoutMode == .custom { drawSplit(b, &x) }
         let onOff = { (on: Bool) in on ? String(localized: "an", bundle: Bundle.app) : String(localized: "aus", bundle: Bundle.app) }
-        segment(b, &x, "AUTO", fill: auto ? Theme.waiting : nil, key: "auto", String(localized: "Auto-Modus", bundle: Bundle.app), onOff(auto)) { [weak self] in self?.onToggleAuto?() }
-        segment(b, &x, "SYNC", fill: sync ? Theme.error : nil, key: "sync", "Sync", onOff(sync)) { [weak self] in self?.onToggleSync?() }
-        segment(b, &x, grouped ? "GRP" : String(localized: "FLACH", bundle: Bundle.app), fill: grouped ? nil : Theme.sub, key: "group",
+        segment(b, &x, "AUTO", fill: auto ? Theme.waiting : nil, String(localized: "Auto-Modus", bundle: Bundle.app), onOff(auto)) { [weak self] in self?.onToggleAuto?() }
+        segment(b, &x, "SYNC", fill: sync ? Theme.error : nil, "Sync", onOff(sync)) { [weak self] in self?.onToggleSync?() }
+        segment(b, &x, grouped ? "GRP" : String(localized: "FLACH", bundle: Bundle.app), fill: grouped ? nil : Theme.sub,
                 String(localized: "Gruppierung nach Projekt", bundle: Bundle.app), onOff(grouped)) { [weak self] in self?.onToggleGrouping?() }
         let sortLabel = switch sort { case .off: "SORT"; case .alpha: "A–Z"; case .status: "STATUS" }
-        segment(b, &x, sortLabel, fill: sort == .off ? nil : Theme.sub, key: "sort", String(localized: "Sortierung", bundle: Bundle.app), sort == .off ? String(localized: "aus", bundle: Bundle.app) : sortLabel) { [weak self] in self?.onCycleSort?() }
-        return drawZoom(b, x: x + 7)   // 8 pt hinter der letzten Trennlinie
+        segment(b, &x, sortLabel, fill: sort == .off ? nil : Theme.sub, String(localized: "Sortierung", bundle: Bundle.app), sort == .off ? String(localized: "aus", bundle: Bundle.app) : sortLabel) { [weak self] in self?.onCycleSort?() }
+        drawZoom(b, &x)
+        return x - Self.keyGap
     }
 
-    /// Schalter mit Trennlinie rechts. `fill` = an: gefülltes Badge (wächst beim Umschalten aus der Mitte), sonst gedämpfter Text.
-    private func segment(_ b: CGRect, _ x: inout CGFloat, _ text: String, color: NSColor? = nil, fill: NSColor? = nil, key: String = "",
+    /// Schalter als Taste. `fill` = an: eingesunken in dieser Farbe, sonst erhaben mit gedämpftem Text.
+    private func segment(_ b: CGRect, _ x: inout CGFloat, _ text: String, color: NSColor? = nil, fill: NSColor? = nil,
                          _ label: String, _ value: String?, action: @escaping @MainActor () -> Void) {
         let t = NSAttributedString(string: text, attributes: Theme.attrs(10, color ?? fill.map { Theme.pillText(on: $0) } ?? Theme.muted, bold: true))
-        let r = CGRect(x: x, y: 0, width: t.size().width + 20, height: b.height - 1)
-        if let fill { fill.setFill(); badge(r, key).fill() }
-        drawCentered(t, x: r.minX + 10, midY: b.midY)
-        divider(r.maxX, b)
+        let r = keyRect(x: x, width: t.size().width + 16, b)
+        let cap = key(r, label, on: fill != nil, fill: fill)
+        drawCentered(t, x: cap.minX + 8, midY: cap.midY)
         hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
-        x = r.maxX + 1
+        x = r.maxX + Self.keyGap
     }
 
-    /// ‹ AUTO › bzw. ‹ 3 SP ›: die Pfeile ändern die Spaltenzahl. `min` 0 lässt sie unter 1 wieder automatisch werden.
+    /// ‹ AUTO SP › bzw. ‹ 3 SP ›: die Pfeiltasten ändern die Spaltenzahl. `min` 0 lässt sie unter 1 wieder automatisch werden.
     private func drawColumns(_ b: CGRect, _ x: inout CGFloat, value cols: Int, min lo: Int, onChange: @escaping (Int) -> Void) {
-        let midY = b.midY
         let value = NSAttributedString(string: cols == 0 ? String(localized: "AUTO SP", bundle: Bundle.app) : String(localized: "\(cols) SP", bundle: Bundle.app), attributes: Theme.attrs(10, cols == 0 ? Theme.muted : Theme.fg, bold: true))
-        let less = NSAttributedString(string: "‹", attributes: Theme.attrs(12, Theme.sub, bold: true))
-        let more = NSAttributedString(string: "›", attributes: Theme.attrs(12, Theme.sub, bold: true))
-        let lessRect = CGRect(x: x, y: 0, width: less.size().width + 14, height: b.height - 1)
-        drawCentered(less, x: lessRect.minX + 7, midY: midY)
-        drawCentered(value, x: lessRect.maxX, midY: midY)
-        let moreRect = CGRect(x: lessRect.maxX + value.size().width, y: 0, width: more.size().width + 14, height: b.height - 1)
-        drawCentered(more, x: moreRect.minX + 7, midY: midY)
         let spoken = cols == 0 ? String(localized: "automatisch", bundle: Bundle.app) : "\(cols)"
-        hitRects.append(HitRegion(rect: lessRect, label: String(localized: "Weniger Spalten", bundle: Bundle.app), value: spoken) { onChange(Swift.max(lo, cols - 1)) })
-        hitRects.append(HitRegion(rect: moreRect, label: String(localized: "Mehr Spalten", bundle: Bundle.app), value: spoken) { onChange(Swift.min(12, cols + 1)) })
-        divider(moreRect.maxX, b)
-        x = moreRect.maxX + 1
+        let less = arrowKey(b, x: x, "‹", String(localized: "Weniger Spalten", bundle: Bundle.app), value: spoken) { onChange(Swift.max(lo, cols - 1)) }
+        drawCentered(value, x: less.maxX + 6, midY: b.midY - 1)
+        let more = arrowKey(b, x: less.maxX + 12 + value.size().width, "›", String(localized: "Mehr Spalten", bundle: Bundle.app), value: spoken) { onChange(Swift.min(12, cols + 1)) }
+        x = more.maxX + Self.keyGap
+    }
+
+    /// Kleine Taste mit Pfeil für die Spaltenzahl, gibt ihr Rechteck zurück.
+    private func arrowKey(_ b: CGRect, x: CGFloat, _ arrow: String, _ label: String, value: String, action: @escaping @MainActor () -> Void) -> CGRect {
+        let t = NSAttributedString(string: arrow, attributes: Theme.attrs(12, Theme.sub, bold: true))
+        let r = keyRect(x: x, width: t.size().width + 12, b)
+        drawCentered(t, x: key(r, label).minX + 6, midY: r.midY - 1)
+        hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
+        return r
     }
 
     /// Teilrichtung der nächsten Kachel im Layout „Frei“, Klick schaltet auto → rechts → unten weiter.
@@ -263,43 +292,87 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         segment(b, &x, text, color: split == "a" ? Theme.muted : Theme.fg, String(localized: "Nächste Kachel teilt", bundle: Bundle.app), spoken) { [weak self] in self?.onSplit?(next) }
     }
 
-    private func drawZoom(_ b: CGRect, x: CGFloat) -> CGFloat {
-        guard zoomed else { return x }
-        let zt = NSAttributedString(string: "ZOOM", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
-        let z = CGRect(x: x, y: b.midY - 9, width: zt.size().width + 12, height: 18)
-        Theme.waiting.setFill(); z.fill()
-        drawCentered(zt, x: z.minX + 6, midY: b.midY)
-        hitRects.append(HitRegion(rect: z, label: String(localized: "Zoom aufheben", bundle: Bundle.app)) { [weak self] in self?.onToggleZoom?() })
-        return z.maxX + 8
+    /// ZOOM als eingesunkene Taste, solange der Zoom aktiv ist.
+    private func drawZoom(_ b: CGRect, _ x: inout CGFloat) {
+        guard zoomed else { return }
+        segment(b, &x, "ZOOM", fill: Theme.waiting, String(localized: "Zoom aufheben", bundle: Bundle.app), nil) { [weak self] in self?.onToggleZoom?() }
     }
 
     // MARK: Rechts, von rechts nach links
 
-    /// Modul links von `rx`. `pill`: gefüllte Fläche mit 4 pt Abstand, sonst die ganze Modulhöhe.
-    private func module(_ b: CGRect, _ rx: inout CGFloat, _ parts: [NSAttributedString], tip: String? = nil, pill: NSColor? = nil,
+    /// Schwarzes Display ganz rechts: Lampe, Status in Worten (bzw. die Fehlermeldung) und die Uhr. Tooltip und
+    /// VoiceOver bekommen die Langform aller Zustände.
+    private func drawDisplay(_ b: CGRect, _ rx: inout CGFloat, compact: Bool) {
+        let text = NSAttributedString(string: errorText ?? StatusDisplay.text(counts, compact: compact),
+                                      attributes: Theme.attrs(10.5, errorText == nil ? Instrument.screenInk : Self.screenError, bold: true))
+        let time = NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(10.5, Instrument.screenMuted))
+        let gap: CGFloat = text.length > 0 ? 8 : 0
+        let w = 10 + 7 + 6 + text.size().width + gap + time.size().width + 10
+        let r = keyRect(x: rx - w, width: w, b)
+        Instrument.screen(r)
+        lampColor.setFill()
+        NSBezierPath(ovalIn: CGRect(x: r.minX + 10, y: r.midY - 3.5, width: 7, height: 7)).fill()
+        drawCentered(text, x: r.minX + 23, midY: r.midY)
+        drawCentered(time, x: r.maxX - 10 - time.size().width, midY: r.midY)
+        status = (r, errorText ?? StatusDisplay.spoken(counts))
+        moduleTips.append(status)
+        rx = r.minX - Self.edge
+    }
+
+    /// Lampe im Display: bei einer Fehlermeldung rot, sonst nach `StatusDisplay.lamp`.
+    private var lampColor: NSColor {
+        if errorText != nil { return Theme.error }
+        switch StatusDisplay.lamp(counts) {
+        case .waiting: return Theme.waiting
+        case .error: return Theme.error
+        case .ok: return Theme.idle
+        case .off: return Instrument.screenMuted
+        }
+    }
+
+    /// Fehlerrot, so weit Richtung Weiß gemischt, dass es auf dem schwarzen Display lesbar ist (mindestens 4,5:1).
+    private static var screenError: NSColor {
+        Theme.error.ensuringContrast(4.5, against: [Instrument.screen], toward: .white)
+    }
+
+    /// Taste links von `rx`, danach 4 pt Abstand. Gibt ihr Rechteck zurück.
+    @discardableResult
+    private func keyModule(_ b: CGRect, _ rx: inout CGFloat, _ text: NSAttributedString, fill: NSColor? = nil,
+                           _ label: String, value: String?, action: @escaping @MainActor () -> Void) -> CGRect {
+        let r = keyRect(x: rx - text.size().width - 16, width: text.size().width + 16, b)
+        drawCentered(text, x: key(r, label, fill: fill).minX + 8, midY: r.midY - 1)
+        hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
+        rx = r.minX - Self.keyGap
+        return r
+    }
+
+    /// Flaches Modul links von `rx`, rechts davon eine Fuge zum Nachbarn.
+    private func module(_ b: CGRect, _ rx: inout CGFloat, _ parts: [NSAttributedString], tip: String? = nil,
                         _ label: String? = nil, value: String? = nil, action: (@MainActor () -> Void)? = nil) {
-        let w = parts.reduce(20) { $0 + $1.size().width } + CGFloat(max(0, parts.count - 1)) * 5
-        rx -= w
-        divider(rx, b)
-        var rect = CGRect(x: rx, y: 0, width: w, height: b.height - 1), px = rx + 10
-        // Pille ist beidseitig um 4 pt eingerückt; der Text behält seine 10-pt-Basis und sitzt so mittig (6 pt je Seite).
-        if let pill { rect = CGRect(x: rx + 4, y: b.midY - 9, width: w - 8, height: 18); pill.setFill(); rect.fill() }
+        let seam = 2 * Instrument.hairline
+        Instrument.vSeam(x: rx - seam, y: 0, height: b.height)
+        let rect = CGRect(x: rx - seam - Self.moduleWidth(parts), y: 0, width: Self.moduleWidth(parts), height: b.height)
+        var px = rect.minX + 10
         for p in parts {
             drawCentered(p, x: px, midY: b.midY); px += p.size().width + 5
         }
         if let tip { moduleTips.append((rect, tip)) }
         if let label, let action { hitRects.append(HitRegion(rect: rect, label: label, value: value, action: action)) }
+        rx = rect.minX
     }
 
-    /// Konto-Pille: aktiver Account, Klick öffnet das Menü zum Wechseln, Hinzufügen und Verwalten. Ohne Accounts leer.
+    /// Breite eines flachen Moduls ohne Fuge: 10 pt Rand je Seite, 5 pt zwischen den Teilen.
+    private static func moduleWidth(_ parts: [NSAttributedString]) -> CGFloat {
+        parts.reduce(20) { $0 + $1.size().width } + CGFloat(max(0, parts.count - 1)) * 5
+    }
+
+    /// Konto-Taste: aktiver Account, Klick öffnet das Menü zum Wechseln, Hinzufügen und Verwalten. Ohne Accounts leer.
     private func drawAccount(_ b: CGRect, _ rx: inout CGFloat) {
         guard !accounts.isEmpty else { return }
         let title = accounts.first { $0.active }?.title ?? String(localized: "Konto wählen", bundle: Bundle.app)
         let shown = title.count > 26 ? String(title.prefix(25)) + "…" : title
-        let parts = [NSAttributedString(string: shown, attributes: Theme.attrs(11, Theme.fg))]
-        let w = parts.reduce(20) { $0 + $1.size().width }
-        accountRect = CGRect(x: rx - w + 4, y: b.midY - 9, width: w - 8, height: 18)
-        module(b, &rx, parts, pill: Theme.surface, String(localized: "Aktives Konto", bundle: Bundle.app), value: title) { [weak self] in self?.showAccountMenu() }
+        accountRect = keyModule(b, &rx, NSAttributedString(string: shown, attributes: Theme.attrs(11, Theme.fg)),
+                                String(localized: "Aktives Konto", bundle: Bundle.app), value: title) { [weak self] in self?.showAccountMenu() }
     }
 
     private func showAccountMenu() {
@@ -330,23 +403,9 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     @objc private func addAccountItem() { onAddAccount?() }
     @objc private func manageAccounts() { onManageAccounts?() }
 
-    /// Update, wartende Sessions, laufende Prozesse, Tipp und Versionswarnung.
+    /// Tasten neben dem Display (wartende Sessions, trennen, Update, Konto), dann Tipp und Versionswarnung.
     private func drawNotices(_ b: CGRect, _ rx: inout CGFloat) {
-        drawAccount(b, &rx)
-        if let update = updateAvailable {
-            // Dezent statt der waiting-Farbe: kein Alarm, nur ein Hinweis.
-            module(b, &rx, [NSAttributedString(string: String(localized: "\(update.version) verfügbar", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.fg))], pill: Theme.surface,
-                   String(localized: "Update verfügbar", bundle: Bundle.app), value: update.version) { [weak self] in self?.onShowUpdate?() }
-        }
-        if waitingCount > 0 {
-            module(b, &rx, [NSAttributedString(string: String(localized: "\(waitingCount) warten", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))], pill: Theme.waiting,
-                   String(localized: "Wartende Sessions", bundle: Bundle.app), value: "\(waitingCount)") { [weak self] in self?.onSelectWaiting?() }
-        }
-        if detachableCount > 0 {
-            module(b, &rx, [NSAttributedString(string: String(localized: "\(detachableCount) trennen", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.idle), bold: true))], pill: Theme.idle,
-                   String(localized: "Fertige Sessions trennen", bundle: Bundle.app), value: "\(detachableCount)") { [weak self] in self?.onDetachIdle?() }
-        }
-        drawCounts(b, &rx)
+        drawNoticeKeys(b, &rx)
         if let tip {
             module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))],
                    String(localized: "Tipp", bundle: Bundle.app), value: tip) { [weak self] in self?.onDismissTip?() }
@@ -357,23 +416,25 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         }
     }
 
-    /// Sessions je Status in den Farben der Statuspunkte, dahinter die Gesamtzahl. Fehler nur, wenn es welche gibt.
-    private func drawCounts(_ b: CGRect, _ rx: inout CGFloat) {
-        let rows: [(n: Int, color: NSColor, label: String, always: Bool)] = [
-            (counts.running, Theme.running, String(localized: "arbeiten", bundle: Bundle.app), true),
-            (counts.waiting, Theme.waitingText, String(localized: "warten", bundle: Bundle.app), true),
-            (counts.idle, Theme.idle, String(localized: "fertig", bundle: Bundle.app), true),
-            (counts.error, Theme.error, String(localized: "mit Fehler", bundle: Bundle.app), false),
-            // Statusfarbe für „getrennt“ ist als Text zu dunkel; `muted` ist derselbe Grauton in lesbar.
-            (counts.detached, Theme.muted, String(localized: "getrennt", bundle: Bundle.app), true),
-        ]
-        var parts: [NSAttributedString] = [], tips: [String] = []
-        for r in rows where r.n > 0 || r.always {
-            parts.append(NSAttributedString(string: "\(r.n)", attributes: Theme.attrs(11.5, r.color, bold: true)))
-            tips.append("\(r.n) \(r.label)")
+    /// Von rechts: „N warten“, „N trennen“, Update und Konto, jeweils nur wenn es etwas zu tun gibt.
+    private func drawNoticeKeys(_ b: CGRect, _ rx: inout CGFloat) {
+        let start = rx
+        if waitingCount > 0 {
+            keyModule(b, &rx, NSAttributedString(string: String(localized: "\(waitingCount) warten", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true)), fill: Theme.waiting,
+                      String(localized: "Wartende Sessions", bundle: Bundle.app), value: "\(waitingCount)") { [weak self] in self?.onSelectWaiting?() }
         }
-        parts.append(NSAttributedString(string: "· \(counts.total)", attributes: Theme.attrs(11.5, Theme.sub)))
-        module(b, &rx, parts, tip: tips.joined(separator: ", ") + String(localized: " · \(counts.total) Sessions", bundle: Bundle.app))
+        if detachableCount > 0 {
+            keyModule(b, &rx, NSAttributedString(string: String(localized: "\(detachableCount) trennen", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.idle), bold: true)), fill: Theme.idle,
+                      String(localized: "Fertige Sessions trennen", bundle: Bundle.app), value: "\(detachableCount)") { [weak self] in self?.onDetachIdle?() }
+        }
+        if let update = updateAvailable {
+            // Dezent statt der waiting-Farbe: kein Alarm, nur ein Hinweis.
+            keyModule(b, &rx, NSAttributedString(string: String(localized: "\(update.version) verfügbar", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.fg)),
+                      String(localized: "Update verfügbar", bundle: Bundle.app), value: update.version) { [weak self] in self?.onShowUpdate?() }
+        }
+        drawAccount(b, &rx)
+        // Nach der letzten Taste derselbe Rand wie nach dem Display, dann folgt die Fuge des ersten flachen Moduls.
+        if rx != start { rx -= Self.edge - Self.keyGap }
     }
 
     /// Farbe eines Nutzungswerts. Mit Plan (7 Tage) zählt der Vorsprung: über dem Plan rot, dicht darunter gelb,
@@ -433,47 +494,17 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     }
 
     /// Einträge der Extensions, der erste ganz links. Von rechts her gezeichnet; was links von `limit` (Ende der linken
-    /// Seite plus Rand fürs Breadcrumb) nicht mehr passt, bleibt weg, die vorhandenen Module rechts bleiben unberührt.
+    /// Seite plus Rand) nicht mehr passt, bleibt weg, die vorhandenen Module rechts bleiben unberührt.
     private func drawExtensionItems(_ b: CGRect, _ rx: inout CGFloat, limit: CGFloat) {
         for item in extensionItems.reversed() {
             let text = NSAttributedString(string: item.text, attributes: Theme.attrs(11, item.color?.nsColor ?? Theme.fg))
-            guard rx - (text.size().width + 20) >= limit else { return }
+            guard rx - 2 * Instrument.hairline - Self.moduleWidth([text]) >= limit else { return }
             if let action = item.action {
                 module(b, &rx, [text], item.name, value: item.text) { [weak self] in self?.onExtensionAction?(item.name, action) }
             } else {
                 module(b, &rx, [text], tip: "\(item.name): \(item.text)")
             }
         }
-    }
-
-    // MARK: Mitte
-
-    /// So viel Breite behält das Breadcrumb mindestens (oder seine natürliche Breite, wenn kürzer): Einträge der
-    /// Extensions dürfen die Mitte nicht verdrängen, nur kürzen lassen. Rund 20 Zeichen.
-    static let minCrumbWidth: CGFloat = 160
-    /// Breite des Breadcrumbs beim letzten Zeichnen.
-    private(set) var crumbWidth: CGFloat = 0
-
-    private func crumbText() -> NSAttributedString {
-        let fMuted = Theme.attrs(11.5, Theme.muted)
-        if let c = crumb {
-            let m = NSMutableAttributedString(string: c.group + " › ", attributes: crumbGroupAttrs ?? fMuted)
-            m.append(NSAttributedString(string: c.session, attributes: Theme.attrs(11.5, Theme.fg, bold: true)))
-            if openCount > 1 { m.append(NSAttributedString(string: String(localized: " · \(openCount) offen", bundle: Bundle.app), attributes: fMuted)) }
-            return m
-        } else if let e = errorText {
-            return NSAttributedString(string: String(localized: "kadrell · \(e)", bundle: Bundle.app), attributes: Theme.attrs(11.5, Theme.error))
-        }
-        return NSAttributedString(string: String(localized: "kadrell · \(sessionCount) sessions", bundle: Bundle.app), attributes: fMuted)
-    }
-
-    /// Breadcrumb mittig zwischen linker und rechter Seite, gekürzt, wenn der Platz fehlt.
-    private func drawCrumb(_ b: CGRect, from leftEnd: CGFloat, to rx: CGFloat) {
-        let mid = crumbText()
-        let avail = rx - leftEnd - 16
-        let mw = min(mid.size().width, max(0, avail))
-        crumbWidth = mw
-        mid.draw(with: CGRect(x: leftEnd + (avail - mw) / 2, y: b.midY - 8, width: mw, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
     private func showLayoutMenu(at p: CGPoint) {
@@ -497,15 +528,19 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     override func accessibilityRole() -> NSAccessibility.Role? { .toolbar }
     override func accessibilityLabel() -> String? { String(localized: "Statusleiste", bundle: Bundle.app) }
 
-    /// Knöpfe aus den Trefferflächen des letzten Zeichnens.
+    /// Knöpfe aus den Trefferflächen des letzten Zeichnens, dahinter das Display als Text.
     override func accessibilityChildren() -> [Any]? {
         a11y = hitRects.accessibilityElements(parent: self, reusing: a11y)
-        return a11y
+        statusA11y.update(parent: self, role: .staticText, label: String(localized: "Status", bundle: Bundle.app),
+                          value: status.text, frame: status.rect.scaled(Theme.scale))
+        return a11y + [statusA11y]
     }
 
+    /// Die Aktion feuert sofort beim Drücken, die Taste sinkt dazu kurz ein.
     override func mouseDown(with event: NSEvent) {
         let v = convert(event.locationInWindow, from: nil)
-        let p = CGPoint(x: v.x / Theme.scale, y: v.y / Theme.scale)
-        hitRects.first(at: p)?.action()
+        guard let hit = hitRects.first(at: CGPoint(x: v.x / Theme.scale, y: v.y / Theme.scale)) else { return }
+        flash(hit.label)
+        hit.action()
     }
 }

@@ -243,26 +243,28 @@ final class ExtensionPanelTests: XCTestCase {
         }
         let wide = labels(width: 1400)
         XCTAssertEqual(wide.ext.sorted(), ["e1", "e2", "e3"])
-        let narrow = labels(width: 1200)
+        // Ohne Breadcrumb gehört die Mitte den Einträgen, gekürzt wird deshalb erst unter rund 1050 pt.
+        let narrow = labels(width: 1000)
         XCTAssertEqual(narrow.rest, wide.rest, "vorhandene Module bleiben vollständig")
         XCTAssertEqual(narrow.ext.sorted(), ["e2", "e3"])
         for (i, a) in narrow.frames.enumerated() { for b in narrow.frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "\(a) überlappt \(b)") } }
     }
 
     /// Über viele Breiten (um 1000 px), damit der Rest nach dem letzten passenden Eintrag mal klein ausfällt.
-    func testExtensionItemsLeaveRoomForBreadcrumb() {
-        let natural = NSAttributedString(string: "kadrell › Eine ziemlich lange Session", attributes: Theme.attrs(11.5, Theme.fg, bold: true)).size().width
+    func testNarrowBarUsesCompactDisplayWithoutOverlap() {
         for width in stride(from: 900 as CGFloat, through: 1100, by: 9) {
             let bar = StatusBarView(frame: .zero)
-            let w = barWindow(bar, width: width)
-            defer { w.close() }
-            bar.crumb = (group: "kadrell", session: "Eine ziemlich lange Session")
+            let w = barWindow(bar, width: width); defer { w.close() }
+            bar.counts = StatusCounts(running: 12, waiting: 3, idle: 4, error: 2, detached: 1)
+            bar.waitingCount = 3; bar.detachableCount = 4
             bar.extensionItems = (1...6).map { ("e\($0)", "Ein langer Eintrag Nummer \($0)", .ok, "a:\($0)") }
             bar.display()
-            XCTAssertGreaterThanOrEqual(bar.crumbWidth, min(natural, StatusBarView.minCrumbWidth) - 1, "Breite \(width)")
             let frames = barElements(bar).map { $0.accessibilityFrame() }
             for (i, a) in frames.enumerated() { for b in frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "Breite \(width)") } }
         }
+        let bar = StatusBarView(frame: .zero); let w = barWindow(bar, width: 600); defer { w.close() }
+        bar.counts = StatusCounts(running: 12, waiting: 3, idle: 4, error: 2, detached: 1); bar.display()
+        XCTAssertTrue(bar.displayCompact)
     }
 
     /// Der Manager meldet bis zu 50-mal pro Sekunde; `needsDisplay` ist ohne sichtbares Fenster nicht lesbar, daher der Vergleich selbst.
@@ -274,19 +276,34 @@ final class ExtensionPanelTests: XCTestCase {
         XCTAssertFalse(StatusBarView.sameItems(items, []))
     }
 
-    /// Mit `KADRELL_RENDER_BAR_OUT=<pfad>.png` entsteht ein Bild der Leiste mit zwei Einträgen.
+    /// Mit `KADRELL_RENDER_BAR_OUT=<pfad>.png` entsteht ein Bild der Leiste mit zwei Einträgen im eingestellten
+    /// Schema, daneben `<pfad>-instrument-dark.png` und `<pfad>-instrument-light.png`.
     func testRenderStatusBar() throws {
+        let out = ProcessInfo.processInfo.environment["KADRELL_RENDER_BAR_OUT"]
+        let saved = Theme.current
+        defer { Theme.current = saved }
+        for theme in [nil, "instrument-dark", "instrument-light"] {
+            if let theme { Theme.current = ColorTheme.named(theme) }
+            let png = try renderBar()
+            guard let out else { continue }
+            let path = theme.map { out.replacingOccurrences(of: ".png", with: "-\($0).png") } ?? out
+            try png.write(to: URL(fileURLWithPath: path))
+        }
+    }
+
+    private func renderBar() throws -> Data {
         let bar = StatusBarView(frame: .zero)
         let w = barWindow(bar, width: 1200)
         defer { w.close() }
-        bar.crumb = (group: "kadrell", session: "Statusleiste")
         bar.counts = StatusCounts(running: 2, waiting: 1, idle: 3, error: 0, detached: 1)
+        bar.sync = true
+        bar.waitingCount = 1
+        bar.detachableCount = 3
         bar.extensionItems = [("ddev", "ddev 3 up", .ok, "ddev:list"), ("jira", "2 Tickets", .warn, nil)]
         bar.display()
         let rep = try XCTUnwrap(bar.bitmapImageRepForCachingDisplay(in: bar.bounds))
         bar.cacheDisplay(in: bar.bounds, to: rep)
-        guard let out = ProcessInfo.processInfo.environment["KADRELL_RENDER_BAR_OUT"] else { return }
-        try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: out))
+        return try XCTUnwrap(rep.representation(using: .png, properties: [:]))
     }
 
     func testWarnIsTheYellowDotColorEverywhere() {

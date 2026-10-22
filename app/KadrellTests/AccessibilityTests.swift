@@ -3,6 +3,18 @@ import XCTest
 
 @MainActor
 final class AccessibilityTests: XCTestCase {
+    /// Die erwarteten Labels sind deutsch; das Temp-Profil erbt sonst die Sprache des eigenen Profils.
+    override func setUp() {
+        super.setUp()
+        Settings.language = .de
+    }
+
+    override func tearDown() {
+        Profile.defaults.removeObject(forKey: Settings.languageKey)
+        Localization.apply(.system)
+        super.tearDown()
+    }
+
     private func window(_ view: NSView, _ size: NSSize) -> NSWindow {
         let w = NSWindow(contentRect: NSRect(origin: CGPoint(x: 100, y: 100), size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
@@ -135,7 +147,7 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertEqual(closed, "a")
     }
 
-    func testStatusBarButtons() {
+    func testStatusBarButtons() throws {
         let bar = StatusBarView(frame: .zero)
         let w = window(bar, NSSize(width: 900, height: 30))
         defer { w.close() }
@@ -148,7 +160,7 @@ final class AccessibilityTests: XCTestCase {
 
         let buttons = elements(bar)
         XCTAssertEqual(buttons.map { $0.accessibilityLabel() ?? "" },
-                       ["Layout", "Weniger Spalten", "Mehr Spalten", "Auto-Modus", "Sync", "Gruppierung nach Projekt", "Sortierung", "Wartende Sessions"])
+                       ["Layout", "Weniger Spalten", "Mehr Spalten", "Auto-Modus", "Sync", "Gruppierung nach Projekt", "Sortierung", "Wartende Sessions", "Status"])
         let sync = buttons[4]
         XCTAssertEqual(sync.accessibilityValue() as? String, "an")
         XCTAssertEqual(buttons[5].accessibilityValue() as? String, "an", "Gruppierung ist im Default an")
@@ -157,6 +169,24 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertEqual(toggled, 1)
         bar.display()
         XCTAssertTrue(elements(bar)[4] === sync)
+        let status = try XCTUnwrap(elements(bar).first { $0.accessibilityLabel() == "Status" })
+        XCTAssertEqual(status.accessibilityRole(), .staticText)
+    }
+
+    /// Das Display liest die Langform aller Zustände vor, bei einer Fehlermeldung stattdessen diese.
+    func testStatusDisplayReadsLongFormOrError() throws {
+        let bar = StatusBarView(frame: .zero)
+        let w = window(bar, NSSize(width: 900, height: 30))
+        defer { w.close() }
+        let counts = StatusCounts(running: 2, waiting: 1, idle: 0, error: 0, detached: 0)
+        bar.counts = counts
+        bar.display()
+        var status = try XCTUnwrap(elements(bar).first { $0.accessibilityLabel() == "Status" })
+        XCTAssertEqual(status.accessibilityValue() as? String, StatusDisplay.spoken(counts))
+        bar.errorText = "x"
+        bar.display()
+        status = try XCTUnwrap(elements(bar).first { $0.accessibilityLabel() == "Status" })
+        XCTAssertEqual(status.accessibilityValue() as? String, "x")
     }
 
     /// Grüne Pille „N trennen“: nur bei trennbaren fertigen Sessions, Klick trennt sie.
