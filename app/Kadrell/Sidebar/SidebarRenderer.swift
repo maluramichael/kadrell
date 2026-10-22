@@ -78,6 +78,9 @@ enum SidebarStyle: String, CaseIterable {
 /// Bausteine, die sich alle Designs teilen: Zeilenfläche, Punkt, Titel, Laufzeit, Nachricht, Favorit, Gruppen-Label.
 extension SidebarRenderer {
     func headRect(_ row: CGRect) -> CGRect { CGRect(x: row.minX, y: row.minY, width: row.width, height: sessionRow) }
+    /// Höhe der Nachrichtenzeile unter der Kopfzeile einer Session (Einstellung „letzte Nachricht zeigen“). 2 pt mehr
+    /// als die Schrift braucht: mit Tastaturring rückt der Umriss unten 2 pt ein und bliebe sonst an den Unterlängen.
+    var messageLine: CGFloat { 16 }
     func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
     /// Strich-Anzeige arbeitender Sessions, sitzt anstelle des Punkts.
     func meterRect(_ row: CGRect) -> CGRect { CGRect(x: 26, y: headRect(row).midY - 5, width: 12, height: 10) }

@@ -18,13 +18,14 @@ final class SidebarRendererTests: XCTestCase {
     /// `status` ist der Rohwert wie von Claude Code („busy“, „waiting“, „idle“); `lit` = nil lässt alle vier Striche leuchten.
     private func session(focused: Bool = false, keyFocus: Bool = false, selected: Bool = false, hover: Bool = false,
                          unread: Bool = false, color: NSColor = NSColor(hex: 0x6ea8fe), status: String? = nil,
-                         shellRunning: Bool = false, attached: Bool = true, lit: Int? = nil) -> SidebarSessionItem {
+                         shellRunning: Bool = false, attached: Bool = true, lit: Int? = nil,
+                         message: String? = nil) -> SidebarSessionItem {
         var s = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A")
         s.rawStatus = status
         s.hasRunningShell = shellRunning
         return SidebarSessionItem(session: s, color: color, dot: Theme.statusColor(s.status, attached: attached, shellRunning: shellRunning),
                                   meter: SidebarSessionItem.meter(for: s, attached: attached, lit: lit), attached: attached,
-                                  selected: selected, focused: focused, keyFocus: keyFocus, hover: hover, message: nil,
+                                  selected: selected, focused: focused, keyFocus: keyFocus, hover: hover, message: message,
                                   showAge: false, unread: unread)
     }
 
@@ -96,6 +97,28 @@ final class SidebarRendererTests: XCTestCase {
             assertColor(rep, 185, 21, Theme.running, "Marke in der Mitte")
             assertColor(rep, 185, 13, Theme.fg, "Umriss über der Marke durchgehend")
             assertColor(rep, 185, 28, Theme.fg, "Umriss unter der Marke durchgehend")
+        }
+    }
+
+    /// Nachrichtenzeile mit Tastaturring: die Unterlängen („gjpqy“) halten mindestens 1,5 pt Abstand zur Innenkante des
+    /// Umrisses, auch bei 130 %. Gemessen als Unterschied zur selben Zeile ohne Nachricht, vierfach gerastert.
+    func testMessageDescendersClearKeyFocusOutline() {
+        for renderer in [ClassicSidebarRenderer(), CompactSidebarRenderer()] as [any SidebarRenderer] {
+            for ui: CGFloat in [1, 1.3] {
+                let k = 4 * ui, h = renderer.sessionRow + renderer.messageLine
+                func row(_ m: String?) -> NSBitmapImageRep {
+                    render(theme: dark, width: Int(200 * k), height: Int((h * k).rounded(.up)), scale: k) {
+                        panelCanvas(200, h)
+                        renderer.drawSession(session(focused: true, keyFocus: true, message: m), in: CGRect(x: 0, y: 0, width: 200, height: h))
+                    }
+                }
+                let with = row("gjpqy gjpqy gjpqy"), without = row(nil)
+                // Innenkante des Umrisses unten: Fläche endet 3 pt über der Zeilenkante, Umriss 1,5 pt breit.
+                let inner = h - 3 - 1.5
+                let band = Int(((inner - 1.5) * k).rounded(.down))..<Int((inner * k).rounded(.up))
+                let ink = band.filter { y in (Int(42 * k)..<Int(150 * k)).contains { distance(pixel(with, x: $0, y: y), pixel(without, x: $0, y: y)) > 0.05 } }
+                XCTAssertTrue(ink.isEmpty, "\(renderer) \(ui): Unterlängen im Band unter der Nachricht bei y = \(ink.map { CGFloat($0) / k })")
+            }
         }
     }
 

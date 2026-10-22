@@ -202,7 +202,7 @@ final class SidebarView: ClipWidthView {
     }
 
     private func rowHeight(_ r: Row) -> CGFloat {
-        if case .group = r { renderer.groupRow } else { renderer.sessionRow + (showMessages ? 14 : 0) }
+        if case .group = r { renderer.groupRow } else { renderer.sessionRow + (showMessages ? renderer.messageLine : 0) }
     }
 
     func rowRect(_ i: Int) -> CGRect {
