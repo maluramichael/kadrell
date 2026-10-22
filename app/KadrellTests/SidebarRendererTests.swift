@@ -198,6 +198,33 @@ final class SidebarRendererTests: XCTestCase {
         XCTAssertLessThanOrEqual(CGFloat(labelInkRight), label.maxX + 1, "gezeichnete Tinte liegt in der gemeldeten Fläche")
     }
 
+    /// Langer Name, Warte-Marke und Favorit: gekürzt wird nur der Name, „· N“ bleibt vor der Marke sichtbar. Zwei Bilder,
+    /// die sich nur in der Zahl der Sessions unterscheiden, müssen sich direkt vor der Marke unterscheiden.
+    func testLongGroupLabelKeepsCountVisible() {
+        let renderers: [any SidebarRenderer] = [ClassicSidebarRenderer(), CompactSidebarRenderer()]
+        for renderer in renderers {
+            let row = CGRect(x: 0, y: 0, width: 240, height: renderer.groupRow)
+            let head = renderer is ClassicSidebarRenderer ? renderer.headRect(row) : row
+            func draw(_ sessions: Int) -> NSBitmapImageRep {
+                render(theme: dark, width: 240, height: Int(row.height), scale: 1) {
+                    panelCanvas(240, row.height)
+                    renderer.drawGroup(item(name: String(repeating: "x", count: 80), sessions: sessions, favorite: true, waiting: 2), in: row)
+                }
+            }
+            let two = draw(2), seven = draw(7)
+            let band = Int(head.midY) - 6...Int(head.midY) + 6
+            func orange(_ x: Int) -> Bool { band.contains { let c = pixel(two, x: x, y: $0); return c.redComponent - c.blueComponent > 0.3 } }
+            guard let badgeLeft = (37..<240).first(where: orange) else { XCTFail("\(renderer): Warte-Marke fehlt"); continue }
+            let differs = (37..<badgeLeft).filter { x in band.contains { distance(pixel(two, x: x, y: $0), pixel(seven, x: x, y: $0)) > 0.1 } }
+            guard let countLeft = differs.first else { XCTFail("\(renderer): Zahl der Sessions nicht sichtbar"); continue }
+            XCTAssertGreaterThan(countLeft, badgeLeft - 24, "\(renderer): Zahl steht direkt vor der Marke")
+            // Gekürzt wird der Name: zwischen Labelanfang und Zahl steht Tinte bis kurz vor die Zahl.
+            func inked(_ x: Int) -> Bool { band.contains { distance(pixel(two, x: x, y: $0), dark.panel) > 0.1 } }
+            XCTAssertTrue(inked(37) || inked(38), "\(renderer): Name beginnt bei x = 37")
+            XCTAssertTrue((countLeft - 30..<countLeft).contains(where: inked), "\(renderer): Name reicht bis an die Zahl")
+        }
+    }
+
     func testCompactGroupSeparatorIsSeam() {
         let renderer = CompactSidebarRenderer()
         for t in ColorTheme.all {
@@ -266,6 +293,13 @@ final class SidebarRendererTests: XCTestCase {
         s.hasRunningShell = true
         XCTAssertTrue(has(s), "Shell läuft: Striche")
         XCTAssertEqual(SidebarSessionItem.meter(for: s, attached: true, lit: 3)?.lit, 3)
+        // Warten und Fehler gehen vor: die laufende Shell darf sie nicht hinter der Strich-Anzeige verstecken.
+        s.rawStatus = "waiting"
+        XCTAssertFalse(has(s), "wartet, Shell läuft: Punkt")
+        s.rawStatus = "error"
+        XCTAssertFalse(has(s), "Fehler, Shell läuft: Punkt")
+        s.rawStatus = "busy"
+        XCTAssertTrue(has(s), "arbeitet, Shell läuft: Striche")
     }
 
     func testWaitingSessionKeepsDot() {

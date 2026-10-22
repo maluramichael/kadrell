@@ -4,7 +4,7 @@ Neueste Version oben.
 
 ## 1.71.0 (2026-10-22)
 
-- Änderung: Der Baum ist neu gestaltet: Gruppen stehen als ruhige Überschriften mit kleinem Farbpunkt da, die gezeigte Session hat einen hellen Rahmen, arbeitende Sessions zeigen eine Strich-Anzeige statt eines pulsierenden Punkts.
+- Änderung: Der Baum ist neu gestaltet: Gruppen stehen als ruhige Überschriften mit kleinem Farbpunkt da, die gezeigte Session hat einen Rahmen, arbeitende Sessions zeigen eine Strich-Anzeige statt eines pulsierenden Punkts.
 - Änderung: Baum, Arbeitsfläche und Seitenleisten sind durch feine Fugen getrennt, die Arbeitsfläche hat oben links eine runde Ecke.
 - Entfernt: Das Baum-Design „Getönte Gruppen“. Wer es benutzt hat, sieht jetzt „Klassisch“.
 

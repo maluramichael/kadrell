@@ -34,8 +34,9 @@ struct SidebarSessionItem {
     let dot: NSColor
     /// Ohne Gruppierung steht der Projektname vor dem Titel, sonst trägt ihn die Gruppenzeile darüber.
     var project: String? = nil
-    /// Strich-Anzeige statt Punkt: gesetzt, wenn angehängt und Claude arbeitet oder noch ein Kommando läuft. Farbe ohne
-    /// Puls-Alpha, `lit` = leuchtende Striche (nil = alle, bei „Bewegung reduzieren“).
+    /// Strich-Anzeige statt Punkt: gesetzt, wenn angehängt und Claude arbeitet oder (untätig) noch ein Kommando läuft.
+    /// Warten und Fehler behalten den Punkt. Farbe ohne Puls-Alpha, `lit` = leuchtende Striche (nil = alle, bei
+    /// „Bewegung reduzieren“).
     var meter: (color: NSColor, lit: Int?)? = nil
     /// Claude-Prozess läuft (angehängt): steuert die Punktform bei „Farben nicht unterscheiden“ (Ring = nicht gestartet).
     let attached: Bool
@@ -52,7 +53,8 @@ struct SidebarSessionItem {
 
 extension SidebarSessionItem {
     static func meter(for s: Session, attached: Bool, lit: Int?) -> (color: NSColor, lit: Int?)? {
-        guard attached, s.status == .running || s.hasRunningShell else { return nil }
+        // Warten und Fehler gehen vor: eine laufende Shell darf sie nicht hinter den Strichen verstecken.
+        guard attached, s.status == .running || (s.hasRunningShell && s.status == .idle) else { return nil }
         return (Theme.statusColor(s.status, attached: true, shellRunning: s.hasRunningShell), lit)
     }
 }
@@ -232,9 +234,25 @@ extension SidebarRenderer {
 
     /// Gesperrtes Versal-Label mit der Zahl der Sessions: `KADRELL · 2`.
     static func groupLabel(_ g: SidebarGroupItem) -> NSAttributedString {
+        let label = NSMutableAttributedString(attributedString: groupName(g))
+        label.append(groupCount(g))
+        return label
+    }
+
+    /// Name allein, gesperrt in Versalien; wird bei Platzmangel gekürzt.
+    static func groupName(_ g: SidebarGroupItem) -> NSAttributedString {
+        NSAttributedString(string: g.group.name.uppercased(), attributes: groupLabelAttributes)
+    }
+
+    /// Zahl der Sessions ` · 2`, steht immer ganz.
+    static func groupCount(_ g: SidebarGroupItem) -> NSAttributedString {
+        NSAttributedString(string: " · \(g.dots.count)", attributes: groupLabelAttributes)
+    }
+
+    private static var groupLabelAttributes: [NSAttributedString.Key: Any] {
         var attrs = Theme.attrs(10.5, Theme.sub, bold: true)
         attrs[.kern] = CGFloat(0.8)
-        return NSAttributedString(string: "\(g.group.name.uppercased()) · \(g.dots.count)", attributes: attrs)
+        return attrs
     }
 
     /// Kleiner Farbakzent der Gruppe zwischen Chevron und Label.
@@ -243,13 +261,17 @@ extension SidebarRenderer {
         NSBezierPath(roundedRect: CGRect(x: 26, y: head.midY - 3, width: 6, height: 6), xRadius: 1.5, yRadius: 1.5).fill()
     }
 
-    /// Gruppen-Label ab x = 37, bis `right` gekürzt; liefert die belegte Fläche. Das Server-Symbol tragen nur die
-    /// Sessions einer Host-Gruppe.
+    /// Gruppen-Label ab x = 37 bis `right`; liefert die belegte Fläche. Gekürzt wird nur der Name, die Zahl steht direkt
+    /// dahinter und bleibt sichtbar. Das Server-Symbol tragen nur die Sessions einer Host-Gruppe.
     @discardableResult
     func drawGroupName(_ g: SidebarGroupItem, head: CGRect, right: CGFloat) -> CGRect {
-        let label = Self.groupLabel(g), box = CGRect(x: 37, y: head.midY - 7, width: max(0, right - 37), height: 14)
-        label.draw(with: box, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        return CGRect(x: box.minX, y: box.minY, width: min(box.width, label.size().width), height: box.height)
+        let name = Self.groupName(g), count = Self.groupCount(g), y = head.midY - 7
+        let avail = max(0, right - 37), countW = min(count.size().width.rounded(.up), avail)
+        let nameW = min(name.size().width, avail - countW)
+        let options: NSString.DrawingOptions = [.usesLineFragmentOrigin, .truncatesLastVisibleLine]
+        if nameW > 0 { name.draw(with: CGRect(x: 37, y: y, width: avail - countW, height: 14), options: options) }
+        count.draw(with: CGRect(x: 37 + nameW, y: y, width: countW, height: 14), options: options)
+        return CGRect(x: 37, y: y, width: nameW + countW, height: 14)
     }
 
     func drawPath(_ g: SidebarGroupItem, below head: CGRect) {

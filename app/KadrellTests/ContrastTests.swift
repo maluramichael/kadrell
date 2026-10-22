@@ -27,6 +27,27 @@ final class ContrastTests: XCTestCase {
         }
     }
 
+    /// Die Strich-Anzeige trägt den Status allein über Form und Farbe: Arbeitsfarbe und Shell-Farbe heben sich als
+    /// Grafik (3:1) vom Gehäuse des Baums und von der Modulfarbe ausgewählter Zeilen ab.
+    @MainActor
+    func testMeterColorsMeetGraphicsContrast() {
+        var busy = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A")
+        busy.rawStatus = "busy"
+        var shell = busy
+        shell.rawStatus = "idle"; shell.hasRunningShell = true
+        let saved = Theme.current
+        defer { Theme.current = saved }
+        for t in ColorTheme.all {
+            Theme.current = t
+            for (name, s) in [("running", busy), ("shell", shell)] {
+                guard let c = SidebarSessionItem.meter(for: s, attached: true, lit: nil)?.color else { XCTFail("\(t.id): \(name) ohne Striche"); continue }
+                for bg in [t.panel, t.bg] {
+                    XCTAssertGreaterThanOrEqual(c.contrastRatio(with: bg), 3, "\(t.id): \(name) \(c.hexString) gegen \(bg.hexString)")
+                }
+            }
+        }
+    }
+
     /// Ohne eigene Angabe ist der Akzent die Arbeitsfarbe, die zehn älteren Schemata sehen also unverändert aus.
     func testAccentDefaultsToRunning() {
         for t in ColorTheme.all where !t.id.hasPrefix("instrument") {
