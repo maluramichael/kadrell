@@ -2,6 +2,16 @@
 
 Neueste Version oben.
 
+## Unreleased
+
+- Änderung: Kacheln und Stack-Zeilen sind neu gestaltet: neutrale Köpfe mit kleinem Farbpunkt der Gruppe statt eingefärbter Flächen, feine Fugen zwischen den Kacheln und unter den Köpfen. Die fokussierte Kachel hat einen kräftigen Rahmen in Schriftfarbe.
+- Änderung: Arbeitende Sessions zeigen auch in Kachelköpfen und Stack-Zeilen die Strich-Anzeige statt eines pulsierenden Punkts.
+- Änderung: Wartet eine Session, während im Hintergrund noch ein Kommando läuft, zeigt ihr Punkt die Warte-Farbe, und VoiceOver sagt „wartet“.
+- Fix: Seitlich gescrollte Kacheln und die erste Stack-Zeile folgen der runden Ecke der Arbeitsfläche, statt abgeschnitten zu werden.
+- Fix: Bei Kachel-Deckkraft unter 100 % zeigt die runde Ecke keinen deckenden Streifen mehr.
+- Fix: Die Striche der Arbeits-Anzeige stehen bei jeder UI-Größe gleichmäßig weit auseinander.
+- Fix: Das Layout-Symbol in der Leiste ist so groß wie die Schrift der übrigen Tasten.
+
 ## 1.71.0 (2026-10-22)
 
 - Änderung: Der Baum ist neu gestaltet: Gruppen stehen als ruhige Überschriften mit kleinem Farbpunkt da, die gezeigte Session hat einen Rahmen, arbeitende Sessions zeigen eine Strich-Anzeige statt eines pulsierenden Punkts.
