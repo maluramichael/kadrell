@@ -1208,6 +1208,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil, sessionId: String? = nil) -> String {
         let id = sessionId ?? UUID().uuidString.lowercased()
+        // Direkt nach dem Start sucht `boot` noch nach `claude`; bis dahin gibt es keine Registry. Ein ⌘N mit Enter in
+        // diesem Moment darf die App nicht abstürzen lassen, er geht ins Leere.
+        guard registry != nil else {
+            Self.log.warning("startSession vor dem Start der Registry, ignoriert")
+            NSSound.beep()
+            return id
+        }
         var target = group ?? store.group(forCwd: cwd)
         if target == nil {
             let g = store.makeGroup(cwd: cwd)
