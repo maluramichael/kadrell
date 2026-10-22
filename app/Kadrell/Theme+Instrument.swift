@@ -181,7 +181,7 @@ enum Instrument {
     @MainActor static func raisedPanel(_ body: CGRect, radius: CGFloat = dialogRadius, depth: CGFloat = shadowDepth) {
         let body = snapped(body)
         dropShadow.setFill()
-        NSBezierPath(roundedRect: body.offsetBy(dx: 0, dy: depth), xRadius: radius, yRadius: radius).fill()
+        NSBezierPath(roundedRect: body.offsetBy(dx: 0, dy: snapped(depth)), xRadius: radius, yRadius: radius).fill()
         Theme.raised.setFill()
         NSBezierPath(roundedRect: body, xRadius: radius, yRadius: radius).fill()
         seamRing(body, radius: radius)
@@ -210,7 +210,13 @@ enum Instrument {
 
     // MARK: Zeilen-Auswahl (Werte wie im Baum)
 
-    static func rowShape(_ row: CGRect) -> CGRect { row.insetBy(dx: 6, dy: 1) }
+    /// Abstand der Zeilenfläche zum Zeilenrand, Breite von Umriss und Tastaturring, Luft zwischen Ring und Fläche.
+    private static let rowInset = CGSize(width: 6, height: 1)
+    private static let outlineWidth: CGFloat = 1.5
+    private static let keyRingWidth: CGFloat = 2
+    private static let keyRingGap: CGFloat = 0.5
+
+    static func rowShape(_ row: CGRect) -> CGRect { row.insetBy(dx: rowInset.width, dy: rowInset.height) }
 
     @MainActor static func fillRow(_ shape: CGRect) {
         Theme.bg.setFill()
@@ -219,29 +225,29 @@ enum Instrument {
 
     /// 1,5 pt Umriss in `fg` innen an der Fläche.
     @MainActor static func outline(_ shape: CGRect) {
-        let path = NSBezierPath(roundedRect: shape.insetBy(dx: 0.75, dy: 0.75), xRadius: 5.25, yRadius: 5.25)
-        path.lineWidth = 1.5
+        let half = outlineWidth / 2
+        let path = NSBezierPath(roundedRect: shape.insetBy(dx: half, dy: half), xRadius: rowRadius - half, yRadius: rowRadius - half)
+        path.lineWidth = outlineWidth
         Theme.fg.setStroke()
         path.stroke()
     }
 
-    /// 2 pt Tastaturring in `accent`, `outer` ist seine Außenkante.
+    /// 2 pt Tastaturring in `accent`, `outer` ist seine Außenkante. Innen folgt er dem Radius der Zeilenfläche.
     @MainActor static func keyRing(_ outer: CGRect) {
-        let ring = NSBezierPath(roundedRect: outer, xRadius: 8, yRadius: 8)
-        ring.append(NSBezierPath(roundedRect: outer.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6))
-        ring.windingRule = .evenOdd
         Theme.accent.setFill()
-        ring.fill()
+        ring(outer, radius: rowRadius + keyRingWidth, width: keyRingWidth).fill()
     }
 
     /// Hervorgehobene Zeile: Fläche, mit `outline` Umriss in `fg`, mit `ring` außen der Tastaturring. Mit Ring rückt die
-    /// Fläche oben und unten 2 pt ein, damit Ring, Luft und Umriss ringsum gleich breit in der Zeile bleiben.
+    /// Fläche oben und unten 2 pt ein, damit Ring, Luft und Umriss ringsum gleich breit in der Zeile bleiben: seitlich
+    /// wächst der Ring nach außen, oben und unten endet er `keyRingGap` vor dem Zeilenrand.
     @MainActor static func rowHighlight(_ row: CGRect, outline drawOutline: Bool, ring: Bool) {
         var shape = rowShape(row)
         if ring {
-            let outer = shape.insetBy(dx: -2.5, dy: -0.5)
+            let around = keyRingWidth + keyRingGap
+            let outer = shape.insetBy(dx: -around, dy: -(rowInset.height - keyRingGap))
             keyRing(outer)
-            shape = outer.insetBy(dx: 2.5, dy: 2.5)
+            shape = outer.insetBy(dx: around, dy: around)
         }
         fillRow(shape)
         if drawOutline { outline(shape) }

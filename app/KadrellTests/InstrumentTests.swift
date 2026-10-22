@@ -643,6 +643,7 @@ final class InstrumentTests: XCTestCase {
         }
         XCTAssertLessThan(distance(pixel(rep, x: 4, y: 12), t.accent), 0.1, "Ring außen")
         XCTAssertLessThan(distance(pixel(rep, x: 100, y: 12), t.bg), 0.02, "Fläche innen")
+        XCTAssertLessThan(distance(pixel(rep, x: 100, y: 3), t.fg), 0.05, "Umriss oben an der Fläche (y 3 bis 4,5)")
     }
 
     func testKeyRoleLabelsReadable() {
@@ -652,6 +653,21 @@ final class InstrumentTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(role.label.contrastRatio(with: role.fill ?? Instrument.keyCap), 4.5, "\(t.id) \(role)")
             }
         } }
+    }
+
+    func testSurfaceViewDrawsRaisedAndFocusedWell() {
+        let oldScale = Theme.scale; defer { Theme.scale = oldScale }
+        Theme.scale = 1
+        let t = ColorTheme.named("instrument-dark")
+        withTheme(t) {
+            let raised = render(InstrumentSurfaceView(part: .raised, frame: NSRect(x: 0, y: 0, width: 60, height: 40)))
+            XCTAssertLessThan(distance(pixel(raised, x: 30, y: 20), t.raised), 0.02, "Fläche")
+            XCTAssertLessThan(luma(raised, x: 30, y: 0), luma(t.raised), "Fugenring oben")
+            XCTAssertGreaterThan(alpha(raised, x: 30, y: 38), 0.3, "Schatten in den unteren 3 pt")
+            let well = render(InstrumentSurfaceView(part: .well(focused: true), frame: NSRect(x: 0, y: 0, width: 60, height: 20)))
+            XCTAssertLessThan(distance(pixel(well, x: 30, y: 1), t.accent), 0.05, "Akzentring")
+            XCTAssertLessThan(distance(pixel(well, x: 30, y: 10), t.well), 0.02, "Feld")
+        }
     }
 
     func testSurfaceViewIgnoresClicks() {

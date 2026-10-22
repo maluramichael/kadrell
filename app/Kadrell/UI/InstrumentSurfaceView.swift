@@ -33,7 +33,7 @@ final class InstrumentSurfaceView: NSView {
     private func draw(_ part: Part, in r: CGRect) {
         switch part {
         case .raised:
-            Instrument.raisedPanel(CGRect(x: 0, y: 0, width: r.width, height: r.height - Instrument.shadowDepth))
+            Instrument.raisedPanel(CGRect(x: 0, y: 0, width: r.width, height: max(0, r.height - Instrument.shadowDepth)))
         case .group:
             Instrument.group(r)
         case .well(let focused):
