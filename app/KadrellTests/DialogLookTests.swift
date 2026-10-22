@@ -79,6 +79,42 @@ final class DialogLookTests: XCTestCase {
         XCTAssertTrue(surfaceParts(view()).contains { $0.isWell }, "Namensfeld ist ein Feld")
     }
 
+    // MARK: Einstellungen
+
+    func testSettingsOnRaisedSurface() {
+        // Mitte der Kopfzeile ist leer (Titel links, Version rechts).
+        assertOnRaised(SettingsView(model: SettingsModel()), at: { CGPoint(x: $0.width / 2, y: 14) })
+    }
+
+    /// Jede Tabelle ist eine Gruppe mit Fugenring, zwischen ihren Zeilen liegen Fugen statt Linien; dazu eine Fuge
+    /// unter der Kopfzeile. Neun Bereiche plus zwei Kürzel-Tabellen (Navigation, Kacheln verwalten).
+    func testSettingsTablesAreGroupsWithSeams() {
+        let parts = surfaceParts(SettingsView(model: SettingsModel()))
+        let groups = parts.filter { $0 == .group }.count
+        XCTAssertEqual(groups, 11, "jede Tabelle eine Gruppe")
+        XCTAssertGreaterThan(parts.filter { $0 == .hSeam }.count, groups, "Fugen zwischen den Zeilen und unter der Kopfzeile")
+    }
+
+    /// Werte sitzen in Feldern, alle bündig in der rechten Spalte: Dropdowns, Editor, Pfadfelder (ohne eigenen Kasten
+    /// um das Feld) und Kürzel. Ein Kürzel in Aufnahme ist ein Feld mit Akzentring, keine Akzent-Füllung.
+    func testSettingsValuesSitInAlignedWells() {
+        let model = SettingsModel()
+        model.recording = .nextSession
+        defer { model.recording = nil }
+        let (host, views) = hostedSurfaces(SettingsView(model: model))
+        let wells = views.filter { $0.part.isWell }.map { $0.convert($0.bounds, to: host) }
+        XCTAssertGreaterThan(wells.count, 40, "Dropdowns, Felder und Kürzel sind Felder")
+        XCTAssertEqual(Set(wells.map { $0.minX.rounded() }).count, 1, "alle Felder beginnen an derselben Kante: \(Set(wells.map(\.minX)))")
+        XCTAssertEqual(views.filter { $0.part == .well(focused: true) }.count, 1, "Kürzel in Aufnahme trägt den Akzentring")
+    }
+
+    /// Ordner, Bild, kein Bild und Account hinzufügen sind neutrale Tasten (Primär bleibt dem Fuß vorbehalten).
+    func testSettingsActionsAreNeutralKeys() {
+        let roles = surfaceParts(SettingsView(model: SettingsModel())).compactMap { if case .key(_, let role) = $0 { role } else { nil } }
+        XCTAssertGreaterThanOrEqual(roles.count, 4)
+        XCTAssertEqual(Set(roles), [.neutral])
+    }
+
     // MARK: Helfer
 
     private var group: Kadrell.Group {
@@ -102,6 +138,11 @@ final class DialogLookTests: XCTestCase {
 
     /// Teile aller Instrument-Flächen, die `view` im Hosting anlegt.
     private func surfaceParts<V: View>(_ view: V) -> [InstrumentSurfaceView.Part] {
+        hostedSurfaces(view).surfaces.map(\.part)
+    }
+
+    /// Hosting-View bei Maßstab 1 in natürlicher Größe samt aller Instrument-Flächen darin (für Lage und Teil).
+    private func hostedSurfaces<V: View>(_ view: V) -> (host: NSView, surfaces: [InstrumentSurfaceView]) {
         let saved = Theme.scale; defer { Theme.scale = saved }
         Theme.scale = 1
         let host = NSHostingView(rootView: view)
@@ -109,7 +150,7 @@ final class DialogLookTests: XCTestCase {
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date() + 0.05)
         host.layoutSubtreeIfNeeded()
-        return surfaces(in: host).map(\.part)
+        return (host, surfaces(in: host))
     }
 
     /// Genau diese Tasten, unabhängig von der Reihenfolge der Hosting-Views.
