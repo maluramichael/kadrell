@@ -405,13 +405,21 @@ final class InstrumentTests: XCTestCase {
         let mark = CALayer(); mark.frame = CGRect(x: 60, y: 0, width: 40, height: 6); mark.backgroundColor = NSColor.red.cgColor
         root.addSublayer(tile); root.addSublayer(mark)
         CATransaction.commit()
-        let renderer = CARenderer(mtlTexture: texture, options: nil)
+        // Renderer und Abholen auf derselben Warteschlange: sonst liest die Kopie das Bild, bevor der Renderer fertig ist.
+        let queue = try XCTUnwrap(device.makeCommandQueue())
+        let renderer = CARenderer(mtlTexture: texture, options: [kCARendererMetalCommandQueue: queue])
         renderer.layer = root
         renderer.bounds = root.bounds
-        let queue = try XCTUnwrap(device.makeCommandQueue())
-        var bytes = [UInt8](repeating: 0, count: w * h * 4)
-        // Der erste Durchgang kann leer bleiben, solange der Renderer die Ebenen noch nicht übernommen hat.
-        for _ in 0..<5 where !bytes.contains(where: { $0 != 0 }) {
+        let zeros = [UInt8](repeating: 0, count: w * h * 4)
+        var bytes = zeros
+        // BGRA; die Zeilenrichtung der Textur legt die Marke fest.
+        func bgra(_ x: Int, _ row: Int) -> [UInt8] { let i = (row * w + x) * 4; return Array(bytes[i..<i + 4]) }
+        let red: [UInt8] = [0, 0, 255, 255]
+        // Der erste Durchgang kann leer bleiben, solange der Renderer die Ebenen noch nicht übernommen hat. Eine neue
+        // Textur ist nicht genullt: „irgendwas ungleich 0“ hieße dann Speichermüll statt fertigem Bild. Deshalb vor
+        // jedem Durchgang leeren und warten, bis die Marke sichtbar ist.
+        for _ in 0..<10 where bgra(80, 2) != red && bgra(80, h - 3) != red {
+            texture.replace(region: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0, withBytes: zeros, bytesPerRow: w * 4)
             CATransaction.flush()
             renderer.beginFrame(atTime: CACurrentMediaTime(), timeStamp: nil)
             renderer.addUpdate(renderer.bounds)
@@ -421,10 +429,8 @@ final class InstrumentTests: XCTestCase {
             blit.synchronize(resource: texture); blit.endEncoding(); buffer.commit(); buffer.waitUntilCompleted()
             texture.getBytes(&bytes, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
         }
-        // BGRA; die Zeilenrichtung der Textur legt die Marke fest.
-        func bgra(_ x: Int, _ row: Int) -> [UInt8] { let i = (row * w + x) * 4; return Array(bytes[i..<i + 4]) }
-        let topRow = bgra(80, 2)[2] == 255 ? 0 : h - 1
-        XCTAssertEqual(bgra(80, topRow == 0 ? 2 : h - 3), [0, 0, 255, 255], "Marke oben")
+        let topRow = bgra(80, 2) == red ? 0 : h - 1
+        XCTAssertEqual(bgra(80, topRow == 0 ? 2 : h - 3), red, "Marke oben")
         let bottomRow = h - 1 - topRow
         XCTAssertEqual(bgra(1, topRow)[3], 0, "oben links rund: außerhalb des Bogens nichts")
         for (x, row, name) in [(w - 1, topRow, "oben rechts"), (0, bottomRow, "unten links"), (w - 1, bottomRow, "unten rechts")] {
