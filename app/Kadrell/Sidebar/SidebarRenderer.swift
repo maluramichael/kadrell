@@ -53,9 +53,7 @@ struct SidebarSessionItem {
 
 extension SidebarSessionItem {
     static func meter(for s: Session, attached: Bool, lit: Int?) -> (color: NSColor, lit: Int?)? {
-        // Warten und Fehler gehen vor: eine laufende Shell darf sie nicht hinter den Strichen verstecken.
-        guard attached, s.status == .running || (s.hasRunningShell && s.status == .idle) else { return nil }
-        return (Theme.statusColor(s.status, attached: true, shellRunning: s.hasRunningShell), lit)
+        Theme.meterColor(s, attached: attached).map { ($0, lit) }
     }
 }
 

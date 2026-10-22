@@ -310,6 +310,11 @@ final class SidebarRendererTests: XCTestCase {
         }
     }
 
+    func testWaitingWithShellKeepsWaitingDot() {
+        let rep = renderSession(session(status: "waiting", shellRunning: true), theme: dark)
+        withTheme(dark) { assertColor(rep, 31, 22, Theme.waiting, "Punkt in Warte-Farbe, nicht Shell-Farbe") }
+    }
+
     func testShellRunningUsesShellColor() {
         let rep = renderSession(session(status: "idle", shellRunning: true), theme: dark)
         withTheme(dark) {

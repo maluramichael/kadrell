@@ -122,7 +122,7 @@ final class SidebarView: ClipWidthView {
                 // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Anzeigen laufender Sessions.
                 if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true; continue }
                 for (i, row) in self.rows.enumerated() {
-                    guard case .session(let s, _) = row, s.status == .running || s.hasRunningShell else { continue }
+                    guard case .session(let s, _) = row, Theme.meterColor(s, attached: self.isAttached(s.id)) != nil else { continue }
                     self.setNeedsDisplay(self.renderer.statusRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
                 }
             }
@@ -309,12 +309,10 @@ final class SidebarView: ClipWidthView {
     }
 
     private func dotColor(_ s: Session) -> NSColor {
-        let attached = isAttached(s.id)
-        if let f = flashes[s.id], let p = Feedback.progress(since: f.start, duration: Self.flashDuration) {
-            let amount = f.waiting ? abs(sin(p * 2 * .pi)) : 1 - p
-            return NSColor.white.mixed(0.75 * amount, into: Theme.statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell))
-        }
-        return Theme.dotColor(s, attached: attached, pulse: Feedback.pulse())
+        let base = Theme.statusColor(s.status, attached: isAttached(s.id), shellRunning: s.hasRunningShell)
+        guard let f = flashes[s.id], let p = Feedback.progress(since: f.start, duration: Self.flashDuration) else { return base }
+        let amount = f.waiting ? abs(sin(p * 2 * .pi)) : 1 - p
+        return NSColor.white.mixed(0.75 * amount, into: base)
     }
 
     private func drawGroup(_ g: Group, in r: CGRect, first: Bool, hover: Bool) {

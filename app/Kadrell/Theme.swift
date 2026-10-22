@@ -78,17 +78,24 @@ enum Theme {
     /// Session noch etwas.
     static var shell: NSColor { current.shell }
 
-    /// Statuspunkt: ohne laufenden Prozess grau, egal was der letzte Status war. Wartet Claude schon wieder, läuft
-    /// aber noch ein Kommando aus dem Bash-Tool, gilt dessen Farbe (`shell`).
+    /// Statuspunkt: ohne laufenden Prozess grau, egal was der Status war. Die Shell-Farbe gilt nur, wenn die Session
+    /// fertig ist und noch ein Kommando aus dem Bash-Tool läuft; Wartet und Fehler behalten ihre eigene Farbe.
     static func statusColor(_ status: SessionStatus, attached: Bool, shellRunning: Bool = false) -> NSColor {
         guard attached else { return detached }
-        return shellRunning && status != .running ? shell : color(for: status)
+        return shellRunning && status == .idle ? shell : color(for: status)
+    }
+
+    /// Farbe der Strich-Anzeige, nil = Punkt. Striche zeigen „es läuft etwas“: Claude arbeitet, oder die Session ist
+    /// fertig und im Hintergrund läuft noch ein Kommando. Einzige Quelle dieser Regel für Baum, Kachel und Stack.
+    static func meterColor(_ s: Session, attached: Bool) -> NSColor? {
+        guard attached, s.status == .running || (s.hasRunningShell && s.status == .idle) else { return nil }
+        return statusColor(s.status, attached: true, shellRunning: s.hasRunningShell)
     }
 
     /// Farbe des Statuspunkts inklusive Puls: pulsiert, solange Claude arbeitet oder noch ein Kommando läuft.
     static func dotColor(_ s: Session, attached: Bool, pulse: CGFloat) -> NSColor {
         let c = statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell)
-        guard attached, s.status == .running || s.hasRunningShell else { return c }
+        guard meterColor(s, attached: attached) != nil else { return c }
         return c.withAlphaComponent(pulse)
     }
 
