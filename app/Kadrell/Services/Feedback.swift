@@ -77,6 +77,13 @@ enum Feedback {
         return 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
     }
 
+    /// Wie viele der vier Striche der Arbeits-Anzeige leuchten, 1...4 in Schritten von 160 ms (zwei Takte des
+    /// 80-ms-Takts im Baum). nil bei „Bewegung reduzieren“: die Anzeige steht still, alle Striche an.
+    nonisolated static func meterLit(now: CFTimeInterval = CACurrentMediaTime()) -> Int? {
+        guard !reduceMotion else { return nil }
+        return Int(now / 0.16) % 4 + 1
+    }
+
     /// Sessions, die seit dem letzten Stand zu warten begonnen haben bzw. vom Arbeiten in den Leerlauf gewechselt sind.
     nonisolated static func transitions(from old: [String: SessionStatus], to new: [String: SessionStatus]) -> (waiting: Set<String>, done: Set<String>) {
         var waiting = Set<String>(), done = Set<String>()

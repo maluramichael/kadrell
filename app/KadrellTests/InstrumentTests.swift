@@ -22,6 +22,10 @@ final class InstrumentTests: XCTestCase {
         return rep
     }
 
+    private func render(width: Int, height: Int, _ draw: () -> Void) -> NSBitmapImageRep {
+        render(theme: Theme.current, width: width, height: height, scale: 1, draw)
+    }
+
     private func luma(_ c: NSColor) -> CGFloat {
         let s = c.usingColorSpace(.sRGB) ?? c
         return 0.2126 * s.redComponent + 0.7152 * s.greenComponent + 0.0722 * s.blueComponent
@@ -279,5 +283,31 @@ final class InstrumentTests: XCTestCase {
         relayout()
         XCTAssertEqual(wc.corner.frame.origin, expected())
         XCTAssertGreaterThan(wc.corner.frame.minX, 100, "Baum wieder da, Ecke wieder rechts davon")
+    }
+
+    func testMeterLightsInSteps() {
+        XCTAssertEqual(Feedback.meterLit(now: 0.00), 1)
+        XCTAssertEqual(Feedback.meterLit(now: 0.17), 2)
+        XCTAssertEqual(Feedback.meterLit(now: 0.49), 4)
+        XCTAssertEqual(Feedback.meterLit(now: 0.65), 1)
+    }
+
+    func testMeterStillWithReduceMotion() {
+        let saved = Feedback.reduceMotion; defer { Feedback.reduceMotion = saved }
+        Feedback.reduceMotion = true
+        XCTAssertNil(Feedback.meterLit(now: 0.17))
+    }
+
+    func testMeterDrawsLitAndDimBars() {
+        // 12×10, lit = 2: Mitte von Strich 1 und 2 deckend, von Strich 3 und 4 ca. 25 %
+        let rep = render(width: 12, height: 10) { Instrument.meter(CGRect(x: 0, y: 0, width: 12, height: 10), lit: 2, color: .white) }
+        XCTAssertEqual(alpha(rep, x: 1, y: 5), 1, accuracy: 0.05)
+        XCTAssertEqual(alpha(rep, x: 10, y: 5), 0.25, accuracy: 0.08)
+    }
+
+    func testMeterWithoutLitDrawsAllBarsSolid() {
+        let rep = render(width: 12, height: 10) { Instrument.meter(CGRect(x: 0, y: 0, width: 12, height: 10), lit: nil, color: .white) }
+        for x in [1, 4, 8, 11] { XCTAssertEqual(alpha(rep, x: x, y: 5), 1, accuracy: 0.05, "x \(x)") }
+        XCTAssertEqual(alpha(rep, x: 2, y: 5), 0, accuracy: 0.05, "Lücke zwischen Strich 1 und 2")
     }
 }

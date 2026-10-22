@@ -77,4 +77,10 @@ final class ContrastTests: XCTestCase {
         XCTAssertEqual(c.blueComponent, 0, accuracy: 0.001)
         XCTAssertEqual(c.alphaComponent, 0.3, accuracy: 0.001)
     }
+
+    func testShellDefaultsToBlueExceptInstrument() {
+        for t in ColorTheme.all where !t.id.hasPrefix("instrument") { XCTAssertEqual(t.shell, t.ansi[4], t.id) }
+        XCTAssertEqual(ColorTheme.named("instrument-dark").shell.hexString, "#a3a19a")
+        XCTAssertEqual(ColorTheme.named("instrument-light").shell.hexString, "#5c5a54")
+    }
 }
