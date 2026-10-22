@@ -565,4 +565,34 @@ final class InstrumentTests: XCTestCase {
         XCTAssertGreaterThan(alpha(rep, x: 7, y: 10), 0.9)
         XCTAssertLessThan(alpha(rep, x: 10, y: 6), 0.1)
     }
+
+    func testDividerLeavesCornerAreaToModuleCorner() {
+        let split = ThinSplitView(frame: CGRect(x: 0, y: 0, width: 100, height: 40)); split.isVertical = true
+        split.cornerRect = CGRect(x: 50, y: -2, width: 16, height: 16)
+        let rep = render(theme: .named("instrument-dark"), width: 100, height: 40, scale: 1) {
+            split.drawDivider(in: CGRect(x: 50, y: 0, width: 2, height: 40))
+        }
+        XCTAssertEqual(alpha(rep, x: 50, y: 5), 0, accuracy: 0.01, "unter der Ecke malt der Trenner nichts")
+        XCTAssertGreaterThan(alpha(rep, x: 50, y: 20), 0.5, "darunter Grund und Fuge")
+    }
+
+    func testCornerLeftStripTranslucentLikeDivider() {
+        let old = Settings.tileOpacity; defer { Settings.tileOpacity = old }
+        Settings.tileOpacity = 0.5
+        let rep = render(ModuleCornerView(frame: CGRect(x: 0, y: 0, width: 16, height: 16)))
+        XCTAssertEqual(alpha(rep, x: 0, y: 8), 0.5, accuracy: 0.05, "links wie der Trenner")
+        XCTAssertEqual(alpha(rep, x: 8, y: 0), 1, accuracy: 0.05, "oben wie die deckende Leiste")
+    }
+
+    func testClosedWindowNoLongerMovesCorner() {
+        let wc = MainWindowController(index: 26, cascade: nil)
+        defer { wc.window.close() }
+        wc.window.setContentSize(NSSize(width: 1000, height: 700)); wc.split.layoutSubtreeIfNeeded()
+        wc.split.setPosition(300, ofDividerAt: 0)
+        XCTAssertEqual(wc.corner.frame.minX, 300, "Beobachter aktiv")
+        wc.close()
+        wc.split.setPosition(400, ofDividerAt: 0)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(wc.corner.frame.minX, 300, "nach close() zieht niemand mehr die Ecke nach")
+    }
 }

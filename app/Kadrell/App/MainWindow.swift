@@ -23,6 +23,8 @@ final class MainWindowController: NSObject {
     let extensionPanel = ExtensionPanelView(frame: .zero)
     /// Runde Ecke oben links an der Arbeitsfläche, über Leiste und Split (siehe `placeCorner`).
     let corner = ModuleCornerView(frame: .zero)
+    /// Beobachter, der die Ecke mit der Arbeitsfläche mitzieht; `close()` meldet ihn ab.
+    private var cornerObserver: NSObjectProtocol?
     /// Breite, auf die der Baum beim nächsten Einblenden zurückkommt.
     private var lastSidebarWidth: CGFloat = 260
     /// Vom Nutzer ausgeblendet (⌘⌥B), gespeichert pro Fenster. Ohne Panels fehlt der Bereich unabhängig davon.
@@ -96,7 +98,7 @@ final class MainWindowController: NSObject {
         // Jede Lageänderung der Arbeitsfläche im Split (Ziehen, Baum oder rechte Sidebar ein/aus, Fenstergröße) zieht
         // die Ecke nach. Die Leistenhöhe ändert nur `applyAppearance`, das ruft `placeCorner` selbst.
         workspace.postsFrameChangedNotifications = true
-        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: workspace, queue: .main) { [weak self] _ in
+        cornerObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: workspace, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.placeCorner() }
         }
         if index == 0 {
@@ -117,6 +119,13 @@ final class MainWindowController: NSObject {
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
         panel.frame = NSRect(x: 0, y: 0, width: 260, height: 10)
+    }
+
+    /// Fenster geht zu: Beobachter der Ecke abmelden, Terminals der Arbeitsfläche freigeben. Zweimal aufrufen schadet nicht.
+    func close() {
+        if let cornerObserver { NotificationCenter.default.removeObserver(cornerObserver) }
+        cornerObserver = nil
+        workspace.close()
     }
 
     func show() {
@@ -184,6 +193,11 @@ final class MainWindowController: NSObject {
         let side = ModuleCornerView.scaledRadius + 2
         corner.frame = CGRect(x: o.x - 2, y: o.y - 2, width: side, height: side)
         corner.needsDisplay = true
+        let cornerInSplit = root.convert(corner.frame, to: split)
+        if split.cornerRect != cornerInSplit {
+            split.cornerRect = cornerInSplit
+            split.needsDisplay = true
+        }
     }
 
     // MARK: Linkes Dock (Extension-Panels unter dem Baum)

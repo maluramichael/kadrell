@@ -250,7 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closeWindow(_ c: MainWindowController) {
         windows.removeAll { $0 === c }
         if current === c { current = windows.last }
-        c.workspace.close()
+        c.close()
         for k in ["workspace.selected", "workspace.mode", "workspace.auto", "sidebar.width", "rightSidebar.width", "rightSidebar.visible"] {
             Profile.defaults.removeObject(forKey: k + MainWindowController.suffix(c.index))
         }
@@ -1279,7 +1279,9 @@ final class ThinSplitView: NSSplitView {
 
     /// Gehäusefarbe wie der Baum, darauf die Fuge: senkrecht links dunkel, waagerecht oben dunkel. Der Split ist
     /// unskaliert, die Linien sind also genau 1 pt. Ein ungespiegelter Split hat oben bei maxY.
-    override func drawDivider(in rect: NSRect) {
+    override func drawDivider(in fullRect: NSRect) {
+        let rect = leavingCorner(fullRect)
+        guard rect.height > 0, rect.width > 0 else { return }
         Theme.panel.withAlphaComponent(CGFloat(Settings.tileOpacity)).setFill()
         rect.fill(using: .sourceOver)
         let first: CGRect, second: CGRect
@@ -1295,6 +1297,23 @@ final class ThinSplitView: NSSplitView {
         first.fill(using: .sourceOver)
         Instrument.seamLight.setFill()
         second.fill(using: .sourceOver)
+    }
+
+    /// Fläche der runden Modul-Ecke in Split-Koordinaten. Dort malt die Ecke Grund und Fuge selbst; der Trenner
+    /// spart sie aus, sonst läge sein Grund doppelt unter ihrem durchscheinenden und zeigte einen deckenden Streifen.
+    var cornerRect: CGRect = .zero
+
+    /// Der senkrechte Trenner ohne den Teil unter der Ecke: oben um die Höhe der Überlappung gekürzt (ungespiegelt
+    /// liegt oben bei maxY). Waagerechte Trenner und Trenner ohne Überlappung bleiben, wie sie sind.
+    private func leavingCorner(_ rect: NSRect) -> NSRect {
+        guard isVertical, !cornerRect.isEmpty else { return rect }
+        let overlap = cornerRect.intersection(rect)
+        guard !overlap.isNull else { return rect }
+        var cut = rect
+        cut.size.height -= overlap.height
+        if !isFlipped { return cut }
+        cut.origin.y += overlap.height
+        return cut
     }
 
     /// Resize-Cursor passend zur Ausrichtung: senkrechter Trenner zieht links/rechts, waagerechter hoch/runter.
