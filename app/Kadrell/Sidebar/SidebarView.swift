@@ -119,11 +119,11 @@ final class SidebarView: ClipWidthView {
                 guard self.window?.occlusionState.contains(.visible) == true else { wasAnimating = false; continue }
                 let now = CACurrentMediaTime(), animating = self.pruneAnimations(now)
                 if animating || wasAnimating { wasAnimating = animating; self.needsDisplay = true; continue }
-                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Punkte laufender Sessions.
+                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Anzeigen laufender Sessions.
                 if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true; continue }
                 for (i, row) in self.rows.enumerated() {
                     guard case .session(let s, _) = row, s.status == .running || s.hasRunningShell else { continue }
-                    self.setNeedsDisplay(self.renderer.dotRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
+                    self.setNeedsDisplay(self.renderer.statusRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
                 }
             }
         }
@@ -336,6 +336,7 @@ final class SidebarView: ClipWidthView {
         defer { if slide != nil { NSGraphicsContext.restoreGraphicsState() } }
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
                                                 project: grouped ? nil : g.name,
+                                                meter: SidebarSessionItem.meter(for: s, attached: isAttached(s.id), lit: Feedback.meterLit()),
                                                 attached: isAttached(s.id),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,

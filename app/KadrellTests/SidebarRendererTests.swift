@@ -15,11 +15,17 @@ final class SidebarRendererTests: XCTestCase {
                                 hover: hover, first: first, waitingCount: waiting)
     }
 
+    /// `status` ist der Rohwert wie von Claude Code („busy“, „waiting“, „idle“); `lit` = nil lässt alle vier Striche leuchten.
     private func session(focused: Bool = false, keyFocus: Bool = false, selected: Bool = false, hover: Bool = false,
-                         unread: Bool = false, color: NSColor = NSColor(hex: 0x6ea8fe)) -> SidebarSessionItem {
-        SidebarSessionItem(session: Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A"), color: color, dot: Theme.idle,
-                           attached: true, selected: selected, focused: focused, keyFocus: keyFocus, hover: hover, message: nil,
-                           showAge: false, unread: unread)
+                         unread: Bool = false, color: NSColor = NSColor(hex: 0x6ea8fe), status: String? = nil,
+                         shellRunning: Bool = false, attached: Bool = true, lit: Int? = nil) -> SidebarSessionItem {
+        var s = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A")
+        s.rawStatus = status
+        s.hasRunningShell = shellRunning
+        return SidebarSessionItem(session: s, color: color, dot: Theme.statusColor(s.status, attached: attached, shellRunning: shellRunning),
+                                  meter: SidebarSessionItem.meter(for: s, attached: attached, lit: lit), attached: attached,
+                                  selected: selected, focused: focused, keyFocus: keyFocus, hover: hover, message: nil,
+                                  showAge: false, unread: unread)
     }
 
     /// Eine Session-Zeile 200 × 24 bei y = 10 auf einer 200 × 44 großen Gehäusefläche.
@@ -124,8 +130,9 @@ final class SidebarRendererTests: XCTestCase {
             withTheme(dark) {
                 assertColor(rep, 29, mid, accent, "\(renderer): Farbakzent bei x = 26 bis 32")
                 assertColor(rep, 33, mid, Theme.bg, "\(renderer): Akzent nur 6 pt breit")
-                assertColor(rep, 200, mid, Theme.bg, "\(renderer): Hover in Modulfarbe, rechts keine Zahl mehr")
             }
+            let strayInk = (150..<234).filter { x in (mid - 4...mid + 4).contains { distance(pixel(rep, x: x, y: $0), dark.bg) > 0.02 } }
+            XCTAssertTrue(strayInk.isEmpty, "\(renderer): rechts keine Zahl mehr (Hover-Fläche endet bei x = 234), Tinte bei x = \(strayInk)")
             let ink = (37..<44).contains { x in (mid - 4...mid + 4).contains { distance(pixel(rep, x: x, y: $0), dark.bg) > 0.2 } }
             XCTAssertTrue(ink, "\(renderer): Label beginnt bei x = 37")
         }
@@ -186,5 +193,78 @@ final class SidebarRendererTests: XCTestCase {
                 assertColor(firstRep, 100, 10, Theme.panel, "\(t.id): erste Gruppe ohne Fuge")
             }
         }
+    }
+
+    func testFocusedSessionTitleIsBright() {
+        func titleColor(_ s: SidebarSessionItem) -> NSColor? {
+            ClassicSidebarRenderer().sessionTitle(s).attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+        }
+        withTheme(dark) {
+            XCTAssertEqual(titleColor(session(focused: true)), Theme.fg, "gezeigte Session: heller Titel")
+            XCTAssertEqual(titleColor(session()), Theme.sub, "Ruhezustand bleibt gedämpft")
+        }
+    }
+
+    // MARK: Strich-Anzeige
+
+    func testWorkingSessionShowsMeterNotDot() {
+        let rep = renderSession(session(status: "busy"), theme: dark)
+        withTheme(dark) {
+            // Striche bei x = 26...28, 29...31, 33...35, 36...38 (beide Kanten eingerastet), Lücken bei 28, 31 und 32, 35.
+            for x in [27, 30, 34, 37] { assertColor(rep, x, 22, Theme.running, "Strich") }
+            for x in [28, 31, 32, 35] { assertColor(rep, x, 22, Theme.panel, "Lücke") }
+            assertColor(rep, 30, 17, Theme.running, "Strich 10 pt hoch, oben")
+            assertColor(rep, 30, 26, Theme.running, "Strich 10 pt hoch, unten")
+            assertColor(rep, 30, 16, Theme.panel, "über dem Strich nichts")
+            assertColor(rep, 30, 27, Theme.panel, "unter dem Strich nichts")
+        }
+    }
+
+    func testMeterLitDimsTheRestAndFollowsClockStep() {
+        let rep = renderSession(session(status: "busy", lit: 2), theme: dark)
+        withTheme(dark) {
+            assertColor(rep, 27, 22, Theme.running, "Strich 1 leuchtet")
+            assertColor(rep, 30, 22, Theme.running, "Strich 2 leuchtet")
+            assertColor(rep, 34, 22, over(Theme.running.withAlphaComponent(0.25), Theme.panel), "Strich 3 gedimmt")
+            assertColor(rep, 37, 22, over(Theme.running.withAlphaComponent(0.25), Theme.panel), "Strich 4 gedimmt")
+        }
+    }
+
+    func testMeterOnlyWhenAttachedAndWorking() {
+        func has(_ s: Session, attached: Bool = true) -> Bool { SidebarSessionItem.meter(for: s, attached: attached, lit: 3) != nil }
+        var s = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A")
+        XCTAssertFalse(has(s), "idle: Punkt")
+        s.rawStatus = "waiting"
+        XCTAssertFalse(has(s), "wartet: Punkt")
+        s.rawStatus = "busy"
+        XCTAssertTrue(has(s), "arbeitet: Striche")
+        XCTAssertFalse(has(s, attached: false), "nicht angehängt: Punkt")
+        s.rawStatus = "idle"
+        s.hasRunningShell = true
+        XCTAssertTrue(has(s), "Shell läuft: Striche")
+        XCTAssertEqual(SidebarSessionItem.meter(for: s, attached: true, lit: 3)?.lit, 3)
+    }
+
+    func testWaitingSessionKeepsDot() {
+        let rep = renderSession(session(status: "waiting"), theme: dark)
+        withTheme(dark) {
+            assertColor(rep, 31, 22, Theme.waiting, "Punkt in der Mitte von dotRect")
+            assertColor(rep, 37, 22, Theme.panel, "rechts vom Punkt, innerhalb meterRect: Hintergrund")
+        }
+    }
+
+    func testShellRunningUsesShellColor() {
+        let rep = renderSession(session(status: "idle", shellRunning: true), theme: dark)
+        withTheme(dark) {
+            assertColor(rep, 27, 22, NSColor(hex: 0xa3a19a), "Strich in Shell-Farbe")
+            assertColor(rep, 37, 22, NSColor(hex: 0xa3a19a), "letzter Strich in Shell-Farbe")
+        }
+    }
+
+    func testStatusRectCoversDotAndMeter() {
+        let r = ClassicSidebarRenderer(), row = CGRect(x: 0, y: 10, width: 200, height: 24)
+        XCTAssertEqual(r.meterRect(row), CGRect(x: 26, y: r.headRect(row).midY - 5, width: 12, height: 10))
+        XCTAssertTrue(r.statusRect(row).contains(r.dotRect(row)))
+        XCTAssertTrue(r.statusRect(row).contains(r.meterRect(row)))
     }
 }

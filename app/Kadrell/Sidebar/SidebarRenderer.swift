@@ -34,6 +34,9 @@ struct SidebarSessionItem {
     let dot: NSColor
     /// Ohne Gruppierung steht der Projektname vor dem Titel, sonst trägt ihn die Gruppenzeile darüber.
     var project: String? = nil
+    /// Strich-Anzeige statt Punkt: gesetzt, wenn angehängt und Claude arbeitet oder noch ein Kommando läuft. Farbe ohne
+    /// Puls-Alpha, `lit` = leuchtende Striche (nil = alle, bei „Bewegung reduzieren“).
+    var meter: (color: NSColor, lit: Int?)? = nil
     /// Claude-Prozess läuft (angehängt): steuert die Punktform bei „Farben nicht unterscheiden“ (Ring = nicht gestartet).
     let attached: Bool
     let selected: Bool
@@ -45,6 +48,13 @@ struct SidebarSessionItem {
     let showAge: Bool
     /// Fertig oder wartet, ungesehen: fetter heller Titel und Marke „neu“, auch an der fokussierten Zeile.
     let unread: Bool
+}
+
+extension SidebarSessionItem {
+    static func meter(for s: Session, attached: Bool, lit: Int?) -> (color: NSColor, lit: Int?)? {
+        guard attached, s.status == .running || s.hasRunningShell else { return nil }
+        return (Theme.statusColor(s.status, attached: true, shellRunning: s.hasRunningShell), lit)
+    }
 }
 
 enum SidebarStyle: String, CaseIterable {
@@ -69,6 +79,10 @@ enum SidebarStyle: String, CaseIterable {
 extension SidebarRenderer {
     func headRect(_ row: CGRect) -> CGRect { CGRect(x: row.minX, y: row.minY, width: row.width, height: sessionRow) }
     func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
+    /// Strich-Anzeige arbeitender Sessions, sitzt anstelle des Punkts.
+    func meterRect(_ row: CGRect) -> CGRect { CGRect(x: 26, y: headRect(row).midY - 5, width: 12, height: 10) }
+    /// Alles, was der Status der Zeile je belegt: Puls und Striche zeichnen nur diese Fläche neu.
+    func statusRect(_ row: CGRect) -> CGRect { dotRect(row).union(meterRect(row)) }
 
     /// Fläche einer hervorgehobenen Zeile: eingerückt und rund, in der Modulfarbe wie die Kachelfläche.
     func rowShape(_ row: CGRect) -> CGRect { row.insetBy(dx: 6, dy: 1) }
@@ -153,7 +167,7 @@ extension SidebarRenderer {
             NSAttributedString(string: String(m.suffix(300)), attributes: attrs)
                 .draw(in: CGRect(x: 42, y: r.maxY - 4, width: max(0, row.maxX - 10 - 42), height: 14))
         }
-        Icons.statusDot(in: dotRect(row), status: s.session.status, attached: s.attached, color: s.dot)
+        drawStatus(s, row: row)
         let iconRect = CGRect(x: 12, y: r.midY - 6, width: 12, height: 12), iconColor = s.selected || s.hover ? Theme.fg : Theme.muted
         if s.session.isRemote { Icons.server(in: iconRect, color: iconColor) }
         else if s.session.isShell { Icons.computer(in: iconRect, color: iconColor) }
@@ -166,6 +180,12 @@ extension SidebarRenderer {
         }
         if s.unread { right = drawUnreadPill(s, head: r, right: right, shape: sessionShape(s, row: row)) - 8 }
         sessionTitle(s).draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    /// Strich-Anzeige für arbeitende Sessions, sonst der Statuspunkt.
+    func drawStatus(_ s: SidebarSessionItem, row: CGRect) {
+        if let m = s.meter { Instrument.meter(meterRect(row), lit: m.lit, color: m.color) }
+        else { Icons.statusDot(in: dotRect(row), status: s.session.status, attached: s.attached, color: s.dot) }
     }
 
     /// Marke „neu“ links von `right`, liefert ihre linke Kante. Sie bleibt innerhalb des Umrisses der Zeilenfläche,
@@ -183,7 +203,7 @@ extension SidebarRenderer {
 
     /// Titel der Session, ohne Gruppierung mit „projekt › “ in Gruppenfarbe davor.
     func sessionTitle(_ s: SidebarSessionItem) -> NSAttributedString {
-        let title = NSAttributedString(string: s.session.title, attributes: Theme.attrs(12, s.selected || s.hover || s.unread ? Theme.fg : Theme.sub, bold: s.unread))
+        let title = NSAttributedString(string: s.session.title, attributes: Theme.attrs(12, s.selected || s.hover || s.focused || s.unread ? Theme.fg : Theme.sub, bold: s.unread))
         guard let project = s.project else { return title }
         let line = NSMutableAttributedString(string: project + " › ", attributes: Theme.attrs(12, s.color, bold: true))
         line.append(title)
