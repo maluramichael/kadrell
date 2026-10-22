@@ -48,12 +48,11 @@ struct SidebarSessionItem {
 }
 
 enum SidebarStyle: String, CaseIterable {
-    case classic, tinted, compact
+    case classic, compact
 
     var title: String {
         switch self {
         case .classic: String(localized: "Klassisch", bundle: Bundle.app)
-        case .tinted: String(localized: "Getönte Gruppen", bundle: Bundle.app)
         case .compact: String(localized: "Kompakt", bundle: Bundle.app)
         }
     }
@@ -61,7 +60,6 @@ enum SidebarStyle: String, CaseIterable {
     @MainActor var renderer: any SidebarRenderer {
         switch self {
         case .classic: ClassicSidebarRenderer()
-        case .tinted: TintedSidebarRenderer()
         case .compact: CompactSidebarRenderer()
         }
     }

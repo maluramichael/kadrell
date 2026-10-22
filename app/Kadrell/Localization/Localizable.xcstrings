@@ -2843,22 +2843,6 @@
         }
       }
     },
-    "Getönte Gruppen": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Getönte Gruppen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tinted groups"
-          }
-        }
-      }
-    },
     "Gezählt wird, solange Kadrell läuft.": {
       "localizations": {
         "de": {

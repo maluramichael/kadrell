@@ -26,7 +26,7 @@ class ClipWidthView: NSView {
 @MainActor
 final class SidebarView: ClipWidthView {
     /// Aussehen der Zeilen, umschaltbar in den Einstellungen.
-    var renderer: any SidebarRenderer = SidebarStyle.tinted.renderer
+    var renderer: any SidebarRenderer = SidebarStyle.classic.renderer
     /// Laufzeit („12m“) rechts in jeder Session-Zeile.
     var showAge = true
     /// Sortiert nur die Anzeige. Ziehen ist dann aus, weil die Handreihenfolge unsichtbar bliebe.

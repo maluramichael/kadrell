@@ -84,4 +84,14 @@ final class SettingsModelTests: XCTestCase {
         Profile.defaults.removeObject(forKey: "colorTheme")
         XCTAssertEqual(Settings.colorTheme, "instrument-dark")
     }
+
+    /// Ein „tinted“ aus einer älteren Version startet mit Klassisch. Der Wert des Profils wird wiederhergestellt.
+    func testStoredTintedFallsBackToClassic() {
+        // Fasst `Profile.defaults` an: nur mit TEST_RUNNER_KADRELL_PROFILE=tmp laufen lassen.
+        let key = "sidebar.style", saved = Profile.defaults.object(forKey: key)
+        defer { Profile.defaults.set(saved, forKey: key) }
+        Profile.defaults.set("tinted", forKey: key)
+        XCTAssertEqual(Settings.sidebarStyle, .classic)
+        XCTAssertEqual(SidebarStyle.allCases, [.classic, .compact])
+    }
 }
