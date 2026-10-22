@@ -73,6 +73,8 @@ struct InstrumentKeyStyle: ButtonStyle {
             .offset(y: configuration.isPressed ? Theme.scale : 0)
             .padding(.bottom, Instrument.keyDepth * Theme.scale)
             .background(InstrumentSurface(part: .key(pressed: configuration.isPressed, role: role)).accessibilityHidden(true))
+            // Die gezeichnete Kappe nimmt keine Klicks an (`hitTest` = nil); ohne Form träfe nur die Schrift.
+            .contentShape(RoundedRectangle(cornerRadius: Instrument.keyRadius * Theme.scale))
     }
 
     /// Beschriftung der Kappe; liest `isEnabled`, damit eine gesperrte Taste gedämpft erscheint.
