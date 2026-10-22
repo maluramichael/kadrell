@@ -331,4 +331,49 @@ final class TileTests: XCTestCase {
         XCTAssertEqual(alphaAt(40, 1), 1, accuracy: 0.02, "oben rechts der Ecke bleibt")
         XCTAssertEqual(alphaAt(80, 50), 1, accuracy: 0.02, "Mitte bleibt")
     }
+
+    /// Die Maske folgt dem Scrollen sofort: Pfad, Lage und Größe werden nicht implizit 0,25 s lang überblendet.
+    func testModuleMaskDoesNotAnimate() throws {
+        Theme.scale = 1
+        let size = CGSize(width: 240, height: 120)
+        let c = cell()
+        c.frame = CGRect(origin: .zero, size: size)
+        let win = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered, defer: false)
+        defer { win.close() }
+        win.isReleasedWhenClosed = false
+        let root = FlippedView(frame: CGRect(origin: .zero, size: size)); root.wantsLayer = true
+        win.contentView = root
+        root.addSubview(c)
+        c.moduleMask = WorkspaceView.moduleMask(for: CGRect(x: -40, y: 0, width: 240, height: 120))
+        root.layoutSubtreeIfNeeded(); win.displayIfNeeded(); CATransaction.flush()
+        let shape = try XCTUnwrap(c.layer?.mask as? CAShapeLayer)
+        c.frame = CGRect(x: 0, y: 0, width: 300, height: 140)
+        c.moduleMask = WorkspaceView.moduleMask(for: CGRect(x: -80, y: 0, width: 300, height: 140))
+        XCTAssertTrue((c.layer?.mask as? CAShapeLayer) === shape, "dieselbe Masken-Ebene wird weiterverwendet")
+        XCTAssertEqual(shape.frame.size, CGSize(width: 300, height: 140))
+        XCTAssertTrue(shape.animationKeys()?.isEmpty ?? true, "keine laufende Animation: \(shape.animationKeys() ?? [])")
+    }
+
+    /// Die Striche ändern sich nur alle 160 ms: der 80-ms-Takt zeichnet nur bei einem neuen Schritt neu.
+    func testMeterRedrawsOnlyWhenStepChanges() {
+        let ws = WorkspaceView(frame: NSRect(x: 0, y: 0, width: 600, height: 400), defaultsSuffix: ".test-meter-step")
+        defer { ws.close() }
+        XCTAssertTrue(ws.meterStepChanged(1), "erster Schritt")
+        XCTAssertFalse(ws.meterStepChanged(1), "zweiter Takt im selben Schritt")
+        XCTAssertTrue(ws.meterStepChanged(2), "neuer Schritt")
+        XCTAssertFalse(ws.meterStepChanged(2))
+        XCTAssertTrue(ws.meterStepChanged(nil), "Wechsel zu „Bewegung reduzieren“ zeichnet einmal")
+        XCTAssertFalse(ws.meterStepChanged(nil), "bei „Bewegung reduzieren“ nie wieder")
+    }
+
+    /// Ein langes Gruppen-Label drückt in Stack-Zeilen nicht in den Titel: es wird mit Auslassung gekürzt.
+    func testStackGroupLabelTruncates() {
+        let short = WorkspaceView.stackGroupLabel("Web", maxWidth: 200)
+        XCTAssertEqual(short.string, "WEB", "kurzes Label bleibt ganz")
+        let long = WorkspaceView.stackGroupLabel("Ein sehr langer Gruppenname", maxWidth: 80)
+        XCTAssertLessThanOrEqual(long.size().width, 80)
+        XCTAssertTrue(long.string.hasSuffix("…"), long.string)
+        XCTAssertTrue(long.string.hasPrefix("EIN"), long.string)
+        XCTAssertGreaterThan(long.string.count, 1)
+    }
 }

@@ -12,8 +12,6 @@ final class CellView: NSView {
         var groupColor = Theme.muted
         /// Fokus-Kachel der Arbeitsfläche: Rahmen 2 pt in Vordergrundfarbe.
         var focused = false
-        /// Das Terminal dieser Kachel hat gerade die Tastatur.
-        var keyboardFocus = false
         var hovered = false
         /// Beim Ziehen einer anderen Kachel: hier landet sie.
         var dropTarget = false
@@ -54,12 +52,19 @@ final class CellView: NSView {
         didSet {
             guard let layer, moduleMask != oldValue || (moduleMask != nil && layer.mask == nil) else { return }
             guard let path = moduleMask else { layer.mask = nil; return }
-            let shape = layer.mask as? CAShapeLayer ?? CAShapeLayer()
+            let shape = layer.mask as? CAShapeLayer ?? Self.maskLayer()
             shape.fillRule = .evenOdd
             shape.frame = layer.bounds
             shape.path = path
             layer.mask = shape
         }
+    }
+    /// Masken-Ebene ohne implizite Animationen: der Schnitt muss beim Scrollen der Kachel sofort mitlaufen, sonst hinkt
+    /// er (Pfad und Frame würden sonst 0,25 s lang überblendet) und lässt bei Deckkraft unter 100 % Reste durchscheinen.
+    static func maskLayer() -> CAShapeLayer {
+        let shape = CAShapeLayer()
+        shape.actions = ["path": NSNull(), "bounds": NSNull(), "position": NSNull(), "frame": NSNull()]
+        return shape
     }
     /// Abgedunkelter Körper bei fehlendem Ordner, Startfehler und beendeter Session.
     private static let shade = NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 1)

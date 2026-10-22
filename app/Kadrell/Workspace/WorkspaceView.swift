@@ -51,6 +51,8 @@ final class WorkspaceView: NSView {
     private(set) var emptyHitRects: [(rect: CGRect, action: () -> Void)] = []
     private var tickTask: Task<Void, Never>?
     private weak var lastFirstResponder: NSResponder?
+    /// Zuletzt gezeichneter Schritt der Strich-Anzeige (siehe `meterStepChanged`).
+    private var lastMeterLit: Int?
     /// Ziehen einer Kachel oder Stack-Zeile auf eine andere sortiert um.
     private var pressed: (point: CGPoint, key: String)?
     private var dragging = false
@@ -535,7 +537,6 @@ final class WorkspaceView: NSView {
             session: s, groupName: g?.name ?? "", groupColor: groupColor(g),
             // Sync: alle Kacheln bekommen Eingaben, also sehen auch alle ausgewählt aus.
             focused: (focused == key || sync) && multiVisible,
-            keyboardFocus: t.map { $0 === window?.firstResponder } ?? false,
             hovered: hoveredCell == key, dropTarget: dragging && dropTarget == key,
             attached: attach?.isAttached(key) ?? false, ended: attach?.isEnded(key) ?? false,
             exitCode: attach?.exitCode(for: key), missingFolder: attach?.isMissingFolder(key) ?? false,
@@ -591,16 +592,27 @@ final class WorkspaceView: NSView {
         // Fenster verdeckt/versteckt: nichts zu zeichnen, keine Strich-Anzeige nötig.
         guard window?.occlusionState.contains(.visible) == true else { return }
         syncFirstResponder()
-        // Kacheln: nur die Strich-Anzeige im Kopf neu zeichnen, nicht die ganze Kachel.
+        if meterStepChanged(Feedback.meterLit()) { invalidateMeters() }
+        let now = CACurrentMediaTime()
+        if linger.values.contains(where: { $0 <= now }) { relayout() }
+    }
+
+    /// Die Striche ändern sich nur alle 160 ms, der Takt läuft alle 80 ms (bei „Bewegung reduzieren“ nie): nur bei
+    /// einem neuen Schritt neu zeichnen. Gibt zurück, ob sich der Schritt gegenüber dem letzten Aufruf geändert hat.
+    func meterStepChanged(_ lit: Int?) -> Bool {
+        defer { lastMeterLit = lit }
+        return lit != lastMeterLit
+    }
+
+    /// Kacheln: nur die Strich-Anzeige im Kopf neu zeichnen, nicht die ganze Kachel. Stack-Zeilen zeichnet die Fläche
+    /// selbst: auch dort nur die Strich-Anzeigen, nicht die ganze Fläche.
+    private func invalidateMeters() {
         for v in cells.values where !v.isHidden && !v.state.headerHidden && Theme.meterColor(v.state.session, attached: v.state.attached) != nil {
-            v.setNeedsDisplay(v.statusRect)
+            v.setNeedsDisplay(v.statusRect.insetBy(dx: -1, dy: -1))
         }
-        // Stack-Zeilen zeichnet die Fläche selbst: nur die Strich-Anzeigen neu, nicht die ganze Fläche.
         for (r, key) in stackRows where sessions[key].map({ Theme.meterColor($0, attached: attach?.isAttached(key) ?? false) != nil }) == true {
             setNeedsDisplay(stackStatusRect(r).insetBy(dx: -1, dy: -1))
         }
-        let now = CACurrentMediaTime()
-        if linger.values.contains(where: { $0 <= now }) { relayout() }
     }
 
     /// Klick in ein Terminal macht es still zum First Responder: Fokus und Rahmen nachziehen.
@@ -617,7 +629,6 @@ final class WorkspaceView: NSView {
         }
         // Klick ins schon fokussierte Terminal zählt auch als Hinsehen.
         if let hit { onActivate?(hit) }
-        for (key, v) in cells { v.state.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false }
     }
 
     // MARK: Zeichnen
@@ -793,6 +804,17 @@ final class WorkspaceView: NSView {
         }
     }
 
+    /// Gruppen-Label der Stack-Zeile in Versalien, mit Auslassung auf höchstens `maxWidth` gekürzt: gesperrte Versalien
+    /// sind breit und würden sonst in den Titel laufen.
+    static func stackGroupLabel(_ name: String, maxWidth: CGFloat) -> NSAttributedString {
+        var text = name, label = Instrument.groupLabel(text)
+        while label.size().width > maxWidth, !text.isEmpty {
+            text.removeLast()
+            label = Instrument.groupLabel(text + "…")
+        }
+        return label
+    }
+
     /// Rechte Seite von rechts nach links: Hover-Knöpfe, Laufzeit, Gruppe mit Akzent, Pfad. Gibt die linke Kante zurück.
     private func drawStackRowRight(_ r: CGRect, session s: Session, group g: Group?, hover: Bool) -> CGFloat {
         var rx = r.maxX - 10
@@ -804,7 +826,7 @@ final class WorkspaceView: NSView {
         let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         rx -= age.size().width; age.draw(at: CGPoint(x: rx, y: r.midY - 7))
         if let g, !g.name.isEmpty {
-            let label = Instrument.groupLabel(g.name)
+            let label = Self.stackGroupLabel(g.name, maxWidth: r.width / 3)
             rx -= 8 + label.size().width; label.draw(at: CGPoint(x: rx, y: r.midY - 7))
             Instrument.groupAccent(center: CGPoint(x: rx - 8, y: r.midY), color: groupColor(g))
             rx -= 11
