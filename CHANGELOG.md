@@ -6,7 +6,8 @@ Neueste Version oben.
 
 - Änderung: Kacheln und Stack-Zeilen sind neu gestaltet: neutrale Köpfe mit kleinem Farbpunkt der Gruppe statt eingefärbter Flächen, feine Fugen zwischen den Kacheln und unter den Köpfen. Die fokussierte Kachel hat einen kräftigen Rahmen in Schriftfarbe.
 - Änderung: Arbeitende Sessions zeigen auch in Kachelköpfen und Stack-Zeilen die Strich-Anzeige statt eines pulsierenden Punkts.
-- Änderung: Wartet eine Session, während im Hintergrund noch ein Kommando läuft, zeigt ihr Punkt die Warte-Farbe, und VoiceOver sagt „wartet“.
+- Änderung: Wartet eine Session oder hat sie einen Fehler, während im Hintergrund noch ein Kommando läuft, zeigt ihr Punkt weiter die Warte- bzw. Fehlerfarbe, und VoiceOver sagt „wartet“.
+- Änderung: Fährt die Maus über eine Kachel, ändert sich ihr Rand nicht mehr.
 - Fix: Seitlich gescrollte Kacheln und die erste Stack-Zeile folgen der runden Ecke der Arbeitsfläche, statt abgeschnitten zu werden.
 - Fix: Bei Kachel-Deckkraft unter 100 % zeigt die runde Ecke keinen deckenden Streifen mehr.
 - Fix: Die Striche der Arbeits-Anzeige stehen bei jeder UI-Größe gleichmäßig weit auseinander.
