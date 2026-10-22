@@ -35,7 +35,6 @@ final class CellView: NSView {
         var zoomed = false
     }
     var state: State { didSet { if state != oldValue { needsDisplay = true } } }
-    var pulse: CGFloat = 1
     /// Radius der Ecke oben links, wenn die Kachel in der Ecke der Arbeitsfläche liegt, sonst 0. Rahmen, Kopfzeile und
     /// Terminal folgen dann dem Bogen der Modulecke, statt von ihr abgeschnitten zu werden oder durchs Gehäuse zu scheinen.
     var moduleCornerRadius: CGFloat = 0 {

@@ -82,24 +82,20 @@ final class StatusDotColorTests: XCTestCase {
         XCTAssertEqual(SessionStatus.idle.spoken(attached: true, shellRunning: true), String(localized: "Kommando läuft noch", bundle: Bundle.app))
     }
 
-    func testRunningShellPaintsShellColor() {
-        XCTAssertEqual(Theme.dotColor(session(status: "idle", shell: true), attached: true, pulse: 1), Theme.shell)
+    private func statusColor(_ s: Session, attached: Bool) -> NSColor {
+        Theme.statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell)
     }
 
-    func testRunningShellPulses() {
-        XCTAssertEqual(Theme.dotColor(session(status: "idle", shell: true), attached: true, pulse: 0.5).alphaComponent, 0.5, accuracy: 0.001)
+    func testRunningShellPaintsShellColor() {
+        XCTAssertEqual(statusColor(session(status: "idle", shell: true), attached: true), Theme.shell)
     }
 
     func testWorkingSessionKeepsRunningColor() {
-        XCTAssertEqual(Theme.dotColor(session(status: "busy", shell: true), attached: true, pulse: 1), Theme.running)
-    }
-
-    func testIdleWithoutShellDoesNotPulse() {
-        XCTAssertEqual(Theme.dotColor(session(status: "idle", shell: false), attached: true, pulse: 0.5).alphaComponent, 1, accuracy: 0.001)
+        XCTAssertEqual(statusColor(session(status: "busy", shell: true), attached: true), Theme.running)
     }
 
     func testDetachedStaysGrey() {
-        XCTAssertEqual(Theme.dotColor(session(status: "idle", shell: true), attached: false, pulse: 1), Theme.detached)
+        XCTAssertEqual(statusColor(session(status: "idle", shell: true), attached: false), Theme.detached)
     }
 }
 

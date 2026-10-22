@@ -92,13 +92,6 @@ enum Theme {
         return statusColor(s.status, attached: true, shellRunning: s.hasRunningShell)
     }
 
-    /// Farbe des Statuspunkts inklusive Puls: pulsiert, solange Claude arbeitet oder noch ein Kommando läuft.
-    static func dotColor(_ s: Session, attached: Bool, pulse: CGFloat) -> NSColor {
-        let c = statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell)
-        guard meterColor(s, attached: attached) != nil else { return c }
-        return c.withAlphaComponent(pulse)
-    }
-
     static func font(_ size: CGFloat, bold: Bool = false) -> NSFont {
         NSFont(name: bold ? "JetBrainsMonoNF-Bold" : "JetBrainsMonoNF-Regular", size: size)
             ?? NSFont.monospacedSystemFont(ofSize: size, weight: bold ? .bold : .regular)

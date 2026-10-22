@@ -115,11 +115,11 @@ final class SidebarView: ClipWidthView {
                 // Solange etwas aufblitzt oder einfährt, flüssig zeichnen, sonst reicht der langsame Takt.
                 try? await Task.sleep(for: .milliseconds(wasAnimating ? 16 : 80))
                 guard let self else { return }
-                // Fenster verdeckt/versteckt: nichts zu zeichnen, kein Puls nötig, wieder der langsame Takt.
+                // Fenster verdeckt/versteckt: nichts zu zeichnen, keine Strich-Anzeige nötig, wieder der langsame Takt.
                 guard self.window?.occlusionState.contains(.visible) == true else { wasAnimating = false; continue }
                 let now = CACurrentMediaTime(), animating = self.pruneAnimations(now)
                 if animating || wasAnimating { wasAnimating = animating; self.needsDisplay = true; continue }
-                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Anzeigen laufender Sessions.
+                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die Strich-Anzeigen laufender Sessions.
                 if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true; continue }
                 for (i, row) in self.rows.enumerated() {
                     guard case .session(let s, _) = row, Theme.meterColor(s, attached: self.isAttached(s.id)) != nil else { continue }
@@ -158,7 +158,7 @@ final class SidebarView: ClipWidthView {
         }
     }
 
-    /// Zeilenhöhen sind O(1) abrufbar statt bei jedem Aufruf neu aufsummiert (Puls, Zeichnen, Maus laufen oft pro Sekunde
+    /// Zeilenhöhen sind O(1) abrufbar statt bei jedem Aufruf neu aufsummiert (Strich-Anzeige, Zeichnen, Maus laufen oft pro Sekunde
     /// über alle Zeilen). Nur die Breite bleibt live: sie folgt `bounds`, auch zwischen zwei `reload`s (siehe `fitWidth`).
     private var rowOffsets: [(y: CGFloat, height: CGFloat)] = []
 

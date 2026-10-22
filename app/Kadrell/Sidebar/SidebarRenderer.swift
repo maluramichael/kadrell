@@ -35,8 +35,7 @@ struct SidebarSessionItem {
     /// Ohne Gruppierung steht der Projektname vor dem Titel, sonst trägt ihn die Gruppenzeile darüber.
     var project: String? = nil
     /// Strich-Anzeige statt Punkt: gesetzt, wenn angehängt und Claude arbeitet oder (untätig) noch ein Kommando läuft.
-    /// Warten und Fehler behalten den Punkt. Farbe ohne Puls-Alpha, `lit` = leuchtende Striche (nil = alle, bei
-    /// „Bewegung reduzieren“).
+    /// Warten und Fehler behalten den Punkt. `lit` = leuchtende Striche (nil = alle, bei „Bewegung reduzieren“).
     var meter: (color: NSColor, lit: Int?)? = nil
     /// Claude-Prozess läuft (angehängt): steuert die Punktform bei „Farben nicht unterscheiden“ (Ring = nicht gestartet).
     let attached: Bool
@@ -84,7 +83,7 @@ extension SidebarRenderer {
     func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
     /// Strich-Anzeige arbeitender Sessions, sitzt anstelle des Punkts.
     func meterRect(_ row: CGRect) -> CGRect { CGRect(x: 26, y: headRect(row).midY - 5, width: 12, height: 10) }
-    /// Alles, was der Status der Zeile je belegt: Puls und Striche zeichnen nur diese Fläche neu.
+    /// Alles, was der Status der Zeile je belegt: die Striche zeichnen nur diese Fläche neu.
     func statusRect(_ row: CGRect) -> CGRect { dotRect(row).union(meterRect(row)) }
 
     /// Fläche einer hervorgehobenen Zeile: eingerückt und rund, in der Modulfarbe wie die Kachelfläche.
