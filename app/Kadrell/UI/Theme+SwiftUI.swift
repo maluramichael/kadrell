@@ -12,7 +12,6 @@ extension Theme {
     static var lineColor: Color { Color(nsColor: line) }
     static var fgColor: Color { Color(nsColor: fg) }
     static var mutedColor: Color { Color(nsColor: muted) }
-    static var runningColor: Color { Color(nsColor: running) }
     static var accentColor: Color { Color(nsColor: accent) }
     static let errorColor = Color(nsColor: error)
 }
@@ -23,7 +22,7 @@ private struct KeyboardFocusRing: ViewModifier {
     @FocusState private var focused: Bool
     func body(content: Content) -> some View {
         content.focused($focused)
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.runningColor, lineWidth: focused ? 2 : 0).padding(-2))
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.accentColor, lineWidth: focused ? 2 : 0).padding(-2))
     }
 }
 

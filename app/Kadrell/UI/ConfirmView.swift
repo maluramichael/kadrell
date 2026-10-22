@@ -39,7 +39,7 @@ struct ConfirmView: View {
                 }
                 Button(action: onConfirm) {
                     Text(destructive ? "\(button)  ⌘⏎" : button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
-                        .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.runningColor)
+                        .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.accentColor)
                 }.buttonStyle(.plain).kbdFocusRing()
             }
             .padding(16)

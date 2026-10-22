@@ -10,7 +10,7 @@ struct ExtensionDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 16) {
-                Text(ext.name.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.runningColor)
+                Text(ext.name.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.accentColor)
                 Spacer()
                 button("Neu laden  R") { model.reload(ext) }.disabled(!model.canToggle(ext) || !model.isEnabled(ext.name))
                 button("Ordner öffnen") { model.openFolder(ext) }
@@ -50,7 +50,7 @@ struct ExtensionDetail: View {
         switch s.type {
         case "bool":
             Toggle("", isOn: Binding(get: { model.stored[s.key]?.bool ?? false }, set: { save(.bool($0)) }))
-                .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Theme.runningColor)
+                .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Theme.accentColor)
         case "secret":
             HStack(spacing: 8) {
                 (model.secretsSet.contains(s.key) ? Text("gesetzt") : Text("nicht gesetzt")).foregroundStyle(Theme.mutedColor).lineLimit(1)

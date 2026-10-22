@@ -610,7 +610,7 @@ final class WorkspaceView: NSView {
         for (i, (_, primary, action)) in buttons.enumerated() {
             let r = CGRect(x: x, y: y, width: widths[i], height: 32), t = labels[i]
             let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
-            if primary { Theme.running.setFill(); path.fill() } else { Theme.line.setStroke(); path.lineWidth = 1; path.stroke() }
+            if primary { Theme.accent.setFill(); path.fill() } else { Theme.line.setStroke(); path.lineWidth = 1; path.stroke() }
             t.draw(at: CGPoint(x: r.midX - t.size().width / 2, y: r.midY - t.size().height / 2 + 1))
             collected.append((r.scaled(Theme.scale), action))
             x += widths[i] + gap

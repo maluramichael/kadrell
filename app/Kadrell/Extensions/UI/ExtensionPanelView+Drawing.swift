@@ -6,7 +6,7 @@ import AppKit
 extension ThemeColor {
     var nsColor: NSColor {
         switch self {
-        case .accent: Theme.running
+        case .accent: Theme.accent
         case .muted: Theme.muted
         case .ok: Theme.idle
         case .warn: Theme.waiting
@@ -34,7 +34,7 @@ extension ExtensionPanelView {
             let on = p.name == selectedTab
             NSAttributedString(string: Self.label(p), attributes: Theme.attrs(11, on ? Theme.fg : Theme.muted, bold: on))
                 .draw(at: CGPoint(x: r.minX + 8, y: r.midY - 8))
-            if on { Theme.running.setFill(); CGRect(x: r.minX + 4, y: r.maxY - 3, width: r.width - 8, height: 2).fill() }
+            if on { Theme.accent.setFill(); CGRect(x: r.minX + 4, y: r.maxY - 3, width: r.width - 8, height: 2).fill() }
         }
     }
 
@@ -44,7 +44,7 @@ extension ExtensionPanelView {
         switch l.node {
         case .section(let title, _, _):
             Icons.chevron(in: CGRect(x: x - 6, y: r.midY - 8, width: 16, height: 16), open: isOpen(l), color: Theme.muted)
-            text(title, Theme.attrs(11, Theme.running, bold: true), from: x + 14, to: r.maxX - 10, in: r)
+            text(title, Theme.attrs(11, Theme.accent, bold: true), from: x + 14, to: r.maxX - 10, in: r)
         case .item(let title, let detail, let color, _):
             if let color { color.nsColor.setFill(); NSBezierPath(ovalIn: CGRect(x: x, y: r.midY - 4, width: 8, height: 8)).fill() }
             let right = drawDetail(detail, in: r)
@@ -59,7 +59,7 @@ extension ExtensionPanelView {
     /// Wie eine Session-Zeile: grau hinterlegt bei Hover und Auswahl, mit Tastatur zusätzlich in Akzentfarbe gerahmt.
     private func drawHighlight(_ r: CGRect, hot: Bool, ring: Bool) {
         if hot { Theme.surface.setFill(); r.fill() }
-        if ring { Theme.running.setStroke(); NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5)).stroke() }
+        if ring { Theme.accent.setStroke(); NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5)).stroke() }
     }
 
     /// Detail rechtsbündig wie die Laufzeit im Baum, höchstens 40 % der Breite. Liefert die rechte Kante für den Text.

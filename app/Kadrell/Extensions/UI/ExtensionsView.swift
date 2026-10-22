@@ -43,7 +43,7 @@ struct ExtensionsView: View {
             Spacer()
             Button { model.openCatalog() } label: { Text("Extensions-Ordner öffnen").foregroundStyle(Theme.fgColor) }
                 .buttonStyle(.plain).kbdFocusRing()
-            Link("Doku", destination: Self.docs).foregroundStyle(Theme.runningColor)
+            Link("Doku", destination: Self.docs).foregroundStyle(Theme.accentColor)
         }
         .font(Theme.ui(11)).padding(.horizontal, 16).padding(.top, 12)
     }
@@ -80,7 +80,7 @@ struct ExtensionsView: View {
                 TextField("Auf GitHub suchen (Topic kadrell-extension)", text: $model.query)
                     .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
                     .onSubmit { Task { await model.searchStore() } }
-                Button { Task { await model.searchStore() } } label: { Text("Suchen").foregroundStyle(Theme.runningColor) }
+                Button { Task { await model.searchStore() } } label: { Text("Suchen").foregroundStyle(Theme.accentColor) }
                     .buttonStyle(.plain).kbdFocusRing()
             }
             if let e = model.storeError {
@@ -101,7 +101,7 @@ private struct StoreRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Link(remote.fullName, destination: remote.htmlURL).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.runningColor)
+                    Link(remote.fullName, destination: remote.htmlURL).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.accentColor)
                     Text(verbatim: "★ \(remote.stars)").foregroundStyle(Theme.mutedColor)
                 }
                 if !remote.description.isEmpty {
@@ -155,7 +155,7 @@ private struct ExtensionRow: View {
                     Text(ext.manifest?.version ?? "").foregroundStyle(Theme.mutedColor)
                     Spacer(minLength: 12)
                     Toggle("", isOn: Binding(get: { model.isEnabled(ext.name) }, set: { _ in model.toggle(ext) }))
-                        .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Theme.runningColor)
+                        .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Theme.accentColor)
                         .disabled(!model.canToggle(ext))
                 }
                 Text(status.text).foregroundStyle(status.failed ? Theme.errorColor : Theme.mutedColor).fixedSize(horizontal: false, vertical: true)
@@ -169,6 +169,6 @@ private struct ExtensionRow: View {
         .padding(.horizontal, 16).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(selected ? Theme.surfaceColor : .clear)
-        .overlay(alignment: .leading) { if selected { Theme.runningColor.frame(width: 2) } }
+        .overlay(alignment: .leading) { if selected { Theme.accentColor.frame(width: 2) } }
     }
 }

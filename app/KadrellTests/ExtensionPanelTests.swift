@@ -294,6 +294,15 @@ final class ExtensionPanelTests: XCTestCase {
         XCTAssertFalse(StatusBarView.sameItems(items, []))
     }
 
+    /// Das Lua-`accent` ist die Akzentfarbe des Schemas, nicht die Statusfarbe „arbeitet“.
+    func testLuaAccentIsThemeAccent() {
+        let saved = Theme.current
+        defer { Theme.current = saved }
+        Theme.current = ColorTheme.named("instrument-dark")
+        XCTAssertEqual(ThemeColor.accent.nsColor, Theme.accent)
+        XCTAssertNotEqual(ThemeColor.accent.nsColor, Theme.running)
+    }
+
     /// Mit `KADRELL_RENDER_BAR_OUT=<pfad>.png` entsteht ein Bild der Leiste mit zwei Einträgen im eingestellten
     /// Schema, daneben `<pfad>-instrument-dark.png` und `<pfad>-instrument-light.png`.
     func testRenderStatusBar() throws {

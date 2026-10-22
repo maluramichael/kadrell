@@ -58,19 +58,19 @@ struct AboutView: View {
                 .foregroundStyle(Theme.mutedColor).padding(.horizontal, 16).padding(.top, 6)
             HStack(spacing: 6) {
                 Text("von Michael Malura ·").foregroundStyle(Theme.mutedColor)
-                Link("malura.de", destination: URL(string: "https://malura.de")!).foregroundStyle(Theme.runningColor)
+                Link("malura.de", destination: URL(string: "https://malura.de")!).foregroundStyle(Theme.accentColor)
             }
             .font(Theme.ui(12)).padding(.horizontal, 16).padding(.top, 4)
             HStack(spacing: 6) {
                 Text("Eigene Erweiterungen in Lua:").foregroundStyle(Theme.mutedColor)
-                Link("kadrell.malura.de/extensions", destination: ExtensionsView.docs).foregroundStyle(Theme.runningColor)
+                Link("kadrell.malura.de/extensions", destination: ExtensionsView.docs).foregroundStyle(Theme.accentColor)
             }
             .font(Theme.ui(12)).padding(.horizontal, 16).padding(.top, 4)
             Text(Self.credits).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).padding(.horizontal, 16).padding(.top, 4)
             Divider().overlay(Theme.lineColor).padding(.top, 14)
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(sections, id: \.0) { title, keys in
-                    Text(title.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.runningColor)
+                    Text(title.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.accentColor)
                         .padding(.leading, 172 * Theme.scale).padding(.top, title == sections.first?.0 ? 0 : 12).padding(.bottom, 2)
                     ForEach(keys, id: \.1) { k, t in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
