@@ -601,4 +601,60 @@ final class InstrumentTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         XCTAssertEqual(wc.corner.frame.minX, 300, "nach close() zieht niemand mehr die Ecke nach")
     }
+
+    // MARK: Dialog-Bauteile (Stufe 4)
+
+    func testRaisedPanelShadowBodyRim() {
+        let t = ColorTheme.named("instrument-dark")
+        let rep = render(theme: t, width: 60, height: 40, scale: 1) { Instrument.raisedPanel(CGRect(x: 0, y: 0, width: 60, height: 37)) }
+        XCTAssertLessThan(distance(pixel(rep, x: 30, y: 20), t.raised), 0.02, "Fläche")
+        XCTAssertLessThan(luma(rep, x: 30, y: 0), luma(t.raised), "dunkle Fugenlinie außen")
+        XCTAssertGreaterThan(luma(rep, x: 30, y: 1), luma(rep, x: 30, y: 0), "helle Linie innen")
+        XCTAssertGreaterThan(rep.colorAt(x: 30, y: 38)!.alphaComponent, 0.3, "Schatten unter der Fläche")
+        XCTAssertLessThan(rep.colorAt(x: 0, y: 0)!.alphaComponent, 0.05, "Ecke rund")
+    }
+
+    func testRaisedRimStaysHairlineAtScale() {
+        // 1,3: Bitmap 78 × 52, Körper logisch 60 × 37. Zeile 0 dunkel, Zeile 1 hell, Zeile 2 schon Fläche.
+        let t = ColorTheme.named("instrument-dark")
+        let rep = render(theme: t, width: 78, height: 52, scale: 1.3) { Instrument.raisedPanel(CGRect(x: 0, y: 0, width: 60, height: 37)) }
+        XCTAssertLessThan(luma(rep, x: 39, y: 0), luma(rep, x: 39, y: 1))
+        XCTAssertLessThan(distance(pixel(rep, x: 39, y: 2), t.raised), 0.02)
+    }
+
+    func testRimVisibleOnRaisedInEveryTheme() {
+        for t in ColorTheme.all {
+            let rep = render(theme: t, width: 40, height: 40, scale: 1) { Instrument.raisedPanel(CGRect(x: 0, y: 0, width: 40, height: 37)) }
+            XCTAssertGreaterThan(abs(luma(rep, x: 20, y: 0) - luma(t.raised)), 0.02, t.id)
+        }
+    }
+
+    func testFocusedWellShowsAccentRing() {
+        let t = ColorTheme.named("instrument-light")
+        let rep = render(theme: t, width: 60, height: 20, scale: 1) { Instrument.well(CGRect(x: 0, y: 0, width: 60, height: 20), focused: true) }
+        XCTAssertLessThan(distance(pixel(rep, x: 30, y: 1), t.accent), 0.05)
+        XCTAssertLessThan(distance(pixel(rep, x: 30, y: 10), t.well), 0.02)
+    }
+
+    func testRowHighlightMatchesTree() {
+        let t = ColorTheme.named("instrument-dark")
+        let rep = render(theme: t, width: 200, height: 24, scale: 1) {
+            panelCanvas(200, 24); Instrument.rowHighlight(CGRect(x: 0, y: 0, width: 200, height: 24), outline: true, ring: true)
+        }
+        XCTAssertLessThan(distance(pixel(rep, x: 4, y: 12), t.accent), 0.1, "Ring außen")
+        XCTAssertLessThan(distance(pixel(rep, x: 100, y: 12), t.bg), 0.02, "Fläche innen")
+    }
+
+    func testKeyRoleLabelsReadable() {
+        for t in ColorTheme.all { withTheme(t) {
+            XCTAssertEqual(KeyRole.primary.fill, Theme.accent); XCTAssertNil(KeyRole.neutral.fill); XCTAssertEqual(KeyRole.destructive.fill, Theme.error)
+            for role in KeyRole.allCases {
+                XCTAssertGreaterThanOrEqual(role.label.contrastRatio(with: role.fill ?? Instrument.keyCap), 4.5, "\(t.id) \(role)")
+            }
+        } }
+    }
+
+    func testSurfaceViewIgnoresClicks() {
+        XCTAssertNil(InstrumentSurfaceView(part: .raised, frame: NSRect(x: 0, y: 0, width: 50, height: 50)).hitTest(NSPoint(x: 10, y: 10)))
+    }
 }
