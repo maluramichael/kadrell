@@ -173,10 +173,11 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertEqual(status.accessibilityRole(), .staticText)
     }
 
-    /// Das Display liest die Langform aller Zustände vor, bei einer Fehlermeldung stattdessen diese.
+    /// Das Display liest die Langform aller Zustände vor, bei einer Fehlermeldung stattdessen diese. Breit genug,
+    /// dass kein Nutzungswert wegfällt (der hinge sonst hinten an).
     func testStatusDisplayReadsLongFormOrError() throws {
         let bar = StatusBarView(frame: .zero)
-        let w = window(bar, NSSize(width: 900, height: 30))
+        let w = window(bar, NSSize(width: 1400, height: 30))
         defer { w.close() }
         let counts = StatusCounts(running: 2, waiting: 1, idle: 0, error: 0, detached: 0)
         bar.counts = counts

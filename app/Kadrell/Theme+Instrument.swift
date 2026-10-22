@@ -15,7 +15,7 @@ enum Instrument {
         Theme.current.dark ? Theme.bg.mixed(0.3, into: .black) : Theme.line.mixed(0.75, into: .black)
     }
     /// Display-Grund und Schrift sind in allen Schemata gleich, damit Status-Anzeigen überall wie ein Gerät aussehen.
-    static var screen: NSColor { NSColor(hex: Theme.current.dark ? 0x050505 : 0x0d0d0c) }
+    static var screenFace: NSColor { NSColor(hex: Theme.current.dark ? 0x050505 : 0x0d0d0c) }
     static var screenInk: NSColor { NSColor(hex: 0xefe9dc) }
     static var screenMuted: NSColor { NSColor(hex: 0x8f8b81) }
 
@@ -27,7 +27,7 @@ enum Instrument {
     private static let keyDepth: CGFloat = 2
 
     /// Rastet eine Position aufs Gerätepixel ein, sonst verschmiert eine 1-Pixel-Linie bei 90 bis 130 % über drei Zeilen.
-    private static func snapped(_ v: CGFloat) -> CGFloat { (v * Theme.scale).rounded() / Theme.scale }
+    static func snapped(_ v: CGFloat) -> CGFloat { (v * Theme.scale).rounded() / Theme.scale }
 
     // MARK: Fuge
 
@@ -66,7 +66,7 @@ enum Instrument {
     /// Schwarzes Display mit feiner heller Haarlinie am oberen Rand.
     @MainActor static func screen(_ r: CGRect) {
         let face = NSBezierPath(roundedRect: r, xRadius: keyRadius, yRadius: keyRadius)
-        screen.setFill()
+        screenFace.setFill()
         face.fill()
         NSGraphicsContext.saveGraphicsState()
         face.addClip()

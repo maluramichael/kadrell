@@ -145,9 +145,9 @@ final class InstrumentTests: XCTestCase {
     func testScreenIsBlackInEveryTheme() {
         for t in ColorTheme.all {
             withTheme(t) {
-                XCTAssertGreaterThanOrEqual(Instrument.screenInk.contrastRatio(with: Instrument.screen), 4.5, t.id)
-                XCTAssertGreaterThanOrEqual(Instrument.screenMuted.contrastRatio(with: Instrument.screen), 4.5, t.id)
-                XCTAssertEqual(Instrument.screen.hexString, t.dark ? "#050505" : "#0d0d0c", t.id)
+                XCTAssertGreaterThanOrEqual(Instrument.screenInk.contrastRatio(with: Instrument.screenFace), 4.5, t.id)
+                XCTAssertGreaterThanOrEqual(Instrument.screenMuted.contrastRatio(with: Instrument.screenFace), 4.5, t.id)
+                XCTAssertEqual(Instrument.screenFace.hexString, t.dark ? "#050505" : "#0d0d0c", t.id)
                 XCTAssertEqual(Instrument.screenInk.hexString, "#efe9dc", t.id)
                 XCTAssertEqual(Instrument.screenMuted.hexString, "#8f8b81", t.id)
             }

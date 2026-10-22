@@ -104,8 +104,12 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     /// Display beim letzten Zeichnen: Rahmen und vorgelesener Text (Langform bzw. Fehlermeldung), auch als Tooltip.
     private var status: (rect: CGRect, text: String) = (.zero, "")
     private let statusA11y = A11yElement(key: "status-display")
-    /// Welche Form das Display zuletzt gezeichnet hat: kurz, wenn die Langform neben die linke Seite nicht passt.
+    /// Welche Form das Display zuletzt gezeichnet hat: kurz erst, wenn rechts sonst nichts mehr wegfallen kann.
     private(set) var displayCompact = false
+    /// Rahmen aller Tasten, flachen Module und des Displays beim letzten Zeichnen, in unskalierten Punkten.
+    private(set) var drawnFrames: [CGRect] = []
+    /// Fortschritt des Hochzählens der Nutzung, einmal je Zeichnen festgehalten: Messen und Zeichnen sehen dieselben Zahlen.
+    private var usageProgress: CGFloat?
     private var clockTask: Task<Void, Never>?
     private static let clock: DateFormatter = { let df = DateFormatter(); df.dateFormat = "HH:mm"; return df }()
     /// Relative Reset-Zeit im Tooltip („in 2 Std.“), Sprache folgt der eingestellten Oberfläche.
@@ -168,31 +172,21 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         toolTipEntries.first { $0.rect.scaled(Theme.scale).contains(point) }?.text ?? ""
     }
 
-    /// Erst mit der Langform im Display; passt die rechte Seite dann nicht mehr neben die linke, alles noch einmal
-    /// mit der Kurzform (die Fläche wird dabei neu gefüllt, vom ersten Durchgang bleibt nichts stehen).
-    /// Eine Fehlermeldung im Display wird dabei um genau das gekürzt, was im ersten Durchgang fehlte.
+    /// Misst erst und zeichnet dann einmal: die rechte Seite verliert so lange Teile (Reihenfolge in `BarPlan`), bis
+    /// sie mit 16 pt Abstand neben die linken Tasten passt.
     private func drawBar(_ b: CGRect) {
-        let overflow = drawPass(b, compact: false, shrink: 0)
-        if overflow > 0 { _ = drawPass(b, compact: true, shrink: overflow) }
-    }
-
-    /// Ein Durchgang über die ganze Leiste. Gibt zurück, wie viel der rechten Seite neben der linken fehlt; nur wenn
-    /// nichts fehlt (oder schon die Kurzform läuft), kommen die Extensions dazu.
-    private func drawPass(_ b: CGRect, compact: Bool, shrink: CGFloat) -> CGFloat {
         hitRects = []
         moduleTips = []
+        drawnFrames = []
+        usageProgress = Feedback.progress(since: usageAt, duration: 0.5)
         Theme.panel.setFill(); b.fill()
         let content = CGRect(x: 0, y: 0, width: b.width, height: b.height - 2 * Instrument.hairline)
         Instrument.hSeam(x: 0, y: content.maxY, width: b.width)
         let limit = drawLeft(content) + 16
         var rx = b.width - Self.edge
-        drawDisplay(content, &rx, compact: compact, shrink: shrink)
-        drawNotices(content, &rx)
-        drawUsage(content, &rx)
-        guard compact || rx >= limit else { return limit - rx }
-        displayCompact = compact
-        drawExtensionItems(content, &rx, limit: limit)
-        return limit - rx
+        let plan = BarPlan.fit(extensions: extensionItems.count, room: rx - limit) { rightParts(content, $0).reduce(0) { $0 + $1.width } }
+        displayCompact = plan.compact
+        for part in rightParts(content, plan) { part.draw(&rx) }
     }
 
     /// Zeichnet die Zeile senkrecht mittig auf `midY`, für jede Schriftgröße gleich. Die Leiste ist flipped, der
@@ -209,16 +203,22 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     // MARK: Tasten
 
-    /// Rechteck einer Taste ab `x`, senkrecht mittig in der Leiste.
+    /// Rechteck einer Taste ab `x`, senkrecht mittig in der Leiste, oben aufs Gerätepixel eingerastet.
     private func keyRect(x: CGFloat, width: CGFloat, _ b: CGRect) -> CGRect {
-        CGRect(x: x, y: b.midY - Self.keyHeight / 2, width: width, height: Self.keyHeight)
+        CGRect(x: x, y: Instrument.snapped(b.midY - Self.keyHeight / 2), width: width, height: Self.keyHeight)
+    }
+
+    /// Trefferfläche einer Taste: so breit wie die Taste, aber über die ganze Höhe der Leiste.
+    private static func hitRect(_ r: CGRect, _ b: CGRect) -> CGRect {
+        CGRect(x: r.minX, y: b.minY, width: r.width, height: b.height)
     }
 
     /// Zeichnet die Taste der Trefferfläche `label`: eingeschaltet (`on`) sinkt sie ein, nach einem Klick kurz auch.
     /// Gibt die Kappe zurück, dort sitzt die Beschriftung.
     @discardableResult
     private func key(_ r: CGRect, _ label: String, on: Bool = false, fill: NSColor? = nil) -> CGRect {
-        Instrument.key(r, pressed: on || isFlashing(label), fill: fill)
+        drawnFrames.append(r)
+        return Instrument.key(r, pressed: on || isFlashing(label), fill: fill)
     }
 
     private func isFlashing(_ label: String) -> Bool {
@@ -242,7 +242,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let toggle = keyRect(x: Self.edge, width: 30, b)
         let cap = key(toggle, label)
         Icons.layout(layoutMode, in: CGRect(x: cap.midX - 7, y: cap.midY - 7, width: 14, height: 14), color: Theme.sub)
-        hitRects.append(HitRegion(rect: toggle, label: label, value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: b.maxY)) })
+        hitRects.append(HitRegion(rect: Self.hitRect(toggle, b), label: label, value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: b.maxY)) })
         var x = toggle.maxX + Self.keyGap
         if layoutMode == .grid { drawColumns(b, &x, value: gridColumns, min: 0) { [weak self] c in self?.onGridColumns?(c) } }
         if layoutMode == .scroll { drawColumns(b, &x, value: scrollColumns, min: 1) { [weak self] c in self?.onScrollColumns?(c) } }
@@ -265,7 +265,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let r = keyRect(x: x, width: t.size().width + 16, b)
         let cap = key(r, label, on: fill != nil, fill: fill)
         drawCentered(t, x: cap.minX + 8, midY: cap.midY)
-        hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
+        hitRects.append(HitRegion(rect: Self.hitRect(r, b), label: label, value: value, action: action))
         x = r.maxX + Self.keyGap
     }
 
@@ -274,7 +274,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let value = NSAttributedString(string: cols == 0 ? String(localized: "AUTO SP", bundle: Bundle.app) : String(localized: "\(cols) SP", bundle: Bundle.app), attributes: Theme.attrs(10, cols == 0 ? Theme.muted : Theme.fg, bold: true))
         let spoken = cols == 0 ? String(localized: "automatisch", bundle: Bundle.app) : "\(cols)"
         let less = arrowKey(b, x: x, "‹", String(localized: "Weniger Spalten", bundle: Bundle.app), value: spoken) { onChange(Swift.max(lo, cols - 1)) }
-        drawCentered(value, x: less.maxX + 6, midY: b.midY - 1)
+        drawCentered(value, x: less.maxX + 6, midY: less.midY - 1)
         let more = arrowKey(b, x: less.maxX + 12 + value.size().width, "›", String(localized: "Mehr Spalten", bundle: Bundle.app), value: spoken) { onChange(Swift.min(12, cols + 1)) }
         x = more.maxX + Self.keyGap
     }
@@ -283,8 +283,9 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private func arrowKey(_ b: CGRect, x: CGFloat, _ arrow: String, _ label: String, value: String, action: @escaping @MainActor () -> Void) -> CGRect {
         let t = NSAttributedString(string: arrow, attributes: Theme.attrs(12, Theme.sub, bold: true))
         let r = keyRect(x: x, width: t.size().width + 12, b)
-        drawCentered(t, x: key(r, label).minX + 6, midY: r.midY - 1)
-        hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
+        let cap = key(r, label)
+        drawCentered(t, x: cap.minX + 6, midY: cap.midY)
+        hitRects.append(HitRegion(rect: Self.hitRect(r, b), label: label, value: value, action: action))
         return r
     }
 
@@ -307,25 +308,46 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     // MARK: Rechts, von rechts nach links
 
+    /// Ein Teil der rechten Seite: Breite samt Abstand zum linken Nachbarn, gezeichnet ab `rx` nach links. Messen und
+    /// Zeichnen nutzen dieselben Teile, deshalb kann nichts breiter ausfallen als gemessen.
+    private struct BarPart {
+        let width: CGFloat
+        let draw: (inout CGFloat) -> Void
+    }
+
+    /// Alle Teile der rechten Seite nach `plan`, von rechts: Display, Tasten, Tipp und Versionswarnung, Nutzung,
+    /// Einträge der Extensions.
+    private func rightParts(_ b: CGRect, _ plan: BarPlan) -> [BarPart] {
+        var parts = [displayPart(b, plan)]
+        let keys = noticeKeyParts(b, plan)
+        parts += keys
+        // Nach der letzten Taste derselbe Rand wie nach dem Display, dann folgt die Fuge des ersten flachen Moduls.
+        if !keys.isEmpty { parts.append(BarPart(width: Self.edge - Self.keyGap) { $0 -= Self.edge - Self.keyGap }) }
+        return parts + noticeModuleParts(b, plan) + usageParts(b, plan) + extensionParts(b, plan)
+    }
+
     /// Schwarzes Display ganz rechts: Lampe, Status in Worten (bzw. die Fehlermeldung) und die Uhr. Tooltip und
-    /// VoiceOver bekommen die Langform aller Zustände. Eine Fehlermeldung wird um `shrink` gekürzt, damit sie nicht
-    /// über die linken Tasten wächst; Tooltip und VoiceOver behalten sie ganz.
-    private func drawDisplay(_ b: CGRect, _ rx: inout CGFloat, compact: Bool, shrink: CGFloat) {
-        let text = NSAttributedString(string: errorText ?? StatusDisplay.text(counts, compact: compact),
+    /// VoiceOver bekommen die Langform aller Zustände plus die Nutzungswerte, die aus Platzmangel fehlen. Der Text
+    /// wird um `plan.shrink` gekürzt, damit er nicht über die linken Tasten wächst; Tooltip und VoiceOver behalten ihn ganz.
+    private func displayPart(_ b: CGRect, _ plan: BarPlan) -> BarPart {
+        let text = NSAttributedString(string: errorText ?? StatusDisplay.text(counts, compact: plan.compact),
                                       attributes: Theme.attrs(10.5, errorText == nil ? Instrument.screenInk : Self.screenError, bold: true))
         let time = NSAttributedString(string: Self.clock.string(from: Date()), attributes: Theme.attrs(10.5, Instrument.screenMuted))
-        let gap: CGFloat = text.length > 0 ? 8 : 0
-        let textWidth = errorText == nil ? text.size().width : max(0, text.size().width - shrink)
-        let w = 10 + 7 + 6 + textWidth + gap + time.size().width + 10
-        let r = keyRect(x: rx - w, width: w, b)
-        Instrument.screen(r)
-        lampColor.setFill()
-        NSBezierPath(ovalIn: CGRect(x: r.minX + 10, y: r.midY - 3.5, width: 7, height: 7)).fill()
-        drawCentered(text, x: r.minX + 23, midY: r.midY, width: textWidth)
-        drawCentered(time, x: r.maxX - 10 - time.size().width, midY: r.midY)
-        status = (r, errorText ?? StatusDisplay.spoken(counts))
-        moduleTips.append(status)
-        rx = r.minX - Self.edge
+        let textWidth = max(0, text.size().width - plan.shrink)
+        let w = 10 + 7 + 6 + textWidth + (textWidth > 0 ? 8 : 0) + time.size().width + 10
+        let spoken = (errorText ?? StatusDisplay.spoken(counts)) + droppedUsage(plan)
+        return BarPart(width: w + Self.edge) { [self] rx in
+            let r = keyRect(x: rx - w, width: w, b)
+            Instrument.screen(r)
+            drawnFrames.append(r)
+            lampColor.setFill()
+            NSBezierPath(ovalIn: CGRect(x: r.minX + 10, y: r.midY - 3.5, width: 7, height: 7)).fill()
+            drawCentered(text, x: r.minX + 23, midY: r.midY, width: textWidth)
+            drawCentered(time, x: r.maxX - 10 - time.size().width, midY: r.midY)
+            status = (r, spoken)
+            moduleTips.append(status)
+            rx = r.minX - Self.edge
+        }
     }
 
     /// Lampe im Display: bei einer Fehlermeldung rot, sonst nach `StatusDisplay.lamp`.
@@ -341,7 +363,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     /// Fehlerrot, so weit Richtung Weiß gemischt, dass es auf dem schwarzen Display lesbar ist (mindestens 4,5:1).
     private static var screenError: NSColor {
-        Theme.error.ensuringContrast(4.5, against: [Instrument.screen], toward: .white)
+        Theme.error.ensuringContrast(4.5, against: [Instrument.screenFace], toward: .white)
     }
 
     /// Taste links von `rx`, danach 4 pt Abstand. Gibt ihr Rechteck zurück.
@@ -349,10 +371,17 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private func keyModule(_ b: CGRect, _ rx: inout CGFloat, _ text: NSAttributedString, fill: NSColor? = nil,
                            _ label: String, value: String?, action: @escaping @MainActor () -> Void) -> CGRect {
         let r = keyRect(x: rx - text.size().width - 16, width: text.size().width + 16, b)
-        drawCentered(text, x: key(r, label, fill: fill).minX + 8, midY: r.midY - 1)
-        hitRects.append(HitRegion(rect: r, label: label, value: value, action: action))
+        let cap = key(r, label, fill: fill)
+        drawCentered(text, x: cap.minX + 8, midY: cap.midY)
+        hitRects.append(HitRegion(rect: Self.hitRect(r, b), label: label, value: value, action: action))
         rx = r.minX - Self.keyGap
         return r
+    }
+
+    /// `keyModule` als Teil der rechten Seite.
+    private func keyPart(_ b: CGRect, _ text: NSAttributedString, fill: NSColor? = nil, _ label: String, value: String?,
+                         action: @escaping @MainActor () -> Void) -> BarPart {
+        BarPart(width: text.size().width + 16 + Self.keyGap) { [self] rx in keyModule(b, &rx, text, fill: fill, label, value: value, action: action) }
     }
 
     /// Flaches Modul links von `rx`, rechts davon eine Fuge zum Nachbarn.
@@ -361,6 +390,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let seam = 2 * Instrument.hairline
         Instrument.vSeam(x: rx - seam, y: 0, height: b.height)
         let rect = CGRect(x: rx - seam - Self.moduleWidth(parts), y: 0, width: Self.moduleWidth(parts), height: b.height)
+        drawnFrames.append(rect)
         var px = rect.minX + 10
         for p in parts {
             drawCentered(p, x: px, midY: b.midY); px += p.size().width + 5
@@ -370,18 +400,30 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         rx = rect.minX
     }
 
+    /// `module` als Teil der rechten Seite: Fuge plus Modul.
+    private func modulePart(_ b: CGRect, _ parts: [NSAttributedString], tip: String? = nil,
+                            _ label: String? = nil, value: String? = nil, action: (@MainActor () -> Void)? = nil) -> BarPart {
+        BarPart(width: 2 * Instrument.hairline + Self.moduleWidth(parts)) { [self] rx in
+            module(b, &rx, parts, tip: tip, label, value: value, action: action)
+        }
+    }
+
     /// Breite eines flachen Moduls ohne Fuge: 10 pt Rand je Seite, 5 pt zwischen den Teilen.
     private static func moduleWidth(_ parts: [NSAttributedString]) -> CGFloat {
         parts.reduce(20) { $0 + $1.size().width } + CGFloat(max(0, parts.count - 1)) * 5
     }
 
-    /// Konto-Taste: aktiver Account, Klick öffnet das Menü zum Wechseln, Hinzufügen und Verwalten. Ohne Accounts leer.
-    private func drawAccount(_ b: CGRect, _ rx: inout CGFloat) {
-        guard !accounts.isEmpty else { return }
+    /// Konto-Taste: aktiver Account, Klick öffnet das Menü zum Wechseln, Hinzufügen und Verwalten. Ohne Accounts
+    /// keine Taste. Ist es eng (`short`), zeigt sie nur die ersten zehn Zeichen.
+    private func accountPart(_ b: CGRect, short: Bool) -> BarPart? {
+        guard !accounts.isEmpty else { return nil }
         let title = accounts.first { $0.active }?.title ?? String(localized: "Konto wählen", bundle: Bundle.app)
-        let shown = title.count > 26 ? String(title.prefix(25)) + "…" : title
-        accountRect = keyModule(b, &rx, NSAttributedString(string: shown, attributes: Theme.attrs(11, Theme.fg)),
-                                String(localized: "Aktives Konto", bundle: Bundle.app), value: title) { [weak self] in self?.showAccountMenu() }
+        let limit = short ? 10 : 26
+        let shown = title.count > limit ? String(title.prefix(limit - 1)) + "…" : title
+        let text = NSAttributedString(string: shown, attributes: Theme.attrs(11, Theme.fg))
+        return BarPart(width: text.size().width + 16 + Self.keyGap) { [self] rx in
+            accountRect = keyModule(b, &rx, text, String(localized: "Aktives Konto", bundle: Bundle.app), value: title) { [weak self] in self?.showAccountMenu() }
+        }
     }
 
     private func showAccountMenu() {
@@ -412,38 +454,38 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     @objc private func addAccountItem() { onAddAccount?() }
     @objc private func manageAccounts() { onManageAccounts?() }
 
-    /// Tasten neben dem Display (wartende Sessions, trennen, Update, Konto), dann Tipp und Versionswarnung.
-    private func drawNotices(_ b: CGRect, _ rx: inout CGFloat) {
-        drawNoticeKeys(b, &rx)
-        if let tip {
-            module(b, &rx, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))],
-                   String(localized: "Tipp", bundle: Bundle.app), value: tip) { [weak self] in self?.onDismissTip?() }
-        }
-        if versionWarning != nil {
-            module(b, &rx, [NSAttributedString(string: String(localized: "claude alt · claude update", bundle: Bundle.app), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))],
-                   String(localized: "Ältere claude-Version", bundle: Bundle.app), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) }
-        }
-    }
-
     /// Von rechts: „N warten“, „N trennen“, Update und Konto, jeweils nur wenn es etwas zu tun gibt.
-    private func drawNoticeKeys(_ b: CGRect, _ rx: inout CGFloat) {
-        let start = rx
+    private func noticeKeyParts(_ b: CGRect, _ plan: BarPlan) -> [BarPart] {
+        var parts: [BarPart] = []
         if waitingCount > 0 {
-            keyModule(b, &rx, NSAttributedString(string: String(localized: "\(waitingCount) warten", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true)), fill: Theme.waiting,
-                      String(localized: "Wartende Sessions", bundle: Bundle.app), value: "\(waitingCount)") { [weak self] in self?.onSelectWaiting?() }
+            parts.append(keyPart(b, NSAttributedString(string: String(localized: "\(waitingCount) warten", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true)), fill: Theme.waiting,
+                                 String(localized: "Wartende Sessions", bundle: Bundle.app), value: "\(waitingCount)") { [weak self] in self?.onSelectWaiting?() })
         }
         if detachableCount > 0 {
-            keyModule(b, &rx, NSAttributedString(string: String(localized: "\(detachableCount) trennen", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.idle), bold: true)), fill: Theme.idle,
-                      String(localized: "Fertige Sessions trennen", bundle: Bundle.app), value: "\(detachableCount)") { [weak self] in self?.onDetachIdle?() }
+            parts.append(keyPart(b, NSAttributedString(string: String(localized: "\(detachableCount) trennen", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.pillText(on: Theme.idle), bold: true)), fill: Theme.idle,
+                                 String(localized: "Fertige Sessions trennen", bundle: Bundle.app), value: "\(detachableCount)") { [weak self] in self?.onDetachIdle?() })
         }
-        if let update = updateAvailable {
+        if let update = updateAvailable, plan.update {
             // Dezent statt der waiting-Farbe: kein Alarm, nur ein Hinweis.
-            keyModule(b, &rx, NSAttributedString(string: String(localized: "\(update.version) verfügbar", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.fg)),
-                      String(localized: "Update verfügbar", bundle: Bundle.app), value: update.version) { [weak self] in self?.onShowUpdate?() }
+            parts.append(keyPart(b, NSAttributedString(string: String(localized: "\(update.version) verfügbar", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.fg)),
+                                 String(localized: "Update verfügbar", bundle: Bundle.app), value: update.version) { [weak self] in self?.onShowUpdate?() })
         }
-        drawAccount(b, &rx)
-        // Nach der letzten Taste derselbe Rand wie nach dem Display, dann folgt die Fuge des ersten flachen Moduls.
-        if rx != start { rx -= Self.edge - Self.keyGap }
+        if plan.account, let account = accountPart(b, short: plan.shortAccount) { parts.append(account) }
+        return parts
+    }
+
+    /// Links der Tasten: Tipp, dann die Versionswarnung.
+    private func noticeModuleParts(_ b: CGRect, _ plan: BarPlan) -> [BarPart] {
+        var parts: [BarPart] = []
+        if let tip, plan.tip {
+            parts.append(modulePart(b, [NSAttributedString(string: tip + "  ×", attributes: Theme.attrs(10.5, Theme.waiting))],
+                                    String(localized: "Tipp", bundle: Bundle.app), value: tip) { [weak self] in self?.onDismissTip?() })
+        }
+        if versionWarning != nil, plan.version {
+            parts.append(modulePart(b, [NSAttributedString(string: String(localized: "claude alt · claude update", bundle: Bundle.app), attributes: Theme.attrs(10.5, Theme.waiting, bold: true))],
+                                    String(localized: "Ältere claude-Version", bundle: Bundle.app), value: versionWarning) { NSPasteboard.general.copy(ClaudeCLI.updateCommand) })
+        }
+        return parts
     }
 
     /// Farbe eines Nutzungswerts. Mit Plan (7 Tage) zählt der Vorsprung: über dem Plan rot, dicht darunter gelb,
@@ -463,56 +505,72 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         return age > usageStaleAfter ? Int(age / 60) : nil
     }
 
-    /// Claude-Nutzung: 5 h, 7 Tage, Fable-Woche. Fehlt ein Wert, steht „–%“ statt nichts.
-    /// Vor dem 7-Tage-Wert steht der Plan-Stand („25%/32%“): so viel dürfte bei gleichmäßiger Woche jetzt weg sein.
-    private func drawUsage(_ b: CGRect, _ rx: inout CGFloat) {
+    /// Ein Nutzungswert: Kürzel, Stand, Ausgangswert fürs Hochzählen, Bezeichnung im Tooltip, Plan-Stand, Reset.
+    private struct UsageRow {
+        let name: String, pct: Int?, from: Int?, label: String, plan: Int?, reset: Date?
+    }
+
+    /// Nutzungswerte von rechts: Fable-Woche, 7 Tage, 5 Stunden.
+    private var usageRows: [UsageRow] {
+        [
+            UsageRow(name: "fable", pct: usage.fable, from: usageFrom.fable, label: String(localized: "Fable-Kontingent", bundle: Bundle.app), plan: nil, reset: usage.weeklyResets),
+            UsageRow(name: "7d", pct: usage.weekly, from: usageFrom.weekly, label: String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app), plan: usage.weeklyPlan(), reset: usage.weeklyResets),
+            UsageRow(name: "5h", pct: usage.session, from: usageFrom.session, label: String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app), plan: nil, reset: usage.sessionResets),
+        ]
+    }
+
+    /// Claude-Nutzung als flache Module. Fehlt ein Wert, steht „–%“ statt nichts. Vor dem 7-Tage-Wert steht der
+    /// Plan-Stand („25%/32%“): so viel dürfte bei gleichmäßiger Woche jetzt weg sein.
+    private func usageParts(_ b: CGRect, _ plan: BarPlan) -> [BarPart] {
         let fMuted = Theme.attrs(11.5, Theme.muted)
-        let countUp = Feedback.progress(since: usageAt, duration: 0.5)
         let stale = Self.staleMinutes(usageMeasured)
         let staleTip = stale.map { " · " + String(localized: "Stand von vor \($0) min", bundle: Bundle.app) } ?? ""
-        func pctString(_ target: Int?, from: Int?, plan: Int?) -> NSAttributedString {
-            guard let target else { return NSAttributedString(string: "–%", attributes: fMuted) }
-            var v = target
-            if let countUp, let from { v = from + Int((CGFloat(target - from) * countUp).rounded()) }
-            return NSAttributedString(string: "\(v)%", attributes: stale == nil ? Theme.attrs(11.5, Self.usageColor(v, plan: plan)) : fMuted)
-        }
-        /// Tooltip: Bezeichnung plus Prozentwert, beim 7-Tage-Wert zusätzlich der Plan-Stand.
-        func usageTip(_ label: String, _ pct: Int?, _ plan: Int?) -> String {
-            guard let pct else { return String(localized: "\(label): Nutzung nicht abrufbar", bundle: Bundle.app) }
-            guard let plan else { return String(localized: "\(label): \(pct) % verbraucht", bundle: Bundle.app) }
-            return String(localized: "\(label): \(pct) % verbraucht, \(plan) % nach Plan", bundle: Bundle.app)
-        }
-        /// Reset-Zeit ans Tooltip: absolute Uhrzeit plus relativ, leer wenn kein Reset-Zeitpunkt bekannt ist.
-        func resetTip(_ resets: Date?) -> String {
-            guard let resets, resets > Date() else { return "" }
-            Self.relative.locale = Localization.locale
-            let rel = Self.relative.localizedString(for: resets, relativeTo: Date())
-            return " · " + String(localized: "Reset \(Self.clock.string(from: resets)) (\(rel))", bundle: Bundle.app)
-        }
-        let rows: [(String, Int?, Int?, String, Int?, Date?)] = [
-            ("fable", usage.fable, usageFrom.fable, String(localized: "Fable-Kontingent", bundle: Bundle.app), nil, usage.weeklyResets),
-            ("7d", usage.weekly, usageFrom.weekly, String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app), usage.weeklyPlan(), usage.weeklyResets),
-            ("5h", usage.session, usageFrom.session, String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app), nil, usage.sessionResets),
-        ]
-        for (name, pct, from, label, plan, reset) in rows {
+        return usageRows.filter { plan.usage.contains($0.name) }.map { row in
             let value = NSMutableAttributedString()
-            if let plan, pct != nil { value.append(NSAttributedString(string: "\(plan)%/", attributes: fMuted)) }
-            value.append(pctString(pct, from: from, plan: plan))
-            module(b, &rx, [NSAttributedString(string: name, attributes: fMuted), value], tip: usageTip(label, pct, plan) + resetTip(reset) + staleTip)
+            if let p = row.plan, row.pct != nil { value.append(NSAttributedString(string: "\(p)%/", attributes: fMuted)) }
+            value.append(pctString(row, stale: stale != nil))
+            return modulePart(b, [NSAttributedString(string: row.name, attributes: fMuted), value], tip: usageTip(row) + resetTip(row.reset) + staleTip)
         }
     }
 
-    /// Einträge der Extensions, der erste ganz links. Von rechts her gezeichnet; was links von `limit` (Ende der linken
-    /// Seite plus Rand) nicht mehr passt, bleibt weg, die vorhandenen Module rechts bleiben unberührt.
-    private func drawExtensionItems(_ b: CGRect, _ rx: inout CGFloat, limit: CGFloat) {
-        for item in extensionItems.reversed() {
+    /// Prozentwert, beim Hochzählen der Zwischenstand. Veraltet oder ohne Wert gedämpft.
+    private func pctString(_ row: UsageRow, stale: Bool) -> NSAttributedString {
+        let fMuted = Theme.attrs(11.5, Theme.muted)
+        guard let target = row.pct else { return NSAttributedString(string: "–%", attributes: fMuted) }
+        var v = target
+        if let usageProgress, let from = row.from { v = from + Int((CGFloat(target - from) * usageProgress).rounded()) }
+        return NSAttributedString(string: "\(v)%", attributes: stale ? fMuted : Theme.attrs(11.5, Self.usageColor(v, plan: row.plan)))
+    }
+
+    /// Tooltip: Bezeichnung plus Prozentwert, beim 7-Tage-Wert zusätzlich der Plan-Stand.
+    private func usageTip(_ row: UsageRow) -> String {
+        guard let pct = row.pct else { return String(localized: "\(row.label): Nutzung nicht abrufbar", bundle: Bundle.app) }
+        guard let plan = row.plan else { return String(localized: "\(row.label): \(pct) % verbraucht", bundle: Bundle.app) }
+        return String(localized: "\(row.label): \(pct) % verbraucht, \(plan) % nach Plan", bundle: Bundle.app)
+    }
+
+    /// Reset-Zeit ans Tooltip: absolute Uhrzeit plus relativ, leer wenn kein Reset-Zeitpunkt bekannt ist.
+    private func resetTip(_ resets: Date?) -> String {
+        guard let resets, resets > Date() else { return "" }
+        Self.relative.locale = Localization.locale
+        let rel = Self.relative.localizedString(for: resets, relativeTo: Date())
+        return " · " + String(localized: "Reset \(Self.clock.string(from: resets)) (\(rel))", bundle: Bundle.app)
+    }
+
+    /// Nutzungswerte, die aus Platzmangel nicht in der Leiste stehen, für Tooltip und VoiceOver des Displays
+    /// („ · 5h 40% · 7d 25%“), in der Reihenfolge der Leiste.
+    private func droppedUsage(_ plan: BarPlan) -> String {
+        usageRows.reversed().filter { !plan.usage.contains($0.name) }
+            .map { " · \($0.name) " + ($0.pct.map { "\($0)%" } ?? "–%") }.joined()
+    }
+
+    /// Einträge der Extensions, der erste ganz links. Es bleiben die `plan.extensions` rechten, die vorhandenen
+    /// Module rechts bleiben unberührt.
+    private func extensionParts(_ b: CGRect, _ plan: BarPlan) -> [BarPart] {
+        extensionItems.suffix(plan.extensions).reversed().map { item in
             let text = NSAttributedString(string: item.text, attributes: Theme.attrs(11, item.color?.nsColor ?? Theme.fg))
-            guard rx - 2 * Instrument.hairline - Self.moduleWidth([text]) >= limit else { return }
-            if let action = item.action {
-                module(b, &rx, [text], item.name, value: item.text) { [weak self] in self?.onExtensionAction?(item.name, action) }
-            } else {
-                module(b, &rx, [text], tip: "\(item.name): \(item.text)")
-            }
+            guard let action = item.action else { return modulePart(b, [text], tip: "\(item.name): \(item.text)") }
+            return modulePart(b, [text], item.name, value: item.text) { [weak self] in self?.onExtensionAction?(item.name, action) }
         }
     }
 

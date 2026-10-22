@@ -10,7 +10,7 @@ final class ExtensionPanelTests: XCTestCase {
     /// Wie `MainWindowController.suffix(index)`, hier ohne MainActor, damit `tearDown` es lesen kann.
     private let suffix = ".\(ExtensionPanelTests.index + 1)"
     /// Die Leisten-Geometrie ist für 100% ausgelegt; feste Skalierung, damit die UI-Größe des laufenden Profils die Tests nicht kippt.
-    private var savedScale: CGFloat = 1
+    nonisolated(unsafe) private var savedScale: CGFloat = 1
 
     override func setUp() {
         super.setUp()
@@ -196,10 +196,10 @@ final class ExtensionPanelTests: XCTestCase {
 
     private typealias StatusItem = (name: String, text: String, color: ThemeColor?, action: String?)
 
-    private func barWindow(_ bar: StatusBarView, width: CGFloat) -> NSWindow {
-        let w = NSWindow(contentRect: NSRect(x: 100, y: 100, width: width, height: 30), styleMask: [.borderless], backing: .buffered, defer: false)
+    private func barWindow(_ bar: StatusBarView, width: CGFloat, height: CGFloat = 30) -> NSWindow {
+        let w = NSWindow(contentRect: NSRect(x: 100, y: 100, width: width, height: height), styleMask: [.borderless], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
-        bar.frame = NSRect(x: 0, y: 0, width: width, height: 30)
+        bar.frame = NSRect(x: 0, y: 0, width: width, height: height)
         w.contentView = bar
         return w
     }
@@ -267,6 +267,58 @@ final class ExtensionPanelTests: XCTestCase {
         XCTAssertTrue(bar.displayCompact)
     }
 
+    /// Leiste mit allem, was rechts Platz braucht: Nutzung mit Plan-Wert, langer Kontoname, Update, Tipp,
+    /// Versionswarnung, sechs Einträge, wartende und trennbare Sessions.
+    private func worstCaseBar() -> StatusBarView {
+        let bar = StatusBarView(frame: .zero)
+        bar.counts = StatusCounts(running: 12, waiting: 3, idle: 4, error: 2, detached: 1)
+        bar.waitingCount = 3; bar.detachableCount = 4
+        bar.usage = Usage(session: 40, weekly: 25, fable: 12, sessionResets: Date().addingTimeInterval(3600), weeklyResets: Date().addingTimeInterval(3 * 24 * 3600))
+        bar.accounts = [("a", String(repeating: "k", count: 26), true, "")]
+        bar.updateAvailable = UpdateManifest(version: "9.99.0", url: "", sha256: "", notes: [])
+        bar.tip = "Gelb heißt: die Session wartet auf dich"
+        bar.versionWarning = "2.0.0"
+        bar.extensionItems = (1...6).map { ("e\($0)", "Ein langer Eintrag Nummer \($0)", .ok, $0.isMultiple(of: 2) ? "a:\($0)" : nil) }
+        return bar
+    }
+
+    /// Gezeichnete Rahmen (Tasten, Module, Display) statt nur der Knöpfe für VoiceOver: Nutzung, Tipp, Versionswarnung
+    /// und Einträge ohne Aktion haben keinen. Über alle UI-Größen und Breiten darf nichts überlappen oder überstehen.
+    func testWorstCaseBarNeverOverlaps() {
+        let oldScale = Theme.scale
+        defer { Theme.scale = oldScale }
+        for scale in [0.9, 1.0, 1.3] as [CGFloat] {
+            Theme.scale = scale
+            for width in stride(from: 700 as CGFloat, through: 1300, by: 10) {
+                let bar = worstCaseBar()
+                let w = barWindow(bar, width: width, height: Theme.barHeight); defer { w.close() }
+                bar.display()
+                let bounds = CGRect(x: 0, y: 0, width: width / scale, height: Theme.barHeight / scale)
+                let frames = bar.drawnFrames
+                XCTAssertFalse(frames.isEmpty)
+                for f in frames { XCTAssertTrue(bounds.contains(f), "\(scale) / \(width): \(f) steht über") }
+                for (i, a) in frames.enumerated() {
+                    for b in frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "\(scale) / \(width): \(a) überlappt \(b)") }
+                }
+                // Klickflächen reichen über die ganze Höhe der Leiste und überlappen trotzdem nicht.
+                let hits = barElements(bar).filter { $0.accessibilityRole() == .button }.map { $0.accessibilityFrame() }
+                for h in hits { XCTAssertGreaterThanOrEqual(h.height, Theme.barHeight - 2.01, "\(scale) / \(width)") }
+                for (i, a) in hits.enumerated() { for b in hits[(i + 1)...] { XCTAssertFalse(a.intersects(b), "\(scale) / \(width)") } }
+            }
+        }
+    }
+
+    /// Nutzungswerte, die aus Platzmangel fehlen, stehen in Tooltip und VoiceOver des Displays.
+    func testDroppedUsageIsSpokenByDisplay() throws {
+        let bar = worstCaseBar()
+        let w = barWindow(bar, width: 700); defer { w.close() }
+        bar.display()
+        let status = try XCTUnwrap(barElements(bar).first { $0.accessibilityRole() == .staticText })
+        let value = try XCTUnwrap(status.accessibilityValue() as? String)
+        XCTAssertTrue(value.hasSuffix(" · 5h 40% · 7d 25% · fable 12%"), value)
+        XCTAssertTrue(bar.displayCompact)
+    }
+
     /// Echte Fehlermeldungen sind 80 bis 150 Zeichen lang: das Display kürzt sie, statt über die linken Tasten zu
     /// wachsen. Tooltip und VoiceOver behalten den ganzen Text.
     func testLongErrorTextIsShortenedInsteadOfCoveringKeys() throws {
@@ -281,7 +333,8 @@ final class ExtensionPanelTests: XCTestCase {
             let frames = elements.map { $0.accessibilityFrame() }
             for (i, a) in frames.enumerated() { for b in frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "Breite \(width)") } }
             let status = try XCTUnwrap(elements.first { $0.accessibilityRole() == .staticText })
-            XCTAssertEqual(status.accessibilityValue() as? String, long)
+            // Fehlen Nutzungswerte, hängen sie hinten an, die Meldung selbst bleibt vollständig.
+            XCTAssertTrue((status.accessibilityValue() as? String)?.hasPrefix(long) == true)
         }
     }
 
