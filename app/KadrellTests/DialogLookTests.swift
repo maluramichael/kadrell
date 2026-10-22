@@ -64,6 +64,48 @@ final class DialogLookTests: XCTestCase {
         assertKeys(confirm(false, true), [.primary])
     }
 
+    // MARK: Hilfe, Statistik
+
+    /// Hilfe: Fugen statt Divider (unter dem Kopf, vor der Fußzeile), Bereichstitel und Links in der Akzent-Textfarbe,
+    /// nirgends die Akzent-Füllfarbe (Solarized Light trennt beide).
+    func testAboutOnRaisedSurface() {
+        assertOnRaised(AboutView(), at: { CGPoint(x: $0.width - 20, y: 20) })
+        XCTAssertEqual(surfaceParts(AboutView()).filter { $0 == .hSeam }.count, 2, "Fugen statt Divider")
+        assertAccentTextOnly(AboutView())
+    }
+
+    /// Statistik: Fugen statt Divider, das Datum des Rekords in der Akzent-Textfarbe.
+    func testStatsOnRaisedSurface() {
+        let suite = "de.malura.kadrell.tests.statslook"
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+        Stats.defaults = UserDefaults(suiteName: suite)!
+        defer {
+            UserDefaults.standard.removePersistentDomain(forName: suite)
+            Stats.defaults = Profile.defaults
+        }
+        Stats.noteConcurrent(23)
+        assertOnRaised(StatsView(), at: { CGPoint(x: $0.width - 20, y: 20) })
+        XCTAssertEqual(surfaceParts(StatsView()).filter { $0 == .hSeam }.count, 2, "Fugen statt Divider")
+        assertAccentTextOnly(StatsView())
+    }
+
+    /// Im Bild kommt die Akzent-Textfarbe vor, die Akzent-Füllfarbe nicht.
+    private func assertAccentTextOnly<V: View>(_ view: V, line: UInt = #line) {
+        let t = ColorTheme.named("solarized-light")
+        XCTAssertNotEqual(t.accentText.hexString, t.accent.hexString, "Schema trennt Text- und Füllfarbe", line: line)
+        let s = snapshot(view.raisedPanel(), theme: t, scale: 1)
+        var text = 0, fill = 0
+        for y in 0..<s.rep.pixelsHigh {
+            for x in 0..<s.rep.pixelsWide {
+                let c = pixel(s.rep, x: x, y: y)
+                if distance(c, t.accentText) < 0.04 { text += 1 }
+                if distance(c, t.accent) < 0.04 { fill += 1 }
+            }
+        }
+        XCTAssertGreaterThan(text, 0, "Akzent-Textfarbe kommt vor", line: line)
+        XCTAssertEqual(fill, 0, "Akzent-Füllfarbe nicht im Text", line: line)
+    }
+
     // MARK: Gruppe bearbeiten, Umbenennen
 
     func testEditGroupOnRaisedSurface() {

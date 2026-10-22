@@ -22,19 +22,18 @@ struct StatsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider().overlay(Theme.lineColor).padding(.top, 14)
+            SeamLine().padding(.top, 14)
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(rows) { row($0) }
             }
             .padding(16)
-            Divider().overlay(Theme.lineColor)
+            SeamLine()
             Text("Gezählt wird, solange Kadrell läuft.").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 10)
             Text("Esc oder F3 schließen").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .frame(width: 460 * Theme.scale, alignment: .leading)
-        .background(Theme.panelColor)
     }
 
     private var header: some View {
@@ -61,7 +60,7 @@ struct StatsView: View {
             if let d = r.date {
                 Spacer(minLength: 10)
                 Text(d, format: .dateTime.day().month(.abbreviated).year())
-                    .font(Theme.ui(11)).foregroundStyle(Theme.accentColor).lineLimit(1)
+                    .font(Theme.ui(11)).foregroundStyle(Theme.accentTextColor).lineLimit(1)
             }
         }
     }
