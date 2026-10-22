@@ -42,11 +42,13 @@ enum Settings {
     /// Farbschema der Oberfläche und Terminals, Default Instrument Dark.
     static var colorTheme: String { get { value("colorTheme", "instrument-dark") } set { store("colorTheme", newValue) } }
     /// Bestehende Profile (schon einmal gestartet, kein Schema gewählt) behalten Catppuccin Mocha, das bis zum Wechsel
-    /// des Defaults auf Instrument galt. Nur neue Installationen starten mit Instrument. Muss vor dem ersten Zugriff
-    /// auf `Theme.current` laufen.
+    /// des Defaults auf Instrument galt. Nur neue Installationen starten mit Instrument. Läuft pro Profil genau einmal
+    /// (`themePinChecked`), sonst würde eine neue Installation beim zweiten Start auf Mocha festgenagelt, weil der erste
+    /// `helpShown` gesetzt hat. Muss vor dem ersten Zugriff auf `Theme.current` laufen.
     static func pinThemeForExistingProfile(_ d: UserDefaults) {
-        guard d.bool(forKey: "helpShown"), d.object(forKey: "colorTheme") == nil else { return }
-        d.set("mocha", forKey: "colorTheme")
+        guard !d.bool(forKey: "themePinChecked") else { return }
+        if d.bool(forKey: "helpShown"), d.object(forKey: "colorTheme") == nil { d.set("mocha", forKey: "colorTheme") }
+        d.set(true, forKey: "themePinChecked")
     }
     /// Aussehen des Baums, Default getönte Gruppen.
     static var sidebarStyle: SidebarStyle { get { enumValue("sidebar.style", .tinted) } set { store("sidebar.style", newValue.rawValue) } }

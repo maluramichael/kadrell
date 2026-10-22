@@ -66,8 +66,19 @@ final class SettingsModelTests: XCTestCase {
         XCTAssertEqual(d.string(forKey: "colorTheme"), "nord")
     }
 
+    /// Neue Installation über zwei Starts: der erste setzt `helpShown` (wie der Erststart-Zweig im AppDelegate),
+    /// der zweite darf trotzdem nicht auf Mocha festnageln.
+    func testFreshProfileKeepsInstrumentOnSecondLaunch() {
+        let d = freshDefaults()
+        Settings.pinThemeForExistingProfile(d)
+        d.set(true, forKey: "helpShown")
+        Settings.pinThemeForExistingProfile(d)
+        XCTAssertNil(d.string(forKey: "colorTheme"))
+    }
+
     /// Ohne gespeicherten Wert gilt Instrument Dark. Der Wert des Profils wird am Ende wiederhergestellt.
     func testDefaultThemeIsInstrumentDark() {
+        // Fasst `Profile.defaults` an: nur mit TEST_RUNNER_KADRELL_PROFILE=tmp laufen lassen, dann ist es das Temp-Profil.
         let saved = Profile.defaults.object(forKey: "colorTheme")
         defer { Profile.defaults.set(saved, forKey: "colorTheme") }
         Profile.defaults.removeObject(forKey: "colorTheme")
