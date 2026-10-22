@@ -523,7 +523,6 @@ final class WorkspaceView: NSView {
             elsewhere: t.flatMap(host).map { $0 !== self } ?? false,
             lines: attach?.lines(for: key) ?? [],
             headerHidden: mode == .stack && !zen && preview == nil, zoomed: zen && manyTiles)
-        v.pulse = pulse
         mountTerminal(for: key, in: v)
     }
 
@@ -566,9 +565,9 @@ final class WorkspaceView: NSView {
         guard window?.occlusionState.contains(.visible) == true else { return }
         syncFirstResponder()
         pulse = Feedback.pulse()
-        for (key, v) in cells where sessions[key].map({ $0.status == .running || $0.hasRunningShell }) == true && !v.isHidden {
-            v.pulse = pulse
-            if !v.state.headerHidden { v.setNeedsDisplay(v.dotRect) }
+        // Kacheln: nur die Strich-Anzeige im Kopf neu zeichnen, nicht die ganze Kachel.
+        for v in cells.values where !v.isHidden && !v.state.headerHidden && Theme.meterColor(v.state.session, attached: v.state.attached) != nil {
+            v.setNeedsDisplay(v.statusRect)
         }
         // Stack-Zeilen zeichnet die Fläche selbst: nur die Punkte laufender Sessions pulsieren, nicht die ganze Fläche.
         for (r, key) in stackRows where sessions[key].map({ $0.status == .running || $0.hasRunningShell }) == true && (attach?.isAttached(key) ?? false) {

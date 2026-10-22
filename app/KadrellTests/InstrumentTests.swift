@@ -315,7 +315,7 @@ final class InstrumentTests: XCTestCase {
         return rep
     }
 
-    /// Fokussierte Kachel oben links bei Abstand 0: Der Rahmen (2 pt Gruppenfarbe) folgt dem Bogen der Modulecke, außerhalb
+    /// Fokussierte Kachel oben links bei Abstand 0: Der Rahmen (2 pt in `Theme.fg`) folgt dem Bogen der Modulecke, außerhalb
     /// des Bogens zeichnet die Kachel nichts, sonst schnitte die Ecke den Rahmen ab und bei Deckkraft unter 100 % schiene
     /// die Kachel durchs Gehäuse. Die anderen drei Ecken bleiben eckig.
     func testTopLeftTileFrameFollowsModuleCorner() {
@@ -334,12 +334,11 @@ final class InstrumentTests: XCTestCase {
             func px(_ x: CGFloat, _ y: CGFloat) -> (Int, Int) { (Int(x * CGFloat(k)), Int(y * CGFloat(k))) }
             func at(_ x: CGFloat, _ y: CGFloat) -> NSColor { let p = px(x, y); return pixel(rep, x: p.0, y: p.1) }
             func alphaAt(_ x: CGFloat, _ y: CGFloat) -> CGFloat { let p = px(x, y); return alpha(rep, x: p.0, y: p.1) }
-            // Ausrichtung: oben liegt die Kopfzeile (Gruppenfarbe 22 % auf surface), nicht der Körper.
-            let head = accent.mixed(0.22, into: Theme.surface)
-            XCTAssertLessThan(distance(at(80, 8), head), 0.03, "\(scale): Kopfzeile oben, \(at(80, 8).hexString)")
+            // Ausrichtung: oben liegt die Kopfzeile (neutral in surface), nicht der Körper.
+            XCTAssertLessThan(distance(at(80, 8), Theme.surface), 0.03, "\(scale): Kopfzeile oben, \(at(80, 8).hexString)")
             // Mitte der Rundung bei (r, r); unter 45° nach oben links mitten im 2-pt-Rahmen (Abstand r - 1): Rahmenfarbe.
             let mid = r - (r - 1) / 2.squareRoot()
-            XCTAssertLessThan(distance(at(mid, mid), accent), 0.05, "\(scale): Rahmen auf dem Bogen, \(at(mid, mid).hexString)")
+            XCTAssertLessThan(distance(at(mid, mid), Theme.fg), 0.05, "\(scale): Rahmen auf dem Bogen, \(at(mid, mid).hexString)")
             XCTAssertEqual(alphaAt(mid, mid), 1, accuracy: 0.02, "\(scale): Rahmen deckend")
             // Außerhalb des Bogens (Abstand r + 1) und in der Ecke selbst: nichts.
             let out = r - (r + 1) / 2.squareRoot()
@@ -347,8 +346,8 @@ final class InstrumentTests: XCTestCase {
                 XCTAssertEqual(alphaAt(x, y), 0, accuracy: 0.02, "\(scale): außerhalb des Bogens bei \(x),\(y)")
             }
             // Die geraden Kanten tragen den Rahmen bis an den Bogen.
-            XCTAssertLessThan(distance(at(r + 2, 0.5), accent), 0.05, "\(scale): oben gerade")
-            XCTAssertLessThan(distance(at(0.5, r + 2), accent), 0.05, "\(scale): links gerade")
+            XCTAssertLessThan(distance(at(r + 2, 0.5), Theme.fg), 0.05, "\(scale): oben gerade")
+            XCTAssertLessThan(distance(at(0.5, r + 2), Theme.fg), 0.05, "\(scale): links gerade")
             // Nur oben links rund. `render(in:)` übergeht `maskedCorners` und rundet hier alle vier Ecken, auf dem
             // Bildschirm gilt die Maske (Lage der Ecke prüft `testRoundedCornerIsVisuallyTopLeft`).
             XCTAssertEqual(cell.layer?.maskedCorners, [.layerMinXMinYCorner])

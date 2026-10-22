@@ -4,13 +4,13 @@ import AppKit
 /// ohne Terminal zeigt der Körper Snapshot-Zeilen oder ein Statuslabel.
 @MainActor
 final class CellView: NSView {
-    /// Alles, was die Kachel zeichnet (außer dem Puls). Nur eine echte Änderung zeichnet neu, nicht jeder Poll:
+    /// Alles, was die Kachel zeichnet (außer dem Takt der Strich-Anzeige). Nur eine echte Änderung zeichnet neu, nicht jeder Poll:
     /// eine neue Nachricht in Session A soll nicht alle anderen Kacheln neu zeichnen.
     struct State: Equatable {
         var session: Session
         var groupName = ""
         var groupColor = Theme.muted
-        /// Fokus-Kachel der Arbeitsfläche: Rahmen in Gruppenfarbe.
+        /// Fokus-Kachel der Arbeitsfläche: Rahmen 2 pt in Vordergrundfarbe.
         var focused = false
         /// Das Terminal dieser Kachel hat gerade die Tastatur.
         var keyboardFocus = false
@@ -77,6 +77,7 @@ final class CellView: NSView {
     /// Logische Punkte der Titelzeile (vor `Theme.scale`).
     private var xRectLogical: CGRect { CGRect(x: bounds.width / Theme.scale - 24, y: 5, width: 16, height: 16) }
     private let dotRectLogical = CGRect(x: 9, y: 9, width: 8, height: 8)
+    private let meterRectLogical = CGRect(x: 7, y: 8, width: 12, height: 10)
     private var penRectLogical: CGRect { xRectLogical.offsetBy(dx: -20, dy: 0) }
     private var deselectRectLogical: CGRect { penRectLogical.offsetBy(dx: -20, dy: 0) }
     private var zoomRectLogical: CGRect { deselectRectLogical.offsetBy(dx: -20, dy: 0) }
@@ -84,11 +85,12 @@ final class CellView: NSView {
     var penRect: CGRect { penRectLogical.scaled(Theme.scale) }
     var deselectRect: CGRect { deselectRectLogical.scaled(Theme.scale) }
     var zoomRect: CGRect { zoomRectLogical.scaled(Theme.scale) }
-    var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
+    /// Alles, was der Status im Kopf je belegt (Punkt oder Striche): der Takt zeichnet nur diese Fläche neu.
+    var statusRect: CGRect { dotRectLogical.union(meterRectLogical).scaled(Theme.scale) }
     var statusColor: NSColor { Theme.statusColor(state.session.status, attached: state.attached, shellRunning: state.session.hasRunningShell) }
-    /// Hintergrund der Kachel, leicht in Gruppenfarbe getönt, damit Gruppen auf einen Blick auseinanderfallen.
-    /// Mit Deckkraft unter 100 % scheint das Hintergrundbild der Arbeitsfläche durch, auch durchs Terminal.
-    var bodyColor: NSColor { state.groupColor.mixed(0.05, into: Theme.bg).withAlphaComponent(CGFloat(Settings.tileOpacity)) }
+    /// Hintergrund der Kachel in der Modulfarbe, ohne Gruppen-Tönung (die Gruppe zeigt der Akzent im Kopf). Mit Deckkraft
+    /// unter 100 % scheint das Hintergrundbild der Arbeitsfläche durch, auch durchs Terminal.
+    var bodyColor: NSColor { Theme.bg.withAlphaComponent(CGFloat(Settings.tileOpacity)) }
 
     override func draw(_ dirtyRect: NSRect) {
         // Unter dem Terminal nicht füllen: es malt denselben Grund mit derselben Deckkraft selbst. Doppelt gemalt wäre
@@ -102,9 +104,20 @@ final class CellView: NSView {
         ground.fill()
         if !state.headerHidden { Theme.scaled(headerRect) { drawHeader($0) } }
         Theme.scaled(bodyRect) { drawBody($0) }
+        drawInnerRim()
+    }
+
+    /// Helle Hälfte der Fuge direkt innerhalb des dunklen Layer-Rands, 1 pt breit. Zwei Kacheln bei Abstand 0 ergeben so
+    /// hell-dunkel-dunkel-hell. Liegt die Kachel in der Modul-Ecke, folgt der Innenrand deren Bogen.
+    private func drawInnerRim() {
+        let rim = Instrument.topLeftRounded(bounds.insetBy(dx: 1.5, dy: 1.5), radius: max(0, moduleCornerRadius - 1.5))
+        rim.lineWidth = 1
+        Instrument.seamLight.setStroke()
+        rim.stroke()
     }
 
     /// Rahmen als Layer-Rand: liegt über dem Terminal und blendet bei Fokuswechsel in 120 ms über statt zu springen.
+    /// Ohne Fokus oder Status ist er die dunkle Hälfte der Fuge, die helle zeichnet `drawInnerRim`.
     override func viewWillDraw() {
         super.viewWillDraw()
         guard let layer else { return }
@@ -119,30 +132,45 @@ final class CellView: NSView {
         layer.borderWidth = w
     }
 
-    private func drawHeader(_ head: CGRect) {
-        let b = head
-        let dot = Theme.dotColor(state.session, attached: state.attached, pulse: pulse)
-        let headBase = state.groupColor.mixed(state.keyboardFocus || state.focused ? 0.22 : 0.12, into: Theme.surface)
-        headBase.setFill()
-        head.fill()
-        Theme.line.setFill()
-        CGRect(x: 0, y: head.maxY - 1, width: b.width, height: 1).fill()
-        Icons.statusDot(in: dotRectLogical, status: state.session.status, attached: state.attached, color: dot)
+    /// Neutraler Kopf in `Theme.surface`, unten die Fuge zum Körper. Die Gruppe zeigt nur ihr Akzent am Label.
+    private func drawHeader(_ b: CGRect) {
+        Theme.surface.setFill()
+        b.fill()
+        Instrument.hSeam(x: 0, y: b.height - 2 * Instrument.hairline, width: b.width)
+        drawStatus()
         let meta = NSAttributedString(string: state.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         let metaW = meta.size().width
         var iconW: CGFloat = state.hovered ? 84 : 0
         if state.zoomed {
-            let z = CGRect(x: b.width - iconW - 9 - metaW - 8 - 16, y: 5, width: 16, height: 16)
-            Theme.waiting.setFill(); z.fill()
-            let zt = NSAttributedString(string: "Z", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
-            zt.draw(at: CGPoint(x: z.midX - zt.size().width / 2, y: z.minY + 1))
+            drawZoomBadge(CGRect(x: b.width - iconW - 9 - metaW - 8 - 16, y: 5, width: 16, height: 16))
             iconW += 24
         }
-        let title = NSAttributedString(string: state.session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
-        let group = NSAttributedString(string: state.groupName, attributes: Theme.attrs(10.5, state.groupColor))
-        let branch = NSAttributedString(string: state.session.branch ?? "", attributes: Theme.attrs(10.5, Theme.muted))
         // Der Titel hat Vorrang: Branch und Gruppe erscheinen nur, solange daneben noch Platz ist.
-        let avail = max(0, b.width - 24 - metaW - iconW - 16)
+        drawTitleLine(avail: max(0, b.width - 24 - metaW - iconW - 16))
+        meta.draw(at: CGPoint(x: b.width - (state.hovered ? 84 : 0) - 9 - metaW, y: 6))
+        if state.hovered { drawHoverIcons() }
+    }
+
+    /// Striche, solange etwas läuft (Claude arbeitet oder ein Kommando läuft nach „fertig“), sonst der Statuspunkt.
+    private func drawStatus() {
+        if let c = Theme.meterColor(state.session, attached: state.attached) {
+            Instrument.meter(meterRectLogical, lit: Feedback.meterLit(), color: c)
+        } else {
+            Icons.statusDot(in: dotRectLogical, status: state.session.status, attached: state.attached, color: statusColor)
+        }
+    }
+
+    /// Badge „Z“ wie in tmux: gezoomt, obwohl mehrere Sessions offen sind.
+    private func drawZoomBadge(_ z: CGRect) {
+        Theme.waiting.setFill(); z.fill()
+        let zt = NSAttributedString(string: "Z", attributes: Theme.attrs(11, Theme.pillText(on: Theme.waiting), bold: true))
+        zt.draw(at: CGPoint(x: z.midX - zt.size().width / 2, y: z.minY + 1))
+    }
+
+    /// Titel, danach Branch und Gruppe, solange `avail` reicht.
+    private func drawTitleLine(avail: CGFloat) {
+        let title = NSAttributedString(string: state.session.title, attributes: Theme.attrs(11.5, Theme.fg, bold: true))
+        let branch = NSAttributedString(string: state.session.branch ?? "", attributes: Theme.attrs(10.5, Theme.muted))
         let titleW = min(title.size().width, avail)
         if titleW > 0 { title.draw(with: CGRect(x: 24, y: 5, width: titleW, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine]) }
         var x = 24 + titleW + 8
@@ -152,16 +180,23 @@ final class CellView: NSView {
             branch.draw(at: CGPoint(x: x, y: 6))
             x += branchW; rest -= branchW
         }
-        if rest >= min(group.size().width, 40) {
-            group.draw(with: CGRect(x: x, y: 6, width: rest, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        }
-        meta.draw(at: CGPoint(x: b.width - (state.hovered ? 84 : 0) - 9 - metaW, y: 6))
-        if state.hovered {
-            Icons.x(in: xRectLogical, color: Theme.sub)
-            Icons.pen(in: penRectLogical, color: Theme.sub)
-            Icons.circle(in: deselectRectLogical, color: Theme.sub)
-            if state.zoomed { Icons.minus(in: zoomRectLogical, color: Theme.sub) } else { Icons.square(in: zoomRectLogical, color: Theme.sub) }
-        }
+        drawGroup(x: x, rest: rest)
+    }
+
+    /// Farbakzent plus gesperrtes Versal-Label wie im Baum, ohne Zahl. Nur, wenn mindestens ein Teil des Labels passt.
+    private func drawGroup(x: CGFloat, rest: CGFloat) {
+        guard !state.groupName.isEmpty else { return }
+        let label = Instrument.groupLabel(state.groupName)
+        guard rest >= min(label.size().width + 11, 51) else { return }
+        Instrument.groupAccent(center: CGPoint(x: x + 3, y: 13), color: state.groupColor)
+        label.draw(with: CGRect(x: x + 11, y: 6, width: rest - 11, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    private func drawHoverIcons() {
+        Icons.x(in: xRectLogical, color: Theme.sub)
+        Icons.pen(in: penRectLogical, color: Theme.sub)
+        Icons.circle(in: deselectRectLogical, color: Theme.sub)
+        if state.zoomed { Icons.minus(in: zoomRectLogical, color: Theme.sub) } else { Icons.square(in: zoomRectLogical, color: Theme.sub) }
     }
 
     // MARK: Accessibility
@@ -226,10 +261,10 @@ final class CellView: NSView {
     private var borderColor: NSColor {
         if state.dropTarget { return Theme.fg }
         if state.missingFolder || state.exitCode != nil { return Theme.error }
-        if state.focused { return state.groupColor }
+        if state.focused { return Theme.fg }
         if state.session.status == .waiting, state.attached { return Theme.waiting }
         if state.session.status == .error { return Theme.error }
-        return state.groupColor.mixed(state.hovered ? 0.7 : 0.45, into: Theme.bg)
+        return Instrument.seamDark
     }
 
     private func drawLines(in r: CGRect) {
