@@ -7,6 +7,8 @@ struct InstrumentSurface: NSViewRepresentable {
     let part: InstrumentSurfaceView.Part
     var themeID = Theme.current.id
     var scale = Theme.scale
+    /// Wird nie gelesen und muss trotzdem bleiben: erst die Eigenschaft meldet die Abhängigkeit vom Umgebungswert an,
+    /// ohne sie ruft SwiftUI bei einem Wechsel von Schema oder UI-Größe kein `updateNSView`.
     @Environment(\.instrumentThemeGeneration) private var themeGeneration
 
     func makeNSView(context: Context) -> InstrumentSurfaceView { InstrumentSurfaceView(part: part) }
@@ -18,7 +20,7 @@ struct InstrumentSurface: NSViewRepresentable {
 }
 
 extension EnvironmentValues {
-    /// Zählt Schemawechsel bei offenem Dialog (setzt `OverlayScroll`). Jede `InstrumentSurface` liest ihn: so erreicht
+    /// Zählt Wechsel von Schema oder UI-Größe bei offenem Dialog (setzt `OverlayScroll`). Jede `InstrumentSurface` liest ihn: so erreicht
     /// ein Wechsel auch Flächen in Views, deren Eingaben gleich bleiben und die SwiftUI sonst überspringt (Fuge, Taste).
     @Entry var instrumentThemeGeneration = 0
 }

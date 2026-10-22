@@ -29,8 +29,9 @@ final class OverlayPanel: ChildPanel {
         }
     }
 
-    /// Fläche, Rand, Felder und Tasten ziehen bei einem Themewechsel nach, solange der Dialog offen ist (Einstellungen):
-    /// `OverlayScroll` reicht den Zähler als Umgebungswert an jede Instrument-Fläche weiter.
+    /// Fläche, Rand, Felder und Tasten ziehen bei einem Wechsel von Schema oder UI-Größe nach, solange der Dialog offen
+    /// ist (Einstellungen): `OverlayScroll` reicht den Zähler als Umgebungswert an jede Instrument-Fläche weiter und
+    /// rechnet Schattenpolster und Scrollhöhe mit dem neuen Maßstab.
     func applyTheme() {
         appearance = Theme.appearance
         limit.themeGeneration += 1
@@ -63,7 +64,8 @@ final class OverlayPanel: ChildPanel {
 @MainActor
 final class OverlayLimit {
     var maxHeight = CGFloat.infinity
-    /// Zählt Schemawechsel bei offenem Dialog. `OverlayScroll` setzt ihn als `instrumentThemeGeneration` in die Umgebung.
+    /// Zählt Wechsel von Schema oder UI-Größe bei offenem Dialog. `OverlayScroll` setzt ihn als
+    /// `instrumentThemeGeneration` in die Umgebung.
     var themeGeneration = 0
 }
 

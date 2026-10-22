@@ -913,14 +913,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if themeChanged { Theme.current = ColorTheme.named(Settings.colorTheme) }
         // Die Palette baut ihre Texte beim Erzeugen: nach einem Sprachwechsel muss sie neu entstehen.
         let languageChanged = paletteLanguage != Settings.language
-        if themeChanged || languageChanged || Theme.scale != CGFloat(Settings.uiScale) {
+        let scaleChanged = Theme.scale != CGFloat(Settings.uiScale)
+        if themeChanged || languageChanged || scaleChanged {
             Theme.scale = CGFloat(Settings.uiScale)
             if palette.isVisible { palette.dismiss() }
             palette = PaletteWindow()
             paletteLanguage = Settings.language
         }
         for c in windows { c.applyAppearance(themeChanged: themeChanged) }
-        if themeChanged { sheets.applyTheme() }
+        if themeChanged || scaleChanged { sheets.applyTheme() }   // offener Dialog: Hülle, Felder und Tasten neu
         attach?.applyTerminalSettings()
         reloadViews()
     }
