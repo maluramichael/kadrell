@@ -126,7 +126,7 @@ die Farbe). Die acht ANSI-Farben für Terminals wählt der Umsetzer passend zum 
 ### Stufen
 
 1. **Kit + Leiste + Schema Instrument.** Bauteile, abgeleitete Farben, Schema dunkel/hell in den Einstellungen,
-   Leiste mit Fuge unten, Tasten, Display. Default-Migration für bestehende Profile.
+   Leiste mit Fuge unten, Tasten, Display, ohne Breadcrumb. Akzentrolle. Default-Migration für bestehende Profile.
 2. **Baum und Split-Trenner.** Fuge zwischen Baum und Modul (statt `dividerColor`), Modul mit Radius, Gruppen-Labels,
    Auswahl-Umriss, Strich-Anzeige im Baum, linkes Dock.
 3. **Kacheln.** Fugen zwischen Kacheln und unter Kachelköpfen, neutrale Kachelköpfe mit Gruppen-Akzent statt
@@ -148,15 +148,19 @@ Jede Stufe: Changelog-Eintrag und Versionssprung nach `CLAUDE.md` (Stufe 1 `mino
 
 Mit Michael besprochen:
 
-- **Instrument wird Default für Neuinstallationen**, als zwei Einträge „Instrument Dunkel“ und „Instrument Hell“ wie
-  die übrigen Schemata (kein Folgen der Systemdarstellung). Neuinstallationen bekommen Dunkel. Profile, die schon
-  existieren und kein Schema gespeichert haben, bekommen beim ersten Start nach dem Update Mocha festgeschrieben.
+- **Instrument wird Default für Neuinstallationen**, als zwei Einträge wie die übrigen Schemata (kein Folgen der
+  Systemdarstellung). Namen englisch wie bei den anderen Schemata: „Instrument Dark“ und „Instrument Light“.
+  Neuinstallationen bekommen Dark. Profile, die schon existieren und kein Schema gespeichert haben, bekommen beim
+  ersten Start nach dem Update Mocha festgeschrieben.
+- **Das Breadcrumb in der Mitte der Leiste entfällt** (Michael, 22.10., „den Header da oben brauchen wir nicht“):
+  weder „Gruppe › Session · N offen“ noch „kadrell · N sessions“. Die Mitte bleibt frei bzw. gehört den Einträgen der
+  Extensions. Die Fehlermeldung „Sessions können nicht geladen werden“, die heute dort steht, zeigt das Display in Rot.
 
 Calls des Planers (Michael prüft sie beim Lesen):
 
 - **Status-Display:** zeigt nur Zustände ungleich null, in Worten, einfarbig in `screen-ink`, die Zahl vor dem Wort
-  (`2 ARBEITEN · 1 WARTET · 1 FEHLER`), dahinter die Uhr. „Fertig“ und „getrennt“ erscheinen nicht im Display. Die
-  Gesamtzahl steht schon im Breadcrumb. Der Punkt vorn ist eine Lampe: orange, solange etwas wartet, sonst grün, bei
+  (`2 ARBEITEN · 1 WARTET · 1 FEHLER`), dahinter die Uhr. „Fertig“ und „getrennt“ erscheinen nicht im Display, nur
+  im Tooltip und für VoiceOver (Langform mit allen Zuständen und der Gesamtzahl). Der Punkt vorn ist eine Lampe: orange, solange etwas wartet, sonst grün, bei
   Fehler rot. Die klickbaren Pillen „N warten“ und „N trennen“ bleiben eigene Tasten links neben dem Display. Wird es
   eng, kürzt das Display auf Zahlen mit Anfangsbuchstaben (`2A · 1W`), VoiceOver liest immer die Langform.
 - **Auswahl im Baum:** die gezeigte Session (`focused`) bekommt den 1,5-px-Umriss in `fg`. Die Mehrfachauswahl
