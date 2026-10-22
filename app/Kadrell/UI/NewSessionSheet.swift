@@ -171,20 +171,20 @@ struct NewSessionView: View {
             PathField(text: $model.query, placeholder: String(localized: "Projekt suchen oder Pfad tippen (~/d/p/kad)", bundle: Bundle.app),
                       onTab: model.tab, onSubmit: model.start, onMove: model.move)
                 .padding(14)
-            Divider().overlay(Theme.lineColor)
+            SeamLine()
             list
-            Divider().overlay(Theme.lineColor)
+            SeamLine()
             HStack(spacing: 6) {
                 Text(String(localized: "Startet mit: \(Settings.claudeSummary)", bundle: Bundle.app)).font(Theme.ui(10.5)).foregroundStyle(Theme.mutedColor).lineLimit(1)
                 Spacer()
                 if let onOpenSettings {
-                    Button(String(localized: "ändern", bundle: Bundle.app)) { onOpenSettings() }.buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.accentColor)
+                    Button(String(localized: "ändern", bundle: Bundle.app)) { onOpenSettings() }.buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.accentTextColor)
                 }
             }.padding(.horizontal, 16).padding(.vertical, 6)
             DialogFoot(hint: String(localized: "⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen", bundle: Bundle.app), button: String(localized: "Starten", bundle: Bundle.app)) { model.start() }
         }
         .dialogFrame()
-        .overlay { if dropping { Rectangle().stroke(Theme.accentColor, lineWidth: 2) } }
+        .overlay { if dropping { RoundedRectangle(cornerRadius: Instrument.dialogRadius * Theme.scale).strokeBorder(Theme.accentColor, lineWidth: 2) } }
         .dropDestination(for: URL.self) { urls, _ in model.drop(urls) } isTargeted: { dropping = $0 }
         .background { Button("", action: model.browse).keyboardShortcut("o", modifiers: .command).opacity(0).accessibilityHidden(true) }
         .background { Button("", action: model.createAndStart).keyboardShortcut(.return, modifiers: .command).opacity(0).accessibilityHidden(true) }
@@ -204,7 +204,7 @@ struct NewSessionView: View {
                     }
                     if items.isEmpty, let bad = model.notFoundPath {
                         Text(String(localized: "\(Theme.shortPath(bad)) existiert nicht · ⌘⏎ anlegen und starten", bundle: Bundle.app))
-                            .foregroundStyle(Theme.errorColor)
+                            .foregroundStyle(Theme.errorTextColor)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                     } else if items.isEmpty {
                         Text("Kein Ordner gefunden. ⌘O wählt im Finder.").foregroundStyle(Theme.mutedColor)
@@ -231,8 +231,7 @@ struct NewSessionView: View {
         }
         .padding(.vertical, 8).padding(.horizontal, 16)
         .frame(height: Self.rowHeight * Theme.scale)
-        .background(on ? Theme.surfaceColor : .clear)
-        .overlay(alignment: .leading) { if on { Rectangle().fill(Theme.accentColor).frame(width: 3) } }
+        .instrumentRow(selected: on)
         .contentShape(Rectangle())
         .id(c.id)
     }
@@ -249,15 +248,17 @@ struct PathField: View {
     var onTab: () -> Void
     var onSubmit: () -> Void
     var onMove: (Int) -> Void
+    @State private var focused = false
 
     var body: some View {
-        PathFieldRep(text: $text, autofocus: autofocus, size: size, onTab: onTab, onSubmit: onSubmit, onMove: onMove)
+        PathFieldRep(text: $text, autofocus: autofocus, size: size, onTab: onTab, onSubmit: onSubmit, onMove: onMove, onFocus: { focused = $0 })
             .overlay(alignment: .leading) {
                 if text.isEmpty {
                     Text(placeholder).font(Theme.ui(size)).foregroundStyle(Theme.mutedColor)
                         .lineLimit(1).allowsHitTesting(false).padding(.leading, 2)
                 }
             }
+            .instrumentWell(focused: focused)
     }
 }
 
@@ -270,19 +271,20 @@ struct PathFieldRep: NSViewRepresentable {
     var onTab: () -> Void
     var onSubmit: () -> Void
     var onMove: (Int) -> Void
+    /// Beginn (`true`) und Ende (`false`) der Bearbeitung: `PathField` zeigt daran den Akzentring des Feldes.
+    var onFocus: (Bool) -> Void = { _ in }
 
     func makeNSView(context: Context) -> NSTextField {
-        let f = NSTextField()
+        let f = FocusReportingTextField()
         f.cell = CenteredTextFieldCell(textCell: "")   // sonst klebt der Text an der Oberkante des Feldes
+        f.onBecomeFirstResponder = { [weak coordinator = context.coordinator] in coordinator?.parent.onFocus(true) }
         f.isEditable = true
         f.isSelectable = true
         f.isBordered = false
         f.drawsBackground = false
-        // Kein nativer Fokusring (passt nicht zum Dialog-Stil), stattdessen ein eigener Rahmen bei Tastaturfokus,
-        // siehe Coordinator.controlTextDidBeginEditing/EndEditing: sonst sieht ein Tab-Nutzer den Fokus gar nicht.
+        // Kein nativer Fokusring: den Fokus zeigt das eingelassene Feld drumherum als Akzentring. Er kommt schon mit
+        // dem Fokus (`onBecomeFirstResponder`), nicht erst mit dem ersten Tastendruck (`controlTextDidBeginEditing`).
         f.focusRingType = .none
-        f.wantsLayer = true
-        f.layer?.cornerRadius = 3
         f.font = Theme.font(size * Theme.scale)
         f.textColor = Theme.fg
         f.usesSingleLineMode = true      // lange Pfade scrollen horizontal statt umzubrechen
@@ -312,12 +314,8 @@ struct PathFieldRep: NSViewRepresentable {
         func controlTextDidChange(_ n: Notification) {
             if let f = n.object as? NSTextField { parent.text = f.stringValue }
         }
-        func controlTextDidBeginEditing(_ n: Notification) {
-            guard let f = n.object as? NSTextField else { return }
-            f.layer?.borderColor = Theme.accent.cgColor
-            f.layer?.borderWidth = 1.5
-        }
-        func controlTextDidEndEditing(_ n: Notification) { (n.object as? NSTextField)?.layer?.borderWidth = 0 }
+        func controlTextDidBeginEditing(_ n: Notification) { parent.onFocus(true) }
+        func controlTextDidEndEditing(_ n: Notification) { parent.onFocus(false) }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
             switch sel {
             case #selector(NSResponder.insertTab(_:)): parent.onTab(); return true
@@ -327,5 +325,17 @@ struct PathFieldRep: NSViewRepresentable {
             default: return false
             }
         }
+    }
+}
+
+/// Meldet, wenn das Feld den Fokus bekommt (Klick, Tab, Autofokus). `controlTextDidBeginEditing` kommt dafür zu spät:
+/// AppKit schickt es erst beim ersten Tastendruck, das Ende (`controlTextDidEndEditing`) dagegen auch ohne Änderung.
+final class FocusReportingTextField: NSTextField {
+    var onBecomeFirstResponder: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok { onBecomeFirstResponder?() }
+        return ok
     }
 }

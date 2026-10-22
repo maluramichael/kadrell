@@ -35,6 +35,38 @@ final class TextFieldCenteringTests: XCTestCase {
         XCTAssertTrue(field.isSelectable)
     }
 
+    /// Das Pfadfeld meldet Beginn und Ende der Bearbeitung nach oben: daran hängt der Akzentring des Feldes.
+    func testPathFieldReportsFocus() {
+        var seen: [Bool] = []
+        let rep = PathFieldRep(text: .constant(""), autofocus: false, onTab: {}, onSubmit: {}, onMove: { _ in }, onFocus: { seen.append($0) })
+        let c = rep.makeCoordinator(), f = NSTextField()
+        c.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification, object: f))
+        c.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: f))
+        XCTAssertEqual(seen, [true, false])
+    }
+
+    /// Der Akzentring kommt mit dem Fokus, nicht erst mit dem ersten Tastendruck, und geht beim Verlassen auch
+    /// dann, wenn nichts getippt wurde.
+    func testPathFieldReportsFocusWithoutTyping() throws {
+        var seen: [Bool] = []
+        let host = NSHostingView(rootView: PathFieldRep(text: .constant(""), autofocus: false, onTab: {}, onSubmit: {}, onMove: { _ in },
+                                                        onFocus: { seen.append($0) }))
+        host.frame = NSRect(x: 0, y: 0, width: 200, height: 30)
+        let other = NSTextField(frame: NSRect(x: 0, y: 40, width: 100, height: 20))
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        defer { w.close() }
+        w.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 100))
+        w.contentView?.addSubview(host)
+        w.contentView?.addSubview(other)
+        host.layoutSubtreeIfNeeded()
+        let field = try XCTUnwrap(firstTextField(in: host))
+        XCTAssertTrue(w.makeFirstResponder(field))
+        XCTAssertEqual(seen, [true], "Fokus ohne Tastendruck")
+        XCTAssertTrue(w.makeFirstResponder(other))
+        XCTAssertEqual(seen, [true, false], "verlassen ohne Änderung")
+    }
+
     private func firstTextField(in view: NSView) -> NSTextField? {
         if let f = view as? NSTextField { return f }
         return view.subviews.lazy.compactMap { self.firstTextField(in: $0) }.first
