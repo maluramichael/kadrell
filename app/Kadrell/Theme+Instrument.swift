@@ -93,7 +93,8 @@ enum Instrument {
     // MARK: Fläche und Rand
 
     /// Rechteck, bei dem nur die Ecke bei (minX, minY) rund ist (in gespiegelten Views oben links). `radius <= 0` = Rechteck.
-    static func topLeftRounded(_ r: CGRect, radius: CGFloat) -> NSBezierPath {
+    /// `openBottom`: ohne Unterkante, zum Nachziehen eines Rands, der unten offen bleibt.
+    static func topLeftRounded(_ r: CGRect, radius: CGFloat, openBottom: Bool = false) -> NSBezierPath {
         let path = NSBezierPath()
         let rad = min(max(radius, 0), r.width, r.height)
         path.move(to: CGPoint(x: r.minX, y: r.maxY))
@@ -104,7 +105,7 @@ enum Instrument {
         }
         path.line(to: CGPoint(x: r.maxX, y: r.minY))
         path.line(to: CGPoint(x: r.maxX, y: r.maxY))
-        path.close()
+        if !openBottom { path.close() }
         return path
     }
 

@@ -193,6 +193,33 @@ final class TileTests: XCTestCase {
         }
     }
 
+    /// Unter dem Körper liest sich die Kante wie jede waagrechte Fuge von oben nach unten dunkel, dann hell: der Körper
+    /// lässt seine helle Unterkante weg (dunkel ist sein Layer-Rand), die Zeile darunter bringt die helle Linie mit.
+    /// Ist der Körper das Ende der Spalte, behält er seinen Innenrand wie jede Kachel.
+    func testSeamBelowStackBodyReadsDarkThenLight() {
+        for scheme in ["instrument-dark", "instrument-light", "github-light"] {
+            Theme.current = .named(scheme)
+            stackWorkspace(gap: 6) { ws in
+                let body = ws.subviews.compactMap { $0 as? CellView }.first { !$0.isHidden }!
+                let below = ws.stackRows[1].0
+                XCTAssertEqual(below.minY, body.frame.maxY, "\(scheme): Zeile B folgt direkt auf den Körper")
+                XCTAssertTrue(body.state.rowBelow, "\(scheme)")
+                let rep = render(ws), y = Int(body.frame.maxY)
+                assertColor(rep, 150, y - 2, Theme.bg, "\(scheme): Körper ohne helle Unterkante")
+                XCTAssertGreaterThan(luma(rep, x: 150, y: y), luma(Theme.panel) + 0.01, "\(scheme): helle Oberkante der Zeile unter dem Körper")
+                assertColor(rep, 150, y + 1, Theme.panel, "\(scheme): darunter die Zeile")
+                XCTAssertLessThan(luma(rep, x: Int(below.minX), y: y), luma(rep, x: Int(below.minX) + 1, y: y), "\(scheme): Seitenrand außen dunkel")
+                assertColor(rep, 150, Int(ws.stackRows[0].0.maxY) - 1, Theme.surface, "\(scheme): Zeile über dem Körper ohne helle Unterkante")
+                ws.setFocus("C", takeKeyboard: false)
+                let last = ws.subviews.compactMap { $0 as? CellView }.first { !$0.isHidden }!
+                XCTAssertFalse(last.state.rowBelow, "\(scheme): Körper am Ende der Spalte")
+                let end = render(ws)
+                // In GitHub Light ist der Körper reinweiß, heller geht nicht.
+                if luma(Theme.bg) < 0.99 { XCTAssertGreaterThan(luma(end, x: 150, y: Int(last.frame.maxY) - 2), luma(Theme.bg), "\(scheme): dort heller Innenrand wie bei jeder Kachel") }
+            }
+        }
+    }
+
     func testFirstStackRowFollowsModuleCorner() {
         stackWorkspace(gap: 0) { ws in
             let rep = render(ws)

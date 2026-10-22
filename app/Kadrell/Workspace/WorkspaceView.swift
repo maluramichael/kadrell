@@ -543,7 +543,8 @@ final class WorkspaceView: NSView {
             // Vor dem Einhängen gleichwertig: `mountTerminal` holt nie ein Terminal aus einem anderen Fenster.
             elsewhere: t.flatMap(host).map { $0 !== self } ?? false,
             lines: attach?.lines(for: key) ?? [],
-            headerHidden: mode == .stack && !zen && preview == nil, zoomed: zen && manyTiles)
+            headerHidden: mode == .stack && !zen && preview == nil, rowBelow: stackRows.last.map { $0.1 != key } ?? false,
+            zoomed: zen && manyTiles)
         mountTerminal(for: key, in: v)
     }
 
@@ -741,7 +742,8 @@ final class WorkspaceView: NSView {
         guard !stackRows.isEmpty, !zen, preview == nil else { return }
         for (i, (r, key)) in stackRows.enumerated() {
             let radius = Self.moduleCornerRadius(for: r, gap: CGFloat(Settings.tileGap)) / Theme.scale
-            Theme.scaled(r) { drawStackRow($0, key: key, first: i == 0, bodyBelow: tileFrames[key] != nil, radius: radius) }
+            let edges = StackRowEdges(first: i == 0, bodyAbove: i > 0 && tileFrames[stackRows[i - 1].1] != nil, bodyBelow: tileFrames[key] != nil)
+            Theme.scaled(r) { drawStackRow($0, key: key, edges: edges, radius: radius) }
         }
         if dragging, let t = dropTarget, let (r, _) = stackRows.first(where: { $0.1 == t }) {
             Theme.fg.setFill()
@@ -749,16 +751,20 @@ final class WorkspaceView: NSView {
         }
     }
 
+    /// Lage einer Stack-Zeile in der Spalte: erste Zeile, direkt unter oder direkt über dem Körper.
+    private struct StackRowEdges { var first: Bool, bodyAbove: Bool, bodyBelow: Bool }
+
     /// Stack-Zeile in logischen Punkten. Die Spalte aus Zeilen und Körper ist eine eingesetzte Fläche: jede Zeile trägt
     /// links und rechts den Rand der Kachel, die erste auch oben (dem Bogen der Modul-Ecke folgend); unter jeder Zeile
-    /// liegt eine Fuge, außer direkt über dem Körper, dort ist dessen oberer Rand die Fuge.
-    private func drawStackRow(_ r: CGRect, key: String, first: Bool, bodyBelow: Bool, radius: CGFloat) {
+    /// liegt eine Fuge, außer direkt über dem Körper, dort ist dessen oberer Rand die Fuge. Direkt unter dem Körper
+    /// bringt die Zeile die helle Hälfte der Fuge mit, die dunkle ist der Layer-Rand des Körpers.
+    private func drawStackRow(_ r: CGRect, key: String, edges: StackRowEdges, radius: CGFloat) {
         guard let s = sessions[key] else { return }
         let on = focused == key || sync, hover = hoveredRow == key
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         Instrument.topLeftRounded(r, radius: radius).addClip()
-        drawStackRowGround(r, on: on, first: first, bodyBelow: bodyBelow, radius: radius)
+        drawStackRowGround(r, on: on, edges: edges, radius: radius)
         drawStackRowStatus(r, session: s, attached: attach?.isAttached(key) ?? false)
         let rx = drawStackRowRight(r, session: s, group: group(forSession: key), hover: hover)
         let title = NSAttributedString(string: s.title, attributes: Theme.attrs(11.5, on || hover ? Theme.fg : Theme.sub, bold: on))
@@ -766,11 +772,15 @@ final class WorkspaceView: NSView {
     }
 
     /// Fläche ohne Gruppen-Tönung, Rand der Spalte und Fuge unter der Zeile.
-    private func drawStackRowGround(_ r: CGRect, on: Bool, first: Bool, bodyBelow: Bool, radius: CGFloat) {
+    private func drawStackRowGround(_ r: CGRect, on: Bool, edges: StackRowEdges, radius: CGFloat) {
         (on ? Theme.surface : Theme.panel).setFill()
         r.fill()
-        Instrument.rim(r, top: first, radius: radius)
-        if !bodyBelow { Instrument.hSeam(x: r.minX, y: r.maxY - 2 * Instrument.hairline, width: r.width) }
+        if edges.bodyAbove {
+            Instrument.seamLight.setFill()
+            CGRect(x: r.minX, y: Instrument.snapped(r.minY), width: r.width, height: Instrument.hairline).fill(using: .sourceOver)
+        }
+        Instrument.rim(r, top: edges.first, radius: radius)
+        if !edges.bodyBelow { Instrument.hSeam(x: r.minX, y: r.maxY - 2 * Instrument.hairline, width: r.width) }
     }
 
     /// Striche für „es läuft etwas“, sonst der Statuspunkt, beides nach derselben Regel wie Baum und Kachel.

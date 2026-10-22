@@ -31,6 +31,9 @@ final class CellView: NSView {
         var lines: [String] = []
         /// Stack: die Titelzeile zeichnet die Arbeitsfläche als Stack-Zeile, die Kachel nur den Körper.
         var headerHidden = false
+        /// Stack: direkt unter dem Körper folgt eine Zeile. Der Körper lässt dann seine helle Unterkante weg, die Zeile
+        /// bringt sie als Oberkante mit, so liest sich die Kante wie jede Fuge dunkel, dann hell.
+        var rowBelow = false
         /// Gezoomt, obwohl mehrere Sessions offen sind: Badge „Z“ in der Titelzeile wie in tmux.
         var zoomed = false
     }
@@ -120,10 +123,14 @@ final class CellView: NSView {
     }
 
     /// Helle Hälfte der Fuge direkt innerhalb des dunklen Layer-Rands, 1 pt breit. Zwei Kacheln bei Abstand 0 ergeben so
-    /// hell-dunkel-dunkel-hell. Liegt die Kachel in der Modul-Ecke, folgt der Innenrand deren Bogen.
+    /// hell-dunkel-dunkel-hell. Liegt die Kachel in der Modul-Ecke, folgt der Innenrand deren Bogen. Folgt im Stack eine
+    /// Zeile, bleibt die Unterkante offen und die Seiten laufen bis an den Layer-Rand (siehe `State.rowBelow`).
     private func drawInnerRim() {
-        let rim = Instrument.topLeftRounded(bounds.insetBy(dx: 1.5, dy: 1.5), radius: max(0, moduleCornerRadius - 1.5))
+        var r = bounds.insetBy(dx: 1.5, dy: 1.5)
+        if state.rowBelow { r.size.height += 0.5 }
+        let rim = Instrument.topLeftRounded(r, radius: max(0, moduleCornerRadius - 1.5), openBottom: state.rowBelow)
         rim.lineWidth = 1
+        rim.lineCapStyle = .butt
         Instrument.seamLight.setStroke()
         rim.stroke()
     }
