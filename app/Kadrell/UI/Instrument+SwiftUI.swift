@@ -45,18 +45,22 @@ extension View {
         background(InstrumentSurface(part: .group).accessibilityHidden(true))
     }
 
-    /// Eingelassenes Feld für Werte, mit Fokus im Akzentring.
+    /// Eingelassenes Feld für Werte, mit Fokus im Akzentring. Die gezeichnete Fläche nimmt keine Klicks an
+    /// (`hitTest` = nil); erst die Form macht das ganze Feld klickbar, nicht nur die Schrift (Kürzel-Feld, Dropdown).
     func instrumentWell(focused: Bool = false) -> some View {
         padding(.horizontal, 8).padding(.vertical, 3)
             .background(InstrumentSurface(part: .well(focused: focused)).accessibilityHidden(true))
+            .contentShape(RoundedRectangle(cornerRadius: Instrument.keyRadius * Theme.scale))
     }
 
     /// Auswahl in Dialog-Listen: Fläche mit Umriss in `fg`, ohne Akzentring (die Tastatur steht im Suchfeld).
-    /// Die Bedingung sitzt im Hintergrund, damit die Zeile beim Auswählen ihre Identität behält.
+    /// Die Bedingung sitzt im Hintergrund, damit die Zeile beim Auswählen ihre Identität behält. Ohne Auswahl hat
+    /// die Zeile keinen Grund; die Form hält sie trotzdem auf ganzer Breite klickbar.
     func instrumentRow(selected: Bool) -> some View {
         background {
             if selected { InstrumentSurface(part: .row(outline: true, ring: false)).accessibilityHidden(true) }
         }
+        .contentShape(Rectangle())
     }
 }
 

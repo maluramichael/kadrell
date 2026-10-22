@@ -122,6 +122,43 @@ final class InstrumentSwiftUITests: XCTestCase {
         XCTAssertEqual(presses, 2, "Dicke unten")
     }
 
+    func testWellLabelIsClickableBesideText() {
+        // Kürzel-Feld der Einstellungen: `.plain`-Knopf, dessen Label ein Feld ist. Die gezeichnete Fläche nimmt keine
+        // Klicks an (`hitTest` = nil), rechts neben der Schrift muss der Klick trotzdem treffen.
+        var presses = 0
+        let host = clickHost(Button { presses += 1 } label: {
+            Text("⌥←").frame(width: 200, alignment: .leading).instrumentWell()
+        }.buttonStyle(.plain))
+        click(host, at: CGPoint(x: host.bounds.width - 20, y: host.bounds.height / 2))
+        XCTAssertEqual(presses, 1, "leere Fläche des Felds")
+    }
+
+    func testUnselectedRowIsClickableAcrossWidth() {
+        // Zeile einer Dialog-Liste ohne Auswahl hat keinen Grund; der Klick rechts neben dem Text trifft trotzdem.
+        var taps = 0
+        let host = clickHost(Text("Alpha").frame(width: 300, alignment: .leading).padding(.vertical, 4)
+            .instrumentRow(selected: false).onTapGesture { taps += 1 })
+        click(host, at: CGPoint(x: host.bounds.width - 20, y: host.bounds.height / 2))
+        XCTAssertEqual(taps, 1, "leere Fläche der Zeile")
+    }
+
+    /// Hängt `view` bei Maßstab 1 in ein sichtbares Fenster, damit echte Mausereignisse ankommen.
+    private func clickHost<V: View>(_ view: V) -> NSView {
+        let oldScale = Theme.scale
+        defer { Theme.scale = oldScale }
+        Theme.scale = 1
+        let host = NSHostingView(rootView: view)
+        let size = host.fittingSize
+        let window = NSWindow(contentRect: NSRect(origin: CGPoint(x: 200, y: 200), size: size), styleMask: [.borderless],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        addTeardownBlock { window.close() }
+        window.contentView = host
+        window.orderFront(nil)
+        host.layout()
+        return host
+    }
+
     /// Pixel im Schriftbereich einer Taste (mittleres Drittel).
     private func labelPixels(_ s: (rep: NSBitmapImageRep, size: CGSize)) -> [NSColor] {
         let w = s.rep.pixelsWide, h = s.rep.pixelsHigh

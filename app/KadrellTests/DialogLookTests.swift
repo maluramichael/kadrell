@@ -145,15 +145,17 @@ final class DialogLookTests: XCTestCase {
         defer { model.recording = nil }
         let (host, views) = hostedSurfaces(SettingsView(model: model))
         let wells = views.filter { $0.part.isWell }.map { $0.convert($0.bounds, to: host) }
-        XCTAssertGreaterThan(wells.count, 40, "Dropdowns, Felder und Kürzel sind Felder")
+        // Jedes Kürzel ein Feld, dazu Editor und zwei Pfadfelder; was darüber liegt, sind die Dropdowns.
+        XCTAssertGreaterThan(wells.count, HotkeyAction.allCases.count + 3, "Kürzel, Felder und Dropdowns sind Felder")
         XCTAssertEqual(Set(wells.map { $0.minX.rounded() }).count, 1, "alle Felder beginnen an derselben Kante: \(Set(wells.map(\.minX)))")
         XCTAssertEqual(views.filter { $0.part == .well(focused: true) }.count, 1, "Kürzel in Aufnahme trägt den Akzentring")
     }
 
-    /// Ordner, Bild, kein Bild und Account hinzufügen sind neutrale Tasten (Primär bleibt dem Fuß vorbehalten).
+    /// Aktionen sind neutrale Tasten (Primär bleibt dem Fuß vorbehalten). Fest da sind nur Ordner, Bild und kein Bild;
+    /// Konten- und „Standard“-Tasten hängen von Accounts und Kürzeln des Profils ab, sie sind nur mitgezählt.
     func testSettingsActionsAreNeutralKeys() {
         let roles = surfaceParts(SettingsView(model: SettingsModel())).compactMap { if case .key(_, let role) = $0 { role } else { nil } }
-        XCTAssertGreaterThanOrEqual(roles.count, 4)
+        XCTAssertGreaterThanOrEqual(roles.count, 3)
         XCTAssertEqual(Set(roles), [.neutral])
     }
 
