@@ -477,7 +477,93 @@ final class InstrumentTests: XCTestCase {
 
     func testMeterWithoutLitDrawsAllBarsSolid() {
         let rep = render(width: 12, height: 10) { Instrument.meter(CGRect(x: 0, y: 0, width: 12, height: 10), lit: nil, color: .white) }
-        for x in [1, 4, 8, 11] { XCTAssertEqual(alpha(rep, x: x, y: 5), 1, accuracy: 0.05, "x \(x)") }
+        for x in [1, 4, 7, 10] { XCTAssertEqual(alpha(rep, x: x, y: 5), 1, accuracy: 0.05, "x \(x)") }
         XCTAssertEqual(alpha(rep, x: 2, y: 5), 0, accuracy: 0.05, "Lücke zwischen Strich 1 und 2")
+    }
+
+    /// Längen der Folgen deckender Pixel (Striche) und der Lücken dazwischen in einer Bitmap-Zeile.
+    private func runs(_ rep: NSBitmapImageRep, y: Int) -> (bars: [Int], gaps: [Int]) {
+        var bars: [Int] = [], gaps: [Int] = [], len = 0, solid = false
+        for x in 0..<rep.pixelsWide {
+            let on = alpha(rep, x: x, y: y) > 0.5
+            if on == solid { len += 1; continue }
+            if len > 0 { if solid { bars.append(len) } else if !bars.isEmpty { gaps.append(len) } }
+            solid = on; len = 1
+        }
+        if solid && len > 0 { bars.append(len) }
+        return (bars, gaps)
+    }
+
+    func testMeterGapsEvenAtEveryScale() {
+        for s: CGFloat in [0.9, 1, 1.1, 1.2, 1.3] {
+            let w = Int((14 * s).rounded(.up)), h = Int((12 * s).rounded(.up))
+            let rep = render(theme: Theme.current, width: w, height: h, scale: s) {
+                Instrument.meter(CGRect(x: 1, y: 1, width: 12, height: 10), lit: nil, color: .white)
+            }
+            // Zeile in der Mitte abtasten: Folgen deckender Pixel (Striche) und Lücken dazwischen
+            let (bars, gaps) = runs(rep, y: Int(6 * s))
+            XCTAssertEqual(bars.count, 4, "\(s)")
+            XCTAssertEqual(Set(bars).count, 1, "\(s): Striche gleich breit \(bars)")
+            XCTAssertEqual(Set(gaps).count, 1, "\(s): Lücken gleich breit \(gaps)")
+            XCTAssertGreaterThanOrEqual(gaps.first ?? 0, 1)
+        }
+    }
+
+    func testRimDarkOutsideLightInsideWithoutBottom() {
+        let rep = render(theme: .named("instrument-dark"), width: 40, height: 20, scale: 1) {
+            panelCanvas(40, 20)
+            Instrument.rim(CGRect(x: 0, y: 0, width: 40, height: 20), top: true)
+        }
+        let panel = luma(rep, x: 20, y: 10)
+        XCTAssertLessThan(luma(rep, x: 0, y: 10), panel, "links außen dunkel")
+        XCTAssertGreaterThan(luma(rep, x: 1, y: 10), luma(rep, x: 0, y: 10), "links innen heller")
+        XCTAssertLessThan(luma(rep, x: 39, y: 10), panel, "rechts außen dunkel")
+        XCTAssertGreaterThan(luma(rep, x: 38, y: 10), luma(rep, x: 39, y: 10), "rechts innen heller")
+        XCTAssertLessThan(luma(rep, x: 20, y: 0), panel, "oben außen dunkel")
+        XCTAssertGreaterThan(luma(rep, x: 20, y: 1), luma(rep, x: 20, y: 0), "oben innen heller")
+        XCTAssertEqual(luma(rep, x: 20, y: 19), panel, accuracy: 0.005, "keine Unterkante")
+        XCTAssertEqual(luma(rep, x: 20, y: 2), panel, accuracy: 0.005, "Fläche bleibt unberührt")
+    }
+
+    func testRimWithoutTopLeavesTopOpenAndRoundsCorner() {
+        let flat = render(theme: .named("instrument-dark"), width: 40, height: 20, scale: 1) {
+            panelCanvas(40, 20)
+            Instrument.rim(CGRect(x: 0, y: 0, width: 40, height: 20), top: false)
+        }
+        let panel = luma(flat, x: 20, y: 10)
+        XCTAssertEqual(luma(flat, x: 20, y: 0), panel, accuracy: 0.005, "ohne top kein Rand oben")
+        XCTAssertLessThan(luma(flat, x: 0, y: 0), panel, "Seitenrand läuft bis oben")
+        let round = render(theme: .named("instrument-dark"), width: 40, height: 20, scale: 1) {
+            panelCanvas(40, 20)
+            Instrument.rim(CGRect(x: 0, y: 0, width: 40, height: 20), top: true, radius: 10)
+        }
+        XCTAssertEqual(luma(round, x: 0, y: 0), panel, accuracy: 0.005, "Ecke oben links ist rund, Pixel (0, 0) bleibt frei")
+        XCTAssertLessThan(luma(round, x: 20, y: 0), panel, "oben weiter rechts liegt der Rand")
+    }
+
+    func testTopLeftRoundedRoundsOnlyThatCorner() {
+        let rep = render(theme: .named("instrument-dark"), width: 20, height: 20, scale: 1) {
+            Instrument.topLeftRounded(CGRect(x: 0, y: 0, width: 20, height: 20), radius: 8).fill()
+        }
+        XCTAssertLessThan(alpha(rep, x: 0, y: 0), 0.5, "Ecke oben links rund")
+        for (x, y) in [(19, 0), (0, 19), (19, 19)] { XCTAssertGreaterThan(alpha(rep, x: x, y: y), 0.9, "(\(x), \(y)) bleibt eckig") }
+        let square = render(theme: .named("instrument-dark"), width: 20, height: 20, scale: 1) {
+            Instrument.topLeftRounded(CGRect(x: 0, y: 0, width: 20, height: 20), radius: 0).fill()
+        }
+        XCTAssertGreaterThan(alpha(square, x: 0, y: 0), 0.9, "Radius 0 = Rechteck")
+    }
+
+    func testGroupLabelAndAccent() {
+        let l = Instrument.groupLabel("kadrell")
+        XCTAssertEqual(l.string, "KADRELL")
+        XCTAssertEqual(l.attribute(.kern, at: 0, effectiveRange: nil) as? CGFloat, 0.8)
+        let rep = render(theme: Theme.current, width: 20, height: 20, scale: 1) {
+            Instrument.groupAccent(center: CGPoint(x: 10, y: 10), color: .red)
+        }
+        XCTAssertEqual(pixel(rep, x: 10, y: 10).redComponent, 1, accuracy: 0.02)
+        XCTAssertGreaterThan(alpha(rep, x: 10, y: 10), 0.9)
+        XCTAssertLessThan(alpha(rep, x: 6, y: 10), 0.1, "6 pt breit: x = 6 liegt außerhalb")
+        XCTAssertGreaterThan(alpha(rep, x: 7, y: 10), 0.9)
+        XCTAssertLessThan(alpha(rep, x: 10, y: 6), 0.1)
     }
 }

@@ -241,24 +241,17 @@ extension SidebarRenderer {
 
     /// Name allein, gesperrt in Versalien; wird bei Platzmangel gekürzt.
     static func groupName(_ g: SidebarGroupItem) -> NSAttributedString {
-        NSAttributedString(string: g.group.name.uppercased(), attributes: groupLabelAttributes)
+        Instrument.groupLabel(g.group.name)
     }
 
     /// Zahl der Sessions ` · 2`, steht immer ganz.
     static func groupCount(_ g: SidebarGroupItem) -> NSAttributedString {
-        NSAttributedString(string: " · \(g.dots.count)", attributes: groupLabelAttributes)
-    }
-
-    private static var groupLabelAttributes: [NSAttributedString.Key: Any] {
-        var attrs = Theme.attrs(10.5, Theme.sub, bold: true)
-        attrs[.kern] = CGFloat(0.8)
-        return attrs
+        Instrument.groupLabel(" · \(g.dots.count)")
     }
 
     /// Kleiner Farbakzent der Gruppe zwischen Chevron und Label.
     func drawGroupAccent(_ g: SidebarGroupItem, head: CGRect) {
-        g.color.setFill()
-        NSBezierPath(roundedRect: CGRect(x: 26, y: head.midY - 3, width: 6, height: 6), xRadius: 1.5, yRadius: 1.5).fill()
+        Instrument.groupAccent(center: CGPoint(x: 29, y: head.midY), color: g.color)
     }
 
     /// Gruppen-Label ab x = 37 bis `right`; liefert die belegte Fläche. Gekürzt wird nur der Name, die Zahl steht direkt

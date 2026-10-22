@@ -75,16 +75,82 @@ enum Instrument {
     }
 
     /// Vier senkrechte Striche als Arbeits-Anzeige. `lit` = Anzahl leuchtender Striche (1...4), die übrigen stehen
-    /// mit 25 % Deckkraft; nil = alle vier voll. Beide Kanten jedes Strichs rasten aufs Gerätepixel ein, sonst
-    /// verschmiert die Breite von (Breite - 4,5) / 4 die Ränder.
+    /// mit 25 % Deckkraft; nil = alle vier voll. Gerechnet wird in Gerätepixeln: Striche und Lücken sind ganze Pixel,
+    /// alle Lücken gleich breit, der Rest der Breite verteilt sich links und rechts. So rastet die Anzeige bei jeder
+    /// UI-Größe ein, ohne dass eine Lücke schmaler wird als die anderen.
     @MainActor static func meter(_ r: CGRect, lit: Int?, color: NSColor) {
-        let gap: CGFloat = 1.5, width = (r.width - gap * 3) / 4
+        let s = Theme.scale, total = (r.width * s).rounded()
+        let gap = max(1, (1.5 * s).rounded(.down)), bar = max(1, ((total - 3 * gap) / 4).rounded(.down))
+        let x0 = snapped(r.minX) + ((total - 4 * bar - 3 * gap) / 2).rounded(.down) / s
+        let y0 = snapped(r.minY), y1 = snapped(r.maxY)
         let dim = color.withAlphaComponent(color.alphaComponent * 0.25)
         for i in 0..<4 {
             let on = lit.map { i < $0 } ?? true
-            let x0 = snapped(r.minX + CGFloat(i) * (width + gap)), x1 = snapped(r.minX + CGFloat(i) * (width + gap) + width)
-            fill(CGRect(x: x0, y: r.minY, width: x1 - x0, height: r.height), on ? color : dim)
+            fill(CGRect(x: x0 + CGFloat(i) * (bar + gap) / s, y: y0, width: bar / s, height: y1 - y0), on ? color : dim)
         }
+    }
+
+    // MARK: Fläche und Rand
+
+    /// Rechteck, bei dem nur die Ecke bei (minX, minY) rund ist (in gespiegelten Views oben links). `radius <= 0` = Rechteck.
+    static func topLeftRounded(_ r: CGRect, radius: CGFloat) -> NSBezierPath {
+        let path = NSBezierPath()
+        let rad = min(max(radius, 0), r.width, r.height)
+        path.move(to: CGPoint(x: r.minX, y: r.maxY))
+        if rad > 0 {
+            path.appendArc(from: CGPoint(x: r.minX, y: r.minY), to: CGPoint(x: r.maxX, y: r.minY), radius: rad)
+        } else {
+            path.line(to: CGPoint(x: r.minX, y: r.minY))
+        }
+        path.line(to: CGPoint(x: r.maxX, y: r.minY))
+        path.line(to: CGPoint(x: r.maxX, y: r.maxY))
+        path.close()
+        return path
+    }
+
+    /// Rand einer eingesetzten Fläche ohne Unterkante: links, rechts und mit `top` oben außen eine Haarlinie `seamDark`,
+    /// direkt innen eine Haarlinie `seamLight`. Mit `radius` folgt die Ecke oben links dem Bogen der Modul-Ecke.
+    @MainActor static func rim(_ r: CGRect, top: Bool, radius: CGFloat = 0) {
+        let left = snapped(r.minX), right = snapped(r.maxX), topEdge = snapped(r.minY), bottom = snapped(r.maxY)
+        func stroke(inset: CGFloat, _ color: NSColor) {
+            let path = NSBezierPath()
+            path.lineWidth = hairline
+            path.lineCapStyle = .butt
+            let l = left + inset, rt = right - inset, t = topEdge + inset
+            path.move(to: CGPoint(x: l, y: bottom))
+            if top {
+                let rad = radius - inset
+                if rad > 0 {
+                    path.appendArc(from: CGPoint(x: l, y: t), to: CGPoint(x: rt, y: t), radius: rad)
+                } else {
+                    path.line(to: CGPoint(x: l, y: t))
+                }
+                path.line(to: CGPoint(x: rt, y: t))
+            } else {
+                path.line(to: CGPoint(x: l, y: topEdge))
+                path.move(to: CGPoint(x: rt, y: topEdge))
+            }
+            path.line(to: CGPoint(x: rt, y: bottom))
+            color.setStroke()
+            path.stroke()
+        }
+        stroke(inset: hairline / 2, seamDark)
+        stroke(inset: 1.5 * hairline, seamLight)
+    }
+
+    // MARK: Gruppe
+
+    /// Gesperrtes Versal-Label einer Gruppe, wie im Baum.
+    static func groupLabel(_ text: String) -> NSAttributedString {
+        var attrs = Theme.attrs(10.5, Theme.sub, bold: true)
+        attrs[.kern] = CGFloat(0.8)
+        return NSAttributedString(string: text.uppercased(), attributes: attrs)
+    }
+
+    /// Farbakzent der Gruppe: 6 × 6 pt mit Radius 1,5, mittig auf `center`.
+    @MainActor static func groupAccent(center: CGPoint, color: NSColor) {
+        color.setFill()
+        NSBezierPath(roundedRect: CGRect(x: center.x - 3, y: center.y - 3, width: 6, height: 6), xRadius: 1.5, yRadius: 1.5).fill()
     }
 
     /// Füllt mit Alpha über den Untergrund (`NSRectFill` würde ersetzen statt überblenden).
