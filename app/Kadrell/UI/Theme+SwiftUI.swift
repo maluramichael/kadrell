@@ -13,6 +13,7 @@ extension Theme {
     static var fgColor: Color { Color(nsColor: fg) }
     static var mutedColor: Color { Color(nsColor: muted) }
     static var runningColor: Color { Color(nsColor: running) }
+    static var accentColor: Color { Color(nsColor: accent) }
     static let errorColor = Color(nsColor: error)
 }
 
