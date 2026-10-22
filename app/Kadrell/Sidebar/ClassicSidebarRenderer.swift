@@ -1,6 +1,6 @@
 import AppKit
 
-/// Ursprüngliches Design: Name mit ▪ in Gruppenfarbe, Pfad darunter, Hover grau hinterlegt.
+/// Ursprüngliches Design: Gruppen-Label mit Farbakzent, Pfad darunter.
 struct ClassicSidebarRenderer: SidebarRenderer {
     let groupRow: CGFloat = 38
     let sessionRow: CGFloat = 24
@@ -8,7 +8,6 @@ struct ClassicSidebarRenderer: SidebarRenderer {
     let topInset: CGFloat = 6
 
     func drawGroup(_ g: SidebarGroupItem, in r: CGRect) {
-        if g.hover { Theme.surface.setFill(); r.fill() }
-        drawGroupWithPath(g, in: r, prefix: "▪ ")
+        drawGroupWithPath(g, in: r)
     }
 }

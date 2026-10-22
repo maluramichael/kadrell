@@ -5,57 +5,14 @@ import XCTest
 /// y wächst nach unten wie in den echten Views), und zwar über `Theme.scaled`, damit der Maßstab wie in der App wirkt.
 @MainActor
 final class InstrumentTests: XCTestCase {
-    private func render(theme: ColorTheme, width: Int, height: Int, scale: CGFloat, _ draw: () -> Void) -> NSBitmapImageRep {
-        let oldTheme = Theme.current, oldScale = Theme.scale
-        defer { Theme.current = oldTheme; Theme.scale = oldScale }
-        Theme.current = theme
-        Theme.scale = scale
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4,
-                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        let cg = NSGraphicsContext(bitmapImageRep: rep)!.cgContext
-        cg.translateBy(x: 0, y: CGFloat(height))
-        cg.scaleBy(x: 1, y: -1)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: cg, flipped: true)
-        Theme.scaled(CGRect(x: 0, y: 0, width: width, height: height)) { _ in draw() }
-        NSGraphicsContext.restoreGraphicsState()
-        return rep
-    }
-
     private func render(width: Int, height: Int, _ draw: () -> Void) -> NSBitmapImageRep {
         render(theme: Theme.current, width: width, height: height, scale: 1, draw)
     }
-
-    private func luma(_ c: NSColor) -> CGFloat {
-        let s = c.usingColorSpace(.sRGB) ?? c
-        return 0.2126 * s.redComponent + 0.7152 * s.greenComponent + 0.0722 * s.blueComponent
-    }
-
-    private func luma(_ rep: NSBitmapImageRep, x: Int, y: Int) -> CGFloat { luma(rep.colorAt(x: x, y: y)!) }
 
     /// Zeilen, in denen mindestens ein Pixel merklich von `color` abweicht.
     private func changedRows(_ rep: NSBitmapImageRep, against color: NSColor) -> [Int] {
         let ref = luma(color)
         return (0..<rep.pixelsHigh).filter { y in (0..<rep.pixelsWide).contains { abs(luma(rep, x: $0, y: y) - ref) > 0.01 } }
-    }
-
-    /// Fugenfarbe, wie sie über `base` entsteht (Alpha über den Grund gerechnet).
-    private func over(_ c: NSColor, _ base: NSColor) -> NSColor {
-        let s = c.usingColorSpace(.sRGB)!, b = base.usingColorSpace(.sRGB)!, a = s.alphaComponent
-        return NSColor(srgbRed: s.redComponent * a + b.redComponent * (1 - a), green: s.greenComponent * a + b.greenComponent * (1 - a),
-                       blue: s.blueComponent * a + b.blueComponent * (1 - a), alpha: 1)
-    }
-
-    private func withTheme(_ t: ColorTheme, _ body: () -> Void) {
-        let old = Theme.current
-        defer { Theme.current = old }
-        Theme.current = t
-        body()
-    }
-
-    private func panelCanvas(_ w: CGFloat, _ h: CGFloat) {
-        Theme.panel.setFill()
-        NSBezierPath(rect: CGRect(x: 0, y: 0, width: w, height: h)).fill()
     }
 
     /// Trenner eines Splits wie in der App: unskaliert, über dem Gehäuse des Baums.
