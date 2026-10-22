@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var autoDetachTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Vor jedem Zugriff auf `Theme`: `Theme.current` liest das Schema einmalig beim ersten Zugriff.
+        Settings.pinThemeForExistingProfile(Profile.defaults)
         _ = AppBinary.atLaunch
         Localization.apply(Settings.language)
         // Nur eine Instanz pro Profil: hält schon eine das Profil, die nach vorn holen und selbst beenden.

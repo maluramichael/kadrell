@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.70.0 (2026-10-22)
+
+- Feature: Neues Farbschema „Instrument“ (dunkel und hell), Standard für neue Installationen.
+- Änderung: Die Leiste oben ist neu gestaltet: Schalter als Tasten, Trennungen als feine Fugen, rechts ein Status-Display mit Klartext („2 ARBEITEN · 1 WARTET“) und Uhr.
+- Entfernt: Die Anzeige von Gruppe und Session in der Mitte der Leiste.
+
 ## 1.69.0 (2026-10-16)
 
 - Fix: Der automatische Account-Wechsel fragt das Ziel vorher live ab und wechselt nicht mehr auf einen Account, der in Wirklichkeit schon am Limit ist.

@@ -39,8 +39,15 @@ enum Settings {
     static var editorCommand: String { get { value("editorCommand", "") } set { store("editorCommand", newValue) } }
     /// Letzte Antwort von Claude als zweite Zeile unter jeder Session im Baum.
     static var showLastMessage: Bool { get { value("showLastMessage", false) } set { store("showLastMessage", newValue) } }
-    /// Farbschema der Oberfläche und Terminals, Default Catppuccin Mocha.
-    static var colorTheme: String { get { value("colorTheme", ColorTheme.all[0].id) } set { store("colorTheme", newValue) } }
+    /// Farbschema der Oberfläche und Terminals, Default Instrument Dark.
+    static var colorTheme: String { get { value("colorTheme", "instrument-dark") } set { store("colorTheme", newValue) } }
+    /// Bestehende Profile (schon einmal gestartet, kein Schema gewählt) behalten Catppuccin Mocha, das bis zum Wechsel
+    /// des Defaults auf Instrument galt. Nur neue Installationen starten mit Instrument. Muss vor dem ersten Zugriff
+    /// auf `Theme.current` laufen.
+    static func pinThemeForExistingProfile(_ d: UserDefaults) {
+        guard d.bool(forKey: "helpShown"), d.object(forKey: "colorTheme") == nil else { return }
+        d.set("mocha", forKey: "colorTheme")
+    }
     /// Aussehen des Baums, Default getönte Gruppen.
     static var sidebarStyle: SidebarStyle { get { enumValue("sidebar.style", .tinted) } set { store("sidebar.style", newValue.rawValue) } }
     /// Sortierung des Baums (Leiste), Default aus = Handreihenfolge.
