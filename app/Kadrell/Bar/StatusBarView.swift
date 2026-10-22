@@ -122,6 +122,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
 
     /// Maße der Tasten und des Displays: 20 pt hoch, 4 pt Abstand untereinander, 6 pt Rand zu den Kanten.
     private static let keyHeight: CGFloat = 20, keyGap: CGFloat = 4, edge: CGFloat = 6
+    private static let layoutIconSize: CGFloat = 10
 
     /// Kurz flüssig neu zeichnen, die Uhr allein tickt nur jede Sekunde.
     private func animate(_ duration: CFTimeInterval) {
@@ -239,9 +240,11 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
     private func drawLeft(_ b: CGRect) -> CGFloat {
         // Layout-Taste: zeigt den aktuellen Modus, Klick öffnet die Auswahl.
         let label = String(localized: "Layout", bundle: Bundle.app)
-        let toggle = keyRect(x: Self.edge, width: 30, b)
+        let toggle = keyRect(x: Self.edge, width: 26, b)
         let cap = key(toggle, label)
-        Icons.layout(layoutMode, in: CGRect(x: cap.midX - 7, y: cap.midY - 7, width: 14, height: 14), color: Theme.sub)
+        // Symbol so hoch wie die Großbuchstaben der Nachbartasten, nicht kappenfüllend.
+        let icon = Self.layoutIconSize
+        Icons.layout(layoutMode, in: CGRect(x: Instrument.snapped(cap.midX - icon / 2), y: Instrument.snapped(cap.midY - icon / 2), width: icon, height: icon), color: Theme.sub)
         hitRects.append(HitRegion(rect: Self.hitRect(toggle, b), label: label, value: layoutMode.title) { [weak self] in self?.showLayoutMenu(at: CGPoint(x: toggle.minX, y: b.maxY)) })
         var x = toggle.maxX + Self.keyGap
         if layoutMode == .grid { drawColumns(b, &x, value: gridColumns, min: 0) { [weak self] c in self?.onGridColumns?(c) } }
