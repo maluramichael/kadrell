@@ -54,6 +54,15 @@ final class ContrastTests: XCTestCase {
         }
     }
 
+    /// Die Terminalfarben 1 bis 6 (Rot bis Cyan) sind in den Instrument-Schemata als Text auf dem Terminalgrund lesbar.
+    func testInstrumentAnsiMeetsAA() {
+        for t in ColorTheme.all where t.id.hasPrefix("instrument") {
+            for (i, c) in t.ansi.enumerated() where (1...6).contains(i) {
+                XCTAssertGreaterThanOrEqual(c.contrastRatio(with: t.bg), 4.5, "\(t.id): ansi[\(i)] \(c.hexString) gegen \(t.bg.hexString)")
+            }
+        }
+    }
+
     /// `ensuringContrast` lässt eine schon konforme Farbe unangetastet (kein unnötiger Charakterverlust).
     func testEnsuringContrastNoopsWhenAlreadyCompliant() {
         let bg = NSColor(hex: 0x000000), fg = NSColor(hex: 0xffffff)
