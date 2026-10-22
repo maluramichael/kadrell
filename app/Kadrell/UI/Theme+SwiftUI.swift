@@ -26,23 +26,23 @@ private struct KeyboardFocusRing: ViewModifier {
     @FocusState private var focused: Bool
     func body(content: Content) -> some View {
         content.focused($focused)
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.accentColor, lineWidth: focused ? 2 : 0).padding(-2))
+            .overlay(RoundedRectangle(cornerRadius: (Instrument.keyRadius + 2) * Theme.scale).stroke(Theme.accentColor, lineWidth: focused ? 2 : 0).padding(-2))
     }
 }
 
 extension View {
     func kbdFocusRing() -> some View { modifier(KeyboardFocusRing()) }
 
-    /// Rahmen der schmalen Eingabe-Dialoge (⌘N, Gruppe bearbeiten, Umbenennen).
+    /// Rahmen der schmalen Eingabe-Dialoge (⌘N, Gruppe bearbeiten, Umbenennen). Ohne eigenen Grund: die erhabene
+    /// Fläche legt die gemeinsame Hülle der Overlays an.
     func dialogFrame() -> some View {
-        font(Theme.ui(12)).foregroundStyle(Theme.fgColor).frame(width: 640 * Theme.scale).background(Theme.panelColor)
+        font(Theme.ui(12)).foregroundStyle(Theme.fgColor).frame(width: 640 * Theme.scale)
     }
 }
 
 extension Text {
-    /// Überschrift oben links im Dialog: klein, gesperrt, gedämpft.
+    /// Überschrift oben links im Dialog: gesperrtes Versal-Label, gedämpft.
     func dialogTitle() -> some View {
-        font(Theme.ui(11)).kerning(0.6).foregroundStyle(Theme.mutedColor)
-            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
+        capsLabel().frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 12)
     }
 }

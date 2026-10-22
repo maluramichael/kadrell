@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import Kadrell
 
 /// Gemeinsame Helfer für Pixel-Tests: Zeichnen in ein gespiegeltes Bitmap (1 pt = 1 px bei Maßstab 1, y wächst nach
@@ -58,5 +59,28 @@ extension XCTestCase {
     func panelCanvas(_ w: CGFloat, _ h: CGFloat) {
         Theme.panel.setFill()
         NSBezierPath(rect: CGRect(x: 0, y: 0, width: w, height: h)).fill()
+    }
+
+    /// Rendert eine SwiftUI-View in ihrer natürlichen Größe. Schema und Maßstab gelten nur fürs Rendern. Die View
+    /// entsteht erst danach (`@autoclosure`), sonst lesen Modifier wie `raisedPanel()` noch den alten Maßstab.
+    func snapshot<V: View>(_ view: @autoclosure () -> V, theme: ColorTheme, scale: CGFloat = 1) -> (rep: NSBitmapImageRep, size: CGSize) {
+        let oldTheme = Theme.current, oldScale = Theme.scale
+        defer { Theme.current = oldTheme; Theme.scale = oldScale }
+        Theme.current = theme
+        Theme.scale = scale
+        let host = NSHostingView(rootView: view())
+        host.layout()
+        let size = host.fittingSize
+        host.frame = NSRect(origin: .zero, size: size)
+        host.layout()
+        let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+        host.cacheDisplay(in: host.bounds, to: rep)
+        return (rep, size)
+    }
+
+    /// Farbe eines Snapshots am Punkt `p` (Punkte, y nach unten), in sRGB, deckend.
+    func pixel(_ s: (rep: NSBitmapImageRep, size: CGSize), at p: CGPoint) -> NSColor {
+        let k = CGFloat(s.rep.pixelsWide) / s.size.width
+        return pixel(s.rep, x: Int(p.x * k), y: Int(p.y * k))
     }
 }
