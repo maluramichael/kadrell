@@ -457,13 +457,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld WORKING"
+                  "value": "%lld RUNNING"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld WORKING"
+                  "value": "%lld RUNNING"
                 }
               }
             }
@@ -758,7 +758,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lldW"
+            "value": "%lldR"
           }
         }
       }
@@ -790,7 +790,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lldQ"
+            "value": "%lldW"
           }
         }
       }
@@ -8568,18 +8568,18 @@
         }
       }
     },
-    "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi)": {
+    "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi) sowie Farbwerte des Schemas Instrument aus Monsters (Apache-2.0, Saturday Company)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi)"
+            "value": "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi) sowie Farbwerte des Schemas Instrument aus Monsters (Apache-2.0, Saturday Company)"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Includes Lua 5.5.1 (MIT, lua.org) and json.lua (MIT, rxi)"
+            "value": "Includes Lua 5.5.1 (MIT, lua.org) and json.lua (MIT, rxi) as well as colour values of the Instrument scheme from Monsters (Apache-2.0, Saturday Company)"
           }
         }
       }

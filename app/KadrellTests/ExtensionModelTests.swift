@@ -214,12 +214,13 @@ final class ExtensionModelTests: XCTestCase {
         XCTAssertTrue(problem.contains("x.lua"), problem)
     }
 
-    /// A5: die MIT-Lizenz von Lua liegt im Bundle, das About nennt Lua und json.lua.
+    /// A5: die MIT-Lizenz von Lua liegt im Bundle, das About nennt Lua, json.lua und die Herkunft der Instrument-Farben.
     @MainActor func testLuaLicenseShips() throws {
         let url = try XCTUnwrap(Bundle.main.url(forResource: "LICENSE", withExtension: nil), "LICENSE fehlt im Bundle")
         XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("Lua.org, PUC-Rio"))
         XCTAssertTrue(AboutView.credits.contains("Lua 5.5.1"), AboutView.credits)
         XCTAssertTrue(AboutView.credits.contains("json.lua"), AboutView.credits)
+        XCTAssertTrue(AboutView.credits.contains("Monsters"), AboutView.credits)
     }
 
     func testStatusTruncatedTo40() throws {

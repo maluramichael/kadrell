@@ -27,8 +27,8 @@ final class StatusDisplayTests: XCTestCase {
     func testDisplaySwitchesLanguage() {
         let c = StatusCounts(running: 2, waiting: 1, idle: 0, error: 1, detached: 0)
         Settings.language = .en
-        XCTAssertEqual(StatusDisplay.text(c, compact: false), "2 WORKING · 1 WAITING · 1 ERROR")
-        XCTAssertEqual(StatusDisplay.text(c, compact: true), "2W · 1Q · 1E")
+        XCTAssertEqual(StatusDisplay.text(c, compact: false), "2 RUNNING · 1 WAITING · 1 ERROR")
+        XCTAssertEqual(StatusDisplay.text(c, compact: true), "2R · 1W · 1E")
         Settings.language = .de
         XCTAssertEqual(StatusDisplay.text(c, compact: false), "2 ARBEITEN · 1 WARTET · 1 FEHLER")
         XCTAssertEqual(StatusDisplay.text(c, compact: true), "2A · 1W · 1F")
@@ -36,7 +36,7 @@ final class StatusDisplayTests: XCTestCase {
 
     func testEnglishPlural() {
         Settings.language = .en
-        XCTAssertEqual(StatusDisplay.text(StatusCounts(running: 1, waiting: 2, idle: 0, error: 2, detached: 0), compact: false), "1 WORKING · 2 WAITING · 2 ERRORS")
+        XCTAssertEqual(StatusDisplay.text(StatusCounts(running: 1, waiting: 2, idle: 0, error: 2, detached: 0), compact: false), "1 RUNNING · 2 WAITING · 2 ERRORS")
     }
 
     func testSpokenListsEverything() {

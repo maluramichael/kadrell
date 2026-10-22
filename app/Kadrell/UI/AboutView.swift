@@ -44,8 +44,11 @@ struct AboutView: View {
         return out
     }
 
-    /// Lizenzhinweis der mitgelieferten Lua-Teile; der Lua-Lizenztext liegt als LICENSE im Bundle.
-    static var credits: String { String(localized: "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi)", bundle: Bundle.app) }
+    /// Lizenzhinweis der mitgelieferten Lua-Teile und der Herkunft der Instrument-Farbwerte; der Lua-Lizenztext liegt
+    /// als LICENSE im Bundle.
+    static var credits: String {
+        String(localized: "Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi) sowie Farbwerte des Schemas Instrument aus Monsters (Apache-2.0, Saturday Company)", bundle: Bundle.app)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
