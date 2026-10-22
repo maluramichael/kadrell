@@ -45,6 +45,19 @@ final class CellView: NSView {
             layer.maskedCorners = [.layerMinXMinYCorner]
         }
     }
+    /// Schnitt entlang des Modul-Bogens für eine seitlich gescrollte Kachel unter der Ecke (Pfad in Kachel-Koordinaten,
+    /// gerade-ungerade gefüllt), sonst nil. Rand, Kopf und Terminal enden so am Bogen statt von der Ecke überdeckt zu werden.
+    var moduleMask: CGPath? {
+        didSet {
+            guard let layer, moduleMask != oldValue || (moduleMask != nil && layer.mask == nil) else { return }
+            guard let path = moduleMask else { layer.mask = nil; return }
+            let shape = layer.mask as? CAShapeLayer ?? CAShapeLayer()
+            shape.fillRule = .evenOdd
+            shape.frame = layer.bounds
+            shape.path = path
+            layer.mask = shape
+        }
+    }
     /// Abgedunkelter Körper bei fehlendem Ordner, Startfehler und beendeter Session.
     private static let shade = NSColor(srgbRed: 17 / 255, green: 17 / 255, blue: 27 / 255, alpha: 1)
 

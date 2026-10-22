@@ -503,11 +503,33 @@ final class WorkspaceView: NSView {
         frame.origin == CGPoint(x: gap, y: gap) ? max(0, ModuleCornerView.scaledRadius - gap) : 0
     }
 
+    /// Maske für eine Kachel, die seitlich unter die Modul-Ecke ragt, in Kachel-Koordinaten (Ursprung oben links),
+    /// gefüllt gerade-ungerade: die Kachel ohne die Fläche des Eckquadrats außerhalb des Bogens. nil, wenn nichts
+    /// abzuschneiden ist (Kachel in oder rechts der Ecke, ganz links hinaus oder unterhalb).
+    static func moduleMask(for frame: CGRect) -> CGPath? {
+        let r = ModuleCornerView.scaledRadius
+        // Fernster Punkt von der Bogenmitte (r, r) in Kachel ∩ Eckquadrat.
+        let near = CGPoint(x: max(frame.minX, 0), y: max(frame.minY, 0))
+        guard frame.maxX > 0, frame.maxY > 0, near.x < r, near.y < r, hypot(near.x - r, near.y - r) > r else { return nil }
+        let path = CGMutablePath()
+        path.addRect(CGRect(origin: .zero, size: frame.size))
+        // Ausschnitt: Quadrat ohne Viertelkreis. Der volle Kreis wäre falsch, er ragte aus dem Quadrat und höhlte die Kachel aus.
+        let cut = CGMutablePath()
+        cut.move(to: .zero)
+        cut.addLine(to: CGPoint(x: r, y: 0))
+        cut.addArc(center: CGPoint(x: r, y: r), radius: r, startAngle: 3 * .pi / 2, endAngle: .pi, clockwise: true)
+        cut.closeSubpath()
+        path.addPath(cut, transform: CGAffineTransform(translationX: -frame.minX, y: -frame.minY))
+        return path
+    }
+
     /// Die Kachel zeichnet nur bei echter Änderung ihres Zustands neu (siehe `CellView.State`).
     private func updateCell(_ v: CellView, key: String, frame f: CGRect, session s: Session, multiVisible: Bool, manyTiles: Bool) {
         if v.isHidden { v.isHidden = false; v.needsDisplay = true }
         if v.frame != f { v.frame = f; v.needsDisplay = true }
         v.moduleCornerRadius = Self.moduleCornerRadius(for: f, gap: CGFloat(Settings.tileGap))
+        // Die Kachel genau in der Ecke rundet selbst, seitlich gescrollte werden entlang des Bogens angeschnitten.
+        v.moduleMask = v.moduleCornerRadius > 0 ? nil : Self.moduleMask(for: f)
         let g = group(forSession: key), t = attach?.terminal(for: key)
         v.state = CellView.State(
             session: s, groupName: g?.name ?? "", groupColor: groupColor(g),

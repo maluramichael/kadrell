@@ -205,4 +205,103 @@ final class TileTests: XCTestCase {
             assertColor(rep, 20, 8, Theme.surface, "Zeilenfläche im Bogen")
         }
     }
+
+    // MARK: Modul-Ecke beim Scrollen
+
+    func testModuleMaskFollowsArc() throws {
+        Theme.scale = 1                                                    // r = 14, Mitte (14, 14)
+        let p = try XCTUnwrap(WorkspaceView.moduleMask(for: CGRect(x: -100, y: 6, width: 300, height: 200)))
+        XCTAssertFalse(p.contains(CGPoint(x: 101, y: 1), using: .evenOdd), "Fläche (1, 7): außerhalb des Bogens")
+        XCTAssertTrue(p.contains(CGPoint(x: 110, y: 2), using: .evenOdd), "Fläche (10, 8): innerhalb")
+        XCTAssertTrue(p.contains(CGPoint(x: 150, y: 2), using: .evenOdd), "rechts der Ecke")
+        XCTAssertNil(WorkspaceView.moduleMask(for: CGRect(x: 306, y: 6, width: 300, height: 200)))
+        XCTAssertNil(WorkspaceView.moduleMask(for: CGRect(x: 6, y: 6, width: 300, height: 200)), "Kachel in der Ecke bei Abstand 6")
+        XCTAssertNil(WorkspaceView.moduleMask(for: CGRect(x: -400, y: 6, width: 300, height: 200)), "ganz links hinaus")
+    }
+
+    /// Die Maske schneidet nur das Eckquadrat außerhalb des Bogens ab. Alles andere der Kachel bleibt, auch der Teil
+    /// innerhalb des Kreises, der unter oder rechts vom Quadrat liegt (dort läge bei gerade-ungerade mit vollem Kreis ein Loch).
+    func testModuleMaskKeepsEverythingButCornerCut() throws {
+        Theme.scale = 1
+        let frame = CGRect(x: -100, y: 0, width: 300, height: 200)
+        let p = try XCTUnwrap(WorkspaceView.moduleMask(for: frame))
+        func kept(_ x: CGFloat, _ y: CGFloat) -> Bool { p.contains(CGPoint(x: x - frame.minX, y: y - frame.minY), using: .evenOdd) }
+        XCTAssertFalse(kept(1, 1), "Ecke außerhalb des Bogens")
+        XCTAssertFalse(kept(7, 1), "oben nahe dem Bogen außerhalb")
+        XCTAssertTrue(kept(10, 10), "im Bogen")
+        XCTAssertTrue(kept(20, 20), "im Kreis, aber außerhalb des Quadrats")
+        XCTAssertTrue(kept(25, 5), "außerhalb von Kreis und Quadrat")
+        XCTAssertTrue(kept(5, 25), "unterhalb des Quadrats")
+        XCTAssertTrue(kept(100, 100), "Mitte der Kachel")
+        XCTAssertTrue(kept(-50, 100), "links der Arbeitsfläche bleibt der Kachel, die Fläche schneidet es ab")
+    }
+
+    func testScrolledTileUnderCornerIsMasked() {
+        let oldGap = Settings.tileGap, oldColumns = Settings.scrollColumns
+        let suffix = ".test-scroll-mask"
+        let ws = WorkspaceView(frame: NSRect(x: 0, y: 0, width: 600, height: 400), defaultsSuffix: suffix)
+        defer {
+            Settings.tileGap = oldGap; Settings.scrollColumns = oldColumns
+            ws.close()
+            for k in ["workspace.selected", "workspace.mode", "workspace.auto"] { Profile.defaults.removeObject(forKey: k + suffix) }
+        }
+        Theme.scale = 1
+        let ids = ["a", "b", "c"]
+        let sessions = ids.map { Session(id: $0, cwd: "/p", startedAt: 0, sessionId: $0, name: $0) }
+        ws.reload(groups: [Group(id: "g", name: "G", color: "#89b4fa", cwd: "/p", sessionIds: ids, favorite: false)], sessions: sessions)
+        ws.setMode(.scroll)
+        ws.setScrollColumns(2)
+        ws.select(ids, add: false, takeKeyboard: false)
+        func tiles() -> [CellView] {
+            ws.subviews.compactMap { $0 as? CellView }.filter { !$0.isHidden }.sorted { $0.frame.minX < $1.frame.minX }
+        }
+        for gap in [0.0, 6.0] {
+            Settings.tileGap = gap
+            ws.scrollBy(-10_000)
+            ws.relayout()
+            var t = tiles()
+            XCTAssertNil(t[0].layer?.mask, "gap \(gap): Kachel in der Ecke ohne Maske")
+            XCTAssertGreaterThan(t[0].moduleCornerRadius, 0, "gap \(gap): konzentrischer Radius")
+            ws.scrollBy(100)
+            t = tiles()
+            XCTAssertLessThan(t[0].frame.minX, 0, "gap \(gap): erste Kachel liegt links angeschnitten")
+            let mask = t[0].layer?.mask as? CAShapeLayer
+            XCTAssertNotNil(mask, "gap \(gap): angeschnittene Kachel hat Maske")
+            XCTAssertEqual(mask?.fillRule, .evenOdd)
+            XCTAssertEqual(mask?.frame, t[0].layer?.bounds)
+            XCTAssertEqual(t[0].moduleCornerRadius, 0, "gap \(gap): eckig")
+            XCTAssertNil(t[1].layer?.mask, "gap \(gap): zweite Kachel ohne Maske")
+            ws.scrollBy(-100)
+            t = tiles()
+            XCTAssertNil(t[0].layer?.mask, "gap \(gap): wieder in der Ecke, Maske weg")
+            XCTAssertGreaterThan(t[0].moduleCornerRadius, 0)
+        }
+    }
+
+    /// Die Maske schneidet wirklich außerhalb des Bogens ab (Lage und Richtung der Ebene, nicht nur der Pfad).
+    func testMaskedTileIsClippedOutsideArc() {
+        Theme.scale = 1
+        let size = CGSize(width: 160, height: 100), k = 4
+        let c = cell()
+        c.frame = CGRect(origin: .zero, size: size)
+        c.moduleMask = WorkspaceView.moduleMask(for: CGRect(origin: .zero, size: size))
+        let win = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered, defer: false)
+        defer { win.close() }
+        win.isReleasedWhenClosed = false
+        let root = FlippedView(frame: CGRect(origin: .zero, size: size)); root.wantsLayer = true
+        win.contentView = root
+        root.addSubview(c)
+        root.layoutSubtreeIfNeeded(); win.displayIfNeeded(); c.layer!.displayIfNeeded()
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width) * k, pixelsHigh: Int(size.height) * k, bitsPerSample: 8,
+                                   samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let cg = NSGraphicsContext(bitmapImageRep: rep)!.cgContext
+        cg.scaleBy(x: CGFloat(k), y: CGFloat(k))
+        cg.translateBy(x: 0, y: size.height); cg.scaleBy(x: 1, y: -1)
+        root.layer!.render(in: cg)
+        func alphaAt(_ x: CGFloat, _ y: CGFloat) -> CGFloat { rep.colorAt(x: Int(x * CGFloat(k)), y: Int(y * CGFloat(k)))?.alphaComponent ?? -1 }
+        XCTAssertEqual(alphaAt(1, 1), 0, accuracy: 0.02, "Ecke außerhalb des Bogens")
+        XCTAssertEqual(alphaAt(1, 40), 1, accuracy: 0.02, "links unterhalb der Ecke bleibt")
+        XCTAssertEqual(alphaAt(40, 1), 1, accuracy: 0.02, "oben rechts der Ecke bleibt")
+        XCTAssertEqual(alphaAt(80, 50), 1, accuracy: 0.02, "Mitte bleibt")
+    }
 }
