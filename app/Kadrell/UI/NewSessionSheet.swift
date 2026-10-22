@@ -178,13 +178,13 @@ struct NewSessionView: View {
                 Text(String(localized: "Startet mit: \(Settings.claudeSummary)", bundle: Bundle.app)).font(Theme.ui(10.5)).foregroundStyle(Theme.mutedColor).lineLimit(1)
                 Spacer()
                 if let onOpenSettings {
-                    Button(String(localized: "ändern", bundle: Bundle.app)) { onOpenSettings() }.buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.runningColor)
+                    Button(String(localized: "ändern", bundle: Bundle.app)) { onOpenSettings() }.buttonStyle(.plain).font(Theme.ui(10.5)).foregroundStyle(Theme.accentColor)
                 }
             }.padding(.horizontal, 16).padding(.vertical, 6)
             DialogFoot(hint: String(localized: "⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen", bundle: Bundle.app), button: String(localized: "Starten", bundle: Bundle.app)) { model.start() }
         }
         .dialogFrame()
-        .overlay { if dropping { Rectangle().stroke(Theme.runningColor, lineWidth: 2) } }
+        .overlay { if dropping { Rectangle().stroke(Theme.accentColor, lineWidth: 2) } }
         .dropDestination(for: URL.self) { urls, _ in model.drop(urls) } isTargeted: { dropping = $0 }
         .background { Button("", action: model.browse).keyboardShortcut("o", modifiers: .command).opacity(0).accessibilityHidden(true) }
         .background { Button("", action: model.createAndStart).keyboardShortcut(.return, modifiers: .command).opacity(0).accessibilityHidden(true) }
@@ -232,7 +232,7 @@ struct NewSessionView: View {
         .padding(.vertical, 8).padding(.horizontal, 16)
         .frame(height: Self.rowHeight * Theme.scale)
         .background(on ? Theme.surfaceColor : .clear)
-        .overlay(alignment: .leading) { if on { Rectangle().fill(Theme.runningColor).frame(width: 3) } }
+        .overlay(alignment: .leading) { if on { Rectangle().fill(Theme.accentColor).frame(width: 3) } }
         .contentShape(Rectangle())
         .id(c.id)
     }
@@ -314,7 +314,7 @@ struct PathFieldRep: NSViewRepresentable {
         }
         func controlTextDidBeginEditing(_ n: Notification) {
             guard let f = n.object as? NSTextField else { return }
-            f.layer?.borderColor = Theme.running.cgColor
+            f.layer?.borderColor = Theme.accent.cgColor
             f.layer?.borderWidth = 1.5
         }
         func controlTextDidEndEditing(_ n: Notification) { (n.object as? NSTextField)?.layer?.borderWidth = 0 }

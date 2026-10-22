@@ -61,7 +61,7 @@ struct StatsView: View {
             if let d = r.date {
                 Spacer(minLength: 10)
                 Text(d, format: .dateTime.day().month(.abbreviated).year())
-                    .font(Theme.ui(11)).foregroundStyle(Theme.runningColor).lineLimit(1)
+                    .font(Theme.ui(11)).foregroundStyle(Theme.accentColor).lineLimit(1)
             }
         }
     }

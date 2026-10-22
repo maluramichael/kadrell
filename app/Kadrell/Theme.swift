@@ -11,6 +11,8 @@ enum Theme {
     static var sub: NSColor { current.sub }
     static var muted: NSColor { current.muted }
     static var running: NSColor { current.running }
+    /// Akzentrolle für Links, Abschnittstitel und Fokus; ohne eigene Angabe des Schemas gleich `running`.
+    static var accent: NSColor { current.accent }
     static var waiting: NSColor { current.waiting }
     static var idle: NSColor { current.idle }
     static var error: NSColor { current.error }
@@ -130,15 +132,16 @@ private func accessibleText(_ c: NSColor, against backgrounds: [NSColor], toward
 /// Farbschema der ganzen Oberfläche. `ansi` sind die acht Terminal-Grundfarben, die hellen Varianten sind dieselben.
 struct ColorTheme {
     let id: String, name: String, dark: Bool
-    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText: NSColor
+    let bg, panel, surface, line, fg, sub, muted, detached, running, waiting, idle, error, waitingText, accent: NSColor
     let ansi: [NSColor]
 
-    init(_ id: String, _ name: String, dark: Bool, _ c: [UInt32], ansi: [UInt32]) {
+    init(_ id: String, _ name: String, dark: Bool, _ c: [UInt32], ansi: [UInt32], accent: UInt32? = nil) {
         self.id = id; self.name = name; self.dark = dark
         let n = c.map { NSColor(hex: $0) }
         (bg, panel, surface, line, fg) = (n[0], n[1], n[2], n[3], n[4])
         detached = n[7]
         (running, waiting, idle, error) = (n[8], n[9], n[10], n[11])
+        self.accent = accent.map { NSColor(hex: $0) } ?? n[8]
         // Sekundärtext und die Warte-Beschriftung sind in mehreren Schemata unter 4,5:1: erst Richtung `fg`
         // mischen (behält den Charakter der Palette), reicht das nicht, weiter Richtung Schwarz/Weiß.
         let textBGs = [panel, surface], extreme = NSColor(hex: dark ? 0xffffff : 0)
@@ -182,6 +185,13 @@ struct ColorTheme {
         ColorTheme("github-light", "GitHub Light", dark: false,
                    [0xffffff, 0xf6f8fa, 0xeaeef2, 0xd0d7de, 0x1f2328, 0x424a53, 0x6e7781, 0xafb8c1, 0x0969da, 0x9a6700, 0x1a7f37, 0xcf222e],
                    ansi: [0x24292f, 0xcf222e, 0x116329, 0x4d2d00, 0x0550ae, 0x8250df, 0x1b7c83, 0x6e7781]),
+        // Werte aus Monsters (github.com/Saturday-Company/monsters, Apache-2.0, docs/design.md).
+        ColorTheme("instrument-dark", "Instrument Dark", dark: true,
+                   [0x1c1c1a, 0x151514, 0x252523, 0x2e2e2b, 0xecebe5, 0xa3a19a, 0x8d8b85, 0x5c5a54, 0xecebe5, 0xff5e14, 0x4fd98a, 0xff3b2f],
+                   ansi: [0x252523, 0xff5a4e, 0x4fd98a, 0xf2c14e, 0x6ea8fe, 0xc792ea, 0x5fd4d0, 0xecebe5], accent: 0xff8a4c),
+        ColorTheme("instrument-light", "Instrument Light", dark: false,
+                   [0xf2f1ec, 0xe3e1db, 0xfbfaf7, 0xcfccc4, 0x1a1a18, 0x5c5a54, 0x6b6963, 0xb5b2a9, 0x1a1a18, 0xff4f00, 0x1f8f4e, 0xd8231a],
+                   ansi: [0x1a1a18, 0xb51c14, 0x16703c, 0x8a6100, 0x1f5fbf, 0x8a3fb0, 0x0f7a78, 0x5c5a54], accent: 0xa83500),
     ]
 }
 

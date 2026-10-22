@@ -99,7 +99,7 @@ struct SettingsView: View {
     /// Bereichsüberschrift wie in der F1-Hilfe: Akzentfarbe, gesperrt, Großbuchstaben, optionaler Hinweis daneben.
     private func heading(_ s: String, note: String = "", first: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(s.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.runningColor)
+            Text(s.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.accentColor)
             if !note.isEmpty { Text(note).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor) }
         }
         .padding(.horizontal, 16).padding(.top, first ? 14 : 18).padding(.bottom, 6)
@@ -166,7 +166,7 @@ struct SettingsView: View {
                     setting(a.title + (a.subscription.map { " · \($0)" } ?? "")) {
                         HStack(spacing: 10) {
                             if a.id == model.activeAccountId {
-                                Text(String(localized: "aktiv", bundle: Bundle.app)).foregroundStyle(Theme.runningColor)
+                                Text(String(localized: "aktiv", bundle: Bundle.app)).foregroundStyle(Theme.accentColor)
                             } else {
                                 Button { model.switchAccount(a.id) } label: { Text(String(localized: "Wechseln", bundle: Bundle.app)).foregroundStyle(Theme.fgColor) }.buttonStyle(.plain).kbdFocusRing()
                             }
@@ -180,7 +180,7 @@ struct SettingsView: View {
                         HStack(spacing: 8) {
                             if let e = model.currentEmail { Text(e).foregroundStyle(Theme.mutedColor).lineLimit(1) }
                             Spacer(minLength: 8)
-                            Button { model.addAccount() } label: { Text(String(localized: "Hinzufügen", bundle: Bundle.app)).foregroundStyle(Theme.runningColor) }.buttonStyle(.plain).kbdFocusRing()
+                            Button { model.addAccount() } label: { Text(String(localized: "Hinzufügen", bundle: Bundle.app)).foregroundStyle(Theme.accentColor) }.buttonStyle(.plain).kbdFocusRing()
                         }.frame(width: controlWidth)
                     }
                 }
@@ -371,7 +371,7 @@ struct SettingsView: View {
                     .font(Theme.ui(12, bold: true))
                     .foregroundStyle(isRecording ? Theme.bgColor : Theme.fgColor)
                     .padding(.horizontal, 8).padding(.vertical, 3).frame(width: controlWidth, alignment: .leading)
-                    .background(isRecording ? Theme.runningColor : Theme.bgColor)
+                    .background(isRecording ? Theme.accentColor : Theme.bgColor)
             }
             .buttonStyle(.plain).kbdFocusRing()
         }
@@ -395,7 +395,7 @@ private struct IntSlider: View {
             }), in: range, step: step) { editing in
                 if !editing, let d = draft { value = d / factor; draft = nil }
             }
-            .controlSize(.small).tint(Theme.runningColor)
+            .controlSize(.small).tint(Theme.accentColor)
             Text("\(Int(shown)) \(unit)").monospacedDigit().foregroundStyle(Theme.fgColor)
                 .frame(width: 60 * Theme.scale, alignment: .trailing)
         }

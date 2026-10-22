@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var autoDetachTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Vor jedem Zugriff auf `Theme`: `Theme.current` liest das Schema einmalig beim ersten Zugriff.
+        Settings.pinThemeForExistingProfile(Profile.defaults)
         _ = AppBinary.atLaunch
         Localization.apply(Settings.language)
         // Nur eine Instanz pro Profil: hält schon eine das Profil, die nach vorn holen und selbst beenden.
@@ -672,15 +674,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.unread = attention.unseen
         sidebar.reload(groups: store.groups, sessions: Array(workspace.sessions.values))
         let sessions = workspace.sessions
-        let focused = (workspace.preview ?? workspace.focused).flatMap { sessions[$0] }
-        let fg = focused.flatMap { workspace.group(forSession: $0.id) }
-        bar.crumb = focused.map { (fg?.name ?? "", $0.title) }
-        bar.crumbGroupAttrs = fg.map { Theme.attrs(11.5, Theme.group($0.color)) }
         bar.errorText = registry?.lastError
         bar.versionWarning = versionWarning
         bar.tip = attention.tip
-        bar.sessionCount = sessions.count
-        bar.openCount = workspace.selected.count
         bar.layoutMode = workspace.mode
         bar.gridColumns = Settings.gridColumns
         bar.scrollColumns = Settings.scrollColumns

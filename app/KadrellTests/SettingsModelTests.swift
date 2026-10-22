@@ -31,4 +31,57 @@ final class SettingsModelTests: XCTestCase {
         Settings.stackShowPath = original
         XCTAssertEqual(box.appliedAtNotify, true)
     }
+
+    // MARK: Farbschema: Instrument für neue Profile, bestehende behalten Mocha
+
+    /// Eigene, leere Suite statt der Profil-Defaults; `tearDown` räumt sie samt plist wieder weg.
+    private let themeSuite = "de.malura.kadrell.tests.theme"
+    private func freshDefaults() -> UserDefaults {
+        UserDefaults.standard.removePersistentDomain(forName: themeSuite)
+        return UserDefaults(suiteName: themeSuite)!
+    }
+
+    override func tearDown() {
+        UserDefaults.standard.removePersistentDomain(forName: themeSuite)
+        super.tearDown()
+    }
+
+    func testExistingProfileKeepsMocha() {
+        let d = freshDefaults()
+        d.set(true, forKey: "helpShown")
+        Settings.pinThemeForExistingProfile(d)
+        XCTAssertEqual(d.string(forKey: "colorTheme"), "mocha")
+    }
+
+    func testFreshProfileGetsInstrument() {
+        let d = freshDefaults()
+        Settings.pinThemeForExistingProfile(d)
+        XCTAssertNil(d.string(forKey: "colorTheme"))
+    }
+
+    func testChosenThemeIsUntouched() {
+        let d = freshDefaults()
+        d.set(true, forKey: "helpShown"); d.set("nord", forKey: "colorTheme")
+        Settings.pinThemeForExistingProfile(d)
+        XCTAssertEqual(d.string(forKey: "colorTheme"), "nord")
+    }
+
+    /// Neue Installation über zwei Starts: der erste setzt `helpShown` (wie der Erststart-Zweig im AppDelegate),
+    /// der zweite darf trotzdem nicht auf Mocha festnageln.
+    func testFreshProfileKeepsInstrumentOnSecondLaunch() {
+        let d = freshDefaults()
+        Settings.pinThemeForExistingProfile(d)
+        d.set(true, forKey: "helpShown")
+        Settings.pinThemeForExistingProfile(d)
+        XCTAssertNil(d.string(forKey: "colorTheme"))
+    }
+
+    /// Ohne gespeicherten Wert gilt Instrument Dark. Der Wert des Profils wird am Ende wiederhergestellt.
+    func testDefaultThemeIsInstrumentDark() {
+        // Fasst `Profile.defaults` an: nur mit TEST_RUNNER_KADRELL_PROFILE=tmp laufen lassen, dann ist es das Temp-Profil.
+        let saved = Profile.defaults.object(forKey: "colorTheme")
+        defer { Profile.defaults.set(saved, forKey: "colorTheme") }
+        Profile.defaults.removeObject(forKey: "colorTheme")
+        XCTAssertEqual(Settings.colorTheme, "instrument-dark")
+    }
 }

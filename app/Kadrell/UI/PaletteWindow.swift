@@ -352,7 +352,7 @@ final class PaletteRow: NSView {
     private func drawRow(_ b: CGRect) {
         if selected {
             Theme.surface.setFill(); b.fill()
-            Theme.running.setFill(); CGRect(x: 0, y: 0, width: 3, height: b.height).fill()
+            Theme.accent.setFill(); CGRect(x: 0, y: 0, width: 3, height: b.height).fill()
         }
         guard let item else {
             NSAttributedString(string: String(localized: "Keine Treffer", bundle: Bundle.app), attributes: Theme.attrs(12, Theme.muted)).draw(at: CGPoint(x: 16, y: 14))

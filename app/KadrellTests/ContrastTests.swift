@@ -27,6 +27,42 @@ final class ContrastTests: XCTestCase {
         }
     }
 
+    /// Ohne eigene Angabe ist der Akzent die Arbeitsfarbe, die zehn älteren Schemata sehen also unverändert aus.
+    func testAccentDefaultsToRunning() {
+        for t in ColorTheme.all where !t.id.hasPrefix("instrument") {
+            XCTAssertEqual(t.accent, t.running, t.id)
+        }
+    }
+
+    func testInstrumentThemes() throws {
+        let dark = ColorTheme.named("instrument-dark"), light = ColorTheme.named("instrument-light")
+        XCTAssertEqual(dark.id, "instrument-dark"); XCTAssertTrue(dark.dark)
+        XCTAssertEqual(light.id, "instrument-light"); XCTAssertFalse(light.dark)
+        XCTAssertEqual(dark.panel.hexString, "#151514"); XCTAssertEqual(dark.bg.hexString, "#1c1c1a")
+        XCTAssertEqual(dark.waiting.hexString, "#ff5e14"); XCTAssertEqual(dark.accent.hexString, "#ff8a4c")
+        XCTAssertEqual(light.panel.hexString, "#e3e1db"); XCTAssertEqual(light.bg.hexString, "#f2f1ec")
+        XCTAssertEqual(light.waiting.hexString, "#ff4f00"); XCTAssertEqual(light.accent.hexString, "#a83500")
+        XCTAssertEqual(ColorTheme.all[0].id, "mocha")
+    }
+
+    /// Akzent als Text (Links, Abschnittstitel) mindestens 4,5:1 auf panel und surface.
+    func testAccentTextMeetsAA() {
+        for t in ColorTheme.all where t.id.hasPrefix("instrument") {
+            for bg in [t.panel, t.surface, t.bg] {
+                XCTAssertGreaterThanOrEqual(t.accent.contrastRatio(with: bg), 4.5, "\(t.id): accent gegen \(bg.hexString)")
+            }
+        }
+    }
+
+    /// Die Terminalfarben 1 bis 6 (Rot bis Cyan) sind in den Instrument-Schemata als Text auf dem Terminalgrund lesbar.
+    func testInstrumentAnsiMeetsAA() {
+        for t in ColorTheme.all where t.id.hasPrefix("instrument") {
+            for (i, c) in t.ansi.enumerated() where (1...6).contains(i) {
+                XCTAssertGreaterThanOrEqual(c.contrastRatio(with: t.bg), 4.5, "\(t.id): ansi[\(i)] \(c.hexString) gegen \(t.bg.hexString)")
+            }
+        }
+    }
+
     /// `ensuringContrast` lässt eine schon konforme Farbe unangetastet (kein unnötiger Charakterverlust).
     func testEnsuringContrastNoopsWhenAlreadyCompliant() {
         let bg = NSColor(hex: 0x000000), fg = NSColor(hex: 0xffffff)

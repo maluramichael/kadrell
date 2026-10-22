@@ -10,7 +10,7 @@ final class ExtensionPanelTests: XCTestCase {
     /// Wie `MainWindowController.suffix(index)`, hier ohne MainActor, damit `tearDown` es lesen kann.
     private let suffix = ".\(ExtensionPanelTests.index + 1)"
     /// Die Leisten-Geometrie ist für 100% ausgelegt; feste Skalierung, damit die UI-Größe des laufenden Profils die Tests nicht kippt.
-    private var savedScale: CGFloat = 1
+    nonisolated(unsafe) private var savedScale: CGFloat = 1
 
     override func setUp() {
         super.setUp()
@@ -196,10 +196,10 @@ final class ExtensionPanelTests: XCTestCase {
 
     private typealias StatusItem = (name: String, text: String, color: ThemeColor?, action: String?)
 
-    private func barWindow(_ bar: StatusBarView, width: CGFloat) -> NSWindow {
-        let w = NSWindow(contentRect: NSRect(x: 100, y: 100, width: width, height: 30), styleMask: [.borderless], backing: .buffered, defer: false)
+    private func barWindow(_ bar: StatusBarView, width: CGFloat, height: CGFloat = 30) -> NSWindow {
+        let w = NSWindow(contentRect: NSRect(x: 100, y: 100, width: width, height: height), styleMask: [.borderless], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
-        bar.frame = NSRect(x: 0, y: 0, width: width, height: 30)
+        bar.frame = NSRect(x: 0, y: 0, width: width, height: height)
         w.contentView = bar
         return w
     }
@@ -243,25 +243,98 @@ final class ExtensionPanelTests: XCTestCase {
         }
         let wide = labels(width: 1400)
         XCTAssertEqual(wide.ext.sorted(), ["e1", "e2", "e3"])
-        let narrow = labels(width: 1200)
+        // Ohne Breadcrumb gehört die Mitte den Einträgen, gekürzt wird deshalb erst unter rund 1050 pt.
+        let narrow = labels(width: 1000)
         XCTAssertEqual(narrow.rest, wide.rest, "vorhandene Module bleiben vollständig")
         XCTAssertEqual(narrow.ext.sorted(), ["e2", "e3"])
         for (i, a) in narrow.frames.enumerated() { for b in narrow.frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "\(a) überlappt \(b)") } }
     }
 
     /// Über viele Breiten (um 1000 px), damit der Rest nach dem letzten passenden Eintrag mal klein ausfällt.
-    func testExtensionItemsLeaveRoomForBreadcrumb() {
-        let natural = NSAttributedString(string: "kadrell › Eine ziemlich lange Session", attributes: Theme.attrs(11.5, Theme.fg, bold: true)).size().width
+    func testNarrowBarUsesCompactDisplayWithoutOverlap() {
         for width in stride(from: 900 as CGFloat, through: 1100, by: 9) {
             let bar = StatusBarView(frame: .zero)
-            let w = barWindow(bar, width: width)
-            defer { w.close() }
-            bar.crumb = (group: "kadrell", session: "Eine ziemlich lange Session")
+            let w = barWindow(bar, width: width); defer { w.close() }
+            bar.counts = StatusCounts(running: 12, waiting: 3, idle: 4, error: 2, detached: 1)
+            bar.waitingCount = 3; bar.detachableCount = 4
             bar.extensionItems = (1...6).map { ("e\($0)", "Ein langer Eintrag Nummer \($0)", .ok, "a:\($0)") }
             bar.display()
-            XCTAssertGreaterThanOrEqual(bar.crumbWidth, min(natural, StatusBarView.minCrumbWidth) - 1, "Breite \(width)")
             let frames = barElements(bar).map { $0.accessibilityFrame() }
             for (i, a) in frames.enumerated() { for b in frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "Breite \(width)") } }
+        }
+        let bar = StatusBarView(frame: .zero); let w = barWindow(bar, width: 600); defer { w.close() }
+        bar.counts = StatusCounts(running: 12, waiting: 3, idle: 4, error: 2, detached: 1); bar.display()
+        XCTAssertTrue(bar.displayCompact)
+    }
+
+    /// Leiste mit allem, was rechts Platz braucht: Nutzung mit Plan-Wert, langer Kontoname, Update, Tipp,
+    /// Versionswarnung, sechs Einträge, wartende und trennbare Sessions.
+    private func worstCaseBar() -> StatusBarView {
+        let bar = StatusBarView(frame: .zero)
+        bar.counts = StatusCounts(running: 12, waiting: 3, idle: 4, error: 2, detached: 1)
+        bar.waitingCount = 3; bar.detachableCount = 4
+        bar.usage = Usage(session: 40, weekly: 25, fable: 12, sessionResets: Date().addingTimeInterval(3600), weeklyResets: Date().addingTimeInterval(3 * 24 * 3600))
+        bar.accounts = [("a", String(repeating: "k", count: 26), true, "")]
+        bar.updateAvailable = UpdateManifest(version: "9.99.0", url: "", sha256: "", notes: [])
+        bar.tip = "Gelb heißt: die Session wartet auf dich"
+        bar.versionWarning = "2.0.0"
+        bar.extensionItems = (1...6).map { ("e\($0)", "Ein langer Eintrag Nummer \($0)", .ok, $0.isMultiple(of: 2) ? "a:\($0)" : nil) }
+        return bar
+    }
+
+    /// Gezeichnete Rahmen (Tasten, Module, Display) statt nur der Knöpfe für VoiceOver: Nutzung, Tipp, Versionswarnung
+    /// und Einträge ohne Aktion haben keinen. Über alle UI-Größen und Breiten darf nichts überlappen oder überstehen.
+    func testWorstCaseBarNeverOverlaps() {
+        let oldScale = Theme.scale
+        defer { Theme.scale = oldScale }
+        for scale in [0.9, 1.0, 1.3] as [CGFloat] {
+            Theme.scale = scale
+            for width in stride(from: 700 as CGFloat, through: 1300, by: 10) {
+                let bar = worstCaseBar()
+                let w = barWindow(bar, width: width, height: Theme.barHeight); defer { w.close() }
+                bar.display()
+                let bounds = CGRect(x: 0, y: 0, width: width / scale, height: Theme.barHeight / scale)
+                let frames = bar.drawnFrames
+                XCTAssertFalse(frames.isEmpty)
+                for f in frames { XCTAssertTrue(bounds.contains(f), "\(scale) / \(width): \(f) steht über") }
+                for (i, a) in frames.enumerated() {
+                    for b in frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "\(scale) / \(width): \(a) überlappt \(b)") }
+                }
+                // Klickflächen reichen über die ganze Höhe der Leiste und überlappen trotzdem nicht.
+                let hits = barElements(bar).filter { $0.accessibilityRole() == .button }.map { $0.accessibilityFrame() }
+                for h in hits { XCTAssertGreaterThanOrEqual(h.height, Theme.barHeight - 2.01, "\(scale) / \(width)") }
+                for (i, a) in hits.enumerated() { for b in hits[(i + 1)...] { XCTAssertFalse(a.intersects(b), "\(scale) / \(width)") } }
+            }
+        }
+    }
+
+    /// Nutzungswerte, die aus Platzmangel fehlen, stehen in Tooltip und VoiceOver des Displays.
+    func testDroppedUsageIsSpokenByDisplay() throws {
+        let bar = worstCaseBar()
+        let w = barWindow(bar, width: 700); defer { w.close() }
+        bar.display()
+        let status = try XCTUnwrap(barElements(bar).first { $0.accessibilityRole() == .staticText })
+        let value = try XCTUnwrap(status.accessibilityValue() as? String)
+        XCTAssertTrue(value.hasSuffix(" · 5h 40% · 7d 25% · fable 12%"), value)
+        XCTAssertTrue(bar.displayCompact)
+    }
+
+    /// Echte Fehlermeldungen sind 80 bis 150 Zeichen lang: das Display kürzt sie, statt über die linken Tasten zu
+    /// wachsen. Tooltip und VoiceOver behalten den ganzen Text.
+    func testLongErrorTextIsShortenedInsteadOfCoveringKeys() throws {
+        let long = String(repeating: "Speichern von sessions.json fehlgeschlagen: Datei gesperrt. ", count: 3)
+        for width in [900 as CGFloat, 1200] {
+            let bar = StatusBarView(frame: .zero)
+            let w = barWindow(bar, width: width); defer { w.close() }
+            bar.errorText = long
+            bar.waitingCount = 2
+            bar.display()
+            let elements = barElements(bar)
+            let frames = elements.map { $0.accessibilityFrame() }
+            for (i, a) in frames.enumerated() { for b in frames[(i + 1)...] { XCTAssertFalse(a.intersects(b), "Breite \(width)") } }
+            let status = try XCTUnwrap(elements.first { $0.accessibilityRole() == .staticText })
+            // Fehlen Nutzungswerte, hängen sie hinten an, die Meldung selbst bleibt vollständig.
+            XCTAssertTrue((status.accessibilityValue() as? String)?.hasPrefix(long) == true)
         }
     }
 
@@ -274,19 +347,43 @@ final class ExtensionPanelTests: XCTestCase {
         XCTAssertFalse(StatusBarView.sameItems(items, []))
     }
 
-    /// Mit `KADRELL_RENDER_BAR_OUT=<pfad>.png` entsteht ein Bild der Leiste mit zwei Einträgen.
+    /// Das Lua-`accent` ist die Akzentfarbe des Schemas, nicht die Statusfarbe „arbeitet“.
+    func testLuaAccentIsThemeAccent() {
+        let saved = Theme.current
+        defer { Theme.current = saved }
+        Theme.current = ColorTheme.named("instrument-dark")
+        XCTAssertEqual(ThemeColor.accent.nsColor, Theme.accent)
+        XCTAssertNotEqual(ThemeColor.accent.nsColor, Theme.running)
+    }
+
+    /// Mit `KADRELL_RENDER_BAR_OUT=<pfad>.png` entsteht ein Bild der Leiste mit zwei Einträgen im eingestellten
+    /// Schema, daneben `<pfad>-instrument-dark.png` und `<pfad>-instrument-light.png`.
     func testRenderStatusBar() throws {
+        let out = ProcessInfo.processInfo.environment["KADRELL_RENDER_BAR_OUT"]
+        let saved = Theme.current
+        defer { Theme.current = saved }
+        for theme in [nil, "instrument-dark", "instrument-light"] {
+            if let theme { Theme.current = ColorTheme.named(theme) }
+            let png = try renderBar()
+            guard let out else { continue }
+            let path = theme.map { out.replacingOccurrences(of: ".png", with: "-\($0).png") } ?? out
+            try png.write(to: URL(fileURLWithPath: path))
+        }
+    }
+
+    private func renderBar() throws -> Data {
         let bar = StatusBarView(frame: .zero)
         let w = barWindow(bar, width: 1200)
         defer { w.close() }
-        bar.crumb = (group: "kadrell", session: "Statusleiste")
         bar.counts = StatusCounts(running: 2, waiting: 1, idle: 3, error: 0, detached: 1)
+        bar.sync = true
+        bar.waitingCount = 1
+        bar.detachableCount = 3
         bar.extensionItems = [("ddev", "ddev 3 up", .ok, "ddev:list"), ("jira", "2 Tickets", .warn, nil)]
         bar.display()
         let rep = try XCTUnwrap(bar.bitmapImageRepForCachingDisplay(in: bar.bounds))
         bar.cacheDisplay(in: bar.bounds, to: rep)
-        guard let out = ProcessInfo.processInfo.environment["KADRELL_RENDER_BAR_OUT"] else { return }
-        try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: out))
+        return try XCTUnwrap(rep.representation(using: .png, properties: [:]))
     }
 
     func testWarnIsTheYellowDotColorEverywhere() {
