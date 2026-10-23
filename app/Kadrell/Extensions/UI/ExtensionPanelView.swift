@@ -191,6 +191,7 @@ final class ExtensionPanelView: ClipWidthView {
     override func mouseUp(with event: NSEvent) {
         guard let i = pressed else { return }
         pressed = nil
+        needsDisplay = true // ein gedrückter Knopf springt wieder hoch
         if lineIndex(at: local(event)) == i { activate(i) }
     }
 
