@@ -3,6 +3,13 @@ import XCTest
 
 @MainActor
 final class LocalizationTests: XCTestCase {
+    /// Das Temp-Profil erbt die Sprache des eigenen Profils; der Leerzustand-Test braucht „noch keine Sprache gewählt“.
+    override func setUp() {
+        super.setUp()
+        Profile.defaults.removeObject(forKey: Settings.languageKey)
+        Localization.apply(.system)
+    }
+
     override func tearDown() {
         Profile.defaults.removeObject(forKey: Settings.languageKey)
         Localization.apply(.system)
