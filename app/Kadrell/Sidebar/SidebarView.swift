@@ -256,7 +256,7 @@ final class SidebarView: ClipWidthView {
         Instrument.raisedPanel(t, radius: Instrument.keyRadius, depth: 2)
         for (k, b) in buttons.enumerated() {
             let hot = hoveredButton == k
-            if hot { Instrument.fillRow(b.hit.rect) }
+            if hot { Instrument.fillRow(b.hit.rect, Instrument.hoverOnRaised) }
             let color = hot ? (k == buttons.count - 1 ? Theme.error : Theme.fg) : Theme.muted
             b.icon(b.hit.rect.insetBy(dx: 2, dy: 2), color)
         }

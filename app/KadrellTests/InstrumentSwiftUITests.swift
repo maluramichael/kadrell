@@ -87,6 +87,51 @@ final class InstrumentSwiftUITests: XCTestCase {
         XCTAssertLessThan(distance(pixel(s, at: CGPoint(x: x, y: s.size.height - 4.5)), t.accent), 0.05, "darüber die Kappe")
     }
 
+    /// Pfadfeld (⌘N, Einstellungen): der Text sitzt bei 100 und 130 % senkrecht mittig im Feld. Im Einzeilenmodus setzte
+    /// AppKit die Grundlinie bei 130 % rund 3 pt zu hoch (Schrift oben am Feldrand, 5 pt Luft darunter).
+    func testPathFieldTextCenteredAtScale() throws {
+        let oldTheme = Theme.current, oldScale = Theme.scale
+        defer { Theme.current = oldTheme; Theme.scale = oldScale }
+        Theme.current = .named("github-light")
+        for s in [1.0, 1.3] as [CGFloat] {
+            Theme.scale = s
+            let host = NSHostingView(rootView: PathField(text: .constant("~/development/"), autofocus: false, size: 12, onTab: {}, onSubmit: {}, onMove: { _ in })
+                .frame(width: 200).padding(10).background(Color.white))
+            // Im Fenster mit Erscheinung wie das Overlay; ohne Fenster zeichnet das native Feld anders.
+            let window = NSWindow(contentRect: NSRect(x: -3000, y: 0, width: 300, height: 100), styleMask: .borderless, backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            defer { window.close() }
+            window.appearance = Theme.appearance
+            window.contentView = host
+            host.frame = NSRect(origin: .zero, size: host.fittingSize)
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date() + 0.1)
+            let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: rep)
+            let field = try XCTUnwrap(textField(in: host)), r = field.convert(field.bounds, to: host)
+            let k = CGFloat(rep.pixelsWide) / host.bounds.width
+            let ink = (Int(r.minY * k)..<Int(r.maxY * k)).filter { y in
+                stride(from: Int(r.minX * k) + 2, to: Int(r.maxX * k) - 2, by: 1).contains { luma(rep, x: $0, y: y) < 0.4 }
+            }
+            let top = CGFloat(try XCTUnwrap(ink.first)) / k - r.minY, bottom = r.maxY - CGFloat(try XCTUnwrap(ink.last) + 1) / k
+            XCTAssertLessThanOrEqual(abs(top - bottom), 1.0, "Luft über (\(top)) und unter (\(bottom)) der Schrift bei \(s)")
+        }
+    }
+
+    /// Ohne Einzeilenmodus nimmt das Feld eingefügte Zeilenumbrüche an; im Pfad landen sie nicht.
+    func testPathFieldDropsPastedLineBreaks() {
+        var text = ""
+        let rep = PathFieldRep(text: Binding(get: { text }, set: { text = $0 }), onTab: {}, onSubmit: {}, onMove: { _ in })
+        let field = NSTextField(string: "~/a\n/b\r")
+        rep.makeCoordinator().controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: field))
+        XCTAssertEqual(text, "~/a/b")
+        XCTAssertEqual(field.stringValue, "~/a/b")
+    }
+
+    private func textField(in view: NSView) -> NSTextField? {
+        (view as? NSTextField) ?? view.subviews.lazy.compactMap { self.textField(in: $0) }.first
+    }
+
     // MARK: Taste: gesperrt und Trefferfläche
 
     func testDisabledKeyKeepsCapAndMutesLabel() {

@@ -232,7 +232,6 @@ struct NewSessionView: View {
         .padding(.vertical, 8).padding(.horizontal, 16)
         .frame(height: Self.rowHeight * Theme.scale)
         .instrumentRow(selected: on)
-        .contentShape(Rectangle())
         .id(c.id)
     }
 }
@@ -287,7 +286,8 @@ struct PathFieldRep: NSViewRepresentable {
         f.focusRingType = .none
         f.font = Theme.font(size * Theme.scale)
         f.textColor = Theme.fg
-        f.usesSingleLineMode = true      // lange Pfade scrollen horizontal statt umzubrechen
+        // Lange Pfade scrollen horizontal statt umzubrechen. Bewusst ohne `usesSingleLineMode`: damit setzt AppKit die
+        // Grundlinie außerhalb der Bearbeitung nach eigener Metrik, bei 130 % rund 3 pt zu hoch im Feld.
         f.cell?.wraps = false
         f.cell?.isScrollable = true
         f.lineBreakMode = .byClipping
@@ -312,7 +312,10 @@ struct PathFieldRep: NSViewRepresentable {
         var parent: PathFieldRep
         init(_ p: PathFieldRep) { parent = p }
         func controlTextDidChange(_ n: Notification) {
-            if let f = n.object as? NSTextField { parent.text = f.stringValue }
+            guard let f = n.object as? NSTextField else { return }
+            // Ohne Einzeilenmodus käme ein eingefügter Zeilenumbruch ins Feld; ein Pfad hat keinen.
+            if f.stringValue.contains(where: \.isNewline) { f.stringValue = f.stringValue.filter { !$0.isNewline } }
+            parent.text = f.stringValue
         }
         func controlTextDidBeginEditing(_ n: Notification) { parent.onFocus(true) }
         func controlTextDidEndEditing(_ n: Notification) { parent.onFocus(false) }

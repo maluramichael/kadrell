@@ -1198,8 +1198,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model?.refreshIfUntouched()
         }
         let view = NewSessionView(model: model, onOpenSettings: { [weak self] in self?.menuSettings() }) { [weak self] g, cwd in
-            self?.sheets.dismiss()
-            self?.startSession(group: g, cwd: cwd)
+            guard let self else { return }
+            // Bis `boot` Claude Code gefunden hat, gibt es keine Registry: der Dialog bleibt offen, statt die Session still zu verlieren.
+            guard registry != nil else { NSSound.beep(); return }
+            sheets.dismiss()
+            startSession(group: g, cwd: cwd)
         }
         sheets.present(view, onPrimary: { model.start() })
     }
@@ -1209,8 +1212,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil, sessionId: String? = nil) -> String {
         let id = sessionId ?? UUID().uuidString.lowercased()
-        // Direkt nach dem Start sucht `boot` noch nach `claude`; bis dahin gibt es keine Registry. Ein ⌘N mit Enter in
-        // diesem Moment darf die App nicht abstürzen lassen, er geht ins Leere.
+        // Direkt nach dem Start sucht `boot` noch nach `claude`; bis dahin gibt es keine Registry. Der ⌘N-Dialog bleibt
+        // dann selbst offen; diese Sicherung fängt jeden anderen Weg ab, damit die App nicht abstürzt.
         guard registry != nil else {
             Self.log.warning("startSession vor dem Start der Registry, ignoriert")
             NSSound.beep()

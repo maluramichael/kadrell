@@ -10,6 +10,12 @@ enum Instrument {
     /// Helle Hälfte der Fuge: Weiß mit Alpha, in hellen Schemata deutlich stärker.
     static var seamLight: NSColor { NSColor.white.withAlphaComponent(Theme.current.dark ? 0.05 : 0.65) }
     static var keyCap: NSColor { Theme.surface }
+    /// Hover auf einer erhabenen Fläche (Toolbar im Baum): die Schemafläche mit dem größten Helligkeitsabstand zu
+    /// `raised`. `bg` reicht nicht, in GitHub Light, Latte und Solarized Light ist es so hell wie `raised`.
+    static var hoverOnRaised: NSColor {
+        let raised = Theme.raised.relativeLuminance
+        return [Theme.bg, Theme.panel, Theme.surface].max { abs($0.relativeLuminance - raised) < abs($1.relativeLuminance - raised) } ?? Theme.bg
+    }
     /// Kante und Dicke der Taste. Startwerte, die Sichtprüfung der Leiste kann sie nachziehen.
     static var keyEdge: NSColor {
         Theme.current.dark ? Theme.bg.mixed(0.3, into: .black) : Theme.line.mixed(0.75, into: .black)
@@ -218,8 +224,9 @@ enum Instrument {
 
     static func rowShape(_ row: CGRect) -> CGRect { row.insetBy(dx: rowInset.width, dy: rowInset.height) }
 
-    @MainActor static func fillRow(_ shape: CGRect) {
-        Theme.bg.setFill()
+    /// Zeilenfläche, standardmäßig in `bg`.
+    @MainActor static func fillRow(_ shape: CGRect, _ color: NSColor? = nil) {
+        (color ?? Theme.bg).setFill()
         NSBezierPath(roundedRect: shape, xRadius: rowRadius, yRadius: rowRadius).fill()
     }
 
