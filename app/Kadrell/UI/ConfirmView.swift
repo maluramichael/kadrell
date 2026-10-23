@@ -32,19 +32,14 @@ struct ConfirmView: View {
                 }
                 Spacer()
                 if !infoOnly {
-                    Button(action: onCancel) {
-                        Text("Abbrechen").font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
-                            .padding(.horizontal, 12).padding(.vertical, 6).overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
-                    }.buttonStyle(.plain).kbdFocusRing()
+                    Button(action: onCancel) { Text("Abbrechen") }
+                        .buttonStyle(InstrumentKeyStyle(.neutral)).kbdFocusRing()
                 }
-                Button(action: onConfirm) {
-                    Text(destructive ? "\(button)  ⌘⏎" : button).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
-                        .padding(.horizontal, 12).padding(.vertical, 6).background(destructive ? Theme.errorColor : Theme.accentColor)
-                }.buttonStyle(.plain).kbdFocusRing()
+                Button(action: onConfirm) { Text(destructive ? "\(button)  ⌘⏎" : button) }
+                    .buttonStyle(InstrumentKeyStyle(destructive ? .destructive : .primary)).kbdFocusRing()
             }
             .padding(16)
         }
         .frame(width: 520 * Theme.scale, alignment: .leading)
-        .background(Theme.panelColor)
     }
 }

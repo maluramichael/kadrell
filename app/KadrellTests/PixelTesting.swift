@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import Kadrell
 
 /// Gemeinsame Helfer für Pixel-Tests: Zeichnen in ein gespiegeltes Bitmap (1 pt = 1 px bei Maßstab 1, y wächst nach
@@ -59,4 +60,104 @@ extension XCTestCase {
         Theme.panel.setFill()
         NSBezierPath(rect: CGRect(x: 0, y: 0, width: w, height: h)).fill()
     }
+
+    /// Rendert eine SwiftUI-View in ihrer natürlichen Größe. Schema und Maßstab gelten nur fürs Rendern. Die View
+    /// entsteht erst danach (`@autoclosure`), sonst lesen Modifier wie `raisedPanel()` noch den alten Maßstab.
+    /// Native Schalter (`Toggle` als Switch) nehmen ihre Größe erst nach einem Durchlauf der Run-Loop an; bis dahin
+    /// misst die Hosting-View zu hoch und zentriert den Inhalt mit leerem Rand oben und unten. Deshalb wird gemessen,
+    /// bis die Größe steht.
+    func snapshot<V: View>(_ view: @autoclosure () -> V, theme: ColorTheme, scale: CGFloat = 1) -> (rep: NSBitmapImageRep, size: CGSize) {
+        let oldTheme = Theme.current, oldScale = Theme.scale
+        defer { Theme.current = oldTheme; Theme.scale = oldScale }
+        Theme.current = theme
+        Theme.scale = scale
+        let host = NSHostingView(rootView: view())
+        host.layout()
+        var size = CGSize.zero
+        for _ in 0..<5 where host.fittingSize != size {
+            size = host.fittingSize
+            host.frame = NSRect(origin: .zero, size: size)
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date() + 0.05)
+        }
+        let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+        host.cacheDisplay(in: host.bounds, to: rep)
+        return (rep, size)
+    }
+
+    /// Farbe eines Snapshots am Punkt `p` (Punkte, y nach unten), in sRGB, deckend.
+    func pixel(_ s: (rep: NSBitmapImageRep, size: CGSize), at p: CGPoint) -> NSColor {
+        let k = CGFloat(s.rep.pixelsWide) / s.size.width
+        return pixel(s.rep, x: Int(p.x * k), y: Int(p.y * k))
+    }
+
+    /// Zählt je Farbe die Pixel des ganzen Bitmaps, die ihr nahekommen (größte Kanalabweichung in sRGB unter
+    /// `tolerance`, wie `distance`). Das Bitmap wird einmal als sRGB-Bytes gelesen statt jedes Pixel einzeln über
+    /// `colorAt` umzurechnen; bei Dialoggröße kostet das sonst Sekunden bis Minuten.
+    func count(_ rep: NSBitmapImageRep, near colors: [NSColor], tolerance: CGFloat) -> [Int] {
+        let w = rep.pixelsWide, h = rep.pixelsHigh
+        guard let image = rep.cgImage,
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { XCTFail("kein sRGB-Bitmap"); return colors.map { _ in 0 } }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let bytes = ctx.data!.assumingMemoryBound(to: UInt8.self)
+        return colors.map { c in
+            let s = c.usingColorSpace(.sRGB)!, r = s.redComponent, g = s.greenComponent, b = s.blueComponent
+            var n = 0
+            for i in stride(from: 0, to: w * h * 4, by: 4) {
+                let a = CGFloat(bytes[i + 3])
+                guard a > 0 else { continue }
+                // Wie `pixel`: Farbe ohne Alpha, also aus dem vormultiplizierten Wert zurückrechnen.
+                if max(abs(CGFloat(bytes[i]) / a - r), abs(CGFloat(bytes[i + 1]) / a - g), abs(CGFloat(bytes[i + 2]) / a - b)) < tolerance { n += 1 }
+            }
+            return n
+        }
+    }
+
+    // MARK: Dialoge auf der erhabenen Fläche
+
+    /// Im Bild kommt die Akzent-Textfarbe vor, die Akzent-Füllfarbe nicht.
+    func assertAccentTextOnly<V: View>(_ view: V, line: UInt = #line) {
+        let t = ColorTheme.named("solarized-light")
+        XCTAssertNotEqual(t.accentText.hexString, t.accent.hexString, "Schema trennt Text- und Füllfarbe", line: line)
+        let s = snapshot(view.raisedPanel(), theme: t, scale: 1)
+        let counts = count(s.rep, near: [t.accentText, t.accent], tolerance: 0.04)
+        let text = counts[0], fill = counts[1]
+        XCTAssertGreaterThan(text, 0, "Akzent-Textfarbe kommt vor", line: line)
+        XCTAssertEqual(fill, 0, "Akzent-Füllfarbe nicht im Text", line: line)
+    }
+
+    /// Rendert `view` auf der erhabenen Fläche in Instrument Light (dort sind `raised`, `bg` und `panel` verschieden)
+    /// und prüft, dass am Punkt die Fläche selbst zu sehen ist, kein eigener Grund des Dialogs.
+    func assertOnRaised<V: View>(_ view: V, at point: (CGSize) -> CGPoint, file: StaticString = #filePath, line: UInt = #line) {
+        let t = ColorTheme.named("instrument-light")
+        let s = snapshot(view.raisedPanel(), theme: t, scale: 1)
+        let p = point(s.size)
+        XCTAssertLessThan(distance(pixel(s, at: p), t.raised), 0.02, "erhabene Fläche bei \(p)", file: file, line: line)
+    }
+
+    /// Teile aller Instrument-Flächen, die `view` im Hosting anlegt.
+    func surfaceParts<V: View>(_ view: V) -> [InstrumentSurfaceView.Part] {
+        hostedSurfaces(view).surfaces.map(\.part)
+    }
+
+    /// Hosting-View bei Maßstab 1 in natürlicher Größe samt aller Instrument-Flächen darin (für Lage und Teil).
+    func hostedSurfaces<V: View>(_ view: V) -> (host: NSView, surfaces: [InstrumentSurfaceView]) {
+        let saved = Theme.scale; defer { Theme.scale = saved }
+        Theme.scale = 1
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(origin: .zero, size: host.fittingSize)
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date() + 0.05)
+        host.layoutSubtreeIfNeeded()
+        return (host, surfaces(in: host))
+    }
+
+    func surfaces(in view: NSView) -> [InstrumentSurfaceView] {
+        view.subviews.flatMap { sub in (sub as? InstrumentSurfaceView).map { [$0] } ?? surfaces(in: sub) }
+    }
+}
+
+extension InstrumentSurfaceView.Part {
+    var isWell: Bool { if case .well = self { true } else { false } }
 }

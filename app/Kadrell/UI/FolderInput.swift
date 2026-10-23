@@ -64,23 +64,21 @@ struct DialogFootKey: PreferenceKey {
     static func reduce(value: inout DialogFootData?, nextValue: () -> DialogFootData?) { value = nextValue() ?? value }
 }
 
+/// Fuge oben, Hinweis links, Primärtaste rechts. Ohne eigenen Grund: sie steht auf der erhabenen Fläche der Hülle.
 struct DialogFootBar: View {
     let foot: DialogFootData
 
     var body: some View {
         VStack(spacing: 0) {
-            Divider().overlay(Theme.lineColor)
+            SeamLine()
             HStack(spacing: 12) {
                 Text(foot.hint).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 Spacer()
-                Button(action: foot.action) {
-                    Text("\(foot.button)  ⏎").font(Theme.ui(12, bold: true)).foregroundStyle(Theme.bgColor)
-                        .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.accentColor)
-                }.buttonStyle(.plain).kbdFocusRing()
+                Button(action: foot.action) { Text("\(foot.button)  ⏎") }
+                    .buttonStyle(InstrumentKeyStyle(.primary)).kbdFocusRing()
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .background(Theme.panelColor)
     }
 }
 

@@ -115,14 +115,14 @@ final class SidebarView: ClipWidthView {
                 // Solange etwas aufblitzt oder einfährt, flüssig zeichnen, sonst reicht der langsame Takt.
                 try? await Task.sleep(for: .milliseconds(wasAnimating ? 16 : 80))
                 guard let self else { return }
-                // Fenster verdeckt/versteckt: nichts zu zeichnen, kein Puls nötig, wieder der langsame Takt.
+                // Fenster verdeckt/versteckt: nichts zu zeichnen, keine Strich-Anzeige nötig, wieder der langsame Takt.
                 guard self.window?.occlusionState.contains(.visible) == true else { wasAnimating = false; continue }
                 let now = CACurrentMediaTime(), animating = self.pruneAnimations(now)
                 if animating || wasAnimating { wasAnimating = animating; self.needsDisplay = true; continue }
-                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die pulsenden Anzeigen laufender Sessions.
+                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die Strich-Anzeigen laufender Sessions.
                 if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true; continue }
                 for (i, row) in self.rows.enumerated() {
-                    guard case .session(let s, _) = row, s.status == .running || s.hasRunningShell else { continue }
+                    guard case .session(let s, _) = row, Theme.meterColor(s, attached: self.isAttached(s.id)) != nil else { continue }
                     self.setNeedsDisplay(self.renderer.statusRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
                 }
             }
@@ -158,7 +158,7 @@ final class SidebarView: ClipWidthView {
         }
     }
 
-    /// Zeilenhöhen sind O(1) abrufbar statt bei jedem Aufruf neu aufsummiert (Puls, Zeichnen, Maus laufen oft pro Sekunde
+    /// Zeilenhöhen sind O(1) abrufbar statt bei jedem Aufruf neu aufsummiert (Strich-Anzeige, Zeichnen, Maus laufen oft pro Sekunde
     /// über alle Zeilen). Nur die Breite bleibt live: sie folgt `bounds`, auch zwischen zwei `reload`s (siehe `fitWidth`).
     private var rowOffsets: [(y: CGFloat, height: CGFloat)] = []
 
@@ -250,23 +250,13 @@ final class SidebarView: ClipWidthView {
         })
     }
 
+    /// Erhabene Leiste wie eine Taste: Radius 5, fester Schatten 2 pt nach unten (deshalb zeichnet `drawRows` sie
+    /// auch, wenn nur der Schatten im geänderten Bereich liegt).
     private func drawToolbar(_ t: CGRect, _ buttons: [ToolButton]) {
-        let path = NSBezierPath(roundedRect: t.insetBy(dx: 0.5, dy: 0.5), xRadius: 5, yRadius: 5)
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
-        shadow.shadowBlurRadius = 8
-        shadow.shadowOffset = NSSize(width: 0, height: -2)
-        shadow.set()
-        Theme.bg.setFill()
-        path.fill()
-        NSGraphicsContext.restoreGraphicsState()
-        Theme.line.setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        Instrument.raisedPanel(t, radius: Instrument.keyRadius, depth: 2)
         for (k, b) in buttons.enumerated() {
             let hot = hoveredButton == k
-            if hot { Theme.line.setFill(); NSBezierPath(roundedRect: b.hit.rect, xRadius: 4, yRadius: 4).fill() }
+            if hot { Instrument.fillRow(b.hit.rect, Instrument.hoverOnRaised) }
             let color = hot ? (k == buttons.count - 1 ? Theme.error : Theme.fg) : Theme.muted
             b.icon(b.hit.rect.insetBy(dx: 2, dy: 2), color)
         }
@@ -295,7 +285,9 @@ final class SidebarView: ClipWidthView {
             case .session(let s, let g): drawSession(s, group: g, in: r, hover: hovered == i)
             }
         }
-        if let i = hovered, !dragging, i < rows.count, case let tb = toolbar(i), tb.rect.intersects(dirtyRect) { drawToolbar(tb.rect, tb.buttons) }
+        if let i = hovered, !dragging, i < rows.count, case let tb = toolbar(i), tb.rect.insetBy(dx: 0, dy: -2).intersects(dirtyRect) {
+            drawToolbar(tb.rect, tb.buttons)
+        }
         if let y = dropLineY() { Theme.fg.setFill(); CGRect(x: 0, y: y - 1, width: bounds.width / Theme.scale, height: 2).fill() }
     }
 
@@ -309,12 +301,10 @@ final class SidebarView: ClipWidthView {
     }
 
     private func dotColor(_ s: Session) -> NSColor {
-        let attached = isAttached(s.id)
-        if let f = flashes[s.id], let p = Feedback.progress(since: f.start, duration: Self.flashDuration) {
-            let amount = f.waiting ? abs(sin(p * 2 * .pi)) : 1 - p
-            return NSColor.white.mixed(0.75 * amount, into: Theme.statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell))
-        }
-        return Theme.dotColor(s, attached: attached, pulse: Feedback.pulse())
+        let base = Theme.statusColor(s.status, attached: isAttached(s.id), shellRunning: s.hasRunningShell)
+        guard let f = flashes[s.id], let p = Feedback.progress(since: f.start, duration: Self.flashDuration) else { return base }
+        let amount = f.waiting ? abs(sin(p * 2 * .pi)) : 1 - p
+        return NSColor.white.mixed(0.75 * amount, into: base)
     }
 
     private func drawGroup(_ g: Group, in r: CGRect, first: Bool, hover: Bool) {

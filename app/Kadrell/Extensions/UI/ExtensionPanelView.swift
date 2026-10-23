@@ -34,7 +34,7 @@ final class ExtensionPanelView: ClipWidthView {
     private(set) var cursor: Int?
     private(set) var hovered: Int?
     /// Gedrückte Zeile: ausgelöst wird erst beim Loslassen über derselben Zeile.
-    private var pressed: Int?
+    private(set) var pressed: Int?
 
     override var isFlipped: Bool { true }
 
@@ -191,6 +191,7 @@ final class ExtensionPanelView: ClipWidthView {
     override func mouseUp(with event: NSEvent) {
         guard let i = pressed else { return }
         pressed = nil
+        needsDisplay = true // ein gedrückter Knopf springt wieder hoch
         if lineIndex(at: local(event)) == i { activate(i) }
     }
 

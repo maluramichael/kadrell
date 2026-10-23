@@ -44,14 +44,15 @@ final class WorkspaceView: NSView {
     private var scrollX: CGFloat = 0
     private var revealFocus = true
     private var loaded = false
-    private var stackRows: [(CGRect, String)] = []
+    private(set) var stackRows: [(CGRect, String)] = []
     private var hoveredCell: String?
     private var hoveredRow: String?
     /// Klickflächen der Knöpfe im Leerzustand (Fehler-/Erststart-Karte), in echten View-Koordinaten, neu bei jedem `draw`.
     private(set) var emptyHitRects: [(rect: CGRect, action: () -> Void)] = []
-    private var pulse: CGFloat = 1
-    private var pulseTask: Task<Void, Never>?
+    private var tickTask: Task<Void, Never>?
     private weak var lastFirstResponder: NSResponder?
+    /// Zuletzt gezeichneter Schritt der Strich-Anzeige (siehe `meterStepChanged`).
+    private var lastMeterLit: Int?
     /// Ziehen einer Kachel oder Stack-Zeile auf eine andere sortiert um.
     private var pressed: (point: CGPoint, key: String)?
     private var dragging = false
@@ -96,7 +97,7 @@ final class WorkspaceView: NSView {
         auto = Profile.defaults.bool(forKey: "workspace.auto" + defaultsSuffix)
         selected = Profile.defaults.stringArray(forKey: "workspace.selected" + defaultsSuffix) ?? []
         focused = selected.first
-        pulseTask = Task { [weak self] in
+        tickTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(80))
                 guard let self else { return }
@@ -414,7 +415,7 @@ final class WorkspaceView: NSView {
 
     /// Fenster geht zu: Terminals freigeben und den Takt anhalten.
     func close() {
-        pulseTask?.cancel()
+        tickTask?.cancel()
         for key in Array(cells.keys) { unmountTerminal(for: key) }
         onReleaseTerminal?()
     }
@@ -504,17 +505,38 @@ final class WorkspaceView: NSView {
         frame.origin == CGPoint(x: gap, y: gap) ? max(0, ModuleCornerView.scaledRadius - gap) : 0
     }
 
+    /// Maske für eine Kachel, die seitlich unter die Modul-Ecke ragt, in Kachel-Koordinaten (Ursprung oben links),
+    /// gefüllt gerade-ungerade: die Kachel ohne die Fläche des Eckquadrats außerhalb des Bogens. nil, wenn nichts
+    /// abzuschneiden ist (Kachel in oder rechts der Ecke, ganz links hinaus oder unterhalb).
+    static func moduleMask(for frame: CGRect) -> CGPath? {
+        let r = ModuleCornerView.scaledRadius
+        // Fernster Punkt von der Bogenmitte (r, r) in Kachel ∩ Eckquadrat.
+        let near = CGPoint(x: max(frame.minX, 0), y: max(frame.minY, 0))
+        guard frame.maxX > 0, frame.maxY > 0, near.x < r, near.y < r, hypot(near.x - r, near.y - r) > r else { return nil }
+        let path = CGMutablePath()
+        path.addRect(CGRect(origin: .zero, size: frame.size))
+        // Ausschnitt: Quadrat ohne Viertelkreis. Der volle Kreis wäre falsch, er ragte aus dem Quadrat und höhlte die Kachel aus.
+        let cut = CGMutablePath()
+        cut.move(to: .zero)
+        cut.addLine(to: CGPoint(x: r, y: 0))
+        cut.addArc(center: CGPoint(x: r, y: r), radius: r, startAngle: 3 * .pi / 2, endAngle: .pi, clockwise: true)
+        cut.closeSubpath()
+        path.addPath(cut, transform: CGAffineTransform(translationX: -frame.minX, y: -frame.minY))
+        return path
+    }
+
     /// Die Kachel zeichnet nur bei echter Änderung ihres Zustands neu (siehe `CellView.State`).
     private func updateCell(_ v: CellView, key: String, frame f: CGRect, session s: Session, multiVisible: Bool, manyTiles: Bool) {
         if v.isHidden { v.isHidden = false; v.needsDisplay = true }
         if v.frame != f { v.frame = f; v.needsDisplay = true }
         v.moduleCornerRadius = Self.moduleCornerRadius(for: f, gap: CGFloat(Settings.tileGap))
+        // Die Kachel genau in der Ecke rundet selbst, seitlich gescrollte werden entlang des Bogens angeschnitten.
+        v.moduleMask = v.moduleCornerRadius > 0 ? nil : Self.moduleMask(for: f)
         let g = group(forSession: key), t = attach?.terminal(for: key)
         v.state = CellView.State(
             session: s, groupName: g?.name ?? "", groupColor: groupColor(g),
             // Sync: alle Kacheln bekommen Eingaben, also sehen auch alle ausgewählt aus.
             focused: (focused == key || sync) && multiVisible,
-            keyboardFocus: t.map { $0 === window?.firstResponder } ?? false,
             hovered: hoveredCell == key, dropTarget: dragging && dropTarget == key,
             attached: attach?.isAttached(key) ?? false, ended: attach?.isEnded(key) ?? false,
             exitCode: attach?.exitCode(for: key), missingFolder: attach?.isMissingFolder(key) ?? false,
@@ -522,8 +544,8 @@ final class WorkspaceView: NSView {
             // Vor dem Einhängen gleichwertig: `mountTerminal` holt nie ein Terminal aus einem anderen Fenster.
             elsewhere: t.flatMap(host).map { $0 !== self } ?? false,
             lines: attach?.lines(for: key) ?? [],
-            headerHidden: mode == .stack && !zen && preview == nil, zoomed: zen && manyTiles)
-        v.pulse = pulse
+            headerHidden: mode == .stack && !zen && preview == nil, rowBelow: stackRows.last.map { $0.1 != key } ?? false,
+            zoomed: zen && manyTiles)
         mountTerminal(for: key, in: v)
     }
 
@@ -555,27 +577,42 @@ final class WorkspaceView: NSView {
         relayout()
     }
 
-    /// Punkt einer Stack-Zeile in Bounds-Koordinaten, wie `drawStackRow` ihn zeichnet (dort in lokalen,
-    /// unskalierten Koordinaten relativ zu `r`): für gezieltes `setNeedsDisplay` ohne die ganze Fläche.
-    private func stackDotRect(_ r: CGRect) -> CGRect {
-        CGRect(x: r.minX + 12 * Theme.scale, y: r.midY - 4 * Theme.scale, width: 8 * Theme.scale, height: 8 * Theme.scale)
+    /// Punkt und Striche einer Stack-Zeile, in den logischen Koordinaten von `drawStackRow`.
+    private static func stackDotRect(_ r: CGRect) -> CGRect { CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8) }
+    private static func stackMeterRect(_ r: CGRect) -> CGRect { CGRect(x: r.minX + 10, y: r.midY - 5, width: 12, height: 10) }
+
+    /// Statusfläche einer Stack-Zeile (Punkt oder Striche) in Bounds-Koordinaten: für gezieltes `setNeedsDisplay`
+    /// ohne die ganze Fläche. `r` ist das Feld der Zeile in Bounds-Koordinaten.
+    private func stackStatusRect(_ r: CGRect) -> CGRect {
+        let local = CGRect(origin: .zero, size: CGSize(width: r.width / Theme.scale, height: r.height / Theme.scale))
+        return Self.stackDotRect(local).union(Self.stackMeterRect(local)).scaled(Theme.scale).offsetBy(dx: r.minX, dy: r.minY)
     }
 
     private func tick() {
-        // Fenster verdeckt/versteckt: nichts zu zeichnen, kein Puls nötig.
+        // Fenster verdeckt/versteckt: nichts zu zeichnen, keine Strich-Anzeige nötig.
         guard window?.occlusionState.contains(.visible) == true else { return }
         syncFirstResponder()
-        pulse = Feedback.pulse()
-        for (key, v) in cells where sessions[key].map({ $0.status == .running || $0.hasRunningShell }) == true && !v.isHidden {
-            v.pulse = pulse
-            if !v.state.headerHidden { v.setNeedsDisplay(v.dotRect) }
-        }
-        // Stack-Zeilen zeichnet die Fläche selbst: nur die Punkte laufender Sessions pulsieren, nicht die ganze Fläche.
-        for (r, key) in stackRows where sessions[key].map({ $0.status == .running || $0.hasRunningShell }) == true && (attach?.isAttached(key) ?? false) {
-            setNeedsDisplay(stackDotRect(r).insetBy(dx: -1, dy: -1))
-        }
+        if meterStepChanged(Feedback.meterLit()) { invalidateMeters() }
         let now = CACurrentMediaTime()
         if linger.values.contains(where: { $0 <= now }) { relayout() }
+    }
+
+    /// Die Striche ändern sich nur alle 160 ms, der Takt läuft alle 80 ms (bei „Bewegung reduzieren“ nie): nur bei
+    /// einem neuen Schritt neu zeichnen. Gibt zurück, ob sich der Schritt gegenüber dem letzten Aufruf geändert hat.
+    func meterStepChanged(_ lit: Int?) -> Bool {
+        defer { lastMeterLit = lit }
+        return lit != lastMeterLit
+    }
+
+    /// Kacheln: nur die Strich-Anzeige im Kopf neu zeichnen, nicht die ganze Kachel. Stack-Zeilen zeichnet die Fläche
+    /// selbst: auch dort nur die Strich-Anzeigen, nicht die ganze Fläche.
+    private func invalidateMeters() {
+        for v in cells.values where !v.isHidden && !v.state.headerHidden && Theme.meterColor(v.state.session, attached: v.state.attached) != nil {
+            v.setNeedsDisplay(v.statusRect.insetBy(dx: -1, dy: -1))
+        }
+        for (r, key) in stackRows where sessions[key].map({ Theme.meterColor($0, attached: attach?.isAttached(key) ?? false) != nil }) == true {
+            setNeedsDisplay(stackStatusRect(r).insetBy(dx: -1, dy: -1))
+        }
     }
 
     /// Klick in ein Terminal macht es still zum First Responder: Fokus und Rahmen nachziehen.
@@ -592,7 +629,6 @@ final class WorkspaceView: NSView {
         }
         // Klick ins schon fokussierte Terminal zählt auch als Hinsehen.
         if let hit { onActivate?(hit) }
-        for (key, v) in cells { v.state.keyboardFocus = attach?.terminal(for: key).map { $0 === window?.firstResponder } ?? false }
     }
 
     // MARK: Zeichnen
@@ -607,18 +643,19 @@ final class WorkspaceView: NSView {
         return .hint
     }
 
-    /// Knöpfe im Leerzustand nebeneinander, mittig um `midX` in den logischen Koordinaten von `Theme.scaled`: Pillen
-    /// mit Rahmen, die Haupt-Aktion gefüllt. Ihre realen Klickflächen landen in `collected`.
+    /// Knöpfe im Leerzustand nebeneinander, mittig um `midX` in den logischen Koordinaten von `Theme.scaled`: Tasten,
+    /// die Haupt-Aktion als Primärtaste, die übrigen neutral. Ihre realen Klickflächen (das ganze Rechteck samt Dicke)
+    /// landen in `collected`.
     private func drawEmptyButtons(_ buttons: [(title: String, primary: Bool, action: () -> Void)], midX: CGFloat, y: CGFloat, collected: inout [(CGRect, () -> Void)]) {
         let gap: CGFloat = 8
-        let labels = buttons.map { NSAttributedString(string: $0.title, attributes: Theme.attrs(11.5, $0.primary ? Theme.bg : Theme.fg, bold: true)) }
+        let roles = buttons.map { $0.primary ? KeyRole.primary : .neutral }
+        let labels = zip(buttons, roles).map { NSAttributedString(string: $0.title, attributes: Theme.attrs(11.5, $1.label, bold: true)) }
         let widths = labels.map { $0.size().width + 32 }
         var x = midX - (widths.reduce(0, +) + gap * CGFloat(buttons.count - 1)) / 2
-        for (i, (_, primary, action)) in buttons.enumerated() {
+        for (i, (_, _, action)) in buttons.enumerated() {
             let r = CGRect(x: x, y: y, width: widths[i], height: 32), t = labels[i]
-            let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
-            if primary { Theme.accent.setFill(); path.fill() } else { Theme.line.setStroke(); path.lineWidth = 1; path.stroke() }
-            t.draw(at: CGPoint(x: r.midX - t.size().width / 2, y: r.midY - t.size().height / 2 + 1))
+            let cap = Instrument.key(r, pressed: false, fill: roles[i].fill)
+            t.draw(at: CGPoint(x: cap.midX - t.size().width / 2, y: cap.midY - t.size().height / 2 + 1))
             collected.append((r.scaled(Theme.scale), action))
             x += widths[i] + gap
         }
@@ -715,37 +752,86 @@ final class WorkspaceView: NSView {
         }
         emptyHitRects = []
         guard !stackRows.isEmpty, !zen, preview == nil else { return }
-        for (r, key) in stackRows { Theme.scaled(r) { drawStackRow($0, key: key) } }
+        for (i, (r, key)) in stackRows.enumerated() {
+            let radius = Self.moduleCornerRadius(for: r, gap: CGFloat(Settings.tileGap)) / Theme.scale
+            let edges = StackRowEdges(first: i == 0, bodyAbove: i > 0 && tileFrames[stackRows[i - 1].1] != nil, bodyBelow: tileFrames[key] != nil)
+            Theme.scaled(r) { drawStackRow($0, key: key, edges: edges, radius: radius) }
+        }
         if dragging, let t = dropTarget, let (r, _) = stackRows.first(where: { $0.1 == t }) {
             Theme.fg.setFill()
             r.frame(withWidth: 2)
         }
     }
 
-    private func drawStackRow(_ r: CGRect, key: String) {
+    /// Lage einer Stack-Zeile in der Spalte: erste Zeile, direkt unter oder direkt über dem Körper.
+    private struct StackRowEdges { var first: Bool, bodyAbove: Bool, bodyBelow: Bool }
+
+    /// Stack-Zeile in logischen Punkten. Die Spalte aus Zeilen und Körper ist eine eingesetzte Fläche: jede Zeile trägt
+    /// links und rechts den Rand der Kachel, die erste auch oben (dem Bogen der Modul-Ecke folgend); unter jeder Zeile
+    /// liegt eine Fuge, außer direkt über dem Körper, dort ist dessen oberer Rand die Fuge. Direkt unter dem Körper
+    /// bringt die Zeile die helle Hälfte der Fuge mit, die dunkle ist der Layer-Rand des Körpers.
+    private func drawStackRow(_ r: CGRect, key: String, edges: StackRowEdges, radius: CGFloat) {
         guard let s = sessions[key] else { return }
-        let g = group(forSession: key)
-        let color = groupColor(g)
         let on = focused == key || sync, hover = hoveredRow == key
-        color.mixed(on ? 0.22 : 0.1, into: on ? Theme.surface : Theme.panel).setFill()
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        Instrument.topLeftRounded(r, radius: radius).addClip()
+        drawStackRowGround(r, on: on, edges: edges, radius: radius)
+        drawStackRowStatus(r, session: s, attached: attach?.isAttached(key) ?? false)
+        let rx = drawStackRowRight(r, session: s, group: group(forSession: key), hover: hover)
+        let title = NSAttributedString(string: s.title, attributes: Theme.attrs(11.5, on || hover ? Theme.fg : Theme.sub, bold: on))
+        title.draw(with: CGRect(x: r.minX + 28, y: r.midY - 8, width: max(0, rx - 10 - r.minX - 28), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    /// Fläche ohne Gruppen-Tönung, Rand der Spalte und Fuge unter der Zeile.
+    private func drawStackRowGround(_ r: CGRect, on: Bool, edges: StackRowEdges, radius: CGFloat) {
+        (on ? Theme.surface : Theme.panel).setFill()
         r.fill()
-        Theme.line.setFill()
-        CGRect(x: r.minX, y: r.maxY - 1, width: r.width, height: 1).fill()
-        (on ? color : color.mixed(0.45, into: Theme.bg)).setFill()
-        CGRect(x: r.minX, y: r.minY, width: on ? 3 : 1, height: r.height).fill()
-        let attached = attach?.isAttached(key) ?? false
-        let dotColor = Theme.dotColor(s, attached: attached, pulse: pulse)
-        Icons.statusDot(in: CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8), status: s.status, attached: attached, color: dotColor)
-        let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
-        let grp = NSAttributedString(string: g?.name ?? "", attributes: Theme.attrs(10.5, color))
+        if edges.bodyAbove {
+            Instrument.seamLight.setFill()
+            CGRect(x: r.minX, y: Instrument.snapped(r.minY), width: r.width, height: Instrument.hairline).fill(using: .sourceOver)
+        }
+        Instrument.rim(r, top: edges.first, radius: radius)
+        if !edges.bodyBelow { Instrument.hSeam(x: r.minX, y: r.maxY - 2 * Instrument.hairline, width: r.width) }
+    }
+
+    /// Striche für „es läuft etwas“, sonst der Statuspunkt, beides nach derselben Regel wie Baum und Kachel.
+    private func drawStackRowStatus(_ r: CGRect, session s: Session, attached: Bool) {
+        if let c = Theme.meterColor(s, attached: attached) {
+            Instrument.meter(Self.stackMeterRect(r), lit: Feedback.meterLit(), color: c)
+        } else {
+            let c = Theme.statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell)
+            Icons.statusDot(in: Self.stackDotRect(r), status: s.status, attached: attached, color: c)
+        }
+    }
+
+    /// Gruppen-Label der Stack-Zeile in Versalien, mit Auslassung auf höchstens `maxWidth` gekürzt: gesperrte Versalien
+    /// sind breit und würden sonst in den Titel laufen.
+    static func stackGroupLabel(_ name: String, maxWidth: CGFloat) -> NSAttributedString {
+        var text = name, label = Instrument.groupLabel(text)
+        while label.size().width > maxWidth, !text.isEmpty {
+            text.removeLast()
+            label = Instrument.groupLabel(text + "…")
+        }
+        return label
+    }
+
+    /// Rechte Seite von rechts nach links: Hover-Knöpfe, Laufzeit, Gruppe mit Akzent, Pfad. Gibt die linke Kante zurück.
+    private func drawStackRowRight(_ r: CGRect, session s: Session, group g: Group?, hover: Bool) -> CGFloat {
         var rx = r.maxX - 10
         if hover {
             Icons.x(in: CGRect(x: rx - 16, y: r.midY - 8, width: 16, height: 16), color: Theme.sub)
             Icons.pen(in: CGRect(x: rx - 36, y: r.midY - 8, width: 16, height: 16), color: Theme.sub)
             rx -= 44
         }
+        let age = NSAttributedString(string: s.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
         rx -= age.size().width; age.draw(at: CGPoint(x: rx, y: r.midY - 7))
-        rx -= 8 + grp.size().width; grp.draw(at: CGPoint(x: rx, y: r.midY - 7))
+        if let g, !g.name.isEmpty {
+            let label = Self.stackGroupLabel(g.name, maxWidth: r.width / 3)
+            rx -= 8 + label.size().width; label.draw(at: CGPoint(x: rx, y: r.midY - 7))
+            Instrument.groupAccent(center: CGPoint(x: rx - 8, y: r.midY), color: groupColor(g))
+            rx -= 11
+        }
         if Settings.stackShowPath {
             let pa = Theme.attrs(10.5, Theme.muted)
             let maxW = max(0, (rx - 16 - r.minX - 28) / 2)
@@ -754,8 +840,7 @@ final class WorkspaceView: NSView {
             rx -= 16 + w
             path.draw(with: CGRect(x: rx, y: r.midY - 7, width: w, height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
-        let title = NSAttributedString(string: s.title, attributes: Theme.attrs(11.5, on || hover ? Theme.fg : Theme.sub, bold: on))
-        title.draw(with: CGRect(x: r.minX + 28, y: r.midY - 8, width: max(0, rx - 10 - r.minX - 28), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        return rx
     }
 
     /// Klick auf Kachel oder Stack-Zeile: Fokus, eine beendete Session setzt fort.

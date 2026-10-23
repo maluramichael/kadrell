@@ -415,6 +415,92 @@ final class ExtensionPanelTests: XCTestCase {
         guard let out = ProcessInfo.processInfo.environment["KADRELL_RENDER_OUT"] else { return }
         try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: out))
     }
+
+    // MARK: Instrument-Look
+
+    /// Panel 320 × 520 über dem Fenstergrund wie in `testRenderSmoke`, deckend, im Schema `theme`. `prepare` läuft im
+    /// Fenster vor dem Rendern (Tastatur, Tasten). Liefert die View und eine Abfrage der Farbe an einem Punkt in Punkten.
+    private func renderPanel(_ tabs: [(name: String, tree: PanelTree)], theme: String, prepare: (ExtensionPanelView, NSWindow) -> Void = { _, _ in })
+        throws -> (view: ExtensionPanelView, color: (CGFloat, CGFloat) -> NSColor) {
+        let oldTheme = Theme.current, oldOpacity = Settings.tileOpacity
+        defer { Theme.current = oldTheme; Settings.tileOpacity = oldOpacity }
+        Theme.current = ColorTheme.named(theme)
+        Settings.tileOpacity = 1
+        let v = ExtensionPanelView(frame: NSRect(x: 0, y: 0, width: 320, height: 520))
+        v.panels = tabs
+        let root = Backdrop(frame: v.frame)
+        root.addSubview(v)
+        let w = NSWindow(contentRect: v.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        w.contentView = root
+        defer { w.close() }
+        prepare(v, w)
+        // Eigenes Bitmap in deviceRGB wie in `TileTests`, doppelt aufgelöst: das Bitmap des Fensters läge im Farbraum
+        // des Bildschirms (Display P3) und verschöbe satte Töne wie den Akzent.
+        let k: CGFloat = 2
+        let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(root.bounds.width * k), pixelsHigh: Int(root.bounds.height * k),
+                                                 bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                                 bytesPerRow: 0, bitsPerPixel: 0))
+        rep.size = root.bounds.size
+        root.cacheDisplay(in: root.bounds, to: rep)
+        return (v, { x, y in self.pixel(rep, x: Int(x * k), y: Int(y * k)) })
+    }
+
+    /// Unter der Tab-Reihe liegt eine Fuge: dunkle Haarlinie bei `tabHeight - 2`, helle darunter. Der gewählte Tab ist
+    /// eine eingesunkene Taste, unter seiner Kappe liegt die Kante.
+    func testTabRowEndsInSeam() throws {
+        let t = ColorTheme.named("instrument-dark")
+        let (v, color) = try renderPanel(twoTabs, theme: t.id)
+        let dark = color(300, ExtensionPanelView.tabHeight - 2 + 0.5), light = color(300, ExtensionPanelView.tabHeight - 1 + 0.5)
+        XCTAssertLessThan(luma(dark), luma(t.panel) - 0.01, "dunkle Haarlinie: \(dark.hexString)")
+        XCTAssertGreaterThan(luma(light), luma(dark) + 0.01, "helle Haarlinie darunter: \(light.hexString)")
+        let tab = try XCTUnwrap(v.tabRects().first)
+        var edge = NSColor.clear
+        withTheme(t) { edge = Instrument.keyEdge }
+        XCTAssertLessThan(distance(color(tab.midX, 26.5), edge), 0.03, "Kante unter der Kappe des gewählten Tabs")
+        XCTAssertLessThan(distance(color(tab.midX, 5.5), t.panel), 0.03, "gewählter Tab sitzt 1 pt tiefer")
+    }
+
+    /// Mit ⌘3-Tastatur trägt die Cursorzeile außen den Akzentring wie der Baum: seitlich 2,5 pt vor der Zeilenfläche,
+    /// die 6 pt einrückt, also bei x = 3,5 bis 5,5.
+    func testKeyboardCursorHasAccentRing() throws {
+        let t = ColorTheme.named("instrument-dark")
+        let (v, color) = try renderPanel(twoTabs, theme: t.id) { v, w in
+            w.makeFirstResponder(v)
+            v.keyDown(with: self.key(KeyCode.down))
+            v.keyDown(with: self.key(KeyCode.down))
+        }
+        let row = v.rect(try XCTUnwrap(v.cursor))
+        XCTAssertLessThan(distance(color(4.5, row.midY), t.accent), 0.1, "Akzentring links an der Cursorzeile: \(color(4.5, row.midY).hexString)")
+        XCTAssertLessThan(distance(color(1, row.midY), t.panel), 0.03, "links neben dem Ring bleibt der Grund")
+        XCTAssertLessThan(distance(color(7, row.midY), t.fg), 0.15, "Umriss in fg innen an der Fläche")
+    }
+
+    /// Text in Akzent- oder Fehlerfarbe nimmt die lesbare Text-Rolle, Punkte bleiben in der Füllfarbe. Solarized Light
+    /// trennt beide: im Bild kommt die Akzent-Textfarbe vor, die Akzent-Füllfarbe nicht.
+    func testPanelTextUsesReadableRoles() throws {
+        let t = ColorTheme.named("solarized-light")
+        XCTAssertNotEqual(t.accentText.hexString, t.accent.hexString, "Schema trennt Text- und Füllfarbe")
+        withTheme(t) {
+            XCTAssertEqual(ThemeColor.accent.textColor, Theme.accentText)
+            XCTAssertEqual(ThemeColor.err.textColor, Theme.errorText)
+            XCTAssertEqual(ThemeColor.muted.textColor, Theme.muted)
+            XCTAssertEqual(ThemeColor.accent.nsColor, Theme.accent, "Punkte bleiben in der Füllfarbe")
+        }
+        let text = String(repeating: "MMMM ", count: 6)
+        let (v, color) = try renderPanel([("a", PanelTree(title: "A", nodes: [.text(text, .accent)]))], theme: t.id)
+        let row = v.rect(0)
+        var asText = 0, asFill = 0
+        for y in stride(from: row.minY, to: row.maxY, by: 0.5) {
+            for x in stride(from: 12.0, to: 300, by: 0.5) {
+                let c = color(x, y)
+                if distance(c, t.accentText) < 0.04 { asText += 1 }
+                if distance(c, t.accent) < 0.04 { asFill += 1 }
+            }
+        }
+        XCTAssertGreaterThan(asText, 0, "Akzent-Textfarbe kommt vor")
+        XCTAssertEqual(asFill, 0, "Akzent-Füllfarbe nicht im Text")
+    }
 }
 
 /// Fenstergrund hinter dem Panel, das selbst halbtransparent malt.

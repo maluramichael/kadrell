@@ -35,8 +35,7 @@ struct SidebarSessionItem {
     /// Ohne Gruppierung steht der Projektname vor dem Titel, sonst trägt ihn die Gruppenzeile darüber.
     var project: String? = nil
     /// Strich-Anzeige statt Punkt: gesetzt, wenn angehängt und Claude arbeitet oder (untätig) noch ein Kommando läuft.
-    /// Warten und Fehler behalten den Punkt. Farbe ohne Puls-Alpha, `lit` = leuchtende Striche (nil = alle, bei
-    /// „Bewegung reduzieren“).
+    /// Warten und Fehler behalten den Punkt. `lit` = leuchtende Striche (nil = alle, bei „Bewegung reduzieren“).
     var meter: (color: NSColor, lit: Int?)? = nil
     /// Claude-Prozess läuft (angehängt): steuert die Punktform bei „Farben nicht unterscheiden“ (Ring = nicht gestartet).
     let attached: Bool
@@ -53,9 +52,7 @@ struct SidebarSessionItem {
 
 extension SidebarSessionItem {
     static func meter(for s: Session, attached: Bool, lit: Int?) -> (color: NSColor, lit: Int?)? {
-        // Warten und Fehler gehen vor: eine laufende Shell darf sie nicht hinter den Strichen verstecken.
-        guard attached, s.status == .running || (s.hasRunningShell && s.status == .idle) else { return nil }
-        return (Theme.statusColor(s.status, attached: true, shellRunning: s.hasRunningShell), lit)
+        Theme.meterColor(s, attached: attached).map { ($0, lit) }
     }
 }
 
@@ -86,16 +83,14 @@ extension SidebarRenderer {
     func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
     /// Strich-Anzeige arbeitender Sessions, sitzt anstelle des Punkts.
     func meterRect(_ row: CGRect) -> CGRect { CGRect(x: 26, y: headRect(row).midY - 5, width: 12, height: 10) }
-    /// Alles, was der Status der Zeile je belegt: Puls und Striche zeichnen nur diese Fläche neu.
+    /// Alles, was der Status der Zeile je belegt: die Striche zeichnen nur diese Fläche neu.
     func statusRect(_ row: CGRect) -> CGRect { dotRect(row).union(meterRect(row)) }
 
-    /// Fläche einer hervorgehobenen Zeile: eingerückt und rund, in der Modulfarbe wie die Kachelfläche.
-    func rowShape(_ row: CGRect) -> CGRect { row.insetBy(dx: 6, dy: 1) }
+    /// Fläche einer hervorgehobenen Zeile: eingerückt und rund, in der Modulfarbe wie die Kachelfläche. Maße und
+    /// Zeichnen kommen aus dem Kit, damit Dialog-Listen und rechte Sidebar genau so auswählen wie der Baum.
+    func rowShape(_ row: CGRect) -> CGRect { Instrument.rowShape(row) }
 
-    func fillRowShape(_ shape: CGRect) {
-        Theme.bg.setFill()
-        NSBezierPath(roundedRect: shape, xRadius: 6, yRadius: 6).fill()
-    }
+    func fillRowShape(_ shape: CGRect) { Instrument.fillRow(shape) }
 
     func drawSession(_ s: SidebarSessionItem, in r: CGRect) {
         drawSessionBackground(s, in: r)
@@ -134,12 +129,7 @@ extension SidebarRenderer {
     }
 
     /// 1,5 pt Umriss innen an der Fläche.
-    func drawFocusOutline(_ shape: CGRect) {
-        let path = NSBezierPath(roundedRect: shape.insetBy(dx: 0.75, dy: 0.75), xRadius: 5.25, yRadius: 5.25)
-        path.lineWidth = 1.5
-        Theme.fg.setStroke()
-        path.stroke()
-    }
+    func drawFocusOutline(_ shape: CGRect) { Instrument.outline(shape) }
 
     /// Fläche einer Session. Mit Tastaturring rückt sie oben und unten 2 pt ein: in der Zeile ist darüber nur 1 pt
     /// frei, so liegen Ring, Luft und Umriss ringsum gleich breit und der Ring bleibt in der Zeile.
@@ -151,13 +141,7 @@ extension SidebarRenderer {
     func keyFocusRing(_ row: CGRect) -> CGRect { rowShape(row).insetBy(dx: -2.5, dy: -0.5) }
 
     /// 2 pt Ring in der Akzentfarbe.
-    func drawKeyFocusRing(_ outer: CGRect) {
-        let ring = NSBezierPath(roundedRect: outer, xRadius: 8, yRadius: 8)
-        ring.append(NSBezierPath(roundedRect: outer.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6))
-        ring.windingRule = .evenOdd
-        Theme.accent.setFill()
-        ring.fill()
-    }
+    func drawKeyFocusRing(_ outer: CGRect) { Instrument.keyRing(outer) }
 
     /// Punkt, Titel und rechtsbündige Laufzeit. Die Laufzeit sitzt immer an derselben Stelle, auch beim Hover:
     /// Aktionen schweben als Toolbar darüber.
@@ -241,24 +225,17 @@ extension SidebarRenderer {
 
     /// Name allein, gesperrt in Versalien; wird bei Platzmangel gekürzt.
     static func groupName(_ g: SidebarGroupItem) -> NSAttributedString {
-        NSAttributedString(string: g.group.name.uppercased(), attributes: groupLabelAttributes)
+        Instrument.groupLabel(g.group.name)
     }
 
     /// Zahl der Sessions ` · 2`, steht immer ganz.
     static func groupCount(_ g: SidebarGroupItem) -> NSAttributedString {
-        NSAttributedString(string: " · \(g.dots.count)", attributes: groupLabelAttributes)
-    }
-
-    private static var groupLabelAttributes: [NSAttributedString.Key: Any] {
-        var attrs = Theme.attrs(10.5, Theme.sub, bold: true)
-        attrs[.kern] = CGFloat(0.8)
-        return attrs
+        Instrument.groupLabel(" · \(g.dots.count)")
     }
 
     /// Kleiner Farbakzent der Gruppe zwischen Chevron und Label.
     func drawGroupAccent(_ g: SidebarGroupItem, head: CGRect) {
-        g.color.setFill()
-        NSBezierPath(roundedRect: CGRect(x: 26, y: head.midY - 3, width: 6, height: 6), xRadius: 1.5, yRadius: 1.5).fill()
+        Instrument.groupAccent(center: CGPoint(x: 29, y: head.midY), color: g.color)
     }
 
     /// Gruppen-Label ab x = 37 bis `right`; liefert die belegte Fläche. Gekürzt wird nur der Name, die Zahl steht direkt

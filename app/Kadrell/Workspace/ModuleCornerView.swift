@@ -18,8 +18,8 @@ final class ModuleCornerView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     /// Mittelpunkt C = (2 + r, 2 + r), Abstand d davon: d < r durchsichtig, r bis r + 1 hell, r + 1 bis r + 2 dunkel,
-    /// darüber Gehäuse. Unter den Fugenstreifen am Rand liegt deckendes Panel wie in Leiste und Trenner, damit die
-    /// geraden Fugen darunter nicht doppelt durchscheinen.
+    /// darüber Gehäuse mit der Deckkraft der Kacheln, wie der Trenner (der die Ecke ausspart). Nur der obere Streifen
+    /// liegt deckend, wie die Leiste darüber; links gibt es keinen deckenden Streifen.
     override func draw(_ dirtyRect: NSRect) {
         let r = min(bounds.width, bounds.height) - Self.seam
         let c = CGPoint(x: Self.seam + r, y: Self.seam + r)
@@ -31,7 +31,6 @@ final class ModuleCornerView: NSView {
         outside(c, r).addClip()
         Theme.panel.setFill()
         NSBezierPath(rect: CGRect(x: 0, y: 0, width: bounds.width, height: Self.seam)).fill()
-        NSBezierPath(rect: CGRect(x: 0, y: 0, width: Self.seam, height: bounds.height)).fill()
         NSGraphicsContext.restoreGraphicsState()
         Instrument.seamLight.setFill()
         ring(c, from: r, to: r + 1).fill()

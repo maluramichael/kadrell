@@ -52,7 +52,8 @@ final class BackgroundShellsTests: XCTestCase {
     }
 }
 
-/// Punktfarbe: blau, solange in einer wartenden Session noch ein Kommando läuft.
+/// Punktfarbe: Shell-Farbe nur bei fertiger Session mit laufendem Kommando; Wartet und Fehler behalten ihre Farbe.
+@MainActor
 final class StatusDotColorTests: XCTestCase {
     private func session(status: String?, shell: Bool) -> Session {
         var s = Session(id: "a", cwd: "/tmp", startedAt: 0, sessionId: "a", name: "a")
@@ -61,24 +62,40 @@ final class StatusDotColorTests: XCTestCase {
         return s
     }
 
-    func testRunningShellPaintsShellColor() {
-        XCTAssertEqual(Theme.dotColor(session(status: "idle", shell: true), attached: true, pulse: 1), Theme.shell)
+    func testIdleWithShellPaintsShellColor() {
+        XCTAssertEqual(Theme.statusColor(.idle, attached: true, shellRunning: true), Theme.shell)
     }
 
-    func testRunningShellPulses() {
-        XCTAssertEqual(Theme.dotColor(session(status: "idle", shell: true), attached: true, pulse: 0.5).alphaComponent, 0.5, accuracy: 0.001)
+    func testWaitingWithShellKeepsWaitingColor() {
+        withTheme(.named("instrument-dark")) {
+            XCTAssertEqual(Theme.statusColor(.waiting, attached: true, shellRunning: true).hexString, "#ff5e14")
+        }
+        XCTAssertEqual(Theme.statusColor(.waiting, attached: true, shellRunning: true), Theme.waiting)
+    }
+
+    func testErrorWithShellKeepsErrorColor() {
+        XCTAssertEqual(Theme.statusColor(.error, attached: true, shellRunning: true), Theme.error)
+    }
+
+    func testWaitingWithShellSpeaksWaiting() {
+        XCTAssertEqual(SessionStatus.waiting.spoken(attached: true, shellRunning: true), SessionStatus.waiting.spoken)
+        XCTAssertEqual(SessionStatus.idle.spoken(attached: true, shellRunning: true), String(localized: "Kommando läuft noch", bundle: Bundle.app))
+    }
+
+    private func statusColor(_ s: Session, attached: Bool) -> NSColor {
+        Theme.statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell)
+    }
+
+    func testRunningShellPaintsShellColor() {
+        XCTAssertEqual(statusColor(session(status: "idle", shell: true), attached: true), Theme.shell)
     }
 
     func testWorkingSessionKeepsRunningColor() {
-        XCTAssertEqual(Theme.dotColor(session(status: "busy", shell: true), attached: true, pulse: 1), Theme.running)
-    }
-
-    func testIdleWithoutShellDoesNotPulse() {
-        XCTAssertEqual(Theme.dotColor(session(status: "idle", shell: false), attached: true, pulse: 0.5).alphaComponent, 1, accuracy: 0.001)
+        XCTAssertEqual(statusColor(session(status: "busy", shell: true), attached: true), Theme.running)
     }
 
     func testDetachedStaysGrey() {
-        XCTAssertEqual(Theme.dotColor(session(status: "idle", shell: true), attached: false, pulse: 1), Theme.detached)
+        XCTAssertEqual(statusColor(session(status: "idle", shell: true), attached: false), Theme.detached)
     }
 }
 

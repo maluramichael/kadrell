@@ -10,7 +10,7 @@ struct ExtensionDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 16) {
-                Text(ext.name.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.accentColor)
+                Text(ext.name.uppercased()).sectionTitle()
                 Spacer()
                 button("Neu laden  R") { model.reload(ext) }.disabled(!model.canToggle(ext) || !model.isEnabled(ext.name))
                 button("Ordner öffnen") { model.openFolder(ext) }
@@ -25,13 +25,13 @@ struct ExtensionDetail: View {
     }
 
     private func button(_ title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Text(title).foregroundStyle(Theme.fgColor) }.buttonStyle(.plain).kbdFocusRing()
+        Button(action: action) { Text(title) }.buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing()
     }
 
     private var form: some View {
         VStack(spacing: 0) {
             ForEach(Array(settings.enumerated()), id: \.element.key) { i, s in
-                if i > 0 { Divider().overlay(Theme.lineColor) }
+                if i > 0 { SeamLine() }
                 HStack(spacing: 12) {
                     Text(s.label).foregroundStyle(Theme.fgColor).lineLimit(1)
                     Spacer(minLength: 12)
@@ -40,7 +40,7 @@ struct ExtensionDetail: View {
                 .padding(.horizontal, 10).padding(.vertical, 5)
             }
         }
-        .overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+        .instrumentGroup()
         .padding(.horizontal, 16)
     }
 
@@ -61,16 +61,21 @@ struct ExtensionDetail: View {
         }
     }
 
+    /// Abstand der Logzeilen oben und unten innerhalb des Feldes, zusätzlich zu dessen 3 pt.
+    static let logInset: CGFloat = 5
+
     private var log: some View {
         let lines = model.manager.log(ext.name)
         return ScrollView(.vertical) {
             Text(lines.isEmpty ? String(localized: "Noch keine Logzeilen.", bundle: Bundle.app) : lines.joined(separator: "\n"))
                 .font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // Das Feld rückt nur 3 pt ein; im scrollenden Inhalt bekommt die erste und letzte Zeile Luft zum Rand.
+                .padding(.vertical, Self.logInset)
         }
         .defaultScrollAnchor(.bottom)
         .frame(height: 180 * Theme.scale)
-        .background(Theme.bgColor)
+        .instrumentWell()
         .padding(.horizontal, 16).padding(.top, 10)
     }
 }
@@ -91,7 +96,7 @@ private struct SettingField: View {
             if secure { SecureField("neuer Wert", text: text) } else { TextField("", text: text) }
         }
         .textFieldStyle(.plain).foregroundStyle(Theme.fgColor).focused($focused)
-        .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
+        .instrumentWell(focused: focused)
         .onSubmit(apply)
         .onChange(of: focused) { if !focused { left() } }
         // Der Wert wurde von außen gespeichert (eigenes ⏎, Reload): solange hier nicht getippt wird, den neuen Wert zeigen.

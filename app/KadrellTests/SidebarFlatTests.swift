@@ -156,3 +156,36 @@ final class SidebarMiddleClickTests: XCTestCase {
         XCTAssertFalse(closed)
     }
 }
+
+/// Schwebende Toolbar des Baums: der Knopf unter der Maus hebt sich in jedem Schema von der erhabenen Leiste ab, auch
+/// in hellen Schemata, in denen `raised` und `bg` gleich hell sind (GitHub Light, Latte, Solarized Light).
+@MainActor
+final class SidebarToolbarHoverTests: XCTestCase {
+    func testHoveredToolbarButtonVisibleInEveryTheme() throws {
+        let savedTheme = Theme.current, savedScale = Theme.scale
+        defer { Theme.current = savedTheme; Theme.scale = savedScale }
+        Theme.scale = 1
+        let a = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "Alpha")
+        let g = Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: "/p", sessionIds: ["a"])
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 200), styleMask: .borderless, backing: .buffered, defer: false)
+        let v = SidebarView(frame: NSRect(x: 0, y: 0, width: 240, height: 200))
+        window.contentView = v
+        v.reload(groups: [g], sessions: [a])
+        // Sitzungszeile: zwei Knöpfe zu je 20 pt, rechts 6 pt eingerückt; die Maus steht über dem ersten (Umbenennen).
+        let row = v.rowRect(1), y = row.minY + min(row.height, 24) / 2
+        let first: CGFloat = 240 - 6 - 44 + 2
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .mouseMoved, location: v.convert(CGPoint(x: first + 10, y: y), to: nil), modifierFlags: [],
+                                                     timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+        v.mouseMoved(with: event)
+        for t in ColorTheme.all {
+            Theme.current = t
+            let rep = try XCTUnwrap(v.bitmapImageRepForCachingDisplay(in: v.bounds))
+            v.cacheDisplay(in: v.bounds, to: rep)
+            let k = CGFloat(rep.pixelsWide) / v.bounds.width
+            // Je am linken Rand neben dem Symbol (das sitzt 2 pt eingerückt): erster Knopf mit Hover, zweiter ohne, also
+            // die blanke Leiste. Verglichen im selben Bild, nicht mit dem Schemawert, das Bitmap rechnet die Farben um.
+            let at = { (x: CGFloat) in self.pixel(rep, x: Int(x * k), y: Int(y * k)) }
+            XCTAssertGreaterThan(distance(at(first + 1), at(first + 21)), 0.04, "Hover sichtbar in \(t.id)")
+        }
+    }
+}

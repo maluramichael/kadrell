@@ -95,11 +95,12 @@ final class SettingsModel {
 /// ⌘, Einstellungen. ⏎ speichert, Esc bricht ab.
 struct SettingsView: View {
     @Bindable var model: SettingsModel
+    @FocusState private var editorFocused: Bool
 
-    /// Bereichsüberschrift wie in der F1-Hilfe: Akzentfarbe, gesperrt, Großbuchstaben, optionaler Hinweis daneben.
+    /// Bereichsüberschrift wie in der F1-Hilfe: gesperrte Versalien in Akzent-Textfarbe, optionaler Hinweis daneben.
     private func heading(_ s: String, note: String = "", first: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(s.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.accentColor)
+            Text(s.uppercased()).sectionTitle()
             if !note.isEmpty { Text(note).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor) }
         }
         .padding(.horizontal, 16).padding(.top, first ? 14 : 18).padding(.bottom, 6)
@@ -115,13 +116,12 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("EINSTELLUNGEN").kerning(0.6)
+                Text("EINSTELLUNGEN").capsLabel()
                 Spacer()
-                Text("Kadrell v\(Settings.version)")
+                Text("Kadrell v\(Settings.version)").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
             }
-            .font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
             .padding(.horizontal, 16).padding(.top, 12)
-            Divider().overlay(Theme.lineColor).padding(.top, 12)
+            SeamLine().padding(.top, 12)
 
             heading(String(localized: "Sessions", bundle: Bundle.app), first: true)
             table {
@@ -139,7 +139,7 @@ struct SettingsView: View {
                 setting(String(localized: "Externer Editor (Kommando wie im Terminal)", bundle: Bundle.app)) {
                     TextField("z. B. code", text: $model.editorCommand)
                         .textFieldStyle(.plain).foregroundStyle(Theme.fgColor)
-                        .padding(.horizontal, 8).padding(.vertical, 3).background(Theme.bgColor)
+                        .focused($editorFocused).instrumentWell(focused: editorFocused)
                 }
                 setting(String(localized: "Fertige Sessions automatisch trennen (0 = nie)", bundle: Bundle.app)) {
                     slider(Binding(get: { Double(model.binding(\.autoDetachMinutes).wrappedValue) }, set: { model.binding(\.autoDetachMinutes).wrappedValue = Int($0) }),
@@ -166,12 +166,12 @@ struct SettingsView: View {
                     setting(a.title + (a.subscription.map { " · \($0)" } ?? "")) {
                         HStack(spacing: 10) {
                             if a.id == model.activeAccountId {
-                                Text(String(localized: "aktiv", bundle: Bundle.app)).foregroundStyle(Theme.accentColor)
+                                Text(String(localized: "aktiv", bundle: Bundle.app)).foregroundStyle(Theme.accentTextColor)
                             } else {
-                                Button { model.switchAccount(a.id) } label: { Text(String(localized: "Wechseln", bundle: Bundle.app)).foregroundStyle(Theme.fgColor) }.buttonStyle(.plain).kbdFocusRing()
+                                Button { model.switchAccount(a.id) } label: { Text(String(localized: "Wechseln", bundle: Bundle.app)) }.buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing()
                             }
                             Spacer(minLength: 8)
-                            Button { model.removeAccount(a.id) } label: { Text(String(localized: "Entfernen", bundle: Bundle.app)).foregroundStyle(Theme.mutedColor) }.buttonStyle(.plain).kbdFocusRing()
+                            Button { model.removeAccount(a.id) } label: { Text(String(localized: "Entfernen", bundle: Bundle.app)) }.buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing()
                         }.frame(width: controlWidth, alignment: .trailing)
                     }
                 }
@@ -180,7 +180,7 @@ struct SettingsView: View {
                         HStack(spacing: 8) {
                             if let e = model.currentEmail { Text(e).foregroundStyle(Theme.mutedColor).lineLimit(1) }
                             Spacer(minLength: 8)
-                            Button { model.addAccount() } label: { Text(String(localized: "Hinzufügen", bundle: Bundle.app)).foregroundStyle(Theme.accentColor) }.buttonStyle(.plain).kbdFocusRing()
+                            Button { model.addAccount() } label: { Text(String(localized: "Hinzufügen", bundle: Bundle.app)) }.buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing()
                         }.frame(width: controlWidth)
                     }
                 }
@@ -267,7 +267,7 @@ struct SettingsView: View {
 
             heading(String(localized: "Tastenkürzel", bundle: Bundle.app), note: String(localized: "Kürzel anklicken, Tasten drücken · ⌫ entfernt", bundle: Bundle.app))
             ForEach(hotkeyGroups, id: \.0) { title, actions in
-                Text(title).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.mutedColor)
+                Text(title).capsLabel(bold: true)
                     .padding(.horizontal, 16).padding(.top, title == hotkeyGroups.first?.0 ? 0 : 12).padding(.bottom, 4)
                 table { ForEach(actions, id: \.self) { a in row(a) } }
             }
@@ -275,7 +275,6 @@ struct SettingsView: View {
             DialogFoot(hint: String(localized: "Änderungen gelten sofort · Esc schließt", bundle: Bundle.app), button: String(localized: "Fertig", bundle: Bundle.app)) { model.stopRecording(); model.onClose?() }
         }
         .frame(width: 900 * Theme.scale, alignment: .leading)
-        .background(Theme.panelColor)
         .environment(\.locale, model.locale)
         .onDisappear { model.stopRecording() }
     }
@@ -283,17 +282,17 @@ struct SettingsView: View {
     /// Breite der rechten Spalte: jedes Dropdown, Feld und Kürzel ist gleich breit, die Einstellungen lesen sich wie eine Tabelle.
     private var controlWidth: CGFloat { 300 * Theme.scale }
 
-    /// Zeilen einer Tabelle mit feiner Linie dazwischen.
+    /// Zeilen einer Tabelle als Gruppe mit Fugenring, Fugen zwischen den Zeilen.
     private func table<C: View>(@ViewBuilder _ rows: () -> C) -> some View {
         VStack(spacing: 0) {
             SwiftUI.Group(subviews: rows()) { subviews in
                 ForEach(subviews.indices, id: \.self) { i in
-                    if i > 0 { Divider().overlay(Theme.lineColor) }
+                    if i > 0 { SeamLine() }
                     subviews[i]
                 }
             }
         }
-        .overlay(Rectangle().stroke(Theme.lineColor, lineWidth: 1))
+        .instrumentGroup()
         .padding(.horizontal, 16)
     }
 
@@ -320,8 +319,8 @@ struct SettingsView: View {
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.up.chevron.down").font(.system(size: 9 * Theme.scale)).foregroundStyle(Theme.mutedColor)
             }
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .frame(width: controlWidth).background(Theme.bgColor).contentShape(Rectangle())
+            .instrumentWell()
+            .frame(width: controlWidth).contentShape(Rectangle())
         }
         .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).kbdFocusRing()
         .frame(width: controlWidth)
@@ -336,17 +335,15 @@ struct SettingsView: View {
     /// Pfadfeld der rechten Spalte, nimmt Dateien per Drag & Drop an.
     private func pathField(_ text: Binding<String>, placeholder: String = "", onTab: @escaping () -> Void = {}, drop: @escaping ([URL]) -> Bool) -> some View {
         PathField(text: text, placeholder: placeholder, autofocus: false, size: 12, onTab: onTab, onSubmit: {}, onMove: { _ in })
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Theme.bgColor)
             .dropDestination(for: URL.self) { urls, _ in drop(urls) }
     }
 
     private func iconButton(_ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            // Höhe knapp unter der Zeilenhöhe der Felder daneben, sonst zieht der Knopf die Tabellenzeile in die Länge.
-            Image(systemName: symbol).foregroundStyle(Theme.mutedColor).frame(width: 22 * Theme.scale, height: 18 * Theme.scale)
+            // Symbol plus Dicke der Taste so hoch wie bisher der Knopf (18), sonst zieht die Taste die Tabellenzeile in die Länge.
+            Image(systemName: symbol).frame(width: 22 * Theme.scale, height: 16 * Theme.scale)
         }
-        .buttonStyle(.plain).kbdFocusRing()
+        .buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing()
     }
 
     private func onOff(_ value: Binding<Bool>) -> some View { menu(value, [(true, String(localized: "an", bundle: Bundle.app)), (false, String(localized: "aus", bundle: Bundle.app))]) }
@@ -363,15 +360,15 @@ struct SettingsView: View {
             Text(a.title).foregroundStyle(Theme.fgColor).lineLimit(1)
             Spacer(minLength: 12)
             if key != a.defaultKey, !isRecording {
-                Button { model.hotkeys[a] = a.defaultKey } label: { Text("Standard").foregroundStyle(Theme.mutedColor) }
-                    .buttonStyle(.plain).kbdFocusRing().help("Zurück auf \(a.defaultKey.display)")
+                Button { model.hotkeys[a] = a.defaultKey } label: { Text("Standard") }
+                    .buttonStyle(InstrumentKeyStyle(.neutral, compact: true)).kbdFocusRing().help("Zurück auf \(a.defaultKey.display)")
             }
             Button { isRecording ? model.stopRecording() : model.record(a) } label: {
                 Text(isRecording ? String(localized: "Tasten drücken …", bundle: Bundle.app) : key?.display ?? "–")
                     .font(Theme.ui(12, bold: true))
-                    .foregroundStyle(isRecording ? Theme.bgColor : Theme.fgColor)
-                    .padding(.horizontal, 8).padding(.vertical, 3).frame(width: controlWidth, alignment: .leading)
-                    .background(isRecording ? Theme.accentColor : Theme.bgColor)
+                    .foregroundStyle(isRecording ? Theme.accentTextColor : Theme.fgColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .instrumentWell(focused: isRecording).frame(width: controlWidth)
             }
             .buttonStyle(.plain).kbdFocusRing()
         }

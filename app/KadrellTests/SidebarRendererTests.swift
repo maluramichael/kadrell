@@ -260,9 +260,9 @@ final class SidebarRendererTests: XCTestCase {
     func testWorkingSessionShowsMeterNotDot() {
         let rep = renderSession(session(status: "busy"), theme: dark)
         withTheme(dark) {
-            // Striche bei x = 26...28, 29...31, 33...35, 36...38 (beide Kanten eingerastet), Lücken bei 28, 31 und 32, 35.
-            for x in [27, 30, 34, 37] { assertColor(rep, x, 22, Theme.running, "Strich") }
-            for x in [28, 31, 32, 35] { assertColor(rep, x, 22, Theme.panel, "Lücke") }
+            // Striche 2 pt breit bei x = 26...27, 29...30, 32...33, 35...36, Lücken 1 pt bei 28, 31, 34, danach Hintergrund.
+            for x in [27, 30, 33, 36] { assertColor(rep, x, 22, Theme.running, "Strich") }
+            for x in [28, 31, 34, 37] { assertColor(rep, x, 22, Theme.panel, "Lücke") }
             assertColor(rep, 30, 17, Theme.running, "Strich 10 pt hoch, oben")
             assertColor(rep, 30, 26, Theme.running, "Strich 10 pt hoch, unten")
             assertColor(rep, 30, 16, Theme.panel, "über dem Strich nichts")
@@ -275,8 +275,8 @@ final class SidebarRendererTests: XCTestCase {
         withTheme(dark) {
             assertColor(rep, 27, 22, Theme.running, "Strich 1 leuchtet")
             assertColor(rep, 30, 22, Theme.running, "Strich 2 leuchtet")
-            assertColor(rep, 34, 22, over(Theme.running.withAlphaComponent(0.25), Theme.panel), "Strich 3 gedimmt")
-            assertColor(rep, 37, 22, over(Theme.running.withAlphaComponent(0.25), Theme.panel), "Strich 4 gedimmt")
+            assertColor(rep, 33, 22, over(Theme.running.withAlphaComponent(0.25), Theme.panel), "Strich 3 gedimmt")
+            assertColor(rep, 36, 22, over(Theme.running.withAlphaComponent(0.25), Theme.panel), "Strich 4 gedimmt")
         }
     }
 
@@ -310,11 +310,16 @@ final class SidebarRendererTests: XCTestCase {
         }
     }
 
+    func testWaitingWithShellKeepsWaitingDot() {
+        let rep = renderSession(session(status: "waiting", shellRunning: true), theme: dark)
+        withTheme(dark) { assertColor(rep, 31, 22, Theme.waiting, "Punkt in Warte-Farbe, nicht Shell-Farbe") }
+    }
+
     func testShellRunningUsesShellColor() {
         let rep = renderSession(session(status: "idle", shellRunning: true), theme: dark)
         withTheme(dark) {
             assertColor(rep, 27, 22, NSColor(hex: 0xa3a19a), "Strich in Shell-Farbe")
-            assertColor(rep, 37, 22, NSColor(hex: 0xa3a19a), "letzter Strich in Shell-Farbe")
+            assertColor(rep, 36, 22, NSColor(hex: 0xa3a19a), "letzter Strich in Shell-Farbe")
         }
     }
 

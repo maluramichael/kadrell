@@ -61,19 +61,19 @@ struct AboutView: View {
                 .foregroundStyle(Theme.mutedColor).padding(.horizontal, 16).padding(.top, 6)
             HStack(spacing: 6) {
                 Text("von Michael Malura ·").foregroundStyle(Theme.mutedColor)
-                Link("malura.de", destination: URL(string: "https://malura.de")!).foregroundStyle(Theme.accentColor)
+                Link("malura.de", destination: URL(string: "https://malura.de")!).foregroundStyle(Theme.accentTextColor)
             }
             .font(Theme.ui(12)).padding(.horizontal, 16).padding(.top, 4)
             HStack(spacing: 6) {
                 Text("Eigene Erweiterungen in Lua:").foregroundStyle(Theme.mutedColor)
-                Link("kadrell.malura.de/extensions", destination: ExtensionsView.docs).foregroundStyle(Theme.accentColor)
+                Link("kadrell.malura.de/extensions", destination: ExtensionsView.docs).foregroundStyle(Theme.accentTextColor)
             }
             .font(Theme.ui(12)).padding(.horizontal, 16).padding(.top, 4)
             Text(Self.credits).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).padding(.horizontal, 16).padding(.top, 4)
-            Divider().overlay(Theme.lineColor).padding(.top, 14)
+            SeamLine().padding(.top, 14)
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(sections, id: \.0) { title, keys in
-                    Text(title.uppercased()).kerning(0.6).font(Theme.ui(11, bold: true)).foregroundStyle(Theme.accentColor)
+                    Text(title.uppercased()).sectionTitle()
                         .padding(.leading, 172 * Theme.scale).padding(.top, title == sections.first?.0 ? 0 : 12).padding(.bottom, 2)
                     ForEach(keys, id: \.1) { k, t in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -84,11 +84,10 @@ struct AboutView: View {
                 }
             }
             .padding(16)
-            Divider().overlay(Theme.lineColor)
+            SeamLine()
             Text("Esc oder F1 schließen").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .frame(width: 640 * Theme.scale, alignment: .leading)
-        .background(Theme.panelColor)
     }
 }

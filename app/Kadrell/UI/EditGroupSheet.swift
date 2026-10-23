@@ -35,6 +35,7 @@ struct EditGroupView: View {
                 TextField("Name", text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                     .focused($focused)
                     .onSubmit { model.save() }
+                    .instrumentWell(focused: focused)
                 Capsule().fill(model.color).frame(width: 44 * Theme.scale, height: 20 * Theme.scale)
                     .accessibilityHidden(true)
             }
@@ -57,8 +58,9 @@ struct EditGroupView: View {
                     Text(p.name).foregroundStyle(Color(nsColor: Theme.sub)).frame(width: 110 * Theme.scale, alignment: .leading)
                     ForEach(p.colors, id: \.self) { hex in
                         Button { model.color = Color(nsColor: NSColor(hexString: hex)) } label: {
-                            Rectangle().fill(Color(nsColor: NSColor(hexString: hex))).frame(width: size, height: size)
-                                .overlay(Rectangle().stroke(Theme.fgColor, lineWidth: hex == current ? 2 : 0))
+                            let swatch = RoundedRectangle(cornerRadius: 3 * Theme.scale)
+                            swatch.fill(Color(nsColor: NSColor(hexString: hex))).frame(width: size, height: size)
+                                .overlay(swatch.strokeBorder(Theme.fgColor, lineWidth: hex == current ? 1.5 : 0))
                         }
                         .buttonStyle(.plain).kbdFocusRing()
                         .accessibilityLabel("\(p.name) \(hex)")
@@ -98,6 +100,7 @@ struct RenameSessionView: View {
             TextField(model.session.autoTitle, text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                 .focused($focused)
                 .onSubmit { model.save() }
+                .instrumentWell(focused: focused)
                 .padding(14)
             Text("Leer lassen: wieder der Titel von Claude Code (\(model.session.autoTitle))").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)

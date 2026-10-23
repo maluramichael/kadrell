@@ -70,13 +70,6 @@ enum Feedback {
         return CGFloat(1 - pow(1 - p, 3))
     }
 
-    /// Deckkraft des pulsierenden Punkts laufender Sessions, 0,3...1 im 1,2-s-Takt; 1 bei „Bewegung reduzieren“.
-    nonisolated static func pulse(now: CFTimeInterval = CACurrentMediaTime()) -> CGFloat {
-        guard !reduceMotion else { return 1 }
-        let t = now.truncatingRemainder(dividingBy: 1.2) / 1.2
-        return 0.3 + 0.7 * (0.5 + 0.5 * cos(2 * .pi * t))
-    }
-
     /// Wie viele der vier Striche der Arbeits-Anzeige leuchten, 1...4 in Schritten von 160 ms (zwei Takte des
     /// 80-ms-Takts im Baum). nil bei „Bewegung reduzieren“: die Anzeige steht still, alle Striche an.
     nonisolated static func meterLit(now: CFTimeInterval = CACurrentMediaTime()) -> Int? {
