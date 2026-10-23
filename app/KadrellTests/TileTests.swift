@@ -162,6 +162,27 @@ final class TileTests: XCTestCase {
         return rep
     }
 
+    // MARK: Leerzustand
+
+    /// Die Knöpfe der leeren Arbeitsfläche sind Tasten: der Primärknopf („Neue Session starten“, der unterste) hat
+    /// eine Kappe in `accent` und darunter die Kante in `keyEdge`. Die Trefferfläche bleibt das ganze Rechteck.
+    func testEmptyWorkspaceButtonsAreKeys() throws {
+        let suffix = ".test-empty-keys"
+        let ws = WorkspaceView(frame: NSRect(x: 0, y: 0, width: 600, height: 400), defaultsSuffix: suffix)
+        defer {
+            ws.close()
+            for k in ["workspace.selected", "workspace.mode", "workspace.auto"] { Profile.defaults.removeObject(forKey: k + suffix) }
+        }
+        Theme.scale = 1
+        ws.polled = true
+        ws.reload(groups: [], sessions: [])
+        let rep = render(ws)
+        let primary = try XCTUnwrap(ws.emptyHitRects.max { $0.rect.minY < $1.rect.minY }).rect
+        XCTAssertEqual(primary.height, 32, "Höhe bleibt, Trefferfläche ist das ganze Rechteck")
+        assertColor(rep, Int(primary.minX) + 4, Int(primary.midY), Theme.accent, "Kappe in accent")
+        assertColor(rep, Int(primary.midX), Int(primary.maxY) - 1, Instrument.keyEdge, "Kante unter der Kappe")
+    }
+
     func testStackRowsAreNeutralWithSeams() {
         stackWorkspace(gap: 6) { ws in
             let rows = ws.stackRows.map(\.0)

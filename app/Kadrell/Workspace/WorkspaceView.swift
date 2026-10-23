@@ -643,18 +643,19 @@ final class WorkspaceView: NSView {
         return .hint
     }
 
-    /// Knöpfe im Leerzustand nebeneinander, mittig um `midX` in den logischen Koordinaten von `Theme.scaled`: Pillen
-    /// mit Rahmen, die Haupt-Aktion gefüllt. Ihre realen Klickflächen landen in `collected`.
+    /// Knöpfe im Leerzustand nebeneinander, mittig um `midX` in den logischen Koordinaten von `Theme.scaled`: Tasten,
+    /// die Haupt-Aktion als Primärtaste, die übrigen neutral. Ihre realen Klickflächen (das ganze Rechteck samt Dicke)
+    /// landen in `collected`.
     private func drawEmptyButtons(_ buttons: [(title: String, primary: Bool, action: () -> Void)], midX: CGFloat, y: CGFloat, collected: inout [(CGRect, () -> Void)]) {
         let gap: CGFloat = 8
-        let labels = buttons.map { NSAttributedString(string: $0.title, attributes: Theme.attrs(11.5, $0.primary ? Theme.bg : Theme.fg, bold: true)) }
+        let roles = buttons.map { $0.primary ? KeyRole.primary : .neutral }
+        let labels = zip(buttons, roles).map { NSAttributedString(string: $0.title, attributes: Theme.attrs(11.5, $1.label, bold: true)) }
         let widths = labels.map { $0.size().width + 32 }
         var x = midX - (widths.reduce(0, +) + gap * CGFloat(buttons.count - 1)) / 2
-        for (i, (_, primary, action)) in buttons.enumerated() {
+        for (i, (_, _, action)) in buttons.enumerated() {
             let r = CGRect(x: x, y: y, width: widths[i], height: 32), t = labels[i]
-            let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
-            if primary { Theme.accent.setFill(); path.fill() } else { Theme.line.setStroke(); path.lineWidth = 1; path.stroke() }
-            t.draw(at: CGPoint(x: r.midX - t.size().width / 2, y: r.midY - t.size().height / 2 + 1))
+            let cap = Instrument.key(r, pressed: false, fill: roles[i].fill)
+            t.draw(at: CGPoint(x: cap.midX - t.size().width / 2, y: cap.midY - t.size().height / 2 + 1))
             collected.append((r.scaled(Theme.scale), action))
             x += widths[i] + gap
         }
