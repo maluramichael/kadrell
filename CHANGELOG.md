@@ -2,8 +2,11 @@
 
 Neueste Version oben.
 
-## Unreleased
+## 1.72.0 (2026-10-23)
 
+- Änderung: Dialoge, Einstellungen, Hilfe (F1), Statistik (F3), Extensions (F4) und die Suche (⌘P) sind neu gestaltet: erhabene Fläche mit runden Ecken und feinen Fugen, Knöpfe als Tasten, Eingabefelder eingelassen, die Auswahl in Listen als Rahmen.
+- Änderung: Die rechte Seitenleiste zeigt ihre Tabs als Tasten und ihre Abschnitte mit gesperrten Überschriften.
+- Fix: Links, Überschriften und Fehlermeldungen in Dialogen sind auch in hellen Farbschemata, Nord und Solarized gut lesbar.
 - Änderung: Kacheln und Stack-Zeilen sind neu gestaltet: neutrale Köpfe mit kleinem Farbpunkt der Gruppe statt eingefärbter Flächen, feine Fugen zwischen den Kacheln und unter den Köpfen. Die fokussierte Kachel hat einen kräftigen Rahmen in Schriftfarbe.
 - Änderung: Arbeitende Sessions zeigen auch in Kachelköpfen und Stack-Zeilen die Strich-Anzeige statt eines pulsierenden Punkts.
 - Änderung: Wartet eine Session oder hat sie einen Fehler, während im Hintergrund noch ein Kommando läuft, zeigt ihr Punkt weiter die Warte- bzw. Fehlerfarbe, und VoiceOver sagt „wartet“.
