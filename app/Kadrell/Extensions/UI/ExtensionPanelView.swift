@@ -34,7 +34,7 @@ final class ExtensionPanelView: ClipWidthView {
     private(set) var cursor: Int?
     private(set) var hovered: Int?
     /// Gedrückte Zeile: ausgelöst wird erst beim Loslassen über derselben Zeile.
-    private var pressed: Int?
+    private(set) var pressed: Int?
 
     override var isFlipped: Bool { true }
 

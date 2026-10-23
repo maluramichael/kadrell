@@ -9,7 +9,6 @@ extension Theme {
     static var bgColor: Color { Color(nsColor: bg) }
     static var panelColor: Color { Color(nsColor: panel) }
     static var surfaceColor: Color { Color(nsColor: surface) }
-    static var lineColor: Color { Color(nsColor: line) }
     static var fgColor: Color { Color(nsColor: fg) }
     static var mutedColor: Color { Color(nsColor: muted) }
     static var accentColor: Color { Color(nsColor: accent) }

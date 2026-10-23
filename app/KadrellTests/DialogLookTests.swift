@@ -142,6 +142,28 @@ final class DialogLookTests: XCTestCase {
         XCTAssertEqual(Set(roles), [.neutral])
     }
 
+    // MARK: Wächter
+
+    /// Kein Dialog fällt in den flachen Look zurück: keine Linien in `line`, keine Divider, kein eigener Dialoggrund,
+    /// kein weicher Schatten. Gilt für alle Dialoge, die rechte Sidebar und die Hover-Toolbar des Baums.
+    func testDialogsUseInstrumentParts() throws {
+        let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Kadrell")
+        let fm = FileManager.default
+        var files = try ["UI", "Extensions/UI"].flatMap { dir in
+            try fm.contentsOfDirectory(at: sources.appendingPathComponent(dir), includingPropertiesForKeys: nil).filter { $0.pathExtension == "swift" }
+        }
+        files += ["Sidebar/SidebarView.swift", "App/SheetPresenter.swift"].map { sources.appendingPathComponent($0) }
+        XCTAssertGreaterThan(files.count, 15, "Quellen gefunden")
+        let forbidden = ["Theme.line", "lineColor", "Divider()", "Theme.panelColor", "NSShadow()"]
+        var offenders: [String] = []
+        for file in files {
+            for (i, line) in try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n").enumerated() {
+                for word in forbidden where line.contains(word) { offenders.append("\(file.lastPathComponent):\(i + 1) \(word)") }
+            }
+        }
+        XCTAssertEqual(offenders, [], "flacher Look in Dialogen")
+    }
+
     // MARK: Helfer
 
     private var group: Kadrell.Group {

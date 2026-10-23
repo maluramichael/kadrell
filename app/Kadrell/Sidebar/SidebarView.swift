@@ -250,23 +250,13 @@ final class SidebarView: ClipWidthView {
         })
     }
 
+    /// Erhabene Leiste wie eine Taste: Radius 5, fester Schatten 2 pt nach unten (deshalb zeichnet `drawRows` sie
+    /// auch, wenn nur der Schatten im geänderten Bereich liegt).
     private func drawToolbar(_ t: CGRect, _ buttons: [ToolButton]) {
-        let path = NSBezierPath(roundedRect: t.insetBy(dx: 0.5, dy: 0.5), xRadius: 5, yRadius: 5)
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
-        shadow.shadowBlurRadius = 8
-        shadow.shadowOffset = NSSize(width: 0, height: -2)
-        shadow.set()
-        Theme.bg.setFill()
-        path.fill()
-        NSGraphicsContext.restoreGraphicsState()
-        Theme.line.setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        Instrument.raisedPanel(t, radius: Instrument.keyRadius, depth: 2)
         for (k, b) in buttons.enumerated() {
             let hot = hoveredButton == k
-            if hot { Theme.line.setFill(); NSBezierPath(roundedRect: b.hit.rect, xRadius: 4, yRadius: 4).fill() }
+            if hot { Instrument.fillRow(b.hit.rect) }
             let color = hot ? (k == buttons.count - 1 ? Theme.error : Theme.fg) : Theme.muted
             b.icon(b.hit.rect.insetBy(dx: 2, dy: 2), color)
         }
@@ -295,7 +285,9 @@ final class SidebarView: ClipWidthView {
             case .session(let s, let g): drawSession(s, group: g, in: r, hover: hovered == i)
             }
         }
-        if let i = hovered, !dragging, i < rows.count, case let tb = toolbar(i), tb.rect.intersects(dirtyRect) { drawToolbar(tb.rect, tb.buttons) }
+        if let i = hovered, !dragging, i < rows.count, case let tb = toolbar(i), tb.rect.insetBy(dx: 0, dy: -2).intersects(dirtyRect) {
+            drawToolbar(tb.rect, tb.buttons)
+        }
         if let y = dropLineY() { Theme.fg.setFill(); CGRect(x: 0, y: y - 1, width: bounds.width / Theme.scale, height: 2).fill() }
     }
 
