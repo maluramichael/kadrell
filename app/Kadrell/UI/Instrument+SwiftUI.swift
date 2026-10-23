@@ -20,8 +20,9 @@ struct InstrumentSurface: NSViewRepresentable {
 }
 
 extension EnvironmentValues {
-    /// Zählt Wechsel von Schema oder UI-Größe bei offenem Dialog (setzt `OverlayScroll`). Jede `InstrumentSurface` liest ihn: so erreicht
-    /// ein Wechsel auch Flächen in Views, deren Eingaben gleich bleiben und die SwiftUI sonst überspringt (Fuge, Taste).
+    /// Zählt Wechsel von Schema oder UI-Größe bei offenem Dialog (setzt `OverlayScroll`). Jede `InstrumentSurface` liest ihn, ebenso
+    /// Taste, Feld, Versal-Label und Fokusring: so erreicht ein Wechsel auch Views, deren Eingaben gleich bleiben und die
+    /// SwiftUI sonst überspringt (Fuge, Taste in einer Tabellenzeile).
     @Entry var instrumentThemeGeneration = 0
 }
 
@@ -47,11 +48,7 @@ extension View {
 
     /// Eingelassenes Feld für Werte, mit Fokus im Akzentring. Die gezeichnete Fläche nimmt keine Klicks an
     /// (`hitTest` = nil); erst die Form macht das ganze Feld klickbar, nicht nur die Schrift (Kürzel-Feld, Dropdown).
-    func instrumentWell(focused: Bool = false) -> some View {
-        padding(.horizontal, 8).padding(.vertical, 3)
-            .background(InstrumentSurface(part: .well(focused: focused)).accessibilityHidden(true))
-            .contentShape(RoundedRectangle(cornerRadius: Instrument.keyRadius * Theme.scale))
-    }
+    func instrumentWell(focused: Bool = false) -> some View { modifier(InstrumentWell(focused: focused)) }
 
     /// Auswahl in Dialog-Listen: Fläche mit Umriss in `fg`, ohne Akzentring (die Tastatur steht im Suchfeld).
     /// Die Bedingung sitzt im Hintergrund, damit die Zeile beim Auswählen ihre Identität behält. Ohne Auswahl hat
@@ -64,7 +61,21 @@ extension View {
     }
 }
 
+/// Feld zu `instrumentWell`: liest den Schema-Zähler, damit die Form der Klickfläche nach einem Größenwechsel stimmt.
+private struct InstrumentWell: ViewModifier {
+    let focused: Bool
+    @Environment(\.instrumentThemeGeneration) private var themeGeneration
+
+    func body(content: Content) -> some View {
+        content.padding(.horizontal, 8).padding(.vertical, 3)
+            .background(InstrumentSurface(part: .well(focused: focused)).accessibilityHidden(true))
+            .contentShape(RoundedRectangle(cornerRadius: Instrument.keyRadius * Theme.scale))
+    }
+}
+
 /// Taste: Kappe mit Dicke darunter, gedrückt sinkt sie 1 pt ein. Primär in `accent`, destruktiv in `error`, sonst neutral.
+/// Alles, was Schema oder UI-Größe liest, sitzt in `KeyBody`: SwiftUI ruft `makeBody` bei gleicher Rolle nicht neu auf,
+/// erst der Schema-Zähler der Umgebung erreicht bei offenem Dialog Beschriftung, Schrift, Abstände und Dicke.
 struct InstrumentKeyStyle: ButtonStyle {
     let role: KeyRole
     let compact: Bool
@@ -75,35 +86,49 @@ struct InstrumentKeyStyle: ButtonStyle {
     }
 
     func makeBody(configuration: Configuration) -> some View {
-        KeyLabel(label: configuration.label, role: role, compact: compact)
-            .offset(y: configuration.isPressed ? Theme.scale : 0)
-            .padding(.bottom, Instrument.keyDepth * Theme.scale)
-            .background(InstrumentSurface(part: .key(pressed: configuration.isPressed, role: role)).accessibilityHidden(true))
-            // Die gezeichnete Kappe nimmt keine Klicks an (`hitTest` = nil); ohne Form träfe nur die Schrift.
-            .contentShape(RoundedRectangle(cornerRadius: Instrument.keyRadius * Theme.scale))
+        KeyBody(label: configuration.label, pressed: configuration.isPressed, role: role, compact: compact)
     }
 
-    /// Beschriftung der Kappe; liest `isEnabled`, damit eine gesperrte Taste gedämpft erscheint.
-    private struct KeyLabel: View {
+    /// Kappe samt Beschriftung; liest `isEnabled`, damit eine gesperrte Taste gedämpft erscheint.
+    private struct KeyBody: View {
         let label: ButtonStyleConfiguration.Label
+        let pressed: Bool
         let role: KeyRole
         let compact: Bool
         @Environment(\.isEnabled) private var enabled
+        @Environment(\.instrumentThemeGeneration) private var themeGeneration
 
         var body: some View {
             label.font(compact ? Theme.ui(11) : Theme.ui(12, bold: role != .neutral))
                 .foregroundStyle(enabled ? Color(nsColor: role.label) : Theme.mutedColor)
                 .padding(.horizontal, compact ? 6 : 12).padding(.vertical, compact ? 2 : 5)
+                .offset(y: pressed ? Theme.scale : 0)
+                .padding(.bottom, Instrument.keyDepth * Theme.scale)
+                .background(InstrumentSurface(part: .key(pressed: pressed, role: role)).accessibilityHidden(true))
+                // Die gezeichnete Kappe nimmt keine Klicks an (`hitTest` = nil); ohne Form träfe nur die Schrift.
+                .contentShape(RoundedRectangle(cornerRadius: Instrument.keyRadius * Theme.scale))
         }
     }
 }
 
 extension Text {
-    /// Gesperrtes Versal-Label: klein, gesperrt, standardmäßig gedämpft.
-    func capsLabel(_ color: Color = Theme.mutedColor, bold: Bool = false) -> some View {
-        font(Theme.ui(11, bold: bold)).kerning(Instrument.labelKern * Theme.scale).foregroundStyle(color)
-    }
+    /// Gesperrtes Versal-Label: klein, gesperrt, gedämpft; mit `accent` in Akzent-Textfarbe.
+    func capsLabel(bold: Bool = false, accent: Bool = false) -> some View { CapsLabel(text: self, bold: bold, accent: accent) }
 
     /// Abschnittstitel: gesperrtes Versal-Label in Akzent-Textfarbe.
-    func sectionTitle() -> some View { capsLabel(Theme.accentTextColor, bold: true) }
+    func sectionTitle() -> some View { capsLabel(bold: true, accent: true) }
+}
+
+/// Versal-Label als eigene View: die Farbe entsteht erst hier, beim Rendern mit dem Schema-Zähler, nicht beim Aufrufer.
+/// So folgt ein Titel dem Schema auch in Views, die SwiftUI bei gleichen Eingaben überspringt.
+private struct CapsLabel: View {
+    let text: Text
+    let bold: Bool
+    let accent: Bool
+    @Environment(\.instrumentThemeGeneration) private var themeGeneration
+
+    var body: some View {
+        text.font(Theme.ui(11, bold: bold)).kerning(Instrument.labelKern * Theme.scale)
+            .foregroundStyle(accent ? Theme.accentTextColor : Theme.mutedColor)
+    }
 }

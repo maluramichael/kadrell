@@ -53,6 +53,41 @@ final class DialogChromeTests: XCTestCase {
         XCTAssertEqual(bottom(raised) - bottom(key), 10 + Instrument.shadowDepth * 1.3, accuracy: 0.3)
     }
 
+    /// Schema wechselt bei offenem Dialog von dunkel nach hell: auch Beschriftung der Taste, Abschnittstitel und
+    /// Versal-Label zeichnen in den neuen Farben, nicht nur die Flächen. Der Inhalt ist fest und rendert von sich aus nie
+    /// neu, wie eine Taste in einer Zeile der Einstellungen.
+    func testKeyLabelAndTitlesFollowThemeChangeInOpenDialog() {
+        let light = ColorTheme.named("github-light")
+        var label = NSColor.clear
+        withTheme(light) { label = KeyRole.neutral.label }
+        let key = afterThemeChange(to: light, Button("Abbrechen") {}.buttonStyle(InstrumentKeyStyle(.neutral)))
+        XCTAssertGreaterThan(count(key, near: [label], tolerance: 0.06)[0], 10, "Beschriftung in KeyRole.label des neuen Schemas")
+        let title = afterThemeChange(to: light, Text("TITEL").sectionTitle())
+        XCTAssertGreaterThan(count(title, near: [light.accentText], tolerance: 0.06)[0], 10, "Abschnittstitel in accentText")
+        let caps = afterThemeChange(to: light, Text("HINWEIS").capsLabel())
+        XCTAssertGreaterThan(count(caps, near: [light.muted], tolerance: 0.06)[0], 10, "Versal-Label in muted")
+    }
+
+    /// UI-Größe 100 → 130 % bei offenem Dialog: die Taste wächst mit (Schrift, Dicke), so hoch wie frisch bei 130 %.
+    func testKeyFollowsScaleChangeInOpenDialog() throws {
+        let savedTheme = Theme.current, savedScale = Theme.scale
+        defer { Theme.current = savedTheme; Theme.scale = savedScale }
+        Theme.current = .named("instrument-dark")
+        Theme.scale = 1
+        let content = { Button("OK") {}.buttonStyle(InstrumentKeyStyle(.primary)).padding(20) }
+        let p = OverlayPanel(rootView: content())
+        let view = p.contentViewController!.view
+        settle(view)
+        let before = try keyHeight(in: view)
+        Theme.scale = 1.3
+        p.applyTheme()
+        settle(view)
+        let fresh = OverlayPanel(rootView: content()).contentViewController!.view
+        settle(fresh)
+        XCTAssertGreaterThan(try keyHeight(in: view), before + 4, "Taste wächst")
+        XCTAssertEqual(try keyHeight(in: view), try keyHeight(in: fresh), accuracy: 0.5, "so hoch wie frisch bei 130 %")
+    }
+
     func testScrollLimitLeavesRoomForShadow() {
         let limit = OverlayLimit(); limit.maxHeight = 300
         let host = NSHostingView(rootView: OverlayScroll(limit: limit, content: Color.clear.frame(width: 200, height: 1000)))
@@ -167,6 +202,27 @@ final class DialogChromeTests: XCTestCase {
         p.applyTheme()
         settle(view)
         XCTAssertTrue(surfaces.allSatisfy { $0.part != sentinel }, "jede Fläche zeichnet neu", line: line)
+    }
+
+    /// Öffnet `content` als Dialog in Instrument Dark bei 100 %, wechselt auf `theme` und liefert das Bild danach.
+    private func afterThemeChange<V: View>(to theme: ColorTheme, _ content: V) -> NSBitmapImageRep {
+        let savedTheme = Theme.current, savedScale = Theme.scale
+        defer { Theme.current = savedTheme; Theme.scale = savedScale }
+        Theme.current = .named("instrument-dark")
+        Theme.scale = 1
+        let p = OverlayPanel(rootView: content.padding(20))
+        let view = p.contentViewController!.view
+        settle(view)
+        Theme.current = theme
+        p.applyTheme()
+        settle(view)
+        let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep
+    }
+
+    private func keyHeight(in view: NSView) throws -> CGFloat {
+        try XCTUnwrap(instrumentSurfaces(in: view).first { if case .key = $0.part { true } else { false } }).frame.height
     }
 
     /// Layout plus ein Durchlauf der RunLoop: Präferenzen (Fußleiste) und Geometrie kommen erst dann an.

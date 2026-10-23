@@ -20,9 +20,11 @@ extension Theme {
 }
 
 /// Sichtbarer Tastaturfokus für `.buttonStyle(.plain)`-Elemente (Menüs, Icon-Knöpfe, Dialog-Fuß, Farbfelder):
-/// die verstecken sonst den nativen Fokusring, Tab-Nutzer sehen dann nirgends, wo der Fokus gerade steht.
+/// die verstecken sonst den nativen Fokusring, Tab-Nutzer sehen dann nirgends, wo der Fokus gerade steht. Liest den
+/// Schema-Zähler, damit Farbe und Radius bei offenem Dialog dem Schema und der UI-Größe folgen.
 private struct KeyboardFocusRing: ViewModifier {
     @FocusState private var focused: Bool
+    @Environment(\.instrumentThemeGeneration) private var themeGeneration
     func body(content: Content) -> some View {
         content.focused($focused)
             .overlay(RoundedRectangle(cornerRadius: (Instrument.keyRadius + 2) * Theme.scale).stroke(Theme.accentColor, lineWidth: focused ? 2 : 0).padding(-2))
