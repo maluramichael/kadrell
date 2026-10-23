@@ -86,13 +86,11 @@ extension SidebarRenderer {
     /// Alles, was der Status der Zeile je belegt: die Striche zeichnen nur diese Fläche neu.
     func statusRect(_ row: CGRect) -> CGRect { dotRect(row).union(meterRect(row)) }
 
-    /// Fläche einer hervorgehobenen Zeile: eingerückt und rund, in der Modulfarbe wie die Kachelfläche.
-    func rowShape(_ row: CGRect) -> CGRect { row.insetBy(dx: 6, dy: 1) }
+    /// Fläche einer hervorgehobenen Zeile: eingerückt und rund, in der Modulfarbe wie die Kachelfläche. Maße und
+    /// Zeichnen kommen aus dem Kit, damit Dialog-Listen und rechte Sidebar genau so auswählen wie der Baum.
+    func rowShape(_ row: CGRect) -> CGRect { Instrument.rowShape(row) }
 
-    func fillRowShape(_ shape: CGRect) {
-        Theme.bg.setFill()
-        NSBezierPath(roundedRect: shape, xRadius: 6, yRadius: 6).fill()
-    }
+    func fillRowShape(_ shape: CGRect) { Instrument.fillRow(shape) }
 
     func drawSession(_ s: SidebarSessionItem, in r: CGRect) {
         drawSessionBackground(s, in: r)
@@ -131,12 +129,7 @@ extension SidebarRenderer {
     }
 
     /// 1,5 pt Umriss innen an der Fläche.
-    func drawFocusOutline(_ shape: CGRect) {
-        let path = NSBezierPath(roundedRect: shape.insetBy(dx: 0.75, dy: 0.75), xRadius: 5.25, yRadius: 5.25)
-        path.lineWidth = 1.5
-        Theme.fg.setStroke()
-        path.stroke()
-    }
+    func drawFocusOutline(_ shape: CGRect) { Instrument.outline(shape) }
 
     /// Fläche einer Session. Mit Tastaturring rückt sie oben und unten 2 pt ein: in der Zeile ist darüber nur 1 pt
     /// frei, so liegen Ring, Luft und Umriss ringsum gleich breit und der Ring bleibt in der Zeile.
@@ -148,13 +141,7 @@ extension SidebarRenderer {
     func keyFocusRing(_ row: CGRect) -> CGRect { rowShape(row).insetBy(dx: -2.5, dy: -0.5) }
 
     /// 2 pt Ring in der Akzentfarbe.
-    func drawKeyFocusRing(_ outer: CGRect) {
-        let ring = NSBezierPath(roundedRect: outer, xRadius: 8, yRadius: 8)
-        ring.append(NSBezierPath(roundedRect: outer.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6))
-        ring.windingRule = .evenOdd
-        Theme.accent.setFill()
-        ring.fill()
-    }
+    func drawKeyFocusRing(_ outer: CGRect) { Instrument.keyRing(outer) }
 
     /// Punkt, Titel und rechtsbündige Laufzeit. Die Laufzeit sitzt immer an derselben Stelle, auch beim Hover:
     /// Aktionen schweben als Toolbar darüber.
