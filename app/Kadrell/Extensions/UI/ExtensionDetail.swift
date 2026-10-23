@@ -61,12 +61,17 @@ struct ExtensionDetail: View {
         }
     }
 
+    /// Abstand der Logzeilen oben und unten innerhalb des Feldes, zusätzlich zu dessen 3 pt.
+    static let logInset: CGFloat = 5
+
     private var log: some View {
         let lines = model.manager.log(ext.name)
         return ScrollView(.vertical) {
             Text(lines.isEmpty ? String(localized: "Noch keine Logzeilen.", bundle: Bundle.app) : lines.joined(separator: "\n"))
                 .font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                // Das Feld rückt nur 3 pt ein; im scrollenden Inhalt bekommt die erste und letzte Zeile Luft zum Rand.
+                .padding(.vertical, Self.logInset)
         }
         .defaultScrollAnchor(.bottom)
         .frame(height: 180 * Theme.scale)

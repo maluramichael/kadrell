@@ -465,6 +465,29 @@ final class ExtensionsViewTests: XCTestCase {
         }
     }
 
+    /// Der Log klebt nicht am Rand seines Feldes: die erste Zeile beginnt mindestens 8 pt unter dessen Oberkante (Feld
+    /// 3 pt plus eigener Abstand), wie die Schrift in den Eingabefeldern links 8 pt Luft hat.
+    func testLogTextHasRoomInsideWell() throws {
+        let model = try lookModel()
+        let t = ColorTheme.named("instrument-dark")
+        let saved = Theme.current
+        defer { Theme.current = saved }
+        Theme.current = t
+        // Lage und Bild aus demselben Hosting, sonst misst ein zweites Layout (Schalter) anders hoch.
+        let (host, views) = hostedSurfaces(ExtensionsView(model: model))
+        let well = try XCTUnwrap(views.filter { $0.part.isWell }.map { $0.convert($0.bounds, to: host) }.max { $0.height < $1.height }, "Log-Feld")
+        XCTAssertGreaterThan(well.height, 150, "das hohe Feld ist der Log")
+        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: rep)
+        let s = (rep: rep, size: host.bounds.size)
+        // Erste Zeile (in 0,5-pt-Schritten) unter dem Fugenrand, in der Schrift vom Feldton abweicht.
+        let ink = stride(from: well.minY + 3, to: well.minY + 30, by: 0.5).first { y in
+            stride(from: well.minX + 8, to: well.minX + 200, by: 0.5).contains { x in distance(pixel(s, at: CGPoint(x: x, y: y)), t.well) > 0.15 }
+        }
+        let top = try XCTUnwrap(ink, "Logtext gefunden") - well.minY
+        XCTAssertGreaterThanOrEqual(top, 8, "Logtext beginnt \(top) pt unter dem Feldrand")
+    }
+
     /// Der Grund einer kaputten Extension steht in der Fehler-Textfarbe, nicht in der Füllfarbe.
     func testFailureTextUsesErrorTextColor() throws {
         let model = try lookModel()
