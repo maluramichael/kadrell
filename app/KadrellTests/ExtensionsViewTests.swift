@@ -470,11 +470,7 @@ final class ExtensionsViewTests: XCTestCase {
         let model = try lookModel()
         let t = errorTheme
         let s = snapshot(ExtensionsView(model: model).raisedPanel(), theme: t, scale: 1)
-        var text = 0
-        for y in 0..<s.rep.pixelsHigh {
-            for x in 0..<s.rep.pixelsWide where distance(pixel(s.rep, x: x, y: y), t.errorText) < 0.04 { text += 1 }
-        }
-        XCTAssertGreaterThan(text, 0, "Fehler-Textfarbe kommt vor")
+        XCTAssertGreaterThan(count(s.rep, near: [t.errorText], tolerance: 0.04)[0], 0, "Fehler-Textfarbe kommt vor")
     }
 
     /// Solarized Light trennt Fehler-Text- und Füllfarbe deutlich (Latte nur um einen Hauch, den das Farbmanagement verwischt).

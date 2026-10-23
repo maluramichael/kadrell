@@ -91,6 +91,29 @@ extension XCTestCase {
         return pixel(s.rep, x: Int(p.x * k), y: Int(p.y * k))
     }
 
+    /// Zählt je Farbe die Pixel des ganzen Bitmaps, die ihr nahekommen (größte Kanalabweichung in sRGB unter
+    /// `tolerance`, wie `distance`). Das Bitmap wird einmal als sRGB-Bytes gelesen statt jedes Pixel einzeln über
+    /// `colorAt` umzurechnen; bei Dialoggröße kostet das sonst Sekunden bis Minuten.
+    func count(_ rep: NSBitmapImageRep, near colors: [NSColor], tolerance: CGFloat) -> [Int] {
+        let w = rep.pixelsWide, h = rep.pixelsHigh
+        guard let image = rep.cgImage,
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { XCTFail("kein sRGB-Bitmap"); return colors.map { _ in 0 } }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let bytes = ctx.data!.assumingMemoryBound(to: UInt8.self)
+        return colors.map { c in
+            let s = c.usingColorSpace(.sRGB)!, r = s.redComponent, g = s.greenComponent, b = s.blueComponent
+            var n = 0
+            for i in stride(from: 0, to: w * h * 4, by: 4) {
+                let a = CGFloat(bytes[i + 3])
+                guard a > 0 else { continue }
+                // Wie `pixel`: Farbe ohne Alpha, also aus dem vormultiplizierten Wert zurückrechnen.
+                if max(abs(CGFloat(bytes[i]) / a - r), abs(CGFloat(bytes[i + 1]) / a - g), abs(CGFloat(bytes[i + 2]) / a - b)) < tolerance { n += 1 }
+            }
+            return n
+        }
+    }
+
     // MARK: Dialoge auf der erhabenen Fläche
 
     /// Im Bild kommt die Akzent-Textfarbe vor, die Akzent-Füllfarbe nicht.
@@ -98,14 +121,8 @@ extension XCTestCase {
         let t = ColorTheme.named("solarized-light")
         XCTAssertNotEqual(t.accentText.hexString, t.accent.hexString, "Schema trennt Text- und Füllfarbe", line: line)
         let s = snapshot(view.raisedPanel(), theme: t, scale: 1)
-        var text = 0, fill = 0
-        for y in 0..<s.rep.pixelsHigh {
-            for x in 0..<s.rep.pixelsWide {
-                let c = pixel(s.rep, x: x, y: y)
-                if distance(c, t.accentText) < 0.04 { text += 1 }
-                if distance(c, t.accent) < 0.04 { fill += 1 }
-            }
-        }
+        let counts = count(s.rep, near: [t.accentText, t.accent], tolerance: 0.04)
+        let text = counts[0], fill = counts[1]
         XCTAssertGreaterThan(text, 0, "Akzent-Textfarbe kommt vor", line: line)
         XCTAssertEqual(fill, 0, "Akzent-Füllfarbe nicht im Text", line: line)
     }

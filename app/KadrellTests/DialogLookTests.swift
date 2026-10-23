@@ -148,10 +148,7 @@ final class DialogLookTests: XCTestCase {
     /// kein weicher Schatten. Gilt für alle Dialoge, die rechte Sidebar und die Hover-Toolbar des Baums.
     func testDialogsUseInstrumentParts() throws {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Kadrell")
-        let fm = FileManager.default
-        var files = try ["UI", "Extensions/UI"].flatMap { dir in
-            try fm.contentsOfDirectory(at: sources.appendingPathComponent(dir), includingPropertiesForKeys: nil).filter { $0.pathExtension == "swift" }
-        }
+        var files = try ["UI", "Extensions/UI"].flatMap { try swiftFiles(under: sources.appendingPathComponent($0)) }
         files += ["Sidebar/SidebarView.swift", "App/SheetPresenter.swift"].map { sources.appendingPathComponent($0) }
         XCTAssertGreaterThan(files.count, 15, "Quellen gefunden")
         let forbidden = ["Theme.line", "lineColor", "Divider()", "Theme.panelColor", "NSShadow()"]
@@ -164,7 +161,21 @@ final class DialogLookTests: XCTestCase {
         XCTAssertEqual(offenders, [], "flacher Look in Dialogen")
     }
 
+    /// Der Wächter liest auch Unterordner: Dateien, die später in einen Unterordner von `UI` kommen, fallen darunter.
+    func testGuardReadsSubfolders() throws {
+        let nested = tmp.appendingPathComponent("a/b")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        for name in ["oben.swift", "a/b/tief.swift", "a/b/notiz.md"] { try Data().write(to: tmp.appendingPathComponent(name)) }
+        XCTAssertEqual(Set(try swiftFiles(under: tmp).map(\.lastPathComponent)), ["oben.swift", "tief.swift"])
+    }
+
     // MARK: Helfer
+
+    /// Alle Swift-Dateien unter `dir`, rekursiv.
+    private func swiftFiles(under dir: URL) throws -> [URL] {
+        let enumerator = try XCTUnwrap(FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil))
+        return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+    }
 
     private var group: Kadrell.Group {
         Kadrell.Group(id: "g", name: "Projekt", color: "#89b4fa", cwd: tmp.path, sessionIds: [], favorite: false)
