@@ -135,13 +135,31 @@ final class GroupStore {
                 groups.append(g)
             }
         }
-        // Ohne Sessions hat eine Gruppe keinen Zweck, sonst sammelt die Datei Ordner von längst beendeten
-        // Sessions. Das Herz ist das einzige, was eine leere Gruppe hält: ein eigener Name oder eine eigene
-        // Farbe reicht nicht, sonst bliebe jede einmal umbenannte Gruppe für immer stehen.
-        groups.removeAll { $0.sessionIds.isEmpty && !$0.isFavorite }
+        removeEmptyGroups()
         let changed = groups != before
         if changed { save() }
         return changed
+    }
+
+    /// Ohne Sessions hat eine Gruppe keinen Zweck, sonst sammelt die Datei Ordner von längst beendeten
+    /// Sessions. Das Herz ist das einzige, was eine leere Gruppe hält: ein eigener Name oder eine eigene
+    /// Farbe reicht nicht, sonst bliebe jede einmal umbenannte Gruppe für immer stehen.
+    private func removeEmptyGroups() { groups.removeAll { $0.sessionIds.isEmpty && !$0.isFavorite } }
+
+    /// Sessions in eine andere Gruppe verschieben (Baum, Kontextmenü, `kadrell move`): sie hängen hinten an und
+    /// behalten ihren Ordner, der Prozess läuft weiter. Eine dadurch leere Gruppe ohne Herz geht sofort weg, wie
+    /// beim nächsten Abgleich ohnehin. Gibt zurück, ob sich etwas geändert hat.
+    @discardableResult
+    func move(sessions ids: [String], to groupId: String) -> Bool {
+        guard let target = groups.firstIndex(where: { $0.id == groupId }) else { return false }
+        var seen = Set<String>()
+        let moving = ids.filter { !groups[target].sessionIds.contains($0) && seen.insert($0).inserted }
+        guard !moving.isEmpty else { return false }
+        for i in groups.indices { groups[i].sessionIds.removeAll { moving.contains($0) } }
+        groups[target].sessionIds.append(contentsOf: moving)
+        removeEmptyGroups()
+        save()
+        return true
     }
 
     func add(_ group: Group) { groups.append(group); save() }
