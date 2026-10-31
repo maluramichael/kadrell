@@ -8,6 +8,12 @@ final class MainWindowController: NSObject {
     let index: Int
     let window: NSWindow
     let bar = StatusBarView(frame: .zero)
+    /// Statusleiste unten, nur mit Einträgen von Extensions sichtbar; ohne fehlt sie ganz und belegt keinen Platz.
+    let footer = FooterBarView(frame: .zero)
+    /// Ausblenden wartet kurz: lädt eine Extension neu, kommen ihre Einträge gleich wieder, und die Terminals sollen
+    /// dafür nicht zweimal die Größe wechseln.
+    private var footerHideTask: Task<Void, Never>?
+    nonisolated(unsafe) static var footerHideDelay: TimeInterval = 1.5
     let wallpaper = WallpaperView(frame: .zero)
     let split = ThinSplitView(frame: .zero)
     /// Linke Spalte: Session-Baum oben, darunter optional ein Dock mit Extension-Panels (vertikal geteilt).
@@ -61,7 +67,6 @@ final class MainWindowController: NSObject {
         if index == 0 { window.setFrameAutosaveName(frameName) }
         let root = FlippedView(frame: window.contentRect(forFrameRect: window.frame))
         root.autoresizingMask = [.width, .height]
-        bar.frame = NSRect(x: 0, y: 0, width: root.bounds.width, height: Theme.barHeight)
         bar.autoresizingMask = [.width, .maxYMargin]
 
         sidebarScroll.documentView = sidebar
@@ -86,13 +91,15 @@ final class MainWindowController: NSObject {
         split.setHoldingPriority(.defaultLow + 1, forSubviewAt: 0)
         split.autosaveName = "KadrellSplit" + Self.suffix(index)
         split.delegate = self
-        split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.bounds.width, height: root.bounds.height - Theme.barHeight)
         split.autoresizingMask = [.width, .height]
-        wallpaper.frame = split.frame
         wallpaper.autoresizingMask = [.width, .height]
+        footer.autoresizingMask = [.width, .minYMargin]
+        footer.isHidden = true
         root.addSubview(wallpaper)
         root.addSubview(split)
         root.addSubview(bar)
+        root.addSubview(footer)
+        layoutChrome(in: root.bounds)
         root.addSubview(corner)
         window.contentView = root
         // Jede Lageänderung der Arbeitsfläche im Split (Ziehen, Baum oder rechte Sidebar ein/aus, Fenstergröße) zieht
@@ -125,6 +132,8 @@ final class MainWindowController: NSObject {
     func close() {
         if let cornerObserver { NotificationCenter.default.removeObserver(cornerObserver) }
         cornerObserver = nil
+        footerHideTask?.cancel()
+        footerHideTask = nil
         workspace.close()
     }
 
@@ -173,12 +182,10 @@ final class MainWindowController: NSObject {
         // `placeCorner` neu.
         split.needsDisplay = true
         leftColumn.needsDisplay = true
-        let root = window.contentView!.bounds
-        bar.frame = NSRect(x: 0, y: 0, width: root.width, height: Theme.barHeight)
-        split.frame = NSRect(x: 0, y: Theme.barHeight, width: root.width, height: root.height - Theme.barHeight)
-        wallpaper.frame = split.frame
+        layoutChrome(in: window.contentView!.bounds)
         wallpaper.needsDisplay = true
         bar.needsDisplay = true
+        footer.needsDisplay = true
         sidebar.needsDisplay = true
         extensionPanel.layoutRows()
         leftDockPanel.layoutRows()
@@ -198,6 +205,43 @@ final class MainWindowController: NSObject {
             split.cornerRect = cornerInSplit
             split.needsDisplay = true
         }
+    }
+
+    /// Leiste oben, Split dazwischen, Statusleiste unten nur, wenn sie sichtbar ist. Die Ecke zieht der Beobachter
+    /// der Arbeitsfläche nach.
+    private func layoutChrome(in root: CGRect) {
+        let top = Theme.barHeight, bottom = footer.isHidden ? 0 : FooterBarView.height
+        bar.frame = NSRect(x: 0, y: 0, width: root.width, height: top)
+        footer.frame = NSRect(x: 0, y: root.height - bottom, width: root.width, height: bottom)
+        split.frame = NSRect(x: 0, y: top, width: root.width, height: max(0, root.height - top - bottom))
+        wallpaper.frame = split.frame
+    }
+
+    // MARK: Statusleiste unten
+
+    /// Neue Einträge der Extensions. Mit Einträgen erscheint die Leiste sofort, leer verschwindet sie erst nach
+    /// `footerHideDelay`, falls bis dahin nichts nachkommt.
+    func updateFooter(_ entries: [FooterBarView.Entry]) {
+        footer.entries = entries
+        guard entries.isEmpty else {
+            footerHideTask?.cancel()
+            footerHideTask = nil
+            return setFooterVisible(true)
+        }
+        guard !footer.isHidden, footerHideTask == nil else { return }
+        let delay = Self.footerHideDelay
+        footerHideTask = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard let self, !Task.isCancelled else { return }
+            footerHideTask = nil
+            if footer.entries.isEmpty { setFooterVisible(false) }
+        }
+    }
+
+    private func setFooterVisible(_ visible: Bool) {
+        guard footer.isHidden == visible, let root = window.contentView else { return }
+        footer.isHidden = !visible
+        layoutChrome(in: root.bounds)
     }
 
     // MARK: Linkes Dock (Extension-Panels unter dem Baum)

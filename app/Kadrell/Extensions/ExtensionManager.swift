@@ -42,6 +42,8 @@ final class ExtensionManager {
     private var docks: [String: Dock] = [:]
     private var statuses: [String: (text: String, color: ThemeColor?, action: String?)] = [:]
     private var palettes: [String: [PaletteItem]] = [:]
+    /// Einträge der Statusleiste unten je Extension (`kadrell.footer.set`).
+    private var footers: [String: [FooterItem]] = [:]
     private var logs: [String: [String]] = [:]
     /// Änderungszeiten der Lua-Dateien und des Manifests je Extension, um nach einer Dateimeldung die geänderten zu finden.
     private var stamps: [String: [String: Date]] = [:]
@@ -49,6 +51,11 @@ final class ExtensionManager {
     private var appReady = false
     /// Letztes `session.focus`: ein später gestarteter Prozess bekommt es nach `app.ready`.
     private var focus: JSONValue?
+    /// Sprache, die laufende Extensions kennen (`hello`, danach `app.locale`).
+    private(set) var locale = ExtensionManager.appLocale
+
+    /// Die eingestellte Sprache als `de` oder `en`.
+    static var appLocale: String { Bundle.app.preferredLocalizations.first ?? "en" }
 
     init(environment: [String: String], control: @escaping ([String]) async -> ControlResponse,
          sessions: @escaping () -> [JSONValue], catalogDir: URL = ExtensionCatalog.dir) {
@@ -68,6 +75,11 @@ final class ExtensionManager {
 
     var statusItems: [(name: String, text: String, color: ThemeColor?, action: String?)] {
         found.compactMap { f in statuses[f.name].map { (f.name, $0.text, $0.color, $0.action) } }
+    }
+
+    /// Alle Einträge der Statusleiste unten, in Fundreihenfolge der Extensions und je Extension in ihrer Reihenfolge.
+    var footerItems: [(name: String, item: FooterItem)] {
+        found.flatMap { f in (footers[f.name] ?? []).map { (f.name, $0) } }
     }
 
     /// Alle von Extensions gelieferten ⌘N-Einträge, mit ihrer Extension.
@@ -105,6 +117,13 @@ final class ExtensionManager {
         if event == "app.ready" { appReady = true }
         if event == "session.focus" { focus = data }
         for (name, p) in procs where isLive(p, name) { p.send(.event(name: event, data: data)) }
+    }
+
+    /// Neue Sprache: als Event `app.locale` an alle laufenden, nur wenn sie sich wirklich geändert hat.
+    func setLocale(_ new: String) {
+        guard new != locale else { return }
+        locale = new
+        emit("app.locale", .object(["locale": .string(new)]))
     }
 
     func action(_ name: String, id: String) {
@@ -195,6 +214,7 @@ final class ExtensionManager {
             docks[name] = nil
             statuses[name] = nil
             palettes[name] = nil
+            footers[name] = nil
         }
     }
 
@@ -223,7 +243,7 @@ final class ExtensionManager {
         procs[name] = p
         do {
             try p.start(hello: .hello(api: ExtensionManifest.supportedAPI, name: name, dir: ext.dir.path, storageDir: storageDir(name),
-                                      config: config, locale: Bundle.app.preferredLocalizations.first ?? "en", sessions: sessions()))
+                                      config: config, locale: locale, sessions: sessions()))
         } catch {
             procs[name] = nil
             return feed(name, .exited(expected: false, reason: error.localizedDescription))
@@ -272,6 +292,7 @@ final class ExtensionManager {
         case .panel(let v, let dock): if isLive(p, name) { setPanel(v, dock: dock, name) }
         case .status(let v): if isLive(p, name) { setStatus(v, name) }
         case .palette(let v): if isLive(p, name) { palettes[name] = PanelValidation.palette(v); onChange() }
+        case .footer(let v): if isLive(p, name) { setFooter(v, name) }
         case .secret(let id, let op, let key, let value): answerSecret(p, name, id: id, op: op, key: key, value: value)
         }
     }
@@ -340,6 +361,14 @@ final class ExtensionManager {
             append(name, String(localized: "Knoten „\("status")“ ohne Feld „\("text")“ übersprungen", bundle: Bundle.app))
         }
         statuses[name] = item
+        onChange()
+    }
+
+    /// Wie beim Panel: Warnungen einmal je Text ins Log, die Liste ersetzt immer die ganze vorige.
+    private func setFooter(_ v: JSONValue?, _ name: String) {
+        let result = PanelValidation.footer(v)
+        for w in Set(result.warnings).sorted() { append(name, w) }
+        footers[name] = result.items.isEmpty ? nil : result.items
         onChange()
     }
 

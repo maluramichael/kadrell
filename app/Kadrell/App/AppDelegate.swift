@@ -304,6 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         workspace.onPickLanguage = { [weak self] language in
             Settings.language = language
+            self?.emitLocale()
             self?.buildMenu()
             self?.reloadViews()
         }
@@ -921,6 +922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Theme.scale = CGFloat(Settings.uiScale)
             if palette.isVisible { palette.dismiss() }
             palette = PaletteWindow()
+            if languageChanged { emitLocale() }
             paletteLanguage = Settings.language
         }
         for c in windows { c.applyAppearance(themeChanged: themeChanged) }
@@ -1102,6 +1104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 (String(localized: "Fokussierte Session verschieben nach: \(g.name)", bundle: Bundle.app), { [weak self] in self?.moveSessions([s.id], toGroup: g.id) })
             }
         }
+        commands += extensionCommands()
         src.commands = commands
         palette.source = src
         palette.onClose = { [weak self] in self?.workspace.refocusTerminal() }

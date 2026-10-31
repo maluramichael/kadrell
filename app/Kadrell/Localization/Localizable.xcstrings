@@ -8689,6 +8689,58 @@
         "de": { "stringUnit": { "state": "translated", "value": "Neue Sessions starten im neuen Ordner, laufende bleiben in ihrem." } },
         "en": { "stringUnit": { "state": "translated", "value": "New sessions start in the new folder, running ones stay in theirs." } }
       }
+    },
+    "Session oder Gruppe umsortieren, Baum und Kacheln gleich": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session oder Gruppe umsortieren, Baum und Kacheln gleich"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reorder a session or group, sidebar and tiles alike"
+          }
+        }
+      }
+    },
+    "Statusleiste: %@ · %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: %@ · %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: %1$@ · %2$@" } }
+      }
+    },
+    "Statusleiste der Extensions": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste der Extensions" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Extension status bar" } }
+      }
+    },
+    "Statusleiste: Eintrag ohne „id“ übersprungen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: Eintrag ohne „id“ übersprungen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: skipped entry without “id”" } }
+      }
+    },
+    "Statusleiste: Eintrag „%@“ ohne Inhalt übersprungen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: Eintrag „%@“ ohne Inhalt übersprungen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: skipped entry “%@” without content" } }
+      }
+    },
+    "Statusleiste: höchstens %lld Einträge, der Rest fehlt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: höchstens %lld Einträge, der Rest fehlt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: at most %lld entries, the rest is left out" } }
+      }
+    },
+    "Statusleiste: id „%@“ doppelt, übersprungen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: id „%@“ doppelt, übersprungen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: duplicate id “%@”, skipped" } }
+      }
     }
   },
   "version": "1.0"

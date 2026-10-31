@@ -23,7 +23,8 @@ end
 local ext = {}
 local handlers = {}
 
-kadrell = { json = json, config = {}, storage = {}, panel = {}, status = {}, palette = {}, secret = {}, locale = "en" }
+kadrell = { json = json, config = {}, storage = {}, panel = {}, status = {}, palette = {}, footer = {}, system = {}, secret = {},
+    locale = "en" }
 
 function kadrell.log(text) log("info", text) end
 
@@ -122,6 +123,22 @@ function kadrell.secret.delete(key)
     return request("secret", { t = "secret", op = "delete", key = tostring(key) })
 end
 
+-- Systemwerte, nur lesend, im Helfer selbst gemessen. Bei einem Fehler nil und der Grund.
+-- cpu(): { cores = { 0..1, … }, total = 0..1 }, Last seit dem letzten Aufruf (der erste misst 250 ms).
+-- disk(path): { total, free, used, fraction, name } in Bytes, für das Volume, auf dem path liegt (Default "/").
+local function systemResult(r)
+    if r.error then return nil, r.error end
+    return r
+end
+
+function kadrell.system.cpu()
+    return systemResult(request("system.cpu", { t = "system", op = "cpu" }))
+end
+
+function kadrell.system.disk(path)
+    return systemResult(request("system.disk", { t = "system", op = "disk", path = path and tostring(path) or nil }))
+end
+
 -- Timer: der Host meldet den Ablauf mit {"t":"timer","id"}, every plant sich nach jedem Lauf neu.
 local timers = {}
 local Handle = {}
@@ -178,6 +195,7 @@ local function flush()
     if latest.panel then send(latest.panel) end
     if latest.status then send(latest.status) end
     if latest.palette then send(latest.palette) end
+    if latest.footer then send(latest.footer) end
     latest = {}
 end
 
@@ -195,6 +213,12 @@ function kadrell.palette.clear() latest.palette = '{"t":"palette","items":null}'
 function kadrell.status.set(item) latest.status = json.encode({ t = "status", item = item }) end
 
 function kadrell.status.clear() latest.status = '{"t":"status","item":null}' end
+
+-- Statusleiste unten: ersetzt alle Einträge dieser Extension. items = { { id=, align=, label=, text=, color=, bars=,
+-- gauge=, action=, tip=, title= }, … }. Wie panel: nur der letzte Stand, einmal pro Dispatch.
+function kadrell.footer.set(items) latest.footer = json.encode({ t = "footer", items = items }) end
+
+function kadrell.footer.clear() latest.footer = '{"t":"footer","items":null}' end
 
 local messages = {}
 
@@ -216,6 +240,8 @@ function messages.ping(m)
 end
 
 function messages.event(m)
+    -- Sprachwechsel in Kadrell: kadrell.locale gilt schon, bevor die Handler laufen.
+    if m.name == "app.locale" and type(m.data) == "table" and m.data.locale then kadrell.locale = m.data.locale end
     for _, fn in ipairs(handlers[m.name] or {}) do spawn(fn, m.data) end
 end
 
