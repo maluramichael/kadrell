@@ -37,7 +37,7 @@ extension View {
     /// Rahmen der schmalen Eingabe-Dialoge (⌘N, Gruppe bearbeiten, Umbenennen). Ohne eigenen Grund: die erhabene
     /// Fläche legt die gemeinsame Hülle der Overlays an.
     func dialogFrame() -> some View {
-        font(Theme.ui(12)).foregroundStyle(Theme.fgColor).frame(width: 640 * Theme.scale)
+        font(Theme.ui(12)).foregroundStyle(Theme.fgColor).overlayWidth(640)
     }
 }
 

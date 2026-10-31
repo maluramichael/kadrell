@@ -32,7 +32,7 @@ struct ExtensionsView: View {
             Text("↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .frame(width: 760 * Theme.scale, alignment: .leading)
+        .overlayWidth(760, alignment: .leading)
         .task { await model.load() }
     }
 
