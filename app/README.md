@@ -45,7 +45,7 @@ in einer Liste mit dem Projektnamen vor dem Titel; „SORT“ (⌥O) schaltet au
 wartet vor Fehler vor arbeitet vor fertig, bei gleichem Stand die neuere Session zuerst. Die beiden Handreihenfolgen
 (gruppiert in `groups.json`, flach in den Einstellungen des Profils) sind getrennt: Umschalten sortiert nichts um.
 ⌘B blendet den Baum aus, ⌘N neue Session (Suchfeld über Gruppen, benutzte Ordner und Git-Repos unter dem Projektordner; `~/d/p/kad` kürzt Pfade ab, ⌘O Finder, Ordner aus dem Finder in Dialog oder Baum ziehen), ⌘⏎ neue Session im Ordner der fokussierten, ⌘T Terminal ohne Claude im selben Ordner, ⌘P Suche
-(`>` Kommandos, `/` Text in allen laufenden Terminals, direkt per ⌘⇧F), ⌘F Suchleiste im fokussierten Terminal (⌘G / ⌘⇧G weiter), ⌘W beendet die fokussierte Session. Der rote Knopf versteckt nur das Fenster, Kadrell und alle Sessions laufen weiter; das Menüleisten-Icon (Kurzstatus wartend/arbeitend) oder ein Klick aufs Dock-Icon holen es zurück. ⌘⇧T öffnet ein weiteres Fenster mit denselben Sessions, aber eigener Auswahl, eigenem Layout und Fokus (z. B. für einen zweiten Monitor); ein Terminal hängt nur in einem Fenster, die Kachel im anderen zeigt „IN ANDEREM FENSTER“ und holt es per Klick oder Fokus. Zusatzfenster schließen (⌘⇧W, roter Knopf) beendet keine Session, offene Fenster kommen beim Neustart wieder. F1 zeigt die Hilfe, beim ersten Start automatisch. F3 zeigt die Statistik des Profils (geschickte Nachrichten, geöffnete Sessions und Terminals, Kachelwechsel, Rekord gleichzeitig offener Sessions); gezählt wird, solange Kadrell läuft, die Zahlen liegen in den Einstellungen des Profils.
+(`>` Kommandos, `/` Text in allen laufenden Terminals, direkt per ⌘⇧F, `#` alle bisherigen Claude-Sessions, direkt per ⌘⇧H), ⌘F Suchleiste im fokussierten Terminal (⌘G / ⌘⇧G weiter), ⌘W beendet die fokussierte Session. Der rote Knopf versteckt nur das Fenster, Kadrell und alle Sessions laufen weiter; das Menüleisten-Icon (Kurzstatus wartend/arbeitend) oder ein Klick aufs Dock-Icon holen es zurück. ⌘⇧T öffnet ein weiteres Fenster mit denselben Sessions, aber eigener Auswahl, eigenem Layout und Fokus (z. B. für einen zweiten Monitor); ein Terminal hängt nur in einem Fenster, die Kachel im anderen zeigt „IN ANDEREM FENSTER“ und holt es per Klick oder Fokus. Zusatzfenster schließen (⌘⇧W, roter Knopf) beendet keine Session, offene Fenster kommen beim Neustart wieder. F1 zeigt die Hilfe, beim ersten Start automatisch. F3 zeigt die Statistik des Profils (geschickte Nachrichten, geöffnete Sessions und Terminals, Kachelwechsel, Rekord gleichzeitig offener Sessions); gezählt wird, solange Kadrell läuft, die Zahlen liegen in den Einstellungen des Profils.
 
 Belegbare Kürzel (⌘, Einstellungen, Defaults wie in der tmux-Config): ⌥-Pfeile Fokus, ⌥⇧-Pfeile Kachel
 tauschen, ⌥1…⌥9 Kachel direkt, ⌥N/⌥P nächste/vorige, ⌥J/⌥K Vorschau: blättert durch den Baum und zeigt die Session allein, ohne die Auswahl anzufassen (⏎ übernimmt, Esc zurück), ⌥⇥ zuletzt fokussierte, ⌥I Sync (Tippen und ⌘V gehen an alle offenen Kacheln, rotes Badge „SYNC“ in der Leiste, auch per Klick), ⌥Z Zoom (Fokus-Kachel allein,
@@ -55,6 +55,14 @@ F2 oder Stift an Kachel/Baum-Zeile benennt die Session um (eigener Name geht imm
 (Esc selbst geht an Claude Code). ⌘1 gibt dem Baum die Tastatur, ↑↓ zeigt dann die nächste Session rechts, ohne
 dass Claude die Tasten bekommt; ⇧F10 öffnet dort das Kontextmenü der Session (← klappt die Gruppe zu, dann das der
 Gruppe), ⌃⏎ geht samt Tastatur an die Fokus-Session, weil Claude Code es selbst verlangt; ⌘2 gibt die Tastatur an die fokussierte Kachel zurück (ohne offene Kachel: erste Session).
+
+Verlaufssuche (⌘⇧H, belegbar, oder `#` in ⌘P): durchsucht Titel und eigene Prompts aller Transcripts unter
+`<configDir>/projects/*/*.jsonl`, keine Antworten, Tool-Ergebnisse, Task-Meldungen oder Nachrichten anderer Sessions.
+Jedes Wort muss vorkommen (Groß-/Kleinschreibung und Akzente egal), Treffer im Titel zuerst, sonst die neueste Session;
+ohne solchen Treffer unscharf über Titel und Projekt. ⏎ springt zur Session, wenn sie in Kadrell läuft, sonst
+`claude --resume` im Ordner ihrer ersten Eingabe (dort liegt das Transcript). Der Index (`Services/SessionHistory.swift`)
+liegt unter `~/Library/Caches/de.malura.kadrell/`, beim Start und bei jedem Öffnen werden nur neue und gewachsene
+Transcripts ab der zuletzt gelesenen Stelle nachgelesen; der allererste Lauf liest alles einmal.
 
 Schnellstart (⌘⇧I, belegbar): Idee eintippen, z. B. „In Kadrell habe ich die Idee, dass …“. Kadrell sucht das
 Projekt in Gruppen, Sessions, benutzten Ordnern und Git-Repos (dieselbe Historie wie ⌘N), zeigt es vorausgewählt und

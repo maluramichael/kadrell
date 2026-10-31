@@ -1,7 +1,7 @@
 import AppKit
 
 /// ⌘P Omni-Leiste: Fuzzy-Suche über Sessions, Gruppen, Pfade, letzte Zeilen; `>` schaltet in den Kommandomodus,
-/// `/` durchsucht den Verlauf aller laufenden Terminals (⌘⇧F).
+/// `/` durchsucht den Verlauf aller laufenden Terminals (⌘⇧F), `#` alle bisherigen Claude-Sessions (⌘⇧H).
 @MainActor
 final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     struct Item {
@@ -31,6 +31,13 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         var hosts: () -> [String] = { [] }
         var onConnect: (String, String?) -> Void = { _, _ in }
         var remoteSessions: (String, @escaping ([String]?) -> Void) -> Void = { _, done in done(nil) }
+        /// `#`: alle bisherigen Claude-Sessions nach Titel und eigenen Prompts, auch beendete. nil = erster Aufbau läuft.
+        var history: () -> HistoryIndex? = { nil }
+        /// Neue und gewachsene Transcripts nachlesen; der Rückruf meldet, ob sich der Index geändert hat.
+        var refreshHistory: (@escaping @MainActor (Bool) -> Void) -> Void = { _ in }
+        /// Laufende Claude-Sessions in Kadrell nach ihrer sessionId: Statuspunkt im Treffer, ⏎ springt hin statt neu zu starten.
+        var liveBySessionId: [String: Session] = [:]
+        var onResumeHistory: (HistorySession) -> Void = { _ in }
     }
 
     var source = Source()
@@ -48,6 +55,8 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
     /// `source.buffers()`/`source.hosts()`: teuer, deshalb erst bei tatsächlichem Bedarf und dann nur einmal pro Öffnen geholt.
     private var buffersCache: [(Session, group: Group?, lines: [String])]?
     private var hostsCache: [String]?
+    /// Der Index wird pro Öffnen einmal nachgelesen, sobald `#` zum ersten Mal getippt ist.
+    private var historyRefreshed = false
     private var searchTask: Task<Void, Never>?
 
     init() {
@@ -71,7 +80,7 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         field.focusRingType = .none
         field.font = Theme.font(15 * s)
         field.textColor = Theme.fg
-        field.placeholderAttributedString = NSAttributedString(string: String(localized: "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, @ Remote )", bundle: Bundle.app), attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
+        field.placeholderAttributedString = NSAttributedString(string: String(localized: "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, # alle Claude-Sessions, @ Remote )", bundle: Bundle.app), attributes: [.font: Theme.font(15 * s), .foregroundColor: Theme.muted])
         field.delegate = self
         field.frame = NSRect(x: 16 * s, y: H - 44 * s, width: W - 32 * s, height: 24 * s)
         field.autoresizingMask = [.width, .minYMargin]
@@ -138,6 +147,7 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         remoteCache = [:]
         buffersCache = nil
         hostsCache = nil
+        historyRefreshed = false
         attach(to: parent)
         makeFirstResponder(field)
         field.currentEditor()?.moveToEndOfLine(nil)
@@ -172,6 +182,9 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
             onHighlight?(nil)
         } else if q.hasPrefix("/") {
             items = terminalMatches(String(q.dropFirst()))
+            onHighlight?(Set(items.compactMap(\.sessionKey)))
+        } else if q.hasPrefix("#") {
+            items = historyItems(q.dropFirst().trimmingCharacters(in: .whitespaces))
             onHighlight?(Set(items.compactMap(\.sessionKey)))
         } else if q.hasPrefix("@") {
             items = remoteItems(String(q.dropFirst()))
@@ -277,6 +290,37 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
         return list
     }
     private var remoteError: [String: Bool] = [:]
+
+    /// Ohne Suchbegriff die zuletzt benutzten Sessions, sonst die Treffer aus `HistoryIndex.search`.
+    private func historyItems(_ q: String) -> [Item] {
+        if !historyRefreshed {
+            historyRefreshed = true
+            source.refreshHistory { [weak self] changed in
+                guard changed, let self, self.isVisible, self.field.stringValue.hasPrefix("#") else { return }
+                self.refreshList()
+            }
+        }
+        guard let index = source.history() else {
+            return [Item(label: String(localized: "Verlauf wird eingelesen …", bundle: Bundle.app),
+                         sub: String(localized: "beim ersten Mal einmalig alle Transcripts, danach nur neue", bundle: Bundle.app),
+                         group: nil, status: nil, sessionKey: nil, run: {})]
+        }
+        return index.search(q).map(historyItem)
+    }
+
+    private func historyItem(_ hit: HistoryHit) -> Item {
+        let s = hit.session, live = source.liveBySessionId[s.sessionId]
+        let when = Self.relativeDate.localizedString(for: Date(timeIntervalSince1970: s.lastActive), relativeTo: Date())
+        return Item(label: s.title, sub: hit.snippet ?? Theme.shortPath(s.cwd), group: "\(s.project) · \(when)",
+                    status: live?.status, sessionKey: live?.id, run: { [source] in source.onResumeHistory(s) })
+    }
+
+    private static var relativeDate: RelativeDateTimeFormatter {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        f.locale = Localization.locale
+        return f
+    }
 
     /// Treffer zeilenweise, ohne Groß-/Kleinschreibung wie die Suchleiste im Terminal. Die Nummer des Treffers
     /// in der Session springt dort per `findNext` an dieselbe Stelle.

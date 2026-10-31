@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.76.0 (2026-10-31)
+
+- Feature: Verlaufssuche (⌘⇧H oder `#` in der Suche): findet jede frühere Claude-Session über ihren Titel und deine eigenen Prompts, auch längst beendete. ⏎ setzt sie in ihrem Ordner fort oder springt zu ihr, wenn sie schon läuft.
+
 ## 1.75.0 (2026-10-31)
 
 - Feature: Pi-Sessions: Im Schnellstart (⌘⇧I) wechselt Tab zwischen Claude und Pi mit einem lokalen Modell. Das Modell wählst du unter Einstellungen › Modelle für Funktionen › Pi-Sessions, die Wahl bleibt für den nächsten Schnellstart.

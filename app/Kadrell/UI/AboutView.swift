@@ -13,7 +13,7 @@ struct AboutView: View {
             (String(localized: "Navigation", bundle: Bundle.app), rows([.focusLeft, .focusRight, .focusUp, .focusDown, .nextSession, .prevSession, .lastSession, .previewNext, .previewPrev, .nextWaiting]
                                 + HotkeyAction.allCases.filter { $0.tileIndex != nil } + [.focusSidebar, .focusWorkspace, .focusRightSidebar])
                 + [("⇧F10", String(localized: "Im Baum: Menü der Session, bei zugeklappter Gruppe das der Gruppe · ⌃⏎ geht an die Session", bundle: Bundle.app)),
-                   ("⌘P", String(localized: "Suche, mit > Kommandos", bundle: Bundle.app)), ("⌘F", String(localized: "Im Terminal suchen, ⌘G weiter", bundle: Bundle.app)), ("⌘⇧F", String(localized: "In allen Terminals suchen", bundle: Bundle.app))]),
+                   ("⌘P", String(localized: "Suche, mit > Kommandos", bundle: Bundle.app)), ("⌘F", String(localized: "Im Terminal suchen, ⌘G weiter", bundle: Bundle.app)), ("⌘⇧F", String(localized: "In allen Terminals suchen", bundle: Bundle.app))] + rows([.searchHistory])),
             (String(localized: "Kacheln verwalten", bundle: Bundle.app), rows([.swapLeft, .swapRight, .swapUp, .swapDown, .resizeLeft, .resizeRight, .resizeUp, .resizeDown, .splitRight, .splitDown, .zoom, .nextLayout, .syncInput, .closeFocused]) + [
                 (String(localized: "Trennlinie ziehen", bundle: Bundle.app), String(localized: "Größen des Layouts ändern, Doppelklick verteilt gleich · Terminals füllen die Felder der Reihe nach", bundle: Bundle.app)),
                 (String(localized: "‹ SP › in der Leiste", bundle: Bundle.app), String(localized: "Spalten im Grid, unter 1 wieder automatisch", bundle: Bundle.app)),

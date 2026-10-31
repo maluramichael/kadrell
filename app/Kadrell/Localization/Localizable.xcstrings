@@ -1,6 +1,60 @@
 {
   "sourceLanguage": "de",
   "strings": {
+    "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, # alle Claude-Sessions, @ Remote )": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, # alle Claude-Sessions, @ Remote )" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search session, group, path…  ( > commands, / in all terminals, # all Claude sessions, @ remote )" } }
+      }
+    },
+    "Verlauf wird eingelesen …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Verlauf wird eingelesen …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reading history…" } }
+      }
+    },
+    "beim ersten Mal einmalig alle Transcripts, danach nur neue": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "beim ersten Mal einmalig alle Transcripts, danach nur neue" } },
+        "en": { "stringUnit": { "state": "translated", "value": "all transcripts once the first time, only new ones after that" } }
+      }
+    },
+    "Alle Claude-Sessions durchsuchen, auch beendete": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Alle Claude-Sessions durchsuchen, auch beendete" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search all Claude sessions, including ended ones" } }
+      }
+    },
+    "Sucht in Titeln und eigenen Prompts aller bisherigen Claude-Sessions · ⏎ setzt sie im alten Ordner fort oder springt zur laufenden": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Sucht in Titeln und eigenen Prompts aller bisherigen Claude-Sessions · ⏎ setzt sie im alten Ordner fort oder springt zur laufenden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Searches titles and your own prompts of all past Claude sessions · ⏎ resumes one in its folder or jumps to it if it is running" } }
+      }
+    },
+    "Session lässt sich nicht fortsetzen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Session lässt sich nicht fortsetzen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Session cannot be resumed" } }
+      }
+    },
+    "Den Ordner %@ gibt es nicht mehr.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Den Ordner %@ gibt es nicht mehr." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The folder %@ no longer exists." } }
+      }
+    },
+    "„%@“ läuft noch außerhalb dieses Kadrell (pid %lld). Erst dort beenden.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "„%@“ läuft noch außerhalb dieses Kadrell (pid %lld). Erst dort beenden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "“%@” is still running outside this Kadrell (pid %lld). Quit it there first." } }
+      }
+    },
+    "Das Transcript von „%@“ ist nicht mehr da.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Das Transcript von „%@“ ist nicht mehr da." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The transcript of “%@” is gone." } }
+      }
+    },
     "Pi-Sessions": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "Pi-Sessions" } },
@@ -5353,22 +5407,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop session “%@”?"
-          }
-        }
-      }
-    },
-    "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, @ Remote )": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, @ Remote )"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search session, group, path…  ( > commands, / in all terminals, @ remote )"
           }
         }
       }

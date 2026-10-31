@@ -94,6 +94,7 @@ Defaults follow tmux and are rebindable in settings (⌘,).
 | `⌘P` | Command and search palette |
 | `⌘F` / `⌘G` / `⌘⇧G` | Find in terminal, next, previous |
 | `⌘⇧F` | Find across all running terminals |
+| `⌘⇧H` | Search all past Claude sessions by title and your own prompts, ⏎ resumes in its folder |
 | `⌘B` | Toggle the tree |
 | `⌘L` | Cycle layout |
 | `⌘Esc` | Close the focused tile |

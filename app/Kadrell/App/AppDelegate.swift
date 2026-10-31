@@ -526,6 +526,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await registry.pollNow()
             extensions?.emit("app.ready", .object([:]))
+            // Verlaufssuche (`#` in ⌘P) vorwärmen: Cache laden und neue Transcripts nachlesen, damit die erste Suche sofort trifft.
+            SessionHistory.shared.refresh(configDir: registry.cli.configDir)
             await offerAdopt()
             registry.start()
         }
@@ -970,7 +972,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kürzel der Arbeitsfläche erledigt `WorkspaceView.perform`, hier bleiben die mit Baum, Vorschau oder Dialog.
     private func perform(_ action: HotkeyAction) {
         if action != .previewNext, action != .previewPrev { endPreview(commit: false) }
-        guard !workspace.perform(action), !performRightSidebar(action, in: current) else { return }
+        guard !workspace.perform(action), !performRightSidebar(action, in: current), !performOpen(action) else { return }
         switch action {
         case .previewNext: stepPreview(1)
         case .previewPrev: stepPreview(-1)
@@ -981,10 +983,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
         case .cycleSort: cycleSort()
         case .toggleGrouping: toggleGrouping()
-        case .quickStart: openQuickStart()
-        case .restart: restart()
         default: break
         }
+    }
+
+    /// Kürzel, die einen Dialog oder die Palette öffnen oder Kadrell neu starten.
+    private func performOpen(_ action: HotkeyAction) -> Bool {
+        switch action {
+        case .quickStart: openQuickStart()
+        case .searchHistory: togglePalette(prefix: "#")
+        case .restart: restart()
+        default: return false
+        }
+        return true
     }
 
     private func cycleSort() { Settings.sidebarSort = Settings.sidebarSort.next; syncSidebar() }
@@ -1079,6 +1090,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { done(await SSHConfig.tmuxSessions(host: host, environment: env)) }
         }
         src.onFocusSession = { [weak self] key in self?.workspace.select([key], add: false) }
+        wireHistory(&src)
         src.onFitGroup = { [weak self] gid in
             guard let self, let g = store.group(id: gid) else { return }
             workspace.select(g.sessionIds, add: false)
@@ -1090,6 +1102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (String(localized: "Zoom ein/aus (fokussierte)", bundle: Bundle.app), { [weak self] in self?.workspace.toggleZen() }),
             (String(localized: "Neue Session", bundle: Bundle.app), { [weak self] in self?.openNewSession(groupId: nil) }),
             (String(localized: "Schnellstart: Idee rein, Session raus", bundle: Bundle.app), { [weak self] in self?.openQuickStart() }),
+            (String(localized: "Alle Claude-Sessions durchsuchen, auch beendete", bundle: Bundle.app), { [weak self] in self?.togglePalette(prefix: "#") }),
             (String(localized: "Neues Terminal ohne Claude", bundle: Bundle.app), { [weak self] in self?.menuNewShell() }),
             (String(localized: "Remote verbinden (ssh → tmux)", bundle: Bundle.app), { [weak self] in self?.menuRemote() }),
             (String(localized: "Session stoppen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),

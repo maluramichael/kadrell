@@ -20,7 +20,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case zoom, nextLayout, closeFocused, openEditor, renameSession, syncInput
     case focusSidebar, focusWorkspace, cycleSort, toggleGrouping
     case focusRightSidebar, toggleRightSidebar
-    case quickStart
+    case quickStart, searchHistory
     case restart
 
     /// 0-basiert für focus1…focus9.
@@ -61,6 +61,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .toggleGrouping: return String(localized: "Baum nach Projekt gruppieren", bundle: Bundle.app)
         case .syncInput: return String(localized: "Sync: Eingabe an alle Kacheln", bundle: Bundle.app)
         case .quickStart: return String(localized: "Schnellstart: Idee rein, Session raus", bundle: Bundle.app)
+        case .searchHistory: return String(localized: "Alle Claude-Sessions durchsuchen, auch beendete", bundle: Bundle.app)
         case .restart: return String(localized: "Kadrell neu starten", bundle: Bundle.app)
         default: return String(localized: "Fokus-Kachel schließen", bundle: Bundle.app)
         }
@@ -83,6 +84,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .syncInput: return String(localized: "Sync: Tippen und ⌘V gehen an alle offenen Kacheln gleichzeitig · Badge „SYNC“", bundle: Bundle.app)
         case .toggleGrouping: return String(localized: "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge", bundle: Bundle.app)
         case .quickStart: return String(localized: "Idee tippen, Kadrell erkennt das Projekt und startet dort eine Session mit der Idee als erstem Prompt", bundle: Bundle.app)
+        case .searchHistory: return String(localized: "Sucht in Titeln und eigenen Prompts aller bisherigen Claude-Sessions · ⏎ setzt sie im alten Ordner fort oder springt zur laufenden", bundle: Bundle.app)
         case .focusRightSidebar: return String(localized: "Rechte Sidebar der Extensions: ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ alle Aktionen, Esc zurück", bundle: Bundle.app)
         default: return title
         }
@@ -123,6 +125,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .toggleGrouping: return Hotkey(.option, "g")
         case .syncInput: return Hotkey(.option, "i")
         case .quickStart: return Hotkey([.command, .shift], "i")   // ⌘⇧N ist schon „Remote verbinden“
+        case .searchHistory: return Hotkey([.command, .shift], "h")
         case .restart: return Hotkey([], "")   // Default unbelegt, in den Einstellungen belegbar
         default: return Hotkey(.option, "Esc")
         }

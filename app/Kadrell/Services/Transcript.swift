@@ -70,8 +70,12 @@ enum Transcript {
     /// aber nicht, ebenso wenig Meta-Zeilen, Sidechains (Subagenten) und die Ausgabe von Slash-Commands
     /// (`<command-name>` …). Eine angeschnittene Zeile ist kein JSON und fällt damit von selbst raus.
     static func userText(line: Data) -> String? {
-        guard let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-              obj["type"] as? String == "user", obj["isMeta"] as? Bool != true, obj["isSidechain"] as? Bool != true,
+        (try? JSONSerialization.jsonObject(with: line) as? [String: Any]).flatMap { userText(object: $0) }
+    }
+
+    /// Wie `userText(line:)`, für eine schon geparste Zeile (`SessionHistory` braucht daraus auch `cwd`).
+    static func userText(object obj: [String: Any]) -> String? {
+        guard obj["type"] as? String == "user", obj["isMeta"] as? Bool != true, obj["isSidechain"] as? Bool != true,
               let content = (obj["message"] as? [String: Any])?["content"] else { return nil }
         let text = (content as? String)
             ?? (content as? [[String: Any]])?.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: " ")

@@ -143,16 +143,27 @@ extension AppDelegate {
         return key
     }
 
-    /// Dieselbe Konversation in zwei Prozessen schreibt durcheinander ins Transcript: nur übernehmen, was nirgends mehr läuft.
     private func checkResumable(_ sessionId: String) throws {
-        guard !registry.sessions.contains(where: { $0.sessionId == sessionId || $0.id == sessionId }) else { throw ControlError("\(sessionId) ist schon in Kadrell") }
-        guard Transcript.path(sessionId: sessionId, configDir: registry.cli.configDir) != nil else { throw ControlError("kein Transcript für \(sessionId)") }
+        switch resumeBlocker(sessionId) {
+        case .inKadrell: throw ControlError("\(sessionId) ist schon in Kadrell")
+        case .noTranscript: throw ControlError("kein Transcript für \(sessionId)")
+        case .running(let pid): throw ControlError("\(sessionId) läuft noch (pid \(pid)), erst dort beenden")
+        case nil: return
+        }
+    }
+
+    /// Dieselbe Konversation in zwei Prozessen schreibt durcheinander ins Transcript: nur übernehmen, was nirgends mehr läuft.
+    /// Gemeinsam für `kadrell new --resume` und die Verlaufssuche.
+    func resumeBlocker(_ sessionId: String) -> ResumeBlocker? {
+        guard !registry.sessions.contains(where: { $0.sessionId == sessionId || $0.id == sessionId }) else { return .inKadrell }
+        guard Transcript.path(sessionId: sessionId, configDir: registry.cli.configDir) != nil else { return .noTranscript }
         let dir = registry.cli.configDir + "/sessions"
         let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
         let pids = files.compactMap { Int($0.replacingOccurrences(of: ".json", with: "")) }.filter { kill(pid_t($0), 0) == 0 }
         if let live = Agent.local(pids: pids, configDir: registry.cli.configDir).first(where: { $0.sessionId == sessionId }) {
-            throw ControlError("\(sessionId) läuft noch (pid \(live.pid ?? 0)), erst dort beenden")
+            return .running(pid: live.pid ?? 0)
         }
+        return nil
     }
 
     private func controlSetGroup(target: String?, name: String?, color: String?, favorite: Bool?, _ req: ControlRequest) throws {
