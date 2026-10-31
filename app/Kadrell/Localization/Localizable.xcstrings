@@ -1,6 +1,48 @@
 {
   "sourceLanguage": "de",
   "strings": {
+    "Pi-Sessions": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Pi-Sessions" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Pi sessions" } }
+      }
+    },
+    "Modell für Pi statt Claude, im Schnellstart mit Tab umschalten": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Modell für Pi statt Claude, im Schnellstart mit Tab umschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "model for Pi instead of Claude, switch with Tab in Quick Start" } }
+      }
+    },
+    "kein Modell (nur Claude)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "kein Modell (nur Claude)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "no model (Claude only)" } }
+      }
+    },
+    "startet mit Pi · %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "startet mit Pi · %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "starts with Pi · %@" } }
+      }
+    },
+    "startet mit Claude": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "startet mit Claude" } },
+        "en": { "stringUnit": { "state": "translated", "value": "starts with Claude" } }
+      }
+    },
+    "Tab wechselt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Tab wechselt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Tab switches" } }
+      }
+    },
+    "Pi oder das Modell der Session fehlt (Einstellungen › Modelle für Funktionen)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Pi oder das Modell der Session fehlt (Einstellungen › Modelle für Funktionen)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Pi or the session's model is missing (Settings › Models for features)" } }
+      }
+    },
     "Kadrell neu starten": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "Kadrell neu starten" } },

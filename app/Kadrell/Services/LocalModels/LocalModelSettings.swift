@@ -4,24 +4,35 @@ import Foundation
 /// eigenes Modell. Neue Funktionen: Fall ergänzen, Titel und Beschreibung dazu, fertig; Einstellungen und
 /// `LocalModels.complete(for:…)` sind generisch.
 enum LocalFeature: String, CaseIterable, Sendable {
-    case quickStart
+    case quickStart, piSession
 
     var title: String {
         switch self {
         case .quickStart: String(localized: "Schnellstart: Idee rein, Session raus", bundle: Bundle.app)
+        case .piSession: String(localized: "Pi-Sessions", bundle: Bundle.app)
         }
     }
 
     var summary: String {
         switch self {
         case .quickStart: String(localized: "ordnet die Idee einem Projekt zu, wenn der Name im Text nicht eindeutig ist", bundle: Bundle.app)
+        case .piSession: String(localized: "Modell für Pi statt Claude, im Schnellstart mit Tab umschalten", bundle: Bundle.app)
         }
     }
 
-    /// Wie lange die Funktion auf das Modell wartet, bevor sie ohne Modell weitermacht.
+    /// Eintrag „kein Modell“ in der Auswahl: was die Funktion dann tut.
+    var noModel: String {
+        switch self {
+        case .quickStart: String(localized: "kein Modell (nur Namenssuche)", bundle: Bundle.app)
+        case .piSession: String(localized: "kein Modell (nur Claude)", bundle: Bundle.app)
+        }
+    }
+
+    /// Wie lange die Funktion auf das Modell wartet, bevor sie ohne Modell weitermacht. Pi-Sessions fragen nie selbst.
     var timeout: TimeInterval {
         switch self {
         case .quickStart: 12
+        case .piSession: 0
         }
     }
 }
@@ -54,5 +65,9 @@ enum LocalModelSettings {
     /// Schnellstart: das Modell darf den Verweis auf das Projekt aus dem ersten Prompt nehmen, wenn es sicher ist.
     static var quickStartStripReference: Bool {
         get { value("local.quickStart.stripReference", true) } set { store("local.quickStart.stripReference", newValue) }
+    }
+    /// Schnellstart: zuletzt mit Tab gewählter Agent, true = Pi mit lokalem Modell statt Claude.
+    static var quickStartUsePi: Bool {
+        get { value("local.quickStart.usePi", false) } set { store("local.quickStart.usePi", newValue) }
     }
 }

@@ -244,8 +244,8 @@ final class SessionRegistry {
     }
 
     private func fillFirstPrompts(_ merged: inout [Session]) async {
-        // Shell- und Remote-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich scannen.
-        let missing = merged.filter { $0.name.isEmpty && !$0.isShell && !$0.isRemote && !reported.contains($0.id) && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
+        // Shell-, Remote- und Pi-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich scannen.
+        let missing = merged.filter { $0.name.isEmpty && $0.hasTranscript && !reported.contains($0.id) && firstPrompts[$0.sessionId] == nil }.map(\.sessionId)
         if !missing.isEmpty {
             let configDir = cli.configDir
             let found = await Task.detached { missing.reduce(into: [String: String]()) { r, id in
@@ -261,10 +261,10 @@ final class SessionRegistry {
 
     /// Liest nur gewachsene Transcripts neu und leitet daraus die Nachrichtenzeile ab (falls eingeschaltet).
     private func refreshTranscripts(_ merged: [Session]) async -> [String: String] {
-        // Shell- und Remote-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich den ganzen
+        // Shell-, Remote- und Pi-Sessions haben nie ein Transcript, sonst würde jeder Poll erneut vergeblich den ganzen
         // Projektordner scannen (siehe `Transcript.path`).
         // Gemeldete Sessions (Hooks) nur nach einer Antwort (`transcriptDue`), nicht bei jedem Poll.
-        let ids = merged.filter { !$0.isShell && !$0.isRemote && (!reported.contains($0.id) || transcriptDue.contains($0.id)) }.map(\.sessionId)
+        let ids = merged.filter { $0.hasTranscript && (!reported.contains($0.id) || transcriptDue.contains($0.id)) }.map(\.sessionId)
         transcriptDue.subtract(reported)
         let cache = transcripts, wantText = Settings.showLastMessage, configDir = cli.configDir
         transcripts = await Task.detached { Transcript.refresh(ids, configDir: configDir, cache: cache, wantText: wantText) }.value
@@ -350,7 +350,7 @@ final class SessionRegistry {
 }
 
 private extension Session {
-    var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? ""] }
+    var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? "", model ?? ""] }
 }
 
 /// Eintrag in `closed.json`: die Session, wie sie beim Schließen zuletzt aussah, plus Zeitpunkt.

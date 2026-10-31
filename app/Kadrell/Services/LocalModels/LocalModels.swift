@@ -95,6 +95,14 @@ final class LocalModels {
         return LlamaClient(base: url, session: session)
     }
 
+    /// Adresse des Providers ohne Warten: Ollama wie eingestellt, llama.cpp nur, wenn eingestellt oder schon gestartet.
+    func baseURLNow(_ p: LocalProviderKind) -> URL? {
+        switch p {
+        case .ollama: LocalHTTP.baseURL(LocalModelSettings.ollamaURL)
+        case .llamacpp: LocalHTTP.baseURL(LocalModelSettings.llamaURL) ?? (server.isRunning ? server.url : nil)
+        }
+    }
+
     var llamaBinary: String {
         let s = LocalModelSettings.llamaBinary.trimmingCharacters(in: .whitespacesAndNewlines)
         return s.isEmpty ? LlamaServerProcess.autodetect(environment: environment) : FolderIndex.normalize(s)

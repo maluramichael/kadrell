@@ -162,7 +162,7 @@ struct LocalFeatureSettings: SettingsBlock {
 
     /// Nur vorhandene Modelle; ein gewähltes, das gerade fehlt (gelöscht, Provider aus), bleibt sichtbar markiert.
     private func modelItems(_ f: LocalFeature) -> [(String, String)] {
-        var items = [("", String(localized: "kein Modell (nur Namenssuche)", bundle: Bundle.app))]
+        var items = [("", f.noModel)]
         items += local.available.map { ($0.ref.string, $0.ref.display) }
         if let current = LocalModelSettings.featureModel(f), !items.contains(where: { $0.0 == current.string }) {
             items.append((current.string, String(localized: "\(current.display) (nicht vorhanden)", bundle: Bundle.app)))

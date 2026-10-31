@@ -96,6 +96,13 @@ argv) bleibt außen vor, Hooks decken alles ab.
 - Bei Nicht-Claude-Typen ist die Kachel bis zur ersten Hook-Meldung ohne sessionId; ein „fortsetzen“ davor startet eine
   neue Konversation. Akzeptiert.
 
+## Nachtrag 2026-10-31: Pi als erster weiterer Typ
+
+Pi ist ohne `AgentKind` gebaut, wie Shell-Kacheln über das Schlüsselpräfix (`pi-<uuid>`, `Session.isPi`) plus
+`Session.model` (lokales Modell). Pi kann als einzige CLI außer Claude die Session-Id vorgeben (`--session-id`, legt
+an oder setzt fort), der Statuskanal ist eine Pi-Extension (`Services/Pi/kadrell.ts`), die Kadrell vor jedem Start
+nach `~/.pi/agent/extensions/` legt. Beim Umbau auf `AgentKind` wird daraus `case pi`, `Session.model` bleibt.
+
 ## Nebenbefund: Claude Code mit fremden Backends
 
 Ohne CLI-Wechsel geht auch `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (Ollama ≥ 0.14 `/v1/messages`, llama.cpp

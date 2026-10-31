@@ -64,7 +64,15 @@ lokales Modell (JSON mit Index, Zeitlimit 12 s, sonst ohne Modell weiter). Lokal
 nutzt Kadrell, wenn es läuft (Adresse einstellbar, Modelle laden mit Fortschritt, löschen, Suche über die Webseite
 ollama.com, für die es keine offizielle Schnittstelle gibt); llama.cpp startet Kadrell bei Bedarf selbst als
 `llama-server` im Router-Modus mit `--offline` auf 127.0.0.1, der Prozess endet mit Kadrell (`Services/LocalModels/`).
-Unter „Modelle für Funktionen“ bekommt jede Funktion ihr Modell aus den installierten, bisher nur der Schnellstart.
+Unter „Modelle für Funktionen“ bekommt jede Funktion ihr Modell aus den installierten: der Schnellstart und
+„Pi-Sessions“.
+
+Pi-Sessions: statt Claude läuft [Pi](https://github.com/earendil-works/pi) mit dem lokalen Modell der Funktion „Pi-Sessions“, im
+Schnellstart per Tab umschaltbar (bleibt für das nächste Mal), per CLI `kadrell new --pi`. Kadrell legt vor dem Start
+`~/.pi/agent/extensions/kadrell.ts` an (Quelle `Services/Pi/kadrell.ts`): sie registriert den Provider „kadrell“ aus
+`KADRELL_PI_BASE_URL`/`KADRELL_PI_MODEL` und meldet den Status per `kadrell status` (`agent_start`, `ui_prompt_*`,
+`agent_settled`), außerhalb einer Pi-Kachel tut sie nichts. Der Schlüssel `pi-<uuid>` ist zugleich Pis `--session-id`,
+ein Neustart setzt die Konversation fort. Auf llama.cpp startet Kadrell vorher den eigenen `llama-server`.
 
 Darstellung (⌘, Einstellungen): Design des Baums (Klassisch, Kompakt; je ein `SidebarRenderer`
 unter `Kadrell/Sidebar/`), Laufzeit im Baum an/aus, UI-Größe 90 bis 130 % für Baum, Leiste, Kacheln und Dialoge, Terminal-Schrift

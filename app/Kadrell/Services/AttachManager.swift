@@ -81,6 +81,8 @@ final class AttachManager {
     private var shuttingDown = false
     /// Erste Nachricht für neue Sessions (`kadrell new … <prompt>`), wird beim ersten Start verbraucht.
     var initialPrompts: [String: String] = [:]
+    /// Pi-Sessions, die auf den Start von `llama-server` warten (`startsLocalServer`).
+    private var preparing: Set<String> = []
     var onChange: (() -> Void)?
     /// Claude hat sich selbst beendet (`/exit`, zweimal ⌃C, Absturz), nicht von Kadrell gestoppt.
     var onEnded: ((String) -> Void)?
@@ -118,8 +120,9 @@ final class AttachManager {
     }
 
     /// Startet den Claude-Prozess der Session, auch wenn er vorher beendet war.
-    func attachNow(_ session: Session) {
-        guard !shuttingDown, terminals[session.id] == nil else { return }
+    func attachNow(_ session: Session, serverTried: Bool = false) {
+        guard !shuttingDown, terminals[session.id] == nil, !preparing.contains(session.id) else { return }
+        if !serverTried, startsLocalServer(for: session) { return }
         queue.removeAll { $0.id == session.id }
         ended.remove(session.id)
         exitCodes[session.id] = nil
@@ -167,6 +170,8 @@ final class AttachManager {
         if let host = session.host {
             AttachManager.log.info("ssh \(host, privacy: .private): \(session.tmuxSession ?? "", privacy: .private)")
             (executable, args, execName) = AttachManager.sshLaunch(host: host, tmuxSession: session.tmuxSession)
+        } else if session.isPi {
+            (executable, args, execName) = piLaunch(session, key: key, env: &env)
         } else if session.isShell {
             // Login-Shell des Nutzers: argv[0] mit Bindestrich, wie Terminal.app sie startet.
             let shell = env["SHELL"] ?? "/bin/zsh"
@@ -186,6 +191,33 @@ final class AttachManager {
         t.startProcess(executable: executable, args: args, environment: env.map { "\($0.key)=\($0.value)" }, execName: execName, currentDirectory: session.cwd)
         terminals[key] = t
         onChange?()
+    }
+
+    /// Pi mit dem lokalen Modell der Session. Ohne `pi` startet die Login-Shell mit Hinweis, statt still zu scheitern.
+    private func piLaunch(_ session: Session, key: String, env: inout [String: String]) -> (String, [String], String) {
+        let prompt = initialPrompts.removeValue(forKey: key)
+        guard let binary = PiCLI.binary(environment: env), let model = session.localModel else {
+            let msg = String(localized: "Pi oder das Modell der Session fehlt (Einstellungen › Modelle für Funktionen)", bundle: Bundle.app)
+            return ("/bin/sh", ["-c", #"printf '%s\n' "$1"; exec "${SHELL:-/bin/zsh}" -l"#, "sh", msg], "sh")
+        }
+        PiCLI.installExtension()
+        let launch = PiCLI.launch(binary: binary, session: session, model: model, baseURL: LocalModels.shared.baseURLNow(model.provider), prompt: prompt)
+        env.merge(launch.env) { _, new in new }
+        AttachManager.log.info("pi \(launch.args.dropLast(prompt == nil ? 0 : 1).joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
+        return (binary, launch.args, "pi")
+    }
+
+    /// Pi auf llama.cpp braucht den eigenen `llama-server`: erst ihn starten, dann die Session. true = Start folgt später.
+    private func startsLocalServer(for session: Session) -> Bool {
+        guard session.isPi, let model = session.localModel, model.provider == .llamacpp,
+              LocalModels.shared.baseURLNow(.llamacpp) == nil else { return false }
+        preparing.insert(session.id)
+        Task { [weak self] in
+            _ = try? await LocalModels.shared.llama()
+            self?.preparing.remove(session.id)
+            self?.attachNow(session, serverTried: true)
+        }
+        return true
     }
 
     /// Remote-Kachel: wie das tmux-Popup (M-h) an die laufende Remote-tmux hängen, ohne tmux dort die normale Shell.

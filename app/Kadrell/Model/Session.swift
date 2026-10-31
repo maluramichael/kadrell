@@ -38,8 +38,10 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var host: String? = nil
     /// tmux-Session auf dem Host; nil hängt sich an die zuletzt benutzte (`tmux attach`).
     var tmuxSession: String? = nil
+    /// Pi-Session: lokales Modell als `provider|name` (`LocalModelRef.string`), mit dem Pi startet.
+    var model: String? = nil
 
-    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, host, tmuxSession }
+    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, host, tmuxSession, model }
 
     var title: String { customName ?? autoTitle }
     var autoTitle: String {
@@ -51,6 +53,15 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     static let shellPrefix = "shell-"
     var isShell: Bool { id.hasPrefix(Session.shellPrefix) }
     static func newShellId() -> String { shellPrefix + UUID().uuidString.lowercased() }
+    /// Pi mit lokalem Modell statt `claude` (Schnellstart), erkennbar am Schlüssel. Hinter dem Präfix steht die
+    /// `--session-id` von Pi, damit ein Neustart dieselbe Konversation fortsetzt.
+    static let piPrefix = "pi-"
+    var isPi: Bool { id.hasPrefix(Session.piPrefix) }
+    static func newPiId() -> String { piPrefix + UUID().uuidString.lowercased() }
+    var piSessionId: String { String(id.dropFirst(Session.piPrefix.count)) }
+    var localModel: LocalModelRef? { model.flatMap(LocalModelRef.init(string:)) }
+    /// Nur Claude-Sessions haben ein Transcript unter `<configDir>/projects`; alle anderen nie danach suchen lassen.
+    var hasTranscript: Bool { !isShell && !isRemote && !isPi }
     /// Remote-Session (⌘⇧N): ssh statt `claude`, erkannt an `host`; das Präfix macht nur den Schlüssel lesbar.
     static let remotePrefix = "ssh-"
     var isRemote: Bool { host != nil }

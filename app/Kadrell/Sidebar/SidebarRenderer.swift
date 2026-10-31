@@ -151,6 +151,7 @@ extension SidebarRenderer {
         let iconRect = CGRect(x: 12, y: r.midY - 6, width: 12, height: 12), iconColor = s.selected || s.hover ? Theme.fg : Theme.muted
         if s.session.isRemote { Icons.server(in: iconRect, color: iconColor) }
         else if s.session.isShell { Icons.computer(in: iconRect, color: iconColor) }
+        else if s.session.isPi { Icons.pi(in: iconRect, color: iconColor) }
         var right = r.maxX - 10
         if s.showAge {
             let age = NSAttributedString(string: s.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))

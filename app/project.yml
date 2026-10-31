@@ -30,9 +30,12 @@ targets:
     platform: macOS
     sources:
       - path: Kadrell
-        excludes: ["Extensions/Host/*.lua"]
+        excludes: ["Extensions/Host/*.lua", "Services/Pi/*.ts"]
       - path: Kadrell/Extensions/Host
         includes: ["*.lua"]
+        buildPhase: resources
+      # Pi-Extension, die Kadrell vor dem Start einer Pi-Session nach ~/.pi/agent/extensions legt.
+      - path: Kadrell/Services/Pi/kadrell.ts
         buildPhase: resources
       # Lua-Quellen unverändert von lua.org, kein eigener Code: Warnungen aus.
       - path: Vendor/lua
@@ -51,8 +54,8 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleName: Kadrell
         CFBundleDisplayName: Kadrell
-        CFBundleShortVersionString: "1.74.0"
-        CFBundleVersion: "128"
+        CFBundleShortVersionString: "1.75.0"
+        CFBundleVersion: "129"
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true

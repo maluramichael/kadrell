@@ -73,6 +73,14 @@ enum Icons {
         p.stroke()
     }
 
+    /// π: Pi mit lokalem Modell statt Claude.
+    @MainActor static func pi(in r: CGRect, color: NSColor) {
+        let font = NSFont.systemFont(ofSize: r.height * 1.15, weight: .semibold)
+        let s = NSAttributedString(string: "π", attributes: [.font: font, .foregroundColor: color])
+        let size = s.size()
+        s.draw(at: CGPoint(x: r.midX - size.width / 2, y: r.midY - size.height / 2))
+    }
+
     /// Server-Rack: zwei Einschübe mit Status-LED, für Remote-Sessions und Host-Gruppen.
     @MainActor static func server(in r: CGRect, color: NSColor) {
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x / 16 * r.width, y: r.minY + y / 16 * r.height) }

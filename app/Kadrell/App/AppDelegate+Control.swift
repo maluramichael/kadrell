@@ -41,8 +41,8 @@ extension AppDelegate {
         case .list(let json): return .ok(try listOutput(json: json))
         case .sshHosts(let json): return .ok(sshHostsOutput(json: json))
         case let .newGroup(dir, name, color): return .ok(try controlNewGroup(dir: dir, name: name, color: color, req))
-        case let .newSession(t, dir, name, detached, prompt, resume, host, tmux):
-            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, host: host, tmux: tmux, req))
+        case let .newSession(t, dir, name, detached, prompt, resume, host, tmux, pi):
+            return .ok(try controlNewSession(target: t, dir: dir, name: name, detached: detached, prompt: prompt, resume: resume, host: host, tmux: tmux, pi: pi, req))
         case let .capture(t, all): return .ok(try controlCapture(target: t, all: all, req))
         default:
             try await performControl(cmd, req)
@@ -125,18 +125,20 @@ extension AppDelegate {
 
     /// Ohne -t und -c landet die Session bei der aufrufenden: gleiche Gruppe, gleicher Ordner (wie tmux new-window).
     /// Mit --host stattdessen eine Remote-Kachel per ssh, wie ⌘⇧N, mit eigener Gruppe je Host.
-    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String?, host: String?, tmux: String?, _ req: ControlRequest) throws -> String {
+    private func controlNewSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String?, host: String?, tmux: String?, pi: Bool, _ req: ControlRequest) throws -> String {
         if let host {
             let key = startRemote(host: host, tmuxSession: tmux, show: !detached)
             if let name { registry.rename(key, to: name) }
             return key
         }
         if let resume { try checkResumable(resume) }
+        let piRef = pi ? piSessionModel() : nil
+        if pi, piRef == nil { throw ControlError("--pi braucht pi und ein Modell unter Einstellungen › Modelle für Funktionen › Pi-Sessions") }
         var g = try target.map { try group($0, req, restricted: false) }
         let caller = req.caller.flatMap { c in registry.sessions.first { $0.id == c } }
         if target == nil, dir == nil, let caller { g = store.group(forSession: caller.id) }
         let cwd = try dir.map { try existingDir($0, req) } ?? (target == nil ? caller?.cwd : nil) ?? g?.cwd ?? existingDir(req.cwd, req)
-        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt, sessionId: resume)
+        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt, sessionId: piRef.map { _ in Session.newPiId() } ?? resume, model: piRef)
         if let name { registry.rename(key, to: name) }
         return key
     }

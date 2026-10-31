@@ -29,6 +29,9 @@ final class ControlTests: XCTestCase {
         XCTAssertEqual(try ControlCommand.parse(["ssh-hosts"]), .sshHosts(json: false))
         XCTAssertEqual(try ControlCommand.parse(["new", "--host", "vault", "--tmux", "main", "-d"]),
                        .newSession(target: nil, dir: nil, name: nil, detached: true, prompt: nil, resume: nil, host: "vault", tmux: "main"))
+        XCTAssertEqual(try ControlCommand.parse(["new", "--pi", "-c", "/p", "Idee"]),
+                       .newSession(target: nil, dir: "/p", name: nil, detached: false, prompt: "Idee", pi: true))
+        XCTAssertThrowsError(try ControlCommand.parse(["new", "--pi", "--host", "vault"]), "Pi läuft lokal, nicht per ssh")
         // --host hat eigene Gruppe/Ordner: nicht mit -t, -c, prompt oder --resume, und --tmux nur mit --host.
         XCTAssertThrowsError(try ControlCommand.parse(["new", "--host", "vault", "-c", "/p"]))
         XCTAssertThrowsError(try ControlCommand.parse(["new", "--host", "vault", "hallo"]))

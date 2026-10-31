@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.75.0 (2026-10-31)
+
+- Feature: Pi-Sessions: Im Schnellstart (⌘⇧I) wechselt Tab zwischen Claude und Pi mit einem lokalen Modell. Das Modell wählst du unter Einstellungen › Modelle für Funktionen › Pi-Sessions, die Wahl bleibt für den nächsten Schnellstart.
+- Feature: Pi-Sessions zeigen wie Claude-Sessions, ob sie arbeiten, warten oder fertig sind, und setzen nach einem Neustart dieselbe Konversation fort. Kadrell richtet dafür eine kleine Pi-Erweiterung selbst ein.
+- Feature: `kadrell new --pi` startet eine Pi-Session von der Kommandozeile.
+
 ## 1.74.0 (2026-10-31)
 
 - Änderung: Der automatische Kontowechsel verteilt jetzt durchgehend nach Wochentempo: aktiv ist das Konto, das gemessen an seinem Tagesbudget am meisten Luft hat, nicht erst kurz vor der Sperre. Die Einstellung heißt „Nach Wochentempo verteilen“.

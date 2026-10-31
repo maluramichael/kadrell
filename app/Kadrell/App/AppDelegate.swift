@@ -1230,8 +1230,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Kadrell vergibt die sessionId selbst (`claude --session-id`): die Kachel steht sofort, kein Warten auf `claude agents`.
     /// `show: false` startet Claude im Hintergrund, die Auswahl bleibt. `prompt` ist die erste Nachricht.
+    /// `model` nur für Pi-Sessions (`Session.newPiId()`): das lokale Modell, mit dem Pi startet.
     @discardableResult
-    func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil, sessionId: String? = nil) -> String {
+    func startSession(group: Group?, cwd: String, show: Bool = true, prompt: String? = nil, sessionId: String? = nil, model: LocalModelRef? = nil) -> String {
         let id = sessionId ?? UUID().uuidString.lowercased()
         // Direkt nach dem Start sucht `boot` noch nach `claude`; bis dahin gibt es keine Registry. Der ⌘N-Dialog bleibt
         // dann selbst offen; diese Sicherung fängt jeden anderen Weg ab, damit die App nicht abstürzt.
@@ -1248,7 +1249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         store.attach(sessionId: id, to: target!.id)
         FolderIndex.shared.recordUse(cwd)
-        let session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "")
+        let session = Session(id: id, cwd: cwd, startedAt: Date().timeIntervalSince1970 * 1000, sessionId: id, name: "", model: model?.string)
         if let prompt { attach.initialPrompts[id] = prompt }
         registry.add(session)
         Feedback.play(.open)
