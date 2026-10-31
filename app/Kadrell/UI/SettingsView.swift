@@ -128,6 +128,9 @@ struct SettingsView: View {
         UpdatesSettings(model: model)
         AutoModeSettings(model: model)
         AsksSettings(model: model)
+        OllamaSettings()
+        LlamaCppSettings()
+        LocalFeatureSettings()
         HotkeySettings(model: model, part: .navigation)
         HotkeySettings(model: model, part: .tiles)
     }

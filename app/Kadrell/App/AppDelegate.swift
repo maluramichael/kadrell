@@ -145,6 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attach?.detachAll()
         controlServer?.stop()
         extensions?.shutdownAll()
+        LocalModels.shared.shutdown()
         Profile.cleanUp()
         // Zuletzt, nach dem Lösen des Profil-Locks: den losgelösten Helfer starten, der neu startet, sobald wir weg sind.
         if relaunchOnTerminate { Profile.relaunchAfterExit() }
@@ -529,6 +530,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         startControlServer()
         startExtensions(environment: cli.environment)
+        LocalModels.shared.environment = cli.environment
+        LocalModels.shared.server.sweepStale()
         usage.onMeasured = { [weak self] u in
             self?.accounts.recordUsage(u)
             self?.refreshUsageBars()
@@ -976,6 +979,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .renameSession: if let key = workspace.focused { renameSession(key) } else { NSSound.beep() }
         case .cycleSort: cycleSort()
         case .toggleGrouping: toggleGrouping()
+        case .quickStart: openQuickStart()
         case .restart: restart()
         default: break
         }
@@ -1083,6 +1087,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (String(localized: "Trennlinien zurücksetzen (gleich verteilt)", bundle: Bundle.app), { [weak self] in self?.workspace.resetRatios() }),
             (String(localized: "Zoom ein/aus (fokussierte)", bundle: Bundle.app), { [weak self] in self?.workspace.toggleZen() }),
             (String(localized: "Neue Session", bundle: Bundle.app), { [weak self] in self?.openNewSession(groupId: nil) }),
+            (String(localized: "Schnellstart: Idee rein, Session raus", bundle: Bundle.app), { [weak self] in self?.openQuickStart() }),
             (String(localized: "Neues Terminal ohne Claude", bundle: Bundle.app), { [weak self] in self?.menuNewShell() }),
             (String(localized: "Remote verbinden (ssh → tmux)", bundle: Bundle.app), { [weak self] in self?.menuRemote() }),
             (String(localized: "Session stoppen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),

@@ -56,6 +56,16 @@ F2 oder Stift an Kachel/Baum-Zeile benennt die Session um (eigener Name geht imm
 dass Claude die Tasten bekommt; ⇧F10 öffnet dort das Kontextmenü der Session (← klappt die Gruppe zu, dann das der
 Gruppe), ⌃⏎ geht samt Tastatur an die Fokus-Session, weil Claude Code es selbst verlangt; ⌘2 gibt die Tastatur an die fokussierte Kachel zurück (ohne offene Kachel: erste Session).
 
+Schnellstart (⌘⇧I, belegbar): Idee eintippen, z. B. „In Kadrell habe ich die Idee, dass …“. Kadrell sucht das
+Projekt in Gruppen, Sessions, benutzten Ordnern und Git-Repos (dieselbe Historie wie ⌘N), zeigt es vorausgewählt und
+startet dort mit ⏎ eine Session mit der Idee als erstem Prompt; ↑↓ oder Tippen wählt ein anderes Projekt, Tab
+schaltet zwischen Originaltext und Text ohne Projektverweis. Ist der Name im Text nicht eindeutig, fragt Kadrell ein
+lokales Modell (JSON mit Index, Zeitlimit 12 s, sonst ohne Modell weiter). Lokale Modelle (⌘, Einstellungen): Ollama
+nutzt Kadrell, wenn es läuft (Adresse einstellbar, Modelle laden mit Fortschritt, löschen, Suche über die Webseite
+ollama.com, für die es keine offizielle Schnittstelle gibt); llama.cpp startet Kadrell bei Bedarf selbst als
+`llama-server` im Router-Modus mit `--offline` auf 127.0.0.1, der Prozess endet mit Kadrell (`Services/LocalModels/`).
+Unter „Modelle für Funktionen“ bekommt jede Funktion ihr Modell aus den installierten, bisher nur der Schnellstart.
+
 Darstellung (⌘, Einstellungen): Design des Baums (Klassisch, Kompakt; je ein `SidebarRenderer`
 unter `Kadrell/Sidebar/`), Laufzeit im Baum an/aus, UI-Größe 90 bis 130 % für Baum, Leiste, Kacheln und Dialoge, Terminal-Schrift
 (alle installierten Monospace-Fonts), Schriftgröße, Zeilenabstand und Innenabstand der Terminals.

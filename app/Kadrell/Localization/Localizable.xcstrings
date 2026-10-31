@@ -8741,6 +8741,450 @@
         "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: id „%@“ doppelt, übersprungen" } },
         "en": { "stringUnit": { "state": "translated", "value": "Status bar: duplicate id “%@”, skipped" } }
       }
+    },
+    "Adresse des Ollama-Dienstes": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Adresse des Ollama-Dienstes" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Address of the Ollama service" } }
+      }
+    },
+    "Adresse eines laufenden llama-server (optional)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Adresse eines laufenden llama-server (optional)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Address of a running llama-server (optional)" } }
+      }
+    },
+    "Adresse ungültig": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Adresse ungültig" } },
+        "en": { "stringUnit": { "state": "translated", "value": "invalid address" } }
+      }
+    },
+    "Anderes Projekt suchen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Anderes Projekt suchen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search another project" } }
+      }
+    },
+    "Antwort nicht lesbar": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Antwort nicht lesbar" } },
+        "en": { "stringUnit": { "state": "translated", "value": "unreadable answer" } }
+      }
+    },
+    "Auf ollama.com suchen (Webseite, keine offizielle Schnittstelle)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Auf ollama.com suchen (Webseite, keine offizielle Schnittstelle)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Search ollama.com (website, no official API)" } }
+      }
+    },
+    "Download ohne Abschluss beendet": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Download ohne Abschluss beendet" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Download ended without finishing" } }
+      }
+    },
+    "ERSTER PROMPT": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "ERSTER PROMPT" } },
+        "en": { "stringUnit": { "state": "translated", "value": "FIRST PROMPT" } }
+      }
+    },
+    "Gruppe": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Gruppe" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Group" } }
+      }
+    },
+    "Idee tippen, Kadrell erkennt das Projekt und startet dort eine Session mit der Idee als erstem Prompt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Idee tippen, Kadrell erkennt das Projekt und startet dort eine Session mit der Idee als erstem Prompt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Type an idea, Kadrell recognises the project and starts a session there with the idea as first prompt" } }
+      }
+    },
+    "Idee tippen, z. B. „In Kadrell habe ich die Idee, dass …“": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Idee tippen, z. B. „In Kadrell habe ich die Idee, dass …“" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Type an idea, e.g. “In Kadrell I have the idea that …”" } }
+      }
+    },
+    "Kein Projekt gefunden.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kein Projekt gefunden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "No project found." } }
+      }
+    },
+    "Keine Modelle installiert": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Keine Modelle installiert" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No models installed" } }
+      }
+    },
+    "Laden": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Laden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Download" } }
+      }
+    },
+    "Löschen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Löschen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Delete" } }
+      }
+    },
+    "Modell laden (Name aus der Bibliothek)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Modell laden (Name aus der Bibliothek)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Download model (name from the library)" } }
+      }
+    },
+    "Modell: %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Modell: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Model: %@" } }
+      }
+    },
+    "Modelle für Funktionen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Modelle für Funktionen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Models for features" } }
+      }
+    },
+    "Modellordner mit GGUF-Dateien (optional)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Modellordner mit GGUF-Dateien (optional)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Model folder with GGUF files (optional)" } }
+      }
+    },
+    "Neu laden": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neu laden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reload" } }
+      }
+    },
+    "Ollama nutzen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Ollama nutzen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Use Ollama" } }
+      }
+    },
+    "Ollama starten (App oder ollama serve), Kadrell bringt keinen eigenen Dienst mit": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Ollama starten (App oder ollama serve), Kadrell bringt keinen eigenen Dienst mit" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Start Ollama (app or ollama serve), Kadrell does not ship its own service" } }
+      }
+    },
+    "Originaltext · Tab: ohne Projektverweis": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Originaltext · Tab: ohne Projektverweis" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Original text · Tab: without project reference" } }
+      }
+    },
+    "Pfad zu llama-server (leer = automatisch)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Pfad zu llama-server (leer = automatisch)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Path to llama-server (empty = automatic)" } }
+      }
+    },
+    "Projektverweis aus dem ersten Prompt entfernen, wenn sicher": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Projektverweis aus dem ersten Prompt entfernen, wenn sicher" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Remove the project reference from the first prompt when sure" } }
+      }
+    },
+    "Projektverweis entfernt · Tab: Originaltext": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Projektverweis entfernt · Tab: Originaltext" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Project reference removed · Tab: original text" } }
+      }
+    },
+    "SCHNELLSTART": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "SCHNELLSTART" } },
+        "en": { "stringUnit": { "state": "translated", "value": "QUICK START" } }
+      }
+    },
+    "Schnellstart: Idee rein, Session raus": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Schnellstart: Idee rein, Session raus" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Quick start: idea in, session out" } }
+      }
+    },
+    "Weiter": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Weiter" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Continue" } }
+      }
+    },
+    "Wirklich löschen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Wirklich löschen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Really delete" } }
+      }
+    },
+    "%@ existiert nicht mehr": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ existiert nicht mehr" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@ no longer exists" } }
+      }
+    },
+    "%@: llama-server nicht gefunden": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@: llama-server nicht gefunden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@: llama-server not found" } }
+      }
+    },
+    "%@ (nicht vorhanden)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ (nicht vorhanden)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@ (not available)" } }
+      }
+    },
+    "%@:%@ ins Feld „Modell laden“": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@:%@ ins Feld „Modell laden“" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@:%@ into the “Download model” field" } }
+      }
+    },
+    "%@ vermutet, bitte prüfen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ vermutet, bitte prüfen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@ guesses, please check" } }
+      }
+    },
+    "%@ findet kein passendes Projekt · zuletzt benutzte zuerst": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ findet kein passendes Projekt · zuletzt benutzte zuerst" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@ finds no matching project · recently used first" } }
+      }
+    },
+    "benutzter Ordner": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "benutzter Ordner" } },
+        "en": { "stringUnit": { "state": "translated", "value": "used folder" } }
+      }
+    },
+    "erkannt am Namen im Text": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "erkannt am Namen im Text" } },
+        "en": { "stringUnit": { "state": "translated", "value": "recognised by the name in the text" } }
+      }
+    },
+    "erkannt von %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "erkannt von %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "recognised by %@" } }
+      }
+    },
+    "erkannt: %@ · %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "erkannt: %@ · %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "recognised: %@ · %@" } }
+      }
+    },
+    "frage %@ …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "frage %@ …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "asking %@ …" } }
+      }
+    },
+    "je Funktion an/aus und Modell aus den vorhandenen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "je Funktion an/aus und Modell aus den vorhandenen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "per feature on/off and a model from the installed ones" } }
+      }
+    },
+    "kein Modell (nur Namenssuche)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "kein Modell (nur Namenssuche)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "no model (name search only)" } }
+      }
+    },
+    "kein Modell gewählt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "kein Modell gewählt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "no model chosen" } }
+      }
+    },
+    "kein Name im Text · %@ hilft beim Zuordnen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "kein Name im Text · %@ hilft beim Zuordnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "no name in the text · %@ helps to match" } }
+      }
+    },
+    "kein Name im Text · ohne lokales Modell zuletzt benutzte zuerst": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "kein Name im Text · ohne lokales Modell zuletzt benutzte zuerst" } },
+        "en": { "stringUnit": { "state": "translated", "value": "no name in the text · without a local model, recently used first" } }
+      }
+    },
+    "kein Projekt im Text erkannt · zuletzt benutzte zuerst": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "kein Projekt im Text erkannt · zuletzt benutzte zuerst" } },
+        "en": { "stringUnit": { "state": "translated", "value": "no project recognised in the text · recently used first" } }
+      }
+    },
+    "keine Antwort in der Zeit": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "keine Antwort in der Zeit" } },
+        "en": { "stringUnit": { "state": "translated", "value": "no answer in time" } }
+      }
+    },
+    "leer = Kadrell startet ihn": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "leer = Kadrell startet ihn" } },
+        "en": { "stringUnit": { "state": "translated", "value": "empty = Kadrell starts it" } }
+      }
+    },
+    "llama-server startet nicht": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "llama-server startet nicht" } },
+        "en": { "stringUnit": { "state": "translated", "value": "llama-server does not start" } }
+      }
+    },
+    "llama.cpp": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "llama.cpp" } },
+        "en": { "stringUnit": { "state": "translated", "value": "llama.cpp" } }
+      }
+    },
+    "llama.cpp installieren (brew install llama.cpp) oder den Pfad setzen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "llama.cpp installieren (brew install llama.cpp) oder den Pfad setzen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Install llama.cpp (brew install llama.cpp) or set the path" } }
+      }
+    },
+    "llama.cpp nutzen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "llama.cpp nutzen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Use llama.cpp" } }
+      }
+    },
+    "mehrere Projekte passen zum Namen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "mehrere Projekte passen zum Namen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "several projects match the name" } }
+      }
+    },
+    "nicht erreichbar: %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "nicht erreichbar: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "not reachable: %@" } }
+      }
+    },
+    "nicht gefunden": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "nicht gefunden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "not found" } }
+      }
+    },
+    "nichts gefunden": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "nichts gefunden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "nothing found" } }
+      }
+    },
+    "nur der Cache von llama.cpp": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "nur der Cache von llama.cpp" } },
+        "en": { "stringUnit": { "state": "translated", "value": "only the llama.cpp cache" } }
+      }
+    },
+    "ordnet die Idee einem Projekt zu, wenn der Name im Text nicht eindeutig ist": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "ordnet die Idee einem Projekt zu, wenn der Name im Text nicht eindeutig ist" } },
+        "en": { "stringUnit": { "state": "translated", "value": "matches the idea to a project when the name in the text is unclear" } }
+      }
+    },
+    "prüft …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "prüft …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "checking …" } }
+      }
+    },
+    "startet …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "startet …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "starting …" } }
+      }
+    },
+    "von Kadrell gestartet · %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "von Kadrell gestartet · %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "started by Kadrell · %@" } }
+      }
+    },
+    "wählen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "wählen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "pick" } }
+      }
+    },
+    "z. B. qwen3": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "z. B. qwen3" } },
+        "en": { "stringUnit": { "state": "translated", "value": "e.g. qwen3" } }
+      }
+    },
+    "ähnlicher Name im Text, bitte prüfen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "ähnlicher Name im Text, bitte prüfen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "similar name in the text, please check" } }
+      }
+    },
+    "übersprungen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "übersprungen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "skipped" } }
+      }
+    },
+    "⏎ Projekt erkennen · Esc schließen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "⏎ Projekt erkennen · Esc schließen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "⏎ recognise project · Esc close" } }
+      }
+    },
+    "⏎ ohne Modell weiter · Esc zurück": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "⏎ ohne Modell weiter · Esc zurück" } },
+        "en": { "stringUnit": { "state": "translated", "value": "⏎ continue without model · Esc back" } }
+      }
+    },
+    "⏎ starten · ↑↓ oder tippen wählt ein anderes Projekt · Esc zurück": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "⏎ starten · ↑↓ oder tippen wählt ein anderes Projekt · Esc zurück" } },
+        "en": { "stringUnit": { "state": "translated", "value": "⏎ start · ↑↓ or typing picks another project · Esc back" } }
+      }
+    },
+    "Lokale Modelle: Ollama": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Lokale Modelle: Ollama" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Local models: Ollama" } }
+      }
+    },
+    "Lokale Modelle: llama.cpp": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Lokale Modelle: llama.cpp" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Local models: llama.cpp" } }
+      }
+    },
+    "gezeigt wird nur, was installiert ist": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "gezeigt wird nur, was installiert ist" } },
+        "en": { "stringUnit": { "state": "translated", "value": "only installed models are listed" } }
+      }
+    },
+    "ohne Adresse startet Kadrell llama-server selbst, er endet mit Kadrell": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "ohne Adresse startet Kadrell llama-server selbst, er endet mit Kadrell" } },
+        "en": { "stringUnit": { "state": "translated", "value": "without an address Kadrell starts llama-server itself, it quits with Kadrell" } }
+      }
+    },
+    "Neue Modelle: einmal im Terminal mit llama-server -hf <Repo> laden (landet im Cache) oder GGUF-Dateien in den Modellordner legen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue Modelle: einmal im Terminal mit llama-server -hf <Repo> laden (landet im Cache) oder GGUF-Dateien in den Modellordner legen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New models: load once in the terminal with llama-server -hf <repo> (goes to the cache) or put GGUF files into the model folder" } }
+      }
     }
   },
   "version": "1.0"
