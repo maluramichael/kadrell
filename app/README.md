@@ -32,6 +32,13 @@ die Fläche scrollt seitlich (Wischen, ⇧ + Mausrad), die Fokus-Kachel rückt v
 Bedienung: Klick im Baum zeigt nur diese Session, ⌘-Klick nimmt sie dazu oder weg, ⇧-Klick markiert den
 Bereich seit dem letzten Klick, Klick auf eine Gruppe zeigt alle ihre Sessions. Ziehen im Baum oder an der Titelzeile
 einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf eine fremde Gruppe zieht die ganze Gruppe mit).
+Eine Session im Baum auf eine andere Gruppe gezogen (Kopf oder eine ihrer Sessions, die Zielgruppe leuchtet im Akzent auf)
+wechselt in diese Gruppe, auch bei sortiertem Baum; dasselbe per Rechtsklick „Verschieben nach ▸“ (mit Mehrfachauswahl
+„Auswahl verschieben nach ▸“) oder in der Suche (`> verschieben`). Sie behält ihren Ordner und läuft weiter, wie bei
+`kadrell move`; eine dadurch leere Gruppe ohne Herz verschwindet. Rechtsklick auf eine Gruppenzeile zeigt deren Menü:
+neue Session oder Terminal darin, alle zeigen, Bearbeiten, Favorit, Pfad, Finder, Editor, Schließen. Bearbeiten (Stift
+am Gruppenkopf) ändert Name, Farbe und Ordner (Kürzel wie bei ⌘N, Tab schreibt aus, ⌘O Finder, Ordner hineinziehen):
+laufende Sessions bleiben in ihrem Ordner, neue starten im neuen.
 Mittelklick auf eine Session-Zeile schließt sie, auf eine Gruppenzeile die ganze Gruppe, mit ⌥ ohne Rückfrage.
 Zwei Schalter in der Leiste ordnen den Baum: „GRP“ (⌥G) gruppiert nach Projekt, aus („FLACH“) stehen alle Sessions
 in einer Liste mit dem Projektnamen vor dem Titel; „SORT“ (⌥O) schaltet aus → A–Z → Status weiter. Status heißt:
@@ -46,7 +53,8 @@ Badge „ZOOM“ in der Leiste und „Z“ in der Titelzeile), ⌥E Ordner der F
 F2 oder Stift an Kachel/Baum-Zeile benennt die Session um (eigener Name geht immer vor dem Titel von Claude Code, leer = zurück),
 ⌘L Grid ↔ Stack, ⌘Esc Kachel schließen
 (Esc selbst geht an Claude Code). ⌘1 gibt dem Baum die Tastatur, ↑↓ zeigt dann die nächste Session rechts, ohne
-dass Claude die Tasten bekommt; ⌘2 gibt die Tastatur an die fokussierte Kachel zurück (ohne offene Kachel: erste Session).
+dass Claude die Tasten bekommt; ⇧F10 öffnet dort das Kontextmenü der Session (← klappt die Gruppe zu, dann das der
+Gruppe), ⌃⏎ geht samt Tastatur an die Fokus-Session, weil Claude Code es selbst verlangt; ⌘2 gibt die Tastatur an die fokussierte Kachel zurück (ohne offene Kachel: erste Session).
 
 Darstellung (⌘, Einstellungen): Design des Baums (Klassisch, Kompakt; je ein `SidebarRenderer`
 unter `Kadrell/Sidebar/`), Laufzeit im Baum an/aus, UI-Größe 90 bis 130 % für Baum, Leiste, Kacheln und Dialoge, Terminal-Schrift

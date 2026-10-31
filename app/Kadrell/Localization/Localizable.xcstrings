@@ -5187,22 +5187,6 @@
         }
       }
     },
-    "Session oder Gruppe umsortieren, Baum und Kacheln gleich": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Session oder Gruppe umsortieren, Baum und Kacheln gleich"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reorder a session or group, sidebar and tiles alike"
-          }
-        }
-      }
-    },
     "Session schließen": {
       "localizations": {
         "de": {
@@ -8566,6 +8550,144 @@
             "value": "Includes Lua 5.5.1 (MIT, lua.org) and json.lua (MIT, rxi) as well as colour values of the Instrument scheme from Monsters (Apache-2.0, Saturday Company)"
           }
         }
+      }
+    },
+    "Session oder Gruppe umsortieren, Baum und Kacheln gleich · Session im Baum auf eine andere Gruppe: dorthin verschieben": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Session oder Gruppe umsortieren, Baum und Kacheln gleich · Session im Baum auf eine andere Gruppe: dorthin verschieben" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reorder a session or group, tree and tiles alike · drop a session on another group in the tree: move it there" } }
+      }
+    },
+    "Rechtsklick im Baum": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Rechtsklick im Baum" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Right-click in the tree" } }
+      }
+    },
+    "Menü der Session oder Gruppe: Verschieben nach, Bearbeiten, Ordner, Schließen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Menü der Session oder Gruppe: Verschieben nach, Bearbeiten, Ordner, Schließen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Menu of the session or group: move to, edit, folder, close" } }
+      }
+    },
+    "Im Baum: Menü der Session, bei zugeklappter Gruppe das der Gruppe · ⌃⏎ geht an die Session": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Im Baum: Menü der Session, bei zugeklappter Gruppe das der Gruppe · ⌃⏎ geht an die Session" } },
+        "en": { "stringUnit": { "state": "translated", "value": "In the tree: menu of the session, of the group when it is collapsed · ⌃⏎ goes to the session" } }
+      }
+    },
+    "Keine Session fokussiert": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Keine Session fokussiert" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No session focused" } }
+      }
+    },
+    "Neue Session in dieser Gruppe": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue Session in dieser Gruppe" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New session in this group" } }
+      }
+    },
+    "Remote-Session wählen …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Remote-Session wählen …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose remote session …" } }
+      }
+    },
+    "Neues Terminal in dieser Gruppe": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neues Terminal in dieser Gruppe" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New terminal in this group" } }
+      }
+    },
+    "Alle Sessions zeigen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Alle Sessions zeigen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Show all sessions" } }
+      }
+    },
+    "Bearbeiten …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Bearbeiten …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Edit …" } }
+      }
+    },
+    "Im Editor öffnen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Im Editor öffnen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Open in editor" } }
+      }
+    },
+    "Gruppe schließen …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Gruppe schließen …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Close group …" } }
+      }
+    },
+    "Auswahl verschieben nach (%lld)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Auswahl verschieben nach (%lld)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Move selection to (%lld)" } }
+      }
+    },
+    "Gruppe „%@“": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Gruppe „%@“" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Group “%@”" } }
+      }
+    },
+    "Verschieben nach": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Verschieben nach" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Move to" } }
+      }
+    },
+    "Fokussierte Session verschieben nach: %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Fokussierte Session verschieben nach: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Move focused session to: %@" } }
+      }
+    },
+    "Ordner nicht gefunden · Tab vervollständigt, ⌘O wählt im Finder": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Ordner nicht gefunden · Tab vervollständigt, ⌘O wählt im Finder" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Folder not found · Tab completes, ⌘O picks in Finder" } }
+      }
+    },
+    "Tab vervollständigt · ⌘O Finder · Ordner hineinziehen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Tab vervollständigt · ⌘O Finder · Ordner hineinziehen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Tab completes · ⌘O Finder · drop a folder here" } }
+      }
+    },
+    "Den Ordner hat auch die Gruppe „%@“.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Den Ordner hat auch die Gruppe „%@“." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The group “%@” uses this folder too." } }
+      }
+    },
+    "Ordner (~/d/p/kad kürzt ab)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Ordner (~/d/p/kad kürzt ab)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Folder (~/d/p/kad abbreviates)" } }
+      }
+    },
+    "Im Finder wählen (⌘O)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Im Finder wählen (⌘O)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose in Finder (⌘O)" } }
+      }
+    },
+    "Ordner im Finder wählen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Ordner im Finder wählen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose folder in Finder" } }
+      }
+    },
+    "Neue Sessions starten im neuen Ordner, laufende bleiben in ihrem.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue Sessions starten im neuen Ordner, laufende bleiben in ihrem." } },
+        "en": { "stringUnit": { "state": "translated", "value": "New sessions start in the new folder, running ones stay in theirs." } }
       }
     }
   },

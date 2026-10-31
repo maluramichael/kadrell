@@ -91,8 +91,14 @@ final class SidebarView: ClipWidthView {
     var onMoveGroup: ((String, String) -> Void)?
     /// Ziehen in der flachen Liste: die ganze neue Reihenfolge, zum Speichern als `flatOrder`.
     var onReorderFlat: (([String]) -> Void)?
-    /// Rechtsklick auf eine Session-Zeile: liefert das Kontextmenü, oder nil (Gruppenzeile, daneben).
+    /// Rechtsklick auf eine Session-Zeile: liefert das Kontextmenü, oder nil (daneben).
     var onContextMenu: ((String) -> NSMenu?)?
+    /// Rechtsklick auf eine Gruppenzeile, ⇧F10 auf einer zugeklappten Gruppe: Kontextmenü der Gruppe.
+    var onGroupContextMenu: ((String) -> NSMenu?)?
+    /// Session auf eine andere Gruppe gezogen: (Sessions, Zielgruppe).
+    var onMoveToGroup: (([String], String) -> Void)?
+    /// Taste, die der Baum nicht selbst nimmt, aber Claude verlangt (⌃⏎): an die Fokus-Session weiterreichen.
+    var onPassKey: ((NSEvent) -> Void)?
 
     private enum Row: Equatable {
         case group(Group), session(Session, Group)
@@ -277,6 +283,8 @@ final class SidebarView: ClipWidthView {
     }
 
     private func drawRows(_ dirtyRect: CGRect) {
+        let dropGroup = dropGroupRect()
+        if let r = dropGroup { Instrument.fillRow(dropGroupShape(r), Theme.accent.withAlphaComponent(0.14)) }
         for (i, row) in rows.enumerated() {
             let r = rowRect(i)
             guard r.intersects(dirtyRect) else { continue }
@@ -289,16 +297,37 @@ final class SidebarView: ClipWidthView {
             drawToolbar(tb.rect, tb.buttons)
         }
         if let y = dropLineY() { Theme.fg.setFill(); CGRect(x: 0, y: y - 1, width: bounds.width / Theme.scale, height: 2).fill() }
+        if let r = dropGroup { Instrument.keyRing(dropGroupShape(r)) }
+    }
+
+    /// Session über einer fremden Gruppe: sie landet darin, statt umzusortieren. Dann gibt es keine Linie, sondern einen Rahmen.
+    private var dropsIntoGroup: Bool {
+        guard case .session? = pressed?.row, case .group? = dropTarget else { return false }
+        return true
     }
 
     /// Einfügelinie: über dem Ziel beim Ziehen nach oben, darunter (bei Gruppen unter deren letzter Zeile) nach unten.
     private func dropLineY() -> CGFloat? {
-        guard dragging, let tr = dropTarget, let t = index(of: tr), let sr = pressed?.row, let src = index(of: sr) else { return nil }
+        guard dragging, !dropsIntoGroup, let tr = dropTarget, let t = index(of: tr), let sr = pressed?.row, let src = index(of: sr) else { return nil }
         guard t > src else { return rowRect(t).minY }
         guard case .group = rows[t] else { return rowRect(t).maxY }
-        let end = rows.indices.dropFirst(t + 1).first { if case .group = rows[$0] { true } else { false } } ?? rows.count
-        return rowRect(end - 1).maxY
+        return rowRect(groupEnd(after: t) - 1).maxY
     }
+
+    /// Index hinter der letzten Zeile der Gruppe, deren Kopf bei `t` steht.
+    private func groupEnd(after t: Int) -> Int {
+        rows.indices.dropFirst(t + 1).first { if case .group = rows[$0] { true } else { false } } ?? rows.count
+    }
+
+    /// Ganze Zielgruppe (Kopf und Sessions), in die die gezogene Session fällt.
+    private func dropGroupRect() -> CGRect? {
+        guard dragging, dropsIntoGroup, let tr = dropTarget, let t = index(of: tr) else { return nil }
+        return rowRect(t).union(rowRect(groupEnd(after: t) - 1))
+    }
+
+    /// Zielgruppe hell hinterlegt (unter den Zeilen) und mit dem Tastaturring umrandet (darüber): deutlich anders als
+    /// die Linie beim Umsortieren.
+    private func dropGroupShape(_ r: CGRect) -> CGRect { r.insetBy(dx: 3, dy: 0.5) }
 
     private func dotColor(_ s: Session) -> NSColor {
         let base = Theme.statusColor(s.status, attached: isAttached(s.id), shellRunning: s.hasRunningShell)
@@ -389,8 +418,9 @@ final class SidebarView: ClipWidthView {
     override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
 
     /// ⌘1 gibt dem Baum die Tastatur: ↑↓ wandert über die sichtbaren Sessions, ←/→ klappt die Gruppe der
-    /// fokussierten Session zu/auf, ⏎/Leertaste öffnet sie, ⌫ schließt sie (mit Rückfrage), ⌃⏎/⇧F10 zeigt ihr
-    /// Kontextmenü, ⌥⌘↑/↓ tauscht sie mit dem Nachbarn in der Gruppe.
+    /// fokussierten Session zu/auf, ⏎/Leertaste öffnet sie, ⌫ schließt sie (mit Rückfrage), ⇧F10 zeigt ihr
+    /// Kontextmenü (bei zugeklappter Gruppe das der Gruppe), ⌥⌘↑/↓ tauscht sie mit dem Nachbarn in der Gruppe.
+    /// ⌃⏎ gehört Claude Code: es geht samt Tastatur an die Fokus-Session, statt im Baum zu verpuffen.
     override func keyDown(with event: NSEvent) {
         let mods = event.modifierFlags.intersection(Hotkey.modMask)
         switch (event.keyCode, mods) {
@@ -400,7 +430,8 @@ final class SidebarView: ClipWidthView {
         case (KeyCode.up, []): step(-1)
         case (KeyCode.left, []): collapseFocusedGroup()
         case (KeyCode.right, []): expandFocusedGroup()
-        case (KeyCode.returnKey, [.control]), (KeyCode.f10, [.shift]): if let id = focused { showContextMenu(for: id) }
+        case (KeyCode.f10, [.shift]): showContextMenuForFocused()
+        case (KeyCode.returnKey, [.control]): onPassKey?(event)
         case (KeyCode.returnKey, []), (KeyCode.space, []): if let id = focused { onSelect?([id], .replace) }
         case (KeyCode.delete, []): if let id = focused { onCloseSession?(id, false) }
         default: super.keyDown(with: event)
@@ -451,8 +482,17 @@ final class SidebarView: ClipWidthView {
         onReorderFlat?(ids)
     }
 
-    private func showContextMenu(for id: String) {
-        guard let menu = onContextMenu?(id), let i = sessionRow(id) else { return }
+    /// Sichtbare Fokus-Session: ihr Menü. Steckt sie in einer zugeklappten Gruppe, steht die Gruppenzeile für sie
+    /// (← klappt zu, dann ⇧F10): das Menü der Gruppe.
+    private func showContextMenuForFocused() {
+        guard let id = focused else { return }
+        if let i = sessionRow(id) { popUp(onContextMenu?(id), at: i); return }
+        guard let g = groupOfFocused(), let i = index(of: .group(g)) else { return }
+        popUp(onGroupContextMenu?(g.id), at: i)
+    }
+
+    private func popUp(_ menu: NSMenu?, at i: Int) {
+        guard let menu else { return }
         let r = rowRect(i).scaled(Theme.scale)
         menu.popUp(positioning: nil, at: CGPoint(x: r.minX + 20, y: r.midY), in: self)
     }
@@ -527,10 +567,13 @@ final class SidebarView: ClipWidthView {
         needsDisplay = true
     }
 
-    /// Rechtsklick (bzw. Ctrl-Klick): Kontextmenü der Session unter dem Zeiger, sonst keins.
+    /// Rechtsklick (bzw. Ctrl-Klick): Kontextmenü der Session oder Gruppe unter dem Zeiger, daneben keins.
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard let i = rowIndex(at: local(event)), case .session(let s, _) = rows[i] else { return nil }
-        return onContextMenu?(s.id)
+        guard let i = rowIndex(at: local(event)) else { return nil }
+        switch rows[i] {
+        case .group(let g): return onGroupContextMenu?(g.id)
+        case .session(let s, _): return onContextMenu?(s.id)
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -577,8 +620,9 @@ final class SidebarView: ClipWidthView {
         }
     }
 
+    /// Sortiert (A–Z, Status) gibt es keine Handreihenfolge, eine Session lässt sich dann nur in eine andere Gruppe ziehen.
     override func mouseDragged(with event: NSEvent) {
-        guard let press = pressed, sort == .off else { return }
+        guard let press = pressed, sort == .off || canMoveToGroup(press.row) else { return }
         let p = local(event)
         if !dragging, hypot(p.x - press.point.x, p.y - press.point.y) > 4 { dragging = true; hovered = nil }
         guard dragging else { return }
@@ -590,17 +634,37 @@ final class SidebarView: ClipWidthView {
         needsDisplay = true
     }
 
-    /// Gültiges Ziel: eine Session nur innerhalb ihrer Gruppe, eine Gruppe landet auf der Kopfzeile einer anderen.
+    private func canMoveToGroup(_ row: Row) -> Bool {
+        guard grouped, case .session = row else { return false }
+        return true
+    }
+
+    /// Gültiges Ziel: eine Session sortiert in ihrer Gruppe um oder fällt in eine fremde (dann deren Kopfzeile als
+    /// Ziel), eine Gruppe landet auf der Kopfzeile einer anderen.
     private func target(for src: Row, at p: CGPoint) -> Row? {
         guard let j = rowIndex(at: p), rows[j].key != src.key else { return nil }
-        switch (src, rows[j]) {
-        case (.session(_, let g), .session(_, let h)): return !grouped || g.id == h.id ? rows[j] : nil
-        case (.group(let g), _):
-            guard let head = rows[...j].last(where: { if case .group = $0 { true } else { false } }),
-                  case .group(let h) = head, h.id != g.id else { return nil }
-            return head
-        default: return nil
+        switch src {
+        case .session(_, let g): return sessionTarget(from: g, onto: j)
+        case .group(let g):
+            guard sort == .off, let h = groupHead(at: j), h.id != g.id else { return nil }
+            return .group(h)
         }
+    }
+
+    /// Flach nur umsortieren. Gruppiert: in der eigenen Gruppe umsortieren (nur ohne Sortierung, nicht auf den
+    /// eigenen Kopf), über jeder Zeile einer fremden Gruppe hineinfallen.
+    private func sessionTarget(from g: Group, onto j: Int) -> Row? {
+        guard grouped else { return sort == .off ? rows[j] : nil }
+        guard let h = groupHead(at: j) else { return nil }
+        if h.id != g.id { return .group(h) }
+        guard sort == .off, case .session = rows[j] else { return nil }
+        return rows[j]
+    }
+
+    /// Gruppe, zu der Zeile `j` gehört: ihr Kopf oder eine ihrer Sessions.
+    private func groupHead(at j: Int) -> Group? {
+        guard case .group(let h)? = rows[...j].last(where: { if case .group = $0 { true } else { false } }) else { return nil }
+        return h
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -613,6 +677,7 @@ final class SidebarView: ClipWidthView {
             guard let t else { return }
             switch (press.row, t) {
             case (.session(let s, _), .session(let u, _)): moveSession(s.id, to: u.id)
+            case (.session(let s, _), .group(let h)): onMoveToGroup?([s.id], h.id)
             case (.group(let g), .group(let h)): onMoveGroup?(g.id, h.id)
             default: break
             }
