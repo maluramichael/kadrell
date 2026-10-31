@@ -51,6 +51,7 @@ struct OllamaSettings: SettingsBlock {
                     local.pull(pullName)
                     pullName = ""
                 }
+                .fixedSize()
                 .disabled(pullName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
@@ -184,11 +185,11 @@ private struct LocalStatusRow: SettingsBlock {
                 switch local.status(provider) {
                 case .off: Text(String(localized: "aus", bundle: Bundle.app)).foregroundStyle(Theme.mutedColor)
                 case .checking: ProgressView().controlSize(.small); Text(String(localized: "prüft …", bundle: Bundle.app)).foregroundStyle(Theme.mutedColor)
-                case .ready(let v): Text(v).foregroundStyle(Theme.accentTextColor).lineLimit(1).truncationMode(.middle)
+                case .ready(let v): Text(v).foregroundStyle(Theme.accentTextColor).lineLimit(1).truncationMode(.middle).help(v)
                 case .failed(let e): Text(e).foregroundStyle(Theme.errorTextColor).lineLimit(1).truncationMode(.tail).help(e + "\n" + hint)
                 }
                 Spacer(minLength: 4)
-                smallKey(String(localized: "Neu laden", bundle: Bundle.app)) { Task { await local.refresh(provider) } }
+                smallKey(String(localized: "Neu laden", bundle: Bundle.app)) { Task { await local.refresh(provider) } }.fixedSize()
             }
         }
     }
@@ -207,9 +208,10 @@ private struct LocalModelRows: View {
         }
         ForEach(models) { m in
             row {
-                Text(m.name).foregroundStyle(Theme.fgColor).lineLimit(1).truncationMode(.middle)
+                // Der Name hat Vorrang, die Angaben daneben kürzen zuerst (Größe steht vorn, sie zählt beim Aufräumen).
+                Text(m.name).foregroundStyle(Theme.fgColor).lineLimit(1).truncationMode(.middle).layoutPriority(1)
                 Spacer(minLength: 12)
-                Text([m.detail, m.sizeText].filter { !$0.isEmpty }.joined(separator: " · ")).foregroundStyle(Theme.mutedColor).lineLimit(1)
+                Text([m.sizeText, m.detail].filter { !$0.isEmpty }.joined(separator: " · ")).foregroundStyle(Theme.mutedColor).lineLimit(1)
                 if m.canRemove, !m.downloading { deleteKey(m) }
             }
         }
@@ -229,7 +231,7 @@ private struct LocalModelRows: View {
         } label: {
             Text(isArmed ? String(localized: "Wirklich löschen", bundle: Bundle.app) : String(localized: "Löschen", bundle: Bundle.app))
         }
-        .buttonStyle(InstrumentKeyStyle(isArmed ? .destructive : .neutral, compact: true)).kbdFocusRing()
+        .buttonStyle(InstrumentKeyStyle(isArmed ? .destructive : .neutral, compact: true)).kbdFocusRing().fixedSize()
     }
 }
 

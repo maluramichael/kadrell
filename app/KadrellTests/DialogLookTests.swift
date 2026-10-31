@@ -112,11 +112,12 @@ final class DialogLookTests: XCTestCase {
     }
 
     /// Jede Tabelle ist eine Gruppe mit Fugenring, zwischen ihren Zeilen liegen Fugen statt Linien; dazu eine Fuge
-    /// unter der Kopfzeile. Neun Bereiche plus zwei Kürzel-Tabellen (Navigation, Kacheln verwalten).
+    /// unter der Kopfzeile. Neun Bereiche, drei für lokale Modelle (Ollama, llama.cpp, Funktionen) plus zwei
+    /// Kürzel-Tabellen (Navigation, Kacheln verwalten).
     func testSettingsTablesAreGroupsWithSeams() {
         let parts = surfaceParts(SettingsView(model: SettingsModel()))
         let groups = parts.filter { $0 == .group }.count
-        XCTAssertEqual(groups, 11, "jede Tabelle eine Gruppe")
+        XCTAssertEqual(groups, 14, "jede Tabelle eine Gruppe")
         XCTAssertGreaterThan(parts.filter { $0 == .hSeam }.count, groups, "Fugen zwischen den Zeilen und unter der Kopfzeile")
     }
 
