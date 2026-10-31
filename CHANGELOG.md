@@ -2,6 +2,27 @@
 
 Neueste Version oben.
 
+## 1.73.0 (2026-10-31)
+
+- Feature: Schnellstart (⌘⇧I): Idee eintippen, Kadrell erkennt das Projekt und startet dort eine Session mit der Idee als erstem Prompt, auf Wunsch mit Hilfe eines lokalen Modells.
+- Feature: Lokale Modelle über Ollama und llama.cpp: installierte Modelle sehen, bei Ollama laden mit Fortschritt und auf ollama.com suchen, Modelle löschen.
+- Feature: Einstellungen „Modelle für Funktionen“: je Funktion an/aus und Modellwahl aus den installierten Modellen.
+- Feature: Statusleiste unten im Fenster, die Extensions befüllen können; ohne Einträge bleibt sie unsichtbar.
+- Feature: Einträge der Statusleisten mit Aktion lassen sich über die Kommandopalette (⌘P, dann >) auslösen.
+- Feature: Extensions können CPU-Last je Kern und Plattenbelegung abfragen, ohne Hilfsprozesse.
+- Feature: Extension-Einstellungen können jetzt Zahlenfelder und Auswahlmenüs haben.
+- Feature: Extensions bekommen einen Sprachwechsel sofort mit, ohne Neustart.
+- Feature: Kadrell kann Extensions zum Testen aus einem anderen Ordner laden, ohne die installierten anzufassen.
+- Feature: Sessions lassen sich im Baum per Ziehen auf eine andere Gruppe verschieben, auch per Rechtsklick „Verschieben nach“ und in der Suche. Sie behalten ihren Ordner und laufen weiter.
+- Feature: Gruppen haben ein Kontextmenü (Rechtsklick auf die Gruppenzeile): neue Session oder Terminal darin, alle zeigen, bearbeiten, Favorit, Ordner kopieren, im Finder oder Editor öffnen, schließen.
+- Feature: Beim Bearbeiten einer Gruppe lässt sich jetzt auch ihr Ordner ändern. Laufende Sessions bleiben, wo sie sind, neue starten im neuen Ordner.
+- Änderung: Die Einstellungen sind fast so breit wie das Fenster, verteilen sich auf zwei Spalten und fahren beim Öffnen von oben herein.
+- Änderung: Arbeitende Sessions zeigen im Baum, in Kachelköpfen und Stack-Zeilen einen ruhig atmenden Punkt statt der Strich-Anzeige; bei „Bewegung reduzieren“ steht er still.
+- Änderung: ⌃⏎ öffnet im Baum kein Kontextmenü mehr, sondern geht an die Session, weil Claude Code die Taste selbst verlangt. Das Kontextmenü bleibt auf ⇧F10.
+- Fix: Die Arbeitsanzeige einer Session geht nach einem Abbruch in Claude (Esc, ⌃C) zuverlässig auf „fertig“ zurück.
+- Fix: Nach einer erteilten oder abgelehnten Freigabe zeigt die Session wieder den richtigen Zustand statt weiter „wartet“.
+- Fix: Dialoge, Einstellungen und die Suche passen Größe und Lage sofort an, wenn das Fenster größer, kleiner oder verschoben wird.
+
 ## 1.72.0 (2026-10-23)
 
 - Änderung: Dialoge, Einstellungen, Hilfe (F1), Statistik (F3), Extensions (F4) und die Suche (⌘P) sind neu gestaltet: erhabene Fläche mit runden Ecken und feinen Fugen, Knöpfe als Tasten, Eingabefelder eingelassen, die Auswahl in Listen als Rahmen.

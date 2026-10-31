@@ -51,8 +51,8 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleName: Kadrell
         CFBundleDisplayName: Kadrell
-        CFBundleShortVersionString: "1.72.0"
-        CFBundleVersion: "126"
+        CFBundleShortVersionString: "1.73.0"
+        CFBundleVersion: "127"
         LSMinimumSystemVersion: "15.0"
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true
