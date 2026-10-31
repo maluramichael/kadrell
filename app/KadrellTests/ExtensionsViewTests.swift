@@ -513,7 +513,10 @@ final class ExtensionsViewTests: XCTestCase {
                                        "description": "Zeigt offene Pull-Requests", "permissions": ["exec", "http"],
                                        "settings": [["key": "repo", "type": "string", "label": "Repository", "default": "kadrell"],
                                                     ["key": "token", "type": "secret", "label": "API-Token"],
-                                                    ["key": "drafts", "type": "bool", "label": "Entwürfe zeigen", "default": false]]]
+                                                    ["key": "drafts", "type": "bool", "label": "Entwürfe zeigen", "default": false],
+                                                    ["key": "every", "type": "number", "label": "Alle (Sekunden)", "default": 5],
+                                                    ["key": "view", "type": "choice", "label": "Ansicht", "default": "short",
+                                                     "options": [["value": "short", "label": "Kurz"], ["value": "long", "label": "Ausführlich"]]]]]
         try add("a", "kadrell.log('bereit')", manifest: settings)
         try add("b", "error('kaputt')", manifest: ["name": "b", "version": "0.3.0", "apiVersion": 1, "description": "Stürzt beim Start ab"])
         try add("c", "", manifest: ["name": "c", "version": "2.0.0", "apiVersion": 1, "description": "Abgeschaltet"])

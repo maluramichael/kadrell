@@ -42,8 +42,29 @@ enum JSONValue: Codable, Equatable {
 struct ExtensionManifest: Codable, Equatable {
     struct Setting: Codable, Equatable {
         var key, type, label: String
-        /// `string`, `secret` oder `bool`; `secret` liegt im Schlüsselbund, nie in einer Datei.
+        /// `string`, `secret`, `bool`, `number` oder `choice`; `secret` liegt im Schlüsselbund, nie in einer Datei.
+        /// Ein unbekannter Typ gilt als `string`.
         var `default`: JSONValue?
+        /// Nur bei `choice`: die Auswahl.
+        var options: [Option]?
+    }
+
+    /// Eine Wahl bei `choice`: `{ "value": …, "label": … }` oder nur der Wert als Text (dann ist er auch das Label).
+    struct Option: Codable, Equatable {
+        var value, label: String
+
+        init(value: String, label: String) { self.value = value; self.label = label }
+
+        init(from decoder: Decoder) throws {
+            if let plain = try? decoder.singleValueContainer().decode(String.self) {
+                value = plain
+                label = plain
+                return
+            }
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            value = try c.decode(String.self, forKey: .value)
+            label = try c.decodeIfPresent(String.self, forKey: .label) ?? value
+        }
     }
 
     static let supportedAPI = 1
@@ -76,7 +97,20 @@ struct FoundExtension: Equatable {
 }
 
 enum ExtensionCatalog {
-    static let dir = URL(fileURLWithPath: NSHomeDirectory() + "/.config/kadrell/extensions")
+    /// `~/.config/kadrell/extensions`, ersetzt durch `--extensions-dir <ordner>` oder `KADRELL_EXTENSIONS_DIR`: so lädt
+    /// z. B. ein Testlauf mit `--profile tmp` Extensions aus einem eigenen Ordner, ohne den anzufassen, den ein anderes
+    /// Kadrell beobachtet.
+    static let dir = customDir(arguments: CommandLine.arguments, environment: ProcessInfo.processInfo.environment)
+        ?? URL(fileURLWithPath: NSHomeDirectory() + "/.config/kadrell/extensions")
+
+    /// Das Argument geht vor der Umgebung; leer heißt: kein eigener Ordner. `~` wird aufgelöst.
+    static func customDir(arguments: [String], environment: [String: String]) -> URL? {
+        let raw: String?
+        if let i = arguments.firstIndex(of: "--extensions-dir"), i + 1 < arguments.count { raw = arguments[i + 1] }
+        else { raw = environment["KADRELL_EXTENSIONS_DIR"] }
+        guard let path = raw?.trimmingCharacters(in: .whitespaces), !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL
+    }
 
     static func scan(_ dir: URL = dir) -> [FoundExtension] {
         let fm = FileManager.default

@@ -301,6 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         workspace.onPickLanguage = { [weak self] language in
             Settings.language = language
+            self?.emitLocale()
             self?.buildMenu()
             self?.reloadViews()
         }
@@ -918,6 +919,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Theme.scale = CGFloat(Settings.uiScale)
             if palette.isVisible { palette.dismiss() }
             palette = PaletteWindow()
+            if languageChanged { emitLocale() }
             paletteLanguage = Settings.language
         }
         for c in windows { c.applyAppearance(themeChanged: themeChanged) }
@@ -1091,6 +1093,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         commands += accounts.accounts.map { a in (String(localized: "Zu Konto wechseln: \(a.title)", bundle: Bundle.app), { [weak self] in self?.switchAccount(a.id) }) }
         commands += store.groups.map { g in (String(localized: "Alle Sessions von \(g.name)", bundle: Bundle.app), { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
+        commands += extensionCommands()
         src.commands = commands
         palette.source = src
         palette.onClose = { [weak self] in self?.workspace.refocusTerminal() }

@@ -8567,6 +8567,42 @@
           }
         }
       }
+    },
+    "Statusleiste: %@ · %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: %@ · %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: %1$@ · %2$@" } }
+      }
+    },
+    "Statusleiste der Extensions": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste der Extensions" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Extension status bar" } }
+      }
+    },
+    "Statusleiste: Eintrag ohne „id“ übersprungen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: Eintrag ohne „id“ übersprungen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: skipped entry without “id”" } }
+      }
+    },
+    "Statusleiste: Eintrag „%@“ ohne Inhalt übersprungen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: Eintrag „%@“ ohne Inhalt übersprungen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: skipped entry “%@” without content" } }
+      }
+    },
+    "Statusleiste: höchstens %lld Einträge, der Rest fehlt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: höchstens %lld Einträge, der Rest fehlt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: at most %lld entries, the rest is left out" } }
+      }
+    },
+    "Statusleiste: id „%@“ doppelt, übersprungen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Statusleiste: id „%@“ doppelt, übersprungen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Status bar: duplicate id “%@”, skipped" } }
+      }
     }
   },
   "version": "1.0"
