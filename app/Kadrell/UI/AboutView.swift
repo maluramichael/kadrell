@@ -90,6 +90,6 @@ struct AboutView: View {
             Text("Esc oder F1 schließen").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .frame(width: 640 * Theme.scale, alignment: .leading)
+        .overlayWidth(640, alignment: .leading)
     }
 }

@@ -33,7 +33,7 @@ struct StatsView: View {
             Text("Esc oder F3 schließen").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .frame(width: 460 * Theme.scale, alignment: .leading)
+        .overlayWidth(460, alignment: .leading)
     }
 
     private var header: some View {
