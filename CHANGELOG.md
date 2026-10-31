@@ -2,6 +2,13 @@
 
 Neueste Version oben.
 
+## 1.74.0 (2026-10-31)
+
+- Änderung: Der automatische Kontowechsel verteilt jetzt durchgehend nach Wochentempo: aktiv ist das Konto, das gemessen an seinem Tagesbudget am meisten Luft hat, nicht erst kurz vor der Sperre. Die Einstellung heißt „Nach Wochentempo verteilen“.
+- Änderung: Ultra-Konten (vorher Max 20x) haben seit dem 30.10.2026 kein 5-Stunden-Limit mehr: Kadrell blendet dort den 5h-Wert aus und wechselt deswegen nicht mehr.
+- Änderung: Konten zeigen ihren Plan unter dem neuen Namen (Ultra, Max, Pro).
+- Fix: Testinstanzen mit temporärem Profil wechseln das Claude-Konto nicht mehr automatisch.
+
 ## 1.73.0 (2026-10-31)
 
 - Feature: Schnellstart (⌘⇧I): Idee eintippen, Kadrell erkennt das Projekt und startet dort eine Session mit der Idee als erstem Prompt, auf Wunsch mit Hilfe eines lokalen Modells.

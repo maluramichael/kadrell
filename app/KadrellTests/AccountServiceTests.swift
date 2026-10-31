@@ -115,6 +115,73 @@ final class AccountServiceTests: XCTestCase {
         XCTAssertEqual(u.fable, 19, "Fable folgt dem 7d-Reset, hier noch offen")
     }
 
+    // MARK: Verteilung nach Wochentempo, Ultra ohne 5-Stunden-Limit
+
+    private let ultraTier = "default_claude_max_20x"
+
+    private func with(_ a: Account, tier: String?) -> Account { var a = a; a.tier = tier; return a }
+
+    /// Live-Stand des aktiven Accounts, Wochen-Reset in 84 h (Soll 50 %).
+    private func live(session: Int?, weekly: Int?) -> Usage {
+        Usage(session: session, weekly: weekly, fable: nil, sessionResets: now.addingTimeInterval(3600),
+              weeklyResets: now.addingTimeInterval(84 * 3600))
+    }
+
+    private func switchTarget(_ usage: Usage, active: Account, others: [Account], onPace: Bool = true) -> String? {
+        AccountService.switchTarget(usage, active: active, among: [active] + others, activeId: active.id,
+                                    threshold: 90, onPace: onPace, hysteresis: 10, now: now)
+    }
+
+    /// Ultra hat kein 5-Stunden-Limit: ein voller 5h-Wert löst keinen Wechsel aus, solange das Tempo gleich ist.
+    func testUltraIgnoresSessionForSwitch() {
+        let ultra = with(acct("live", session: 95, weekly: 30, weeklyResetsIn: 84), tier: ultraTier)
+        let other = acct("x", session: 10, weekly: 30, weeklyResetsIn: 84)
+        XCTAssertNil(switchTarget(live(session: 95, weekly: 30), active: ultra, others: [other]))
+    }
+
+    /// Accounts mit 5-Stunden-Limit wechseln weiter, bevor das Fenster voll ist.
+    func testSessionLimitedAccountStillSwitchesAtThreshold() {
+        let max = with(acct("live", session: 95, weekly: 30, weeklyResetsIn: 84), tier: "default_claude_max_5x")
+        let other = acct("x", session: 10, weekly: 30, weeklyResetsIn: 84)
+        XCTAssertEqual(switchTarget(live(session: 95, weekly: 30), active: max, others: [other]), "x")
+    }
+
+    /// Verteilt wird durchgehend nach Tempo, nicht erst, wenn der aktive Account über seinem Soll liegt.
+    func testPaceBalancesEvenBelowPlan() {
+        let active = acct("live", session: 5, weekly: 20, weeklyResetsIn: 84)   // Soll 50, Vorrat 30
+        let other = acct("x", session: 0, weekly: 0, weeklyResetsIn: 84)        // Vorrat 50
+        XCTAssertEqual(switchTarget(live(session: 5, weekly: 20), active: active, others: [other]), "x")
+        XCTAssertNil(switchTarget(live(session: 5, weekly: 20), active: active, others: [other], onPace: false))
+    }
+
+    /// Ein Ultra-Ziel mit hohem 5h-Wert bleibt wählbar; nur ein volles Fenster (100 %) schließt es aus.
+    func testUltraTargetBlockedOnlyByFullSession() {
+        let active = acct("live", session: 5, weekly: 40, weeklyResetsIn: 84)   // Vorrat 10
+        let ultra = with(acct("u", session: 99, weekly: 0, weeklyResetsIn: 84), tier: ultraTier)
+        XCTAssertEqual(switchTarget(live(session: 5, weekly: 40), active: active, others: [ultra]), "u")
+        let blocked = with(acct("u", session: 100, weekly: 0, weeklyResetsIn: 84), tier: ultraTier)
+        XCTAssertNil(switchTarget(live(session: 5, weekly: 40), active: active, others: [blocked]))
+    }
+
+    /// Planname nach der Umbenennung vom 30.10.2026, ohne Stufe der Abo-Typ.
+    func testPlanNameFollowsTier() {
+        let a = acct("a", session: nil, weekly: nil, weeklyResetsIn: 84)
+        XCTAssertEqual(with(a, tier: ultraTier).planName, "Ultra")
+        XCTAssertEqual(with(a, tier: "default_claude_max_5x").planName, "Max")
+        var pro = a; pro.subscription = "pro"
+        XCTAssertEqual(pro.planName, "Pro")
+        XCTAssertFalse(with(a, tier: ultraTier).hasSessionLimit)
+        XCTAssertTrue(a.hasSessionLimit, "ohne bekannte Stufe gilt das Limit weiter")
+    }
+
+    /// Im Konto-Menü entfällt der 5h-Teil bei Accounts ohne 5-Stunden-Limit.
+    func testUsageDetailHidesSessionWithoutLimit() {
+        let u = CachedUsage(session: 40, weekly: 20, fable: nil, sessionResets: Date().addingTimeInterval(3600),
+                            weeklyResets: Date().addingTimeInterval(3600), at: Date())
+        XCTAssertTrue(AccountService.usageDetail(u).contains("5h"))
+        XCTAssertFalse(AccountService.usageDetail(u, session: false).contains("5h"))
+    }
+
     // MARK: Inaktive Accounts abfragen
 
     /// Fällig ist ein Account erst, wenn weder sein Stand noch der letzte Versuch jünger als das Intervall ist.

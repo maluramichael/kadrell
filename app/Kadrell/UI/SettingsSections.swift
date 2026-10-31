@@ -55,7 +55,7 @@ struct AccountsSettings: SettingsBlock {
     var body: some View {
         SettingsSection(String(localized: "Konten", bundle: Bundle.app), note: String(localized: "mehrere Claude-Accounts, Umschalten ohne neues Login", bundle: Bundle.app)) {
             ForEach(model.accountList) { a in
-                setting(a.title + (a.subscription.map { " · \($0)" } ?? "")) {
+                setting(a.title + (a.planName.map { " · \($0)" } ?? "")) {
                     HStack(spacing: 10) {
                         if a.id == model.activeAccountId {
                             Text(String(localized: "aktiv", bundle: Bundle.app)).foregroundStyle(Theme.accentTextColor)
@@ -82,7 +82,7 @@ struct AccountsSettings: SettingsBlock {
             }
             setting(String(localized: "Wechsel-Meldung anzeigen", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchNotice)) }
             setting(String(localized: "Warnen bei zu schnellem 7-Tage-Verbrauch", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchPaceWarning)) }
-            setting(String(localized: "Bei zu schnellem 7-Tage-Verbrauch wechseln", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchOnPace)) }
+            setting(String(localized: "Nach Wochentempo verteilen", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchOnPace)) }
         }
     }
 }

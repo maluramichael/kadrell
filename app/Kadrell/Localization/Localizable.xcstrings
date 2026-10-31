@@ -1451,18 +1451,18 @@
         }
       }
     },
-    "Bei zu schnellem 7-Tage-Verbrauch wechseln": {
+    "Nach Wochentempo verteilen": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bei zu schnellem 7-Tage-Verbrauch wechseln"
+            "value": "Nach Wochentempo verteilen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Switch on too-fast 7-day usage"
+            "value": "Balance by weekly pace"
           }
         }
       }

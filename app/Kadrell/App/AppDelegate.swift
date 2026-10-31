@@ -346,6 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyAccounts(to bar: StatusBarView) {
         bar.accounts = accounts.menuItems
         bar.autoswitch = Settings.autoswitchEnabled
+        bar.showSession = accounts.active?.hasSessionLimit ?? true
         bar.needsDisplay = true
     }
 
@@ -546,6 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         usage.start()
         accounts.startInactivePolling()
+        Task { [weak self] in await self?.accounts.loadTiers() }
         accounts.onChange = { [weak self] in self?.refreshAccountBars() }
         accounts.onAutoSwitch = { [weak self] to in self?.notifyAutoSwitch(to) }
         updateChecker.onChange = { [weak self] m in self?.bar.updateAvailable = m; self?.bar.needsDisplay = true }

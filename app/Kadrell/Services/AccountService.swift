@@ -22,8 +22,6 @@ struct CachedUsage: Codable, Equatable, Sendable {
         Usage(session: session(at: now), weekly: weekly(at: now), fable: freed(fable, weeklyResets, now),
               sessionResets: sessionResets, weeklyResets: weeklyResets)
     }
-    /// Bindender Wert für den Auto-Wechsel: der höhere von 5 h und 7 Tagen, jeweils reset-bereinigt.
-    func used(at now: Date = Date()) -> Int { max(session(at: now) ?? 0, weekly(at: now) ?? 0) }
     private func freed(_ v: Int?, _ resets: Date?, _ now: Date) -> Int? {
         if let resets, resets <= now { return 0 }
         return v
@@ -36,11 +34,37 @@ struct Account: Codable, Equatable, Identifiable, Sendable {
     var email: String?
     var subscription: String?
     var usage: CachedUsage?
+    /// `rateLimitTier` aus dem OAuth-Block, z. B. `default_claude_max_20x`. Fehlt bei Slots aus älteren Versionen,
+    /// bis `loadTiers` sie nachträgt.
+    var tier: String? = nil
     /// Anzeigename: eigener Alias, sonst E-Mail, sonst ein neutraler Platzhalter.
     var title: String {
         if !alias.isEmpty { return alias }
         if let email, !email.isEmpty { return email }
         return String(localized: "Konto", bundle: Bundle.app)
+    }
+
+    /// Ultra hieß bis 30.10.2026 Max 20x, die Stufe heißt weiter `default_claude_max_20x`.
+    private var isUltra: Bool {
+        let t = tier?.lowercased() ?? ""
+        return t.contains("max_20x") || t.contains("ultra")
+    }
+
+    /// Seit 30.10.2026 hat Ultra kein 5-Stunden-Limit mehr, nur noch das Wochenlimit.
+    var hasSessionLimit: Bool { !isUltra }
+
+    /// Planname wie bei Anthropic seit 30.10.2026 (Max 20x heißt Ultra, Max 5x heißt Max), sonst der Abo-Typ.
+    var planName: String? {
+        if isUltra { return "Ultra" }
+        if tier?.lowercased().contains("max_5x") == true { return "Max" }
+        return subscription.map { $0.prefix(1).uppercased() + $0.dropFirst() }
+    }
+
+    /// 5-Stunden-Wert, der für den Wechsel zählt. Ohne 5-Stunden-Limit nur ein volles Fenster: so bleibt ein noch
+    /// nicht verifiziertes Ultra-Konto, das das Limit noch hat, nicht hängen.
+    func bindingSession(_ v: Int?) -> Int? {
+        guard let v else { return nil }
+        return hasSessionLimit || v >= 100 ? v : nil
     }
 }
 
@@ -80,15 +104,16 @@ final class AccountService {
     var active: Account? { accounts.first { $0.id == activeId } }
     /// Für die Leiste: je Account Kürzel, Markierung des aktiven und der zwischengespeicherte Nutzungsstand.
     var menuItems: [(id: String, title: String, active: Bool, detail: String)] {
-        accounts.map { ($0.id, $0.title, $0.id == activeId, Self.usageDetail($0.usage)) }
+        accounts.map { ($0.id, $0.title, $0.id == activeId, Self.usageDetail($0.usage, session: $0.hasSessionLimit)) }
     }
 
     /// „5h 45% · 7d 56% · vor 12 min“ aus dem gecachten Stand, leer wenn nie ein Stand gemerkt wurde. Ein Fenster,
     /// das seit der Messung zurückgesetzt hat, steht als „frei“.
-    static func usageDetail(_ u: CachedUsage?) -> String {
+    /// Ohne 5-Stunden-Limit (`session` false) entfällt der 5h-Teil.
+    static func usageDetail(_ u: CachedUsage?, session: Bool = true) -> String {
         guard let u else { return "" }
         let now = Date()
-        var parts = [dim("5h", u.session, u.sessionResets, now), dim("7d", u.weekly, u.weeklyResets, now)].filter { !$0.isEmpty }
+        var parts = [session ? dim("5h", u.session, u.sessionResets, now) : "", dim("7d", u.weekly, u.weeklyResets, now)].filter { !$0.isEmpty }
         guard !parts.isEmpty else { return "" }
         let mins = max(0, Int(now.timeIntervalSince(u.at) / 60))
         parts.append(mins < 1 ? String(localized: "gerade eben", bundle: Bundle.app) : String(localized: "vor \(mins) min", bundle: Bundle.app))
@@ -129,19 +154,21 @@ final class AccountService {
               let oauth = Self.oauth(from: raw), let token = oauth["accessToken"] as? String else { return false }
         let email = await Self.profileEmail(token: token)
         let sub = oauth["subscriptionType"] as? String
+        let tier = oauth["rateLimitTier"] as? String
         guard let blob = Self.string(from: oauth) else { return false }
 
         if let email, let i = accounts.firstIndex(where: { $0.email == email }) {
             let id = accounts[i].id
             guard await Keychain.write(service: Self.storeService, account: id, value: blob) else { return false }
             accounts[i].subscription = sub
+            accounts[i].tier = tier
             setActive(id)
             return true
         }
         let id = UUID().uuidString
         guard await Keychain.write(service: Self.storeService, account: id, value: blob) else { return false }
         let alias = email ?? String(localized: "Konto \(accounts.count + 1)", bundle: Bundle.app)
-        accounts.append(Account(id: id, alias: alias, email: email, subscription: sub))
+        accounts.append(Account(id: id, alias: alias, email: email, subscription: sub, tier: tier))
         setActive(id)
         return true
     }
@@ -165,6 +192,7 @@ final class AccountService {
         guard let merged = Self.string(from: full),
               await Keychain.write(service: Self.liveService, account: NSUserName(), value: merged) else { return false }
         lastSwitch = Date()
+        if let i = accounts.firstIndex(where: { $0.id == id }), let t = targetOauth["rateLimitTier"] as? String { accounts[i].tier = t }
         setActive(id)
         Self.log.notice("Account gewechselt")
         return true
@@ -186,6 +214,22 @@ final class AccountService {
         busy = true
         defer { busy = false }
         return await body()
+    }
+
+    /// Stufe (`rateLimitTier`) für Accounts nachtragen, die vor ihrer Speicherung angelegt wurden: aus dem Live-Eintrag
+    /// für den aktiven, aus dem Slot für die übrigen. Nur lesen, nichts rotieren.
+    func loadTiers() async {
+        for a in accounts where a.tier == nil {
+            let raw = await exclusive {
+                await Keychain.read(service: a.id == activeId ? Self.liveService : Self.storeService,
+                                    account: a.id == activeId ? nil : a.id)
+            }
+            // Der Live-Eintrag hat den Block unter `claudeAiOauth`, ein Slot ist der Block selbst.
+            let block = raw.flatMap { Self.oauth(from: $0) ?? Self.object(from: $0) }
+            guard let t = block?["rateLimitTier"] as? String, let i = accounts.firstIndex(where: { $0.id == a.id }) else { continue }
+            accounts[i].tier = t
+        }
+        persist()
     }
 
     // MARK: Inaktive Accounts abfragen
@@ -284,7 +328,9 @@ final class AccountService {
     /// mit dem meisten Rest wechseln, aber nur wenn der spürbar leerer ist. Die Kandidaten werden vorher live
     /// abgefragt; scheitert das, wird nicht gewechselt (ein alter Stand kann längst voll sein).
     func considerAutoSwitch(_ usage: Usage) {
-        guard Settings.autoswitchEnabled, accounts.count > 1, let activeId, !autoSwitching,
+        // Temp-Profile teilen den Schlüsselbund mit dem eigenen Kadrell: ein Wechsel dort tauschte das Konto aller
+        // laufenden Claude-Prozesse, deshalb nie automatisch.
+        guard !Profile.isTemporary, Settings.autoswitchEnabled, accounts.count > 1, let activeId, !autoSwitching,
               Date().timeIntervalSince(lastSwitch) >= Self.cooldown,
               autoSwitchTarget(usage, activeId: activeId) != nil else { return }
         autoSwitching = true
@@ -309,20 +355,26 @@ final class AccountService {
         return target
     }
 
-    /// Ziel des Auto-Wechsels: bei erreichter Füllstand-Schwelle der leerste Account. Zusätzlich, wenn `autoswitchOnPace`
-    /// an ist und ein früher Wochen-Lockout droht, der Account mit spürbar mehr Wochen-Runway. Sonst nil (kein Wechsel).
     private func autoSwitchTarget(_ usage: Usage, activeId: String) -> String? {
-        let used = max(usage.session ?? 0, usage.weekly ?? 0)
-        if used >= Settings.autoswitchThreshold, let t = bestTarget(excluding: activeId, activeUsed: used) { return t }
-        guard Settings.autoswitchOnPace, usage.weeklyLockout() != nil else { return nil }
-        let headroom = (usage.weeklyPlan() ?? 100) - (usage.weekly ?? 0)
-        return bestPaceTarget(excluding: activeId, activeHeadroom: headroom)
+        Self.switchTarget(usage, active: accounts.first { $0.id == activeId }, among: accounts, activeId: activeId,
+                          threshold: Settings.autoswitchThreshold, onPace: Settings.autoswitchOnPace,
+                          hysteresis: Self.hysteresis, now: Date())
     }
 
-    /// Der Account, auf den der Auto-Wechsel zielt, aus den echten Einstellungen und der aktuellen Zeit.
-    private func bestTarget(excluding id: String, activeUsed: Int) -> String? {
-        Self.bestTarget(among: accounts, activeId: id, activeUsed: activeUsed,
-                        threshold: Settings.autoswitchThreshold, hysteresis: Self.hysteresis, now: Date())
+    /// Ziel des Auto-Wechsels (rein, testbar). Verteilt wird nur nach Wochentempo: mit `onPace` immer auf den Account,
+    /// der spürbar mehr Vorrat zu seinem Wochen-Soll hat. Die Füllstand-Schwelle ist nur das Netz kurz vor der Wand.
+    /// Ein 5-Stunden-Wert zählt nur bei Accounts, die das Limit noch haben. Sonst nil (kein Wechsel).
+    static func switchTarget(_ usage: Usage, active: Account?, among accounts: [Account], activeId: String,
+                             threshold: Int, onPace: Bool, hysteresis: Int, now: Date) -> String? {
+        // Ohne bekannten aktiven Account gilt der 5h-Wert wie bisher; `bindingSession` gibt bei Ultra bewusst nil zurück.
+        let session = active.map { $0.bindingSession(usage.session) } ?? usage.session
+        let used = max(session ?? 0, usage.weekly ?? 0)
+        if used >= threshold, let t = bestTarget(among: accounts, activeId: activeId, activeUsed: used,
+                                                 threshold: threshold, hysteresis: hysteresis, now: now) { return t }
+        guard onPace else { return nil }
+        let headroom = (usage.weeklyPlan(now: now) ?? 100) - (usage.weekly ?? 0)
+        return bestPaceTarget(among: accounts, activeId: activeId, activeHeadroom: headroom,
+                              threshold: threshold, hysteresis: hysteresis, now: now)
     }
 
     /// Reine Zielwahl (testbar): unter den Accounts mit noch freiem 5-Stunden-Fenster der mit dem meisten
@@ -337,13 +389,8 @@ final class AccountService {
     }
 
     /// Wie `bestTarget`, aber für den Pace-Fall: Ziel ist der Account mit dem meisten Wochen-Runway, gewählt nur wenn er
-    /// den aktiven um die Hysterese-Marge an Pace-Vorrat übertrifft. So springt der Wechsel weg vom zu schnell brennenden
-    /// Account, auch wenn dessen Füllstand die Schwelle noch nicht erreicht hat.
-    private func bestPaceTarget(excluding id: String, activeHeadroom: Int) -> String? {
-        Self.bestPaceTarget(among: accounts, activeId: id, activeHeadroom: activeHeadroom,
-                            threshold: Settings.autoswitchThreshold, hysteresis: Self.hysteresis, now: Date())
-    }
-
+    /// den aktiven um die Hysterese-Marge an Pace-Vorrat übertrifft. So verteilt sich die Woche auf alle Accounts,
+    /// auch wenn keiner die Schwelle erreicht.
     static func bestPaceTarget(among accounts: [Account], activeId: String, activeHeadroom: Int,
                                threshold: Int, hysteresis: Int, now: Date) -> String? {
         let candidates = accounts.filter { $0.id != activeId && sessionUsed($0, now: now) < threshold }
@@ -359,11 +406,11 @@ final class AccountService {
         return (u.weeklyPlan(now: now) ?? 100) - (u.weekly ?? 0)
     }
 
-    /// 5-Stunden-Auslastung, reset-bereinigt; nie gesehen zählt als leer.
-    static func sessionUsed(_ a: Account, now: Date) -> Int { a.usage?.asUsage(at: now).session ?? 0 }
+    /// 5-Stunden-Auslastung, reset-bereinigt und nur, wo das Limit gilt; nie gesehen zählt als leer.
+    static func sessionUsed(_ a: Account, now: Date) -> Int { a.bindingSession(a.usage?.asUsage(at: now).session) ?? 0 }
 
     /// Gecachte Gesamtauslastung (höherer von 5 h und 7 Tagen), reset-bereinigt; nie gesehen zählt als leer.
-    static func cachedUsed(_ a: Account, now: Date) -> Int { a.usage?.used(at: now) ?? 0 }
+    static func cachedUsed(_ a: Account, now: Date) -> Int { max(sessionUsed(a, now: now), a.usage?.weekly(at: now) ?? 0) }
 
     // MARK: JSON-Helfer (rein, testbar)
 

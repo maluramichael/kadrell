@@ -513,13 +513,17 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         let name: String, pct: Int?, from: Int?, label: String, plan: Int?, reset: Date?
     }
 
+    /// Hat der aktive Account ein 5-Stunden-Limit? Ohne (Ultra) entfällt der 5h-Wert.
+    var showSession = true
+
     /// Nutzungswerte von rechts: Fable-Woche, 7 Tage, 5 Stunden.
     private var usageRows: [UsageRow] {
-        [
+        let rows = [
             UsageRow(name: "fable", pct: usage.fable, from: usageFrom.fable, label: String(localized: "Fable-Kontingent", bundle: Bundle.app), plan: nil, reset: usage.weeklyResets),
             UsageRow(name: "7d", pct: usage.weekly, from: usageFrom.weekly, label: String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app), plan: usage.weeklyPlan(), reset: usage.weeklyResets),
             UsageRow(name: "5h", pct: usage.session, from: usageFrom.session, label: String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app), plan: nil, reset: usage.sessionResets),
         ]
+        return showSession ? rows : rows.filter { $0.name != "5h" }
     }
 
     /// Claude-Nutzung als flache Module. Fehlt ein Wert, steht „–%“ statt nichts. Vor dem 7-Tage-Wert steht der
