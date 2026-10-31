@@ -20,6 +20,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case zoom, nextLayout, closeFocused, openEditor, renameSession, syncInput
     case focusSidebar, focusWorkspace, cycleSort, toggleGrouping
     case focusRightSidebar, toggleRightSidebar
+    case quickStart
     case restart
 
     /// 0-basiert für focus1…focus9.
@@ -59,6 +60,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .cycleSort: return String(localized: "Baum sortieren: aus → A–Z → Status", bundle: Bundle.app)
         case .toggleGrouping: return String(localized: "Baum nach Projekt gruppieren", bundle: Bundle.app)
         case .syncInput: return String(localized: "Sync: Eingabe an alle Kacheln", bundle: Bundle.app)
+        case .quickStart: return String(localized: "Schnellstart: Idee rein, Session raus", bundle: Bundle.app)
         case .restart: return String(localized: "Kadrell neu starten", bundle: Bundle.app)
         default: return String(localized: "Fokus-Kachel schließen", bundle: Bundle.app)
         }
@@ -80,6 +82,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .renameSession: return String(localized: "Fokus-Session umbenennen, auch im Baum · Claude überschreibt den Namen danach nicht mehr", bundle: Bundle.app)
         case .syncInput: return String(localized: "Sync: Tippen und ⌘V gehen an alle offenen Kacheln gleichzeitig · Badge „SYNC“", bundle: Bundle.app)
         case .toggleGrouping: return String(localized: "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge", bundle: Bundle.app)
+        case .quickStart: return String(localized: "Idee tippen, Kadrell erkennt das Projekt und startet dort eine Session mit der Idee als erstem Prompt", bundle: Bundle.app)
         case .focusRightSidebar: return String(localized: "Rechte Sidebar der Extensions: ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ alle Aktionen, Esc zurück", bundle: Bundle.app)
         default: return title
         }
@@ -119,6 +122,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .cycleSort: return Hotkey(.option, "o")
         case .toggleGrouping: return Hotkey(.option, "g")
         case .syncInput: return Hotkey(.option, "i")
+        case .quickStart: return Hotkey([.command, .shift], "i")   // ⌘⇧N ist schon „Remote verbinden“
         case .restart: return Hotkey([], "")   // Default unbelegt, in den Einstellungen belegbar
         default: return Hotkey(.option, "Esc")
         }

@@ -265,6 +265,8 @@ struct SettingsView: View {
                 }
             }
 
+            LocalModelsSettingsSection()
+
             heading(String(localized: "Tastenkürzel", bundle: Bundle.app), note: String(localized: "Kürzel anklicken, Tasten drücken · ⌫ entfernt", bundle: Bundle.app))
             ForEach(hotkeyGroups, id: \.0) { title, actions in
                 Text(title).capsLabel(bold: true)
