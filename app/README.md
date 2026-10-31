@@ -72,8 +72,11 @@ Hooks mit (SessionStart, UserPromptSubmit, PermissionRequest, Notification, Stop
 `[ -n "$KADRELL_SOCKET" ] && exec "$KADRELL" hook claude || exit 0`. `kadrell hook claude` liest das Hook-JSON von stdin
 und schickt `kadrell status working|waiting|idle [--session-id] [--title] [--waiting-for] [--message] [--first-prompt]`
 an den Socket der eigenen Kachel; ohne Socket endet der Hook sofort. Eine so gemeldete Kachel wird nicht mehr gepollt
-(kein Lesen von `sessions/<pid>.json`, kein Transcript-Scan), bis ihr Prozess endet; meldet sich ein Prozess nicht
-(ältere CLI), bleibt es beim alten Weg. Nichts wird in `~/.claude/settings.json` eingetragen.
+(kein Transcript-Scan, `sessions/<pid>.json` nur solange sie arbeitet oder wartet), bis ihr Prozess endet; meldet sich
+ein Prozess nicht (ältere CLI), bleibt es beim alten Weg. Grund für den Rest-Abgleich: bei einem Abbruch (Esc, ⌃C) feuert
+Claude Code keinen `Stop`-Hook, die Datei springt aber auf `idle` und stempelt `statusUpdatedAt`. Ist der Stempel neuer
+als die letzte Meldung, gilt die Datei (`ReportFallback`); steht 5 s nach „arbeitet“ noch das alte `idle` da, hat die
+Runde nie begonnen. Nichts wird in `~/.claude/settings.json` eingetragen.
 `kadrell status` steht auch anderen Agent-CLIs offen, siehe `docs/agenten-plan.md`.
 
 Fernsteuerung (wie das `tmux`-Kommando): Menü Kadrell › „Kommandozeilen-Tool installieren …“ legt

@@ -106,9 +106,11 @@ struct Agent: Decodable, Equatable, Sendable {
     let status: String?
     let pid: Int?
     let waitingFor: String?
+    /// Wann Claude Code `status` zuletzt geschrieben hat (ms seit 1970), nur in `sessions/<pid>.json`.
+    let statusUpdatedAt: Double?
 
     enum CodingKeys: String, CodingKey {
-        case shortId = "id", cwd, kind, startedAt, sessionId, name, state, status, pid, waitingFor
+        case shortId = "id", cwd, kind, startedAt, sessionId, name, state, status, pid, waitingFor, statusUpdatedAt
     }
 
     /// Tolerant: Einträge ohne `name` (z. B. liegengebliebene Kopien) dürfen nicht die ganze Liste kippen.
@@ -124,6 +126,7 @@ struct Agent: Decodable, Equatable, Sendable {
         status = try c.decodeIfPresent(String.self, forKey: .status)
         pid = try c.decodeIfPresent(Int.self, forKey: .pid)
         waitingFor = try c.decodeIfPresent(String.self, forKey: .waitingFor)
+        statusUpdatedAt = try c.decodeIfPresent(Double.self, forKey: .statusUpdatedAt)
     }
 
     /// Laufende Hintergrund-Session aus `claude --bg` (gestoppte haben keine pid).

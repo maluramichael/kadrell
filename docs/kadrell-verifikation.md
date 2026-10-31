@@ -35,6 +35,24 @@ Dateiänderung `EnterWorktree` erzwingt. Geprüft per Python-`pty.fork` in einer
 - Der Hook-Prozess erbt die Umgebung des claude-Prozesses samt eigenen Variablen (`KADRELL_*`) und `CLAUDE_PID`;
   `~/.claude/sessions/$CLAUDE_PID.json` hat die Felder `name`, `nameSource` (`derived` = automatischer Name), `status`.
 
+## Abbruch ohne `Stop`-Hook (31.10.2026, 2.1.314)
+
+Geprüft per Python-`pty.fork` (interaktiv, `--model haiku`, Hooks per `--settings`, die jede Hook-Eingabe mit
+Zeitstempel protokollieren), daneben `~/.claude/sessions/<pid>.json` alle 10 s gelesen:
+
+- Esc während der Antwort, ⌃C während der Antwort, Esc während eines laufenden Bash-Werkzeugs (40 s `sleep`): danach
+  weder `Stop` noch `PostToolUse`/`PostToolUseFailure` noch ein `idle_prompt` binnen 70 s. Die Hooks-Doku sagt es
+  ebenso („Does not run if the stoppage occurred due to a user interrupt“). Im Transcript steht
+  `[Request interrupted by user]` bzw. `… for tool use]`.
+- Die Session-Datei springt 10 bis 70 ms nach dem Abbruch auf `status: idle`, `statusUpdatedAt` = Zeitpunkt des
+  Abbruchs. Während der Runde (auch während des Werkzeugs) steht `busy` mit dem Stempel des Rundenbeginns, der auf die
+  Millisekunde mit dem Start des `UserPromptSubmit`-Hooks zusammenfällt.
+- Lokale Slash-Commands (`/cost`, `/model`) lösen kein `UserPromptSubmit` aus; solange ihr Dialog offen ist, steht
+  die Datei auf `waiting`.
+- Nach einer normalen Antwort kommt `idle_prompt` rund 60 s nach `Stop`.
+
+Darauf baut `ReportFallback`: Kadrell liest für gemeldete Kacheln, die arbeiten oder warten, die Session-Datei mit.
+
 ## Spike: Attach-Client hängt sich auf, Session läuft weiter
 
 Ablauf (`/tmp/kadrell-spike/spike_attach.py`, Python `pty.fork`):
