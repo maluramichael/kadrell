@@ -9,6 +9,8 @@ enum ExtHost {
     /// Der Lua-Zustand; nur auf dem Main-Thread benutzt.
     nonisolated(unsafe) private static var lua: OpaquePointer?
     private static let outLock = NSLock()
+    /// Letzte CPU-Messung für `kadrell.system.cpu()`; nur auf dem Main-Thread benutzt.
+    nonisolated(unsafe) private static var lastTicks: [SystemProbe.Ticks]?
 
     static func run(dir: String) -> Never {
         // close-on-exec: Prozesse aus kadrell.exec dürfen den Protokollkanal nicht erben.
@@ -64,6 +66,7 @@ enum ExtHost {
         case "exec": exec(id: id, msg)
         case "http": http(id: id, msg)
         case "timer": timer(id: id, after: (msg["after"] as? Double) ?? 0)
+        case "system": system(id: id, msg)
         default: writeLine(json, len)
         }
     }
@@ -115,6 +118,29 @@ enum ExtHost {
                 deliver(id: id, ["status": 0, "headers": [:] as [String: String], "body": "", "error": error.localizedDescription])
             }
         }
+    }
+
+    /// `kadrell.system`: nur lesend, gemessen wird nur auf Anfrage. Die Platte fragt im Hintergrund (ein langsames
+    /// Netzlaufwerk soll Lua nicht aufhalten), die CPU-Zähler sind ein billiger Kernel-Aufruf.
+    private static func system(id: Int, _ msg: [String: Any]) {
+        switch msg["op"] as? String {
+        case "cpu": cpu(id: id)
+        case "disk":
+            let path = (msg["path"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "/"
+            Task.detached { deliver(id: id, SystemProbe.disk(path) ?? ["error": "volume not readable: \(path)"]) }
+        default: deliver(id: id, ["error": "unknown system op"])
+        }
+    }
+
+    /// Last seit dem letzten Aufruf. Beim ersten gibt es keinen Vergleich: dann zweimal im Abstand von 250 ms messen.
+    private static func cpu(id: Int) {
+        guard let now = SystemProbe.ticks() else { return deliver(id: id, ["error": "cpu load not available"]) }
+        defer { lastTicks = now }
+        guard let last = lastTicks, let load = SystemProbe.load(from: last, to: now) else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { cpu(id: id) }
+            return
+        }
+        deliver(id: id, SystemProbe.cpuFields(load))
     }
 
     /// Ruft die C-Schicht mit einem Fehlerpuffer auf, liefert den Fehlertext oder nil.

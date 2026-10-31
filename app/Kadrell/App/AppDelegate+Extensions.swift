@@ -21,10 +21,12 @@ extension AppDelegate {
     func extensionsChanged() {
         guard let extensions else { return }
         let right = extensions.panels(in: .right), left = extensions.panels(in: .left), items = extensions.statusItems
+        let footer = extensions.footerItems
         for c in windows {
             c.updateExtensionPanels(right)
             c.updateLeftDock(left)
             c.bar.extensionItems = items
+            c.updateFooter(footer)
         }
     }
 
@@ -51,10 +53,29 @@ extension AppDelegate {
         c.extensionPanel.onAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
         c.leftDockPanel.onAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
         c.bar.onExtensionAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
+        c.footer.onAction = { [weak self] name, id in self?.extensions?.action(name, id: id) }
         c.updateExtensionPanels(extensions?.panels(in: .right) ?? [])
         c.updateLeftDock(extensions?.panels(in: .left) ?? [])
         c.bar.extensionItems = extensions?.statusItems ?? []
+        c.updateFooter(extensions?.footerItems ?? [])
     }
+
+    /// Kommandos für ⌘P `>`: jeder Eintrag der Statusleisten (oben und unten) mit Aktion, damit er ohne Maus auslösbar ist.
+    func extensionCommands() -> [(String, () -> Void)] {
+        guard let extensions else { return [] }
+        let top = extensions.statusItems.compactMap { e in e.action.map { (e.name, e.text, $0) } }
+        let bottom = extensions.footerItems.compactMap { e in e.item.action.map { (e.name, e.item.spoken, $0) } }
+        return (top + bottom).map { name, what, id in
+            (Self.commandTitle(name, what), { [weak self] in self?.extensions?.action(name, id: id) })
+        }
+    }
+
+    private static func commandTitle(_ name: String, _ what: String) -> String {
+        String(localized: "Statusleiste: \(name) · \(what)", bundle: Bundle.app)
+    }
+
+    /// Neue Sprache: laufende Extensions bekommen sie als Event `app.locale`, `kadrell.locale` folgt ohne Neustart.
+    func emitLocale() { extensions?.setLocale(ExtensionManager.appLocale) }
 
     /// Von Extensions gelieferte ⌘N-Einträge (z. B. Repos zum Klonen). Auswahl schließt den Dialog und geht als
     /// `palette.select` zurück an die Extension, die dann selbst klont und die Session im Zielordner öffnet.

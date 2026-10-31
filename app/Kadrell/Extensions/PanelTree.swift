@@ -69,7 +69,7 @@ enum PanelValidation {
         }
     }
 
-    fileprivate static func clip(_ s: String, _ limit: Int) -> String { String(s.prefix(limit)) }
+    static func clip(_ s: String, _ limit: Int) -> String { String(s.prefix(limit)) }
 
     /// Zählt Rohknoten vor dem Prüfen, damit ein Flut-Panel gar nicht erst gebaut wird. Jedes Array-Element zählt,
     /// auch Nicht-Knoten und Aktionen: sonst kosteten 500000 Zahlen ebenso viele Warnungen auf dem Hauptthread.

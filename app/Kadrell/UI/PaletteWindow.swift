@@ -53,7 +53,8 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
     init() {
         // Der feste Schatten liegt unter der Fläche: das Fenster ist um seine Tiefe `d` höher, alle Maße von unten rücken hoch.
         let s = Theme.scale, W = (640 * s).rounded(), d = (Instrument.shadowDepth * s).rounded(), H = (420 * s).rounded() + d
-        super.init(size: NSSize(width: W, height: H))
+        fullSize = NSSize(width: W, height: H)
+        super.init(size: fullSize)
         isOpaque = false
         backgroundColor = .clear
         let root = NSView(frame: contentRect(forFrameRect: frame))
@@ -83,7 +84,9 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
 
         let col = NSTableColumn(identifier: .init("c"))
         col.width = W - 40
+        col.resizingMask = .autoresizingMask   // Spalte folgt der Breite, wenn die Palette mit dem Fenster schmaler wird
         table.addTableColumn(col)
+        table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.headerView = nil
         table.backgroundColor = .clear
         table.rowHeight = (44 * s).rounded()
@@ -118,9 +121,19 @@ final class PaletteWindow: ChildPanel, NSTextFieldDelegate, NSTableViewDataSourc
 
     var isCommandMode: Bool { field.stringValue.hasPrefix(">") }
 
+    /// Größe bei genug Platz. Im kleineren Fenster schrumpft die Palette auf dessen Inhalt abzüglich Rand.
+    private let fullSize: NSSize
+
+    /// Mittig, mit der Oberkante bei 12 % der Höhe des Fensterinhalts; folgt Größe und Lage des Fensters.
+    override func follow(_ parent: NSWindow) {
+        let area = OverlayGeometry.area(of: parent), m = OverlayGeometry.margin
+        let w = min(fullSize.width, area.width - 2 * m), h = min(fullSize.height, area.height - 2 * m)
+        let y = max(area.minY + m, area.maxY - 0.12 * area.height - h)
+        let f = NSRect(x: area.midX - w / 2, y: y, width: w, height: h).integral
+        if frame != f { setFrame(f, display: true) }
+    }
+
     func open(over parent: NSWindow, prefix: String = "") {
-        let pf = parent.frame
-        setFrameOrigin(NSPoint(x: pf.midX - frame.width / 2, y: pf.maxY - 0.12 * pf.height - frame.height))
         field.stringValue = prefix
         remoteCache = [:]
         buffersCache = nil

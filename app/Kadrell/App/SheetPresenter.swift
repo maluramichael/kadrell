@@ -28,15 +28,18 @@ final class SheetPresenter {
     }
 
     /// Ohne `onCancel` schließt Esc einfach den Dialog. `panel` merkt sich, welches Panel offen ist, auch wenn es
-    /// erst nach dem Schließen eines anderen drankommt.
-    func present<V: View>(_ view: V, plainReturn: Bool = true, panel: Panel? = nil, onCancel: (() -> Void)? = nil, onPrimary: @escaping () -> Void) {
+    /// erst nach dem Schließen eines anderen drankommt. `placement`: mittig in Inhaltsgröße oder fensterfüllend.
+    func present<V: View>(_ view: V, plainReturn: Bool = true, panel: Panel? = nil, placement: OverlayPanel.Placement = .centered,
+                          onCancel: (() -> Void)? = nil, onPrimary: @escaping () -> Void) {
         if openPanel != nil {
-            pending = { [weak self] in self?.present(view, plainReturn: plainReturn, panel: panel, onCancel: onCancel, onPrimary: onPrimary) }
+            pending = { [weak self] in
+                self?.present(view, plainReturn: plainReturn, panel: panel, placement: placement, onCancel: onCancel, onPrimary: onPrimary)
+            }
             return
         }
         dismiss()
         if let palette = palette(), palette.isVisible { palette.dismiss() }
-        let p = OverlayPanel(rootView: view)
+        let p = OverlayPanel(rootView: view, placement: placement)
         p.onCancel = onCancel ?? { [weak self] in self?.dismiss() }
         p.onPrimary = onPrimary
         p.primaryOnPlainReturn = plainReturn

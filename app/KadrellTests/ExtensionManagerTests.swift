@@ -343,4 +343,39 @@ final class ExtensionManagerTests: XCTestCase {
         let events = AppDelegate.sessionEvents(from: old, to: [s("a", "idle"), s("b", "waiting"), s("d", "busy")])
         XCTAssertEqual(events.map { "\($0.event) \($0.session.id)" }, ["session.status b", "session.new d", "session.remove c"])
     }
+
+    // MARK: Statusleiste unten
+
+    func testFooterItemsArriveAndClearOnDisable() async throws {
+        try make("a", """
+        kadrell.on("app.ready", function()
+            kadrell.footer.set({ { id = "cpu", align = "right", label = "CPU", bars = { 0.2, 0.8 }, action = "open" },
+                                 { text = "ohne id" } })
+        end)
+        """)
+        manager.setEnabled("a", true)
+        manager.emit("app.ready", .object([:]))
+        let arrived = await until(3) { !self.manager.footerItems.isEmpty }
+        XCTAssertTrue(arrived, "\(manager.log("a"))")
+        XCTAssertEqual(manager.footerItems.map(\.item.id), ["cpu"])
+        XCTAssertEqual(manager.footerItems.first?.item.bars, [0.2, 0.8])
+        XCTAssertTrue(logContains("a", String(localized: "Statusleiste: Eintrag ohne „id“ übersprungen", bundle: Bundle.app)),
+                      "verworfene Einträge stehen im Log")
+        manager.setEnabled("a", false)
+        XCTAssertTrue(manager.footerItems.isEmpty)
+    }
+
+    func testLocaleChangeReachesRunningExtension() async throws {
+        try make("a", """
+        kadrell.on("app.locale", function(d) kadrell.log("sprache " .. kadrell.locale) end)
+        """)
+        manager.setEnabled("a", true)
+        await until(3) { self.manager.state("a") == .running }
+        let other = manager.locale == "de" ? "en" : "de"
+        manager.setLocale(other)
+        manager.setLocale(other)
+        let got = await until(3) { self.logContains("a", "sprache " + other) }
+        XCTAssertTrue(got, "\(manager.log("a"))")
+        XCTAssertEqual(manager.log("a").filter { $0.contains("sprache") }.count, 1, "gleiche Sprache zweimal: ein Event")
+    }
 }

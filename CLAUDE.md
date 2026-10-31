@@ -42,6 +42,13 @@ Die Version steht in der App unter Einstellungen (⌘,) und im About (F1).
   Services und Helfer wiederverwenden, keine Logik duplizieren.
 - Vor dem Commit beides prüfen, genau wie die Tests.
 
+## Overlays folgen der Fenstergröße
+
+Jedes Overlay (Dialog, Palette, künftige Panels) passt Größe und Lage sofort an, wenn sein Fenster die Größe ändert
+oder verschoben wird. Dafür immer auf `ChildPanel` aufbauen (`follow(_:)` setzt den Rahmen, SwiftUI-Dialoge über
+`SheetPresenter.present` und `OverlayPanel`), feste Dialogbreiten mit `overlayWidth(_:)` statt `frame(width:)`
+setzen, nie einen Rahmen nur beim Öffnen berechnen. Abgesichert in `OverlayFollowsWindowTests`.
+
 ## Zweisprachig: jeder Nutzertext über das Bundle der eingestellten Sprache
 
 Kadrell ist deutsch und englisch, umschaltbar in den Einstellungen ohne Neustart (ein Neustart würde alle

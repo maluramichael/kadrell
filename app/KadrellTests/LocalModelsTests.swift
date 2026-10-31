@@ -141,7 +141,7 @@ final class LocalModelsTests: XCTestCase {
             {"object":"list","data":[
               {"id":"ggml-org/gemma-3-1b-it-GGUF:Q4_K_M","status":{"value":"unloaded"},"can_remove":true},
               {"id":"local-model","status":{"value":"loaded","args":["llama-server"]},"can_remove":false},
-              {"id":"neu/modell:Q4","status":{"value":"downloading","progress":{"https://a":{"done":50,"total":200},"https://b":{"done":50,"total":200}}}}]}
+              {"id":"neu/modell:Q4","status":{"value":"downloading","progress":{"https://a":{"done":50,"total":200}}}}]}
             """.utf8))
         }
         let client = LlamaClient(base: llama, session: MockHTTP.session())
@@ -149,9 +149,7 @@ final class LocalModelsTests: XCTestCase {
         XCTAssertEqual(models.map(\.name), ["ggml-org/gemma-3-1b-it-GGUF:Q4_K_M", "local-model", "neu/modell:Q4"])
         XCTAssertEqual(models.map(\.canRemove), [true, false, false])
         XCTAssertEqual(models[2].downloading, true)
-        let entries = try await client.entries()
-        XCTAssertEqual(LlamaClient.progress(entries[2])?.fraction, 0.25, "Dateien eines Downloads zusammengezählt")
-        XCTAssertNil(LlamaClient.progress(entries[0]))
+        XCTAssertEqual(models.filter { !$0.downloading }.count, 2, "laufender Download ist noch nicht benutzbar")
         try await client.delete("ggml-org/gemma-3-1b-it-GGUF:Q4_K_M")
     }
 

@@ -108,9 +108,10 @@ final class LocalModels {
 
     // MARK: Modelle laden und löschen
 
-    func pull(_ p: LocalProviderKind, _ name: String) {
+    /// Modell aus der Ollama-Bibliothek laden. llama.cpp lädt nicht über Kadrell (siehe `LlamaClient`).
+    func pull(_ name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ref = LocalModelRef(provider: p, name: name)
+        let ref = LocalModelRef(provider: .ollama, name: name)
         guard !name.isEmpty, pullTasks[ref.string] == nil else { return }
         pulls.removeAll { $0.ref == ref }
         pulls.append(Pull(ref: ref, progress: PullProgress(status: String(localized: "startet …", bundle: Bundle.app))))
@@ -124,10 +125,7 @@ final class LocalModels {
             Task { @MainActor in self?.setProgress(ref, p) }
         }
         do {
-            switch ref.provider {
-            case .ollama: try await ollama().pull(ref.name, progress: update)
-            case .llamacpp: try await llama().download(ref.name, progress: update)
-            }
+            try await ollama().pull(ref.name, progress: update)
             pulls.removeAll { $0.ref == ref }
         } catch is CancellationError {
             pulls.removeAll { $0.ref == ref }
@@ -148,10 +146,7 @@ final class LocalModels {
 
     /// Laufenden Download abbrechen bzw. eine Fehlermeldung wegnehmen.
     func cancelPull(_ ref: LocalModelRef) {
-        if let t = pullTasks[ref.string] {
-            t.cancel()
-            if ref.provider == .llamacpp { Task { try? await llama().cancelDownload(ref.name) } }
-        }
+        pullTasks[ref.string]?.cancel()
         pullTasks[ref.string] = nil
         pulls.removeAll { $0.ref == ref }
     }

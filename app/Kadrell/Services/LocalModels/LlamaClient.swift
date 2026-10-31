@@ -2,8 +2,9 @@ import Foundation
 
 /// HTTP-Client für `llama-server` im Router-Modus (ohne `-m` gestartet), Endpunkte laut `tools/server/README.md`
 /// und `server-models.cpp` am Commit der installierten Version (0.6.0, d81235049): `GET /health`, `GET /models`
-/// (Cache, `--models-dir`, Status je Modell), `POST /models` (Download von Hugging Face, läuft im Hintergrund),
-/// `DELETE /models?model=` (nur Cache-Modelle, `can_remove`), `POST /v1/chat/completions`.
+/// (Cache, `--models-dir`, Status je Modell), `POST /models/load`, `DELETE /models?model=` (nur Cache-Modelle,
+/// `can_remove`), `POST /v1/chat/completions`. Herunterladen (`POST /models`) bietet Kadrell nicht an: der eigene
+/// Server läuft mit `--offline` (siehe `LlamaServerProcess`), Modelle kommen per `llama-server -hf` in den Cache.
 struct LlamaClient: Sendable {
     let base: URL
     var session: URLSession = .shared
@@ -33,35 +34,6 @@ struct LlamaClient: Sendable {
     static func model(_ e: Entry) -> LocalModel {
         let state = e.status?.value ?? ""
         return LocalModel(provider: .llamacpp, name: e.id, detail: state, canRemove: e.can_remove ?? false, downloading: state == "downloading")
-    }
-
-    /// Fortschritt eines laufenden Downloads, über alle gleichzeitig geladenen Dateien summiert. nil = läuft nicht mehr.
-    static func progress(_ e: Entry) -> PullProgress? {
-        guard e.status?.value == "downloading" else { return nil }
-        let parts = e.status?.progress?.values ?? [:].values
-        return PullProgress(status: "downloading", completed: parts.reduce(0) { $0 + ($1.done ?? 0) }, total: parts.reduce(0) { $0 + ($1.total ?? 0) })
-    }
-
-    /// Startet den Download (`user/model:quant` von Hugging Face) und fragt den Stand ab, bis er nicht mehr lädt.
-    func download(_ name: String, progress: @escaping @Sendable (PullProgress) -> Void) async throws {
-        let body = LocalHTTP.json(["model": name])
-        _ = try await LocalHTTP.data(session, LocalHTTP.request(base.appending(path: "models"), method: "POST", body: body, timeout: 60))
-        while true {
-            try await Task.sleep(for: .milliseconds(700))
-            guard let e = try await entries().first(where: { $0.id == name }) else {
-                throw LocalModelError.invalid(String(localized: "Download fehlgeschlagen", bundle: Bundle.app))
-            }
-            if let p = Self.progress(e) { progress(p); continue }
-            if e.status?.failed == true { throw LocalModelError.invalid(String(localized: "Download fehlgeschlagen", bundle: Bundle.app)) }
-            progress(PullProgress(status: "success"))
-            return
-        }
-    }
-
-    /// Abbrechen eines Downloads geht laut Doku über `/models/unload`.
-    func cancelDownload(_ name: String) async {
-        let body = LocalHTTP.json(["model": name])
-        _ = try? await LocalHTTP.data(session, LocalHTTP.request(base.appending(path: "models/unload"), method: "POST", body: body, timeout: 10))
     }
 
     /// Modell vorab laden (`POST /models/load`), damit die erste Frage ohne Ladezeit antwortet. Geladen ist geladen:
@@ -95,7 +67,9 @@ struct LlamaClient: Sendable {
 }
 
 /// `llama-server` als Kindprozess von Kadrell, nur wenn keine Adresse eines schon laufenden Servers eingestellt ist.
-/// Router-Modus auf 127.0.0.1 und einem freien Port, ohne Web-Oberfläche, höchstens ein Modell gleichzeitig geladen.
+/// Router-Modus auf 127.0.0.1 und einem freien Port, ohne Web-Oberfläche, höchstens ein Modell gleichzeitig geladen,
+/// `--offline`: ohne das prüft jede Modell-Instanz beim Laden erst Hugging Face und hing dabei im Test minutenlang
+/// bei „initializing“; offline lädt dasselbe Cache-Modell in rund 2 s.
 /// Endet mit Kadrell (`stop` aus `applicationWillTerminate`); die pid liegt im Profilordner, damit ein Start nach
 /// einem Absturz den liegengebliebenen Server wegräumt statt ihn ewig mitlaufen zu lassen.
 @MainActor
@@ -120,7 +94,7 @@ final class LlamaServerProcess {
             throw LocalModelError.invalid(String(localized: "\(binary): llama-server nicht gefunden", bundle: Bundle.app))
         }
         let port = Self.freePort() ?? 8091
-        var args = ["--host", "127.0.0.1", "--port", String(port), "--no-webui", "--models-max", "1"]
+        var args = ["--host", "127.0.0.1", "--port", String(port), "--no-webui", "--offline", "--models-max", "1"]
         if !modelsDir.isEmpty { args += ["--models-dir", FolderIndex.normalize(modelsDir)] }
         let p = try ProcessRunner.spawn(binary, args, environment: environment, discardOutput: true)
         process = p
