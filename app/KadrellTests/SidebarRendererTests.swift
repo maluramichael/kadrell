@@ -15,16 +15,16 @@ final class SidebarRendererTests: XCTestCase {
                                 hover: hover, first: first, waitingCount: waiting)
     }
 
-    /// `status` ist der Rohwert wie von Claude Code („busy“, „waiting“, „idle“); `lit` = nil lässt alle vier Striche leuchten.
+    /// `status` ist der Rohwert wie von Claude Code („busy“, „waiting“, „idle“).
     private func session(focused: Bool = false, keyFocus: Bool = false, selected: Bool = false, hover: Bool = false,
                          unread: Bool = false, color: NSColor = NSColor(hex: 0x6ea8fe), status: String? = nil,
-                         shellRunning: Bool = false, attached: Bool = true, lit: Int? = nil,
+                         shellRunning: Bool = false, attached: Bool = true,
                          message: String? = nil) -> SidebarSessionItem {
         var s = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A")
         s.rawStatus = status
         s.hasRunningShell = shellRunning
         return SidebarSessionItem(session: s, color: color, dot: Theme.statusColor(s.status, attached: attached, shellRunning: shellRunning),
-                                  meter: SidebarSessionItem.meter(for: s, attached: attached, lit: lit), attached: attached,
+                                  breathing: Theme.activityColor(s, attached: attached) != nil, attached: attached,
                                   selected: selected, focused: focused, keyFocus: keyFocus, hover: hover, message: message,
                                   showAge: false, unread: unread)
     }
@@ -255,58 +255,40 @@ final class SidebarRendererTests: XCTestCase {
         }
     }
 
-    // MARK: Strich-Anzeige
+    // MARK: Atmender Punkt
 
-    func testWorkingSessionShowsMeterNotDot() {
+    /// Arbeitet: die Zeile lässt die Stelle frei, den Punkt zeichnet `BreathingDots` als Ebene darüber.
+    func testWorkingSessionLeavesDotToBreathingLayer() {
         let rep = renderSession(session(status: "busy"), theme: dark)
-        withTheme(dark) {
-            // Striche 2 pt breit bei x = 26...27, 29...30, 32...33, 35...36, Lücken 1 pt bei 28, 31, 34, danach Hintergrund.
-            for x in [27, 30, 33, 36] { assertColor(rep, x, 22, Theme.running, "Strich") }
-            for x in [28, 31, 34, 37] { assertColor(rep, x, 22, Theme.panel, "Lücke") }
-            assertColor(rep, 30, 17, Theme.running, "Strich 10 pt hoch, oben")
-            assertColor(rep, 30, 26, Theme.running, "Strich 10 pt hoch, unten")
-            assertColor(rep, 30, 16, Theme.panel, "über dem Strich nichts")
-            assertColor(rep, 30, 27, Theme.panel, "unter dem Strich nichts")
-        }
+        withTheme(dark) { assertColor(rep, 31, 22, Theme.panel, "kein gezeichneter Punkt") }
     }
 
-    func testMeterLitDimsTheRestAndFollowsClockStep() {
-        let rep = renderSession(session(status: "busy", lit: 2), theme: dark)
-        withTheme(dark) {
-            assertColor(rep, 27, 22, Theme.running, "Strich 1 leuchtet")
-            assertColor(rep, 30, 22, Theme.running, "Strich 2 leuchtet")
-            assertColor(rep, 33, 22, over(Theme.running.withAlphaComponent(0.25), Theme.panel), "Strich 3 gedimmt")
-            assertColor(rep, 36, 22, over(Theme.running.withAlphaComponent(0.25), Theme.panel), "Strich 4 gedimmt")
-        }
-    }
-
-    func testMeterOnlyWhenAttachedAndWorking() {
-        func has(_ s: Session, attached: Bool = true) -> Bool { SidebarSessionItem.meter(for: s, attached: attached, lit: 3) != nil }
+    func testBreathingOnlyWhenAttachedAndWorking() {
+        func has(_ s: Session, attached: Bool = true) -> Bool { Theme.activityColor(s, attached: attached) != nil }
         var s = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A")
         XCTAssertFalse(has(s), "idle: Punkt")
         s.rawStatus = "waiting"
         XCTAssertFalse(has(s), "wartet: Punkt")
         s.rawStatus = "busy"
-        XCTAssertTrue(has(s), "arbeitet: Striche")
+        XCTAssertTrue(has(s), "arbeitet: atmet")
         XCTAssertFalse(has(s, attached: false), "nicht angehängt: Punkt")
         s.rawStatus = "idle"
         s.hasRunningShell = true
-        XCTAssertTrue(has(s), "Shell läuft: Striche")
-        XCTAssertEqual(SidebarSessionItem.meter(for: s, attached: true, lit: 3)?.lit, 3)
-        // Warten und Fehler gehen vor: die laufende Shell darf sie nicht hinter der Strich-Anzeige verstecken.
+        XCTAssertTrue(has(s), "Shell läuft: atmet")
+        // Warten und Fehler gehen vor: die laufende Shell darf sie nicht hinter dem atmenden Punkt verstecken.
         s.rawStatus = "waiting"
         XCTAssertFalse(has(s), "wartet, Shell läuft: Punkt")
         s.rawStatus = "error"
         XCTAssertFalse(has(s), "Fehler, Shell läuft: Punkt")
         s.rawStatus = "busy"
-        XCTAssertTrue(has(s), "arbeitet, Shell läuft: Striche")
+        XCTAssertTrue(has(s), "arbeitet, Shell läuft: atmet")
     }
 
     func testWaitingSessionKeepsDot() {
         let rep = renderSession(session(status: "waiting"), theme: dark)
         withTheme(dark) {
             assertColor(rep, 31, 22, Theme.waiting, "Punkt in der Mitte von dotRect")
-            assertColor(rep, 37, 22, Theme.panel, "rechts vom Punkt, innerhalb meterRect: Hintergrund")
+            assertColor(rep, 37, 22, Theme.panel, "rechts vom Punkt: Hintergrund")
         }
     }
 
@@ -316,17 +298,9 @@ final class SidebarRendererTests: XCTestCase {
     }
 
     func testShellRunningUsesShellColor() {
-        let rep = renderSession(session(status: "idle", shellRunning: true), theme: dark)
-        withTheme(dark) {
-            assertColor(rep, 27, 22, NSColor(hex: 0xa3a19a), "Strich in Shell-Farbe")
-            assertColor(rep, 36, 22, NSColor(hex: 0xa3a19a), "letzter Strich in Shell-Farbe")
-        }
-    }
-
-    func testStatusRectCoversDotAndMeter() {
-        let r = ClassicSidebarRenderer(), row = CGRect(x: 0, y: 10, width: 200, height: 24)
-        XCTAssertEqual(r.meterRect(row), CGRect(x: 26, y: r.headRect(row).midY - 5, width: 12, height: 10))
-        XCTAssertTrue(r.statusRect(row).contains(r.dotRect(row)))
-        XCTAssertTrue(r.statusRect(row).contains(r.meterRect(row)))
+        var s = Session(id: "a", cwd: "/p", startedAt: 0, sessionId: "a", name: "A")
+        s.rawStatus = "idle"
+        s.hasRunningShell = true
+        withTheme(dark) { XCTAssertEqual(Theme.activityColor(s, attached: true), NSColor(hex: 0xa3a19a), "atmet in Shell-Farbe") }
     }
 }

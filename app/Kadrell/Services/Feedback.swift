@@ -51,14 +51,28 @@ enum Feedback {
 
     /// „Bewegung reduzieren“ aus den Bedienungshilfen. `observeReduceMotion()` hält ihn aktuell.
     nonisolated(unsafe) static var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    private static var reduceMotionObserver: Any?
+    private static var reduceMotionObservers: [Any] = []
+    /// Nach jeder Änderung von `reduceMotion` (Bedienungshilfen), für Core-Animationen wie `BreathingDots`, die ohne
+    /// Neuzeichnen laufen und deshalb nicht von selbst nachfragen.
+    static let reduceMotionChanged = Notification.Name("de.malura.kadrell.reduceMotionChanged")
 
-    /// Einmal beim Start aufrufen: hält `reduceMotion` aktuell, wenn die Einstellung sich ändert.
+    /// Einmal beim Start aufrufen: hält `reduceMotion` aktuell, wenn die Einstellung sich ändert. Die Meldung kommt je
+    /// nach macOS-Version über das Workspace- oder das Standard-Center, gehört wird auf beiden.
     static func observeReduceMotion() {
         reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        reduceMotionObserver = NotificationCenter.default.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { _ in
-            reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let name = NSWorkspace.accessibilityDisplayOptionsDidChangeNotification
+        reduceMotionObservers = [NotificationCenter.default, NSWorkspace.shared.notificationCenter].map { center in
+            center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { updateReduceMotion() }
+            }
         }
+    }
+
+    private static func updateReduceMotion() {
+        let now = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        guard now != reduceMotion else { return }
+        reduceMotion = now
+        NotificationCenter.default.post(name: reduceMotionChanged, object: nil)
     }
 
     /// Fortschritt einer Animation seit `start`, 0...1, zum Ende hin abbremsend. nil = vorbei (auch sofort bei
@@ -68,13 +82,6 @@ enum Feedback {
         let p = (now - start) / duration
         guard p >= 0, p < 1 else { return nil }
         return CGFloat(1 - pow(1 - p, 3))
-    }
-
-    /// Wie viele der vier Striche der Arbeits-Anzeige leuchten, 1...4 in Schritten von 160 ms (zwei Takte des
-    /// 80-ms-Takts im Baum). nil bei „Bewegung reduzieren“: die Anzeige steht still, alle Striche an.
-    nonisolated static func meterLit(now: CFTimeInterval = CACurrentMediaTime()) -> Int? {
-        guard !reduceMotion else { return nil }
-        return Int(now / 0.16) % 4 + 1
     }
 
     /// Sessions, die seit dem letzten Stand zu warten begonnen haben bzw. vom Arbeiten in den Leerlauf gewechselt sind.

@@ -55,6 +55,8 @@ final class SidebarView: ClipWidthView {
     /// Letzte einzeln angeklickte Session: Startpunkt für ⇧-Bereiche.
     private var anchor: String?
     private var pulseTask: Task<Void, Never>?
+    /// Atmende Punkte arbeitender Sessions, als Core-Animation ohne Neuzeichnen (siehe `syncBreathing`).
+    let breathing = BreathingDots()
     /// Gedrückte Zeile: Klick wird erst beim Loslassen ausgewertet, Ziehen sortiert um. Zeilen als Wert,
     /// nicht als Index: ein Poll kann den Baum zwischen Drücken und Loslassen neu aufbauen.
     private var pressed: (point: CGPoint, row: Row, flags: NSEvent.ModifierFlags)?
@@ -121,16 +123,12 @@ final class SidebarView: ClipWidthView {
                 // Solange etwas aufblitzt oder einfährt, flüssig zeichnen, sonst reicht der langsame Takt.
                 try? await Task.sleep(for: .milliseconds(wasAnimating ? 16 : 80))
                 guard let self else { return }
-                // Fenster verdeckt/versteckt: nichts zu zeichnen, keine Strich-Anzeige nötig, wieder der langsame Takt.
+                // Fenster verdeckt/versteckt: nichts zu zeichnen, wieder der langsame Takt.
                 guard self.window?.occlusionState.contains(.visible) == true else { wasAnimating = false; continue }
                 let now = CACurrentMediaTime(), animating = self.pruneAnimations(now)
                 if animating || wasAnimating { wasAnimating = animating; self.needsDisplay = true; continue }
-                // Laufzeiten („12m“) einmal pro Minute nachziehen, sonst nur die Strich-Anzeigen laufender Sessions.
-                if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true; continue }
-                for (i, row) in self.rows.enumerated() {
-                    guard case .session(let s, _) = row, Theme.meterColor(s, attached: self.isAttached(s.id)) != nil else { continue }
-                    self.setNeedsDisplay(self.renderer.statusRect(self.rowRect(i)).insetBy(dx: -1, dy: -1).scaled(Theme.scale))
-                }
+                // Laufzeiten („12m“) einmal pro Minute nachziehen. Die atmenden Punkte brauchen keinen Takt.
+                if now - lastFull >= 60 { lastFull = now; self.needsDisplay = true }
             }
         }
     }
@@ -164,7 +162,7 @@ final class SidebarView: ClipWidthView {
         }
     }
 
-    /// Zeilenhöhen sind O(1) abrufbar statt bei jedem Aufruf neu aufsummiert (Strich-Anzeige, Zeichnen, Maus laufen oft pro Sekunde
+    /// Zeilenhöhen sind O(1) abrufbar statt bei jedem Aufruf neu aufsummiert (Zeichnen, Maus laufen oft pro Sekunde
     /// über alle Zeilen). Nur die Breite bleibt live: sie folgt `bounds`, auch zwischen zwei `reload`s (siehe `fitWidth`).
     private var rowOffsets: [(y: CGFloat, height: CGFloat)] = []
 
@@ -270,6 +268,29 @@ final class SidebarView: ClipWidthView {
 
     // MARK: Zeichnen
 
+    override func viewWillDraw() {
+        super.viewWillDraw()
+        syncBreathing()
+    }
+
+    /// Ein atmender Punkt je arbeitender Session an der Stelle ihres Statuspunkts. Läuft vor jedem Zeichnen: jede
+    /// Änderung an Zeilen, Status, Schema oder UI-Größe zeichnet neu und zieht die Punkte so mit.
+    private func syncBreathing() {
+        var dots: [String: (rect: CGRect, color: NSColor)] = [:]
+        for (i, row) in rows.enumerated() {
+            guard case .session(let s, _) = row, let c = breathingColor(s) else { continue }
+            dots[s.id] = (renderer.dotRect(rowRect(i)).scaled(Theme.scale), c)
+        }
+        breathing.sync(dots, in: self)
+    }
+
+    /// Arbeitsfarbe, solange die Session atmet. Eine Zeile, die gerade einfährt, zeichnet ihren Punkt noch selbst mit
+    /// (die Ebene führe nicht mit); nach dem Einfahren zeichnet der Takt neu und die Ebene übernimmt.
+    private func breathingColor(_ s: Session) -> NSColor? {
+        guard appeared[s.id] == nil else { return nil }
+        return Theme.activityColor(s, attached: isAttached(s.id))
+    }
+
     /// Zeilen, Zeichnen und Trefferflächen in unskalierten Punkten, siehe `local`.
     override func draw(_ dirty: NSRect) {
         Theme.panel.withAlphaComponent(CGFloat(Settings.tileOpacity)).setFill()
@@ -355,7 +376,7 @@ final class SidebarView: ClipWidthView {
         defer { if slide != nil { NSGraphicsContext.restoreGraphicsState() } }
         renderer.drawSession(SidebarSessionItem(session: s, color: Theme.group(g.color), dot: dotColor(s),
                                                 project: grouped ? nil : g.name,
-                                                meter: SidebarSessionItem.meter(for: s, attached: isAttached(s.id), lit: Feedback.meterLit()),
+                                                breathing: breathingColor(s) != nil,
                                                 attached: isAttached(s.id),
                                                 selected: selected.contains(s.id), focused: focused == s.id,
                                                 keyFocus: window?.firstResponder === self, hover: hover,

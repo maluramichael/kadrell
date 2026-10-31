@@ -106,16 +106,24 @@ final class TileTests: XCTestCase {
         XCTAssertEqual(focused.layer?.borderColor, Theme.fg.cgColor)
     }
 
-    func testWorkingTileShowsMeter() {
-        let rep = renderCell(cell(status: "busy"))
-        for x in [7, 10, 13, 16] { assertColor(rep, x, 13, Theme.running, "Strich") }
-        for x in [9, 12, 15] { assertColor(rep, x, 13, Theme.surface, "Lücke") }
+    /// Arbeitet: der Kopf lässt die Stelle des Punkts frei, dort atmet die Ebene in der Arbeitsfarbe.
+    func testWorkingTileBreathesInsteadOfDrawingDot() {
+        let c = cell(status: "busy")
+        let rep = renderCell(c)
+        assertColor(rep, 13, 13, Theme.surface, "kein gezeichneter Punkt")
+        c.viewWillDraw()
+        XCTAssertEqual(c.breathing.frames["head"], c.convertToLayer(c.dotRect))
+        XCTAssertEqual(c.breathing.color("head"), Theme.running.cgColor)
+        let idle = cell(status: "idle")
+        idle.viewWillDraw()
+        XCTAssertTrue(idle.breathing.frames.isEmpty, "fertig: ruhiger Punkt, keine Ebene")
+        assertColor(renderCell(idle), 13, 13, Theme.idle, "fertig: Punkt gezeichnet")
     }
 
     func testWaitingTileKeepsDot() {
         let rep = renderCell(cell(status: "waiting"))
         assertColor(rep, 13, 13, Theme.waiting, "Punkt in Warte-Farbe")
-        assertColor(rep, 8, 13, Theme.surface, "kein Strich links")
+        assertColor(rep, 8, 13, Theme.surface, "links vom Punkt frei")
     }
 
     func testWaitingWithShellTileDotIsWaitingColor() {
@@ -200,17 +208,18 @@ final class TileTests: XCTestCase {
         }
     }
 
-    func testStackRowShowsMeterForWorkingSession() {
+    func testStackRowBreathesForWorkingSession() {
         let ids = ["F", "W", "Q"].map { Session.shellPrefix + "stack-row-\($0)" }
         let attach = AttachManager(cli: ClaudeCLI(binary: "/usr/bin/false", environment: ["SHELL": "/bin/sh"]))
         stackWorkspace(gap: 6, ids: ids, status: [ids[1]: "busy", ids[2]: "waiting"], attach: attach) { ws in
             let rows = ws.stackRows.map(\.0)
             XCTAssertTrue(ids.allSatisfy(attach.isAttached))
             let rep = render(ws)
-            let busy = rows[1], waiting = rows[2], minX = Int(busy.minX)
-            for dx in [11, 14, 17, 20] { assertColor(rep, minX + dx, Int(busy.midY), Theme.running, "Strich") }
-            assertColor(rep, minX + 12, Int(busy.midY), Theme.panel, "Lücke")
+            let busy = rows[1], waiting = rows[2]
             assertColor(rep, Int(waiting.minX) + 16, Int(waiting.midY), Theme.waiting, "Punkt in Warte-Farbe")
+            ws.viewWillDraw()
+            XCTAssertEqual(Set(ws.breathing.frames.keys), [ids[1]], "nur die arbeitende Zeile atmet")
+            XCTAssertEqual(ws.breathing.frames[ids[1]], ws.convertToLayer(ws.stackDotFrame(busy)))
         }
     }
 
@@ -373,18 +382,6 @@ final class TileTests: XCTestCase {
         XCTAssertTrue((c.layer?.mask as? CAShapeLayer) === shape, "dieselbe Masken-Ebene wird weiterverwendet")
         XCTAssertEqual(shape.frame.size, CGSize(width: 300, height: 140))
         XCTAssertTrue(shape.animationKeys()?.isEmpty ?? true, "keine laufende Animation: \(shape.animationKeys() ?? [])")
-    }
-
-    /// Die Striche ändern sich nur alle 160 ms: der 80-ms-Takt zeichnet nur bei einem neuen Schritt neu.
-    func testMeterRedrawsOnlyWhenStepChanges() {
-        let ws = WorkspaceView(frame: NSRect(x: 0, y: 0, width: 600, height: 400), defaultsSuffix: ".test-meter-step")
-        defer { ws.close() }
-        XCTAssertTrue(ws.meterStepChanged(1), "erster Schritt")
-        XCTAssertFalse(ws.meterStepChanged(1), "zweiter Takt im selben Schritt")
-        XCTAssertTrue(ws.meterStepChanged(2), "neuer Schritt")
-        XCTAssertFalse(ws.meterStepChanged(2))
-        XCTAssertTrue(ws.meterStepChanged(nil), "Wechsel zu „Bewegung reduzieren“ zeichnet einmal")
-        XCTAssertFalse(ws.meterStepChanged(nil), "bei „Bewegung reduzieren“ nie wieder")
     }
 
     /// Ein langes Gruppen-Label drückt in Stack-Zeilen nicht in den Titel: es wird mit Auslassung gekürzt.
