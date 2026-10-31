@@ -4,7 +4,7 @@ import AppKit
 /// ohne Terminal zeigt der Körper Snapshot-Zeilen oder ein Statuslabel.
 @MainActor
 final class CellView: NSView {
-    /// Alles, was die Kachel zeichnet (außer dem Takt der Strich-Anzeige). Nur eine echte Änderung zeichnet neu, nicht jeder Poll:
+    /// Alles, was die Kachel zeichnet (der atmende Punkt läuft ohne Neuzeichnen). Nur eine echte Änderung zeichnet neu, nicht jeder Poll:
     /// eine neue Nachricht in Session A soll nicht alle anderen Kacheln neu zeichnen.
     struct State: Equatable {
         var session: Session
@@ -97,7 +97,6 @@ final class CellView: NSView {
     /// Logische Punkte der Titelzeile (vor `Theme.scale`).
     private var xRectLogical: CGRect { CGRect(x: bounds.width / Theme.scale - 24, y: 5, width: 16, height: 16) }
     private let dotRectLogical = CGRect(x: 9, y: 9, width: 8, height: 8)
-    private let meterRectLogical = CGRect(x: 7, y: 8, width: 12, height: 10)
     private var penRectLogical: CGRect { xRectLogical.offsetBy(dx: -20, dy: 0) }
     private var deselectRectLogical: CGRect { penRectLogical.offsetBy(dx: -20, dy: 0) }
     private var zoomRectLogical: CGRect { deselectRectLogical.offsetBy(dx: -20, dy: 0) }
@@ -105,8 +104,12 @@ final class CellView: NSView {
     var penRect: CGRect { penRectLogical.scaled(Theme.scale) }
     var deselectRect: CGRect { deselectRectLogical.scaled(Theme.scale) }
     var zoomRect: CGRect { zoomRectLogical.scaled(Theme.scale) }
-    /// Alles, was der Status im Kopf je belegt (Punkt oder Striche): der Takt zeichnet nur diese Fläche neu.
-    var statusRect: CGRect { dotRectLogical.union(meterRectLogical).scaled(Theme.scale) }
+    /// Statuspunkt im Kopf, in Bounds-Koordinaten; dort sitzt auch der atmende Punkt.
+    var dotRect: CGRect { dotRectLogical.scaled(Theme.scale) }
+    /// Atmender Punkt, solange etwas läuft, als Core-Animation-Ebene (kein Neuzeichnen der Kachel).
+    let breathing = BreathingDots()
+    /// Arbeitsfarbe für den atmenden Punkt im Kopf, nil = ruhiger Statuspunkt oder kein Kopf (Stack).
+    var breathingColor: NSColor? { state.headerHidden ? nil : Theme.activityColor(state.session, attached: state.attached) }
     var statusColor: NSColor { Theme.statusColor(state.session.status, attached: state.attached, shellRunning: state.session.hasRunningShell) }
     /// Hintergrund der Kachel in der Modulfarbe, ohne Gruppen-Tönung (die Gruppe zeigt der Akzent im Kopf). Mit Deckkraft
     /// unter 100 % scheint das Hintergrundbild der Arbeitsfläche durch, auch durchs Terminal.
@@ -144,6 +147,7 @@ final class CellView: NSView {
     /// Ohne Fokus oder Status ist er die dunkle Hälfte der Fuge, die helle zeichnet `drawInnerRim`.
     override func viewWillDraw() {
         super.viewWillDraw()
+        breathing.sync(breathingColor.map { ["head": (dotRect, $0)] } ?? [:], in: self)
         guard let layer else { return }
         let c = borderColor.cgColor, w: CGFloat = state.focused || state.dropTarget ? 2 : 1
         guard layer.borderColor != c || layer.borderWidth != w else { return }
@@ -175,13 +179,11 @@ final class CellView: NSView {
         if state.hovered { drawHoverIcons() }
     }
 
-    /// Striche, solange etwas läuft (Claude arbeitet oder ein Kommando läuft nach „fertig“), sonst der Statuspunkt.
+    /// Statuspunkt; solange etwas läuft (Claude arbeitet oder ein Kommando läuft nach „fertig“), atmet an seiner
+    /// Stelle der Punkt aus `breathing`, hier bleibt sie dann frei.
     private func drawStatus() {
-        if let c = Theme.meterColor(state.session, attached: state.attached) {
-            Instrument.meter(meterRectLogical, lit: Feedback.meterLit(), color: c)
-        } else {
-            Icons.statusDot(in: dotRectLogical, status: state.session.status, attached: state.attached, color: statusColor)
-        }
+        guard breathingColor == nil else { return }
+        Icons.statusDot(in: dotRectLogical, status: state.session.status, attached: state.attached, color: statusColor)
     }
 
     /// Badge „Z“ wie in tmux: gezoomt, obwohl mehrere Sessions offen sind.

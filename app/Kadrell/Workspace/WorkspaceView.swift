@@ -51,8 +51,8 @@ final class WorkspaceView: NSView {
     private(set) var emptyHitRects: [(rect: CGRect, action: () -> Void)] = []
     private var tickTask: Task<Void, Never>?
     private weak var lastFirstResponder: NSResponder?
-    /// Zuletzt gezeichneter Schritt der Strich-Anzeige (siehe `meterStepChanged`).
-    private var lastMeterLit: Int?
+    /// Atmende Punkte der Stack-Zeilen arbeitender Sessions (die Kacheln haben ihre eigenen, siehe `CellView`).
+    let breathing = BreathingDots()
     /// Ziehen einer Kachel oder Stack-Zeile auf eine andere sortiert um.
     private var pressed: (point: CGPoint, key: String)?
     private var dragging = false
@@ -577,42 +577,40 @@ final class WorkspaceView: NSView {
         relayout()
     }
 
-    /// Punkt und Striche einer Stack-Zeile, in den logischen Koordinaten von `drawStackRow`.
+    /// Statuspunkt einer Stack-Zeile, in den logischen Koordinaten von `drawStackRow`.
     private static func stackDotRect(_ r: CGRect) -> CGRect { CGRect(x: r.minX + 12, y: r.midY - 4, width: 8, height: 8) }
-    private static func stackMeterRect(_ r: CGRect) -> CGRect { CGRect(x: r.minX + 10, y: r.midY - 5, width: 12, height: 10) }
 
-    /// Statusfläche einer Stack-Zeile (Punkt oder Striche) in Bounds-Koordinaten: für gezieltes `setNeedsDisplay`
-    /// ohne die ganze Fläche. `r` ist das Feld der Zeile in Bounds-Koordinaten.
-    private func stackStatusRect(_ r: CGRect) -> CGRect {
+    /// Statuspunkt einer Stack-Zeile in Bounds-Koordinaten, für den atmenden Punkt. `r` ist das Feld der Zeile in
+    /// Bounds-Koordinaten.
+    func stackDotFrame(_ r: CGRect) -> CGRect {
         let local = CGRect(origin: .zero, size: CGSize(width: r.width / Theme.scale, height: r.height / Theme.scale))
-        return Self.stackDotRect(local).union(Self.stackMeterRect(local)).scaled(Theme.scale).offsetBy(dx: r.minX, dy: r.minY)
+        return Self.stackDotRect(local).scaled(Theme.scale).offsetBy(dx: r.minX, dy: r.minY)
     }
 
     private func tick() {
-        // Fenster verdeckt/versteckt: nichts zu zeichnen, keine Strich-Anzeige nötig.
+        // Fenster verdeckt/versteckt: nichts zu tun. Die atmenden Punkte laufen ohne Takt.
         guard window?.occlusionState.contains(.visible) == true else { return }
         syncFirstResponder()
-        if meterStepChanged(Feedback.meterLit()) { invalidateMeters() }
         let now = CACurrentMediaTime()
         if linger.values.contains(where: { $0 <= now }) { relayout() }
     }
 
-    /// Die Striche ändern sich nur alle 160 ms, der Takt läuft alle 80 ms (bei „Bewegung reduzieren“ nie): nur bei
-    /// einem neuen Schritt neu zeichnen. Gibt zurück, ob sich der Schritt gegenüber dem letzten Aufruf geändert hat.
-    func meterStepChanged(_ lit: Int?) -> Bool {
-        defer { lastMeterLit = lit }
-        return lit != lastMeterLit
+    override func viewWillDraw() {
+        super.viewWillDraw()
+        syncBreathing()
     }
 
-    /// Kacheln: nur die Strich-Anzeige im Kopf neu zeichnen, nicht die ganze Kachel. Stack-Zeilen zeichnet die Fläche
-    /// selbst: auch dort nur die Strich-Anzeigen, nicht die ganze Fläche.
-    private func invalidateMeters() {
-        for v in cells.values where !v.isHidden && !v.state.headerHidden && Theme.meterColor(v.state.session, attached: v.state.attached) != nil {
-            v.setNeedsDisplay(v.statusRect.insetBy(dx: -1, dy: -1))
+    /// Ein atmender Punkt je Stack-Zeile, deren Session arbeitet; nach derselben Regel wie Baum und Kachel. Ohne
+    /// sichtbare Stack-Zeilen (Zen, Vorschau, leer) keine.
+    private func syncBreathing() {
+        var dots: [String: (rect: CGRect, color: NSColor)] = [:]
+        if !tiles.isEmpty, !zen, preview == nil {
+            for (r, key) in stackRows {
+                guard let s = sessions[key], let c = Theme.activityColor(s, attached: attach?.isAttached(key) ?? false) else { continue }
+                dots[key] = (stackDotFrame(r), c)
+            }
         }
-        for (r, key) in stackRows where sessions[key].map({ Theme.meterColor($0, attached: attach?.isAttached(key) ?? false) != nil }) == true {
-            setNeedsDisplay(stackStatusRect(r).insetBy(dx: -1, dy: -1))
-        }
+        breathing.sync(dots, in: self)
     }
 
     /// Klick in ein Terminal macht es still zum First Responder: Fokus und Rahmen nachziehen.
@@ -795,14 +793,11 @@ final class WorkspaceView: NSView {
         if !edges.bodyBelow { Instrument.hSeam(x: r.minX, y: r.maxY - 2 * Instrument.hairline, width: r.width) }
     }
 
-    /// Striche für „es läuft etwas“, sonst der Statuspunkt, beides nach derselben Regel wie Baum und Kachel.
+    /// Statuspunkt; läuft etwas, atmet an seiner Stelle der Punkt aus `breathing` (Regel wie Baum und Kachel).
     private func drawStackRowStatus(_ r: CGRect, session s: Session, attached: Bool) {
-        if let c = Theme.meterColor(s, attached: attached) {
-            Instrument.meter(Self.stackMeterRect(r), lit: Feedback.meterLit(), color: c)
-        } else {
-            let c = Theme.statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell)
-            Icons.statusDot(in: Self.stackDotRect(r), status: s.status, attached: attached, color: c)
-        }
+        guard Theme.activityColor(s, attached: attached) == nil else { return }
+        let c = Theme.statusColor(s.status, attached: attached, shellRunning: s.hasRunningShell)
+        Icons.statusDot(in: Self.stackDotRect(r), status: s.status, attached: attached, color: c)
     }
 
     /// Gruppen-Label der Stack-Zeile in Versalien, mit Auslassung auf höchstens `maxWidth` gekürzt: gesperrte Versalien

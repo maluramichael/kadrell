@@ -91,22 +91,6 @@ enum Instrument {
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    /// Vier senkrechte Striche als Arbeits-Anzeige. `lit` = Anzahl leuchtender Striche (1...4), die übrigen stehen
-    /// mit 25 % Deckkraft; nil = alle vier voll. Gerechnet wird in Gerätepixeln: Striche und Lücken sind ganze Pixel,
-    /// alle Lücken gleich breit, der Rest der Breite verteilt sich links und rechts. So rastet die Anzeige bei jeder
-    /// UI-Größe ein, ohne dass eine Lücke schmaler wird als die anderen.
-    @MainActor static func meter(_ r: CGRect, lit: Int?, color: NSColor) {
-        let s = Theme.scale, total = (r.width * s).rounded()
-        let gap = max(1, (1.5 * s).rounded(.down)), bar = max(1, ((total - 3 * gap) / 4).rounded(.down))
-        let x0 = snapped(r.minX) + ((total - 4 * bar - 3 * gap) / 2).rounded(.down) / s
-        let y0 = snapped(r.minY), y1 = snapped(r.maxY)
-        let dim = color.withAlphaComponent(color.alphaComponent * 0.25)
-        for i in 0..<4 {
-            let on = lit.map { i < $0 } ?? true
-            fill(CGRect(x: x0 + CGFloat(i) * (bar + gap) / s, y: y0, width: bar / s, height: y1 - y0), on ? color : dim)
-        }
-    }
-
     // MARK: Fläche und Rand
 
     /// Rechteck, bei dem nur die Ecke bei (minX, minY) rund ist (in gespiegelten Views oben links). `radius <= 0` = Rechteck.

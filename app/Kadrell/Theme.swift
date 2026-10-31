@@ -93,9 +93,10 @@ enum Theme {
         return shellRunning && status == .idle ? shell : color(for: status)
     }
 
-    /// Farbe der Strich-Anzeige, nil = Punkt. Striche zeigen „es läuft etwas“: Claude arbeitet, oder die Session ist
-    /// fertig und im Hintergrund läuft noch ein Kommando. Einzige Quelle dieser Regel für Baum, Kachel und Stack.
-    static func meterColor(_ s: Session, attached: Bool) -> NSColor? {
+    /// Farbe des atmenden Punkts (`BreathingDots`), nil = ruhiger Statuspunkt. Er zeigt „es läuft etwas“: Claude
+    /// arbeitet, oder die Session ist fertig und im Hintergrund läuft noch ein Kommando. Einzige Quelle dieser Regel
+    /// für Baum, Kachel und Stack.
+    static func activityColor(_ s: Session, attached: Bool) -> NSColor? {
         guard attached, s.status == .running || (s.hasRunningShell && s.status == .idle) else { return nil }
         return statusColor(s.status, attached: true, shellRunning: s.hasRunningShell)
     }

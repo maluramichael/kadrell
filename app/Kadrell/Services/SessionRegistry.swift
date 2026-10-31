@@ -37,6 +37,8 @@ final class SessionRegistry {
     private var firstPrompts: [String: String] = [:]
     /// Kacheln, die sich per `report` selbst melden (Claude-Hooks): kein Lesen ihrer Session-Datei, kein Transcript-Scan.
     private var reported: Set<String> = []
+    /// Zeitpunkt der letzten Meldung je Kachel (ms seit 1970), für den Abgleich mit der Session-Datei (`ReportFallback`).
+    private var reportedAt: [String: Double] = [:]
     /// Letzte Antwort je gemeldeter Kachel (`Session.id`), kommt mit dem `Stop`-Hook statt aus dem Transcript.
     private var hookMessages: [String: String] = [:]
     /// Gemeldete Kacheln, deren Transcript nach einer Antwort einmal nachgelesen wird (Worktree-Erkennung).
@@ -166,6 +168,7 @@ final class SessionRegistry {
         // Nach jeder Antwort einmal den Transcript-Tail lesen: nur daraus kommt der aktive Worktree.
         if state == "idle" { transcriptDue.insert(key) }
         reported.insert(key)
+        reportedAt[key] = Date().timeIntervalSince1970 * 1000
         let changed = s != sessions[i], persisted = s.stored != sessions[i].stored
         sessions[i] = s
         if persisted { save() }
@@ -177,16 +180,19 @@ final class SessionRegistry {
         // Gemeldete Kacheln, deren Prozess weg ist, fallen zurück auf den Poll.
         reported.formIntersection(pids.values)
         hookMessages = hookMessages.filter { reported.contains($0.key) }
-        let live = reported, pollPids = pids.filter { !live.contains($0.value) }
+        reportedAt = reportedAt.filter { reported.contains($0.key) }
+        // Gemeldete Kacheln, die nicht untätig sind, lesen ihre Datei trotzdem, nur für den Abgleich (`ReportFallback`).
+        let live = reported, unsettled = Set(sessions.filter { live.contains($0.id) && $0.status != .idle }.map(\.id))
+        let pollPids = pids.filter { !live.contains($0.value) || unsettled.contains($0.value) }
         // Agent.local liest je pid eine Datei, merge() je Session `.git/HEAD` (Git.branch), applyShellCwd() je
         // Shell-pid /proc: reines I/O ohne UI-Zugriff, deshalb abseits des Main-Threads statt bei jedem Poll
         // Tastatureingaben in allen Terminals zu blockieren.
-        var merged = await Task.detached {
+        var (merged, agents) = await Task.detached {
             let agents = Agent.local(pids: Array(pollPids.keys), configDir: configDir)
             var merged = SessionRegistry.merge(priorSessions, agents: agents, pids: pids, reported: live)
             SessionRegistry.applyShellCwd(&merged, pids: pids)
             SessionRegistry.applyRunningShells(&merged, pids: pids)
-            return merged
+            return (merged, agents)
         }.value
         await fillFirstPrompts(&merged)
         let messages = await refreshTranscripts(merged)
@@ -194,6 +200,7 @@ final class SessionRegistry {
         // Während der awaits kann `add`/`remove`/`rename`/`report` gelaufen sein: nur die Live-Felder auf den aktuellen
         // Stand legen, sonst verschwindet eine eben angelegte Session (und `attach.sync` beendet ihren Prozess).
         merged = SessionRegistry.applyLive(merged, to: sessions, reported: self.reported)
+        settleStaleReports(&merged, agents: agents, pids: pids)
         // Erster Poll meldet sich auch ohne Änderung: Registrierte hören darauf, um den Lade-Zustand zu verlassen.
         let firstPoll = !polled
         polled = true
@@ -203,6 +210,22 @@ final class SessionRegistry {
         lastMessages = messages
         if persisted { save() }
         onChange?(merged)
+    }
+
+    /// Gemeldete Kacheln, deren Meldung die Session-Datei überholt hat (Abbruch ohne `Stop`-Hook), nehmen deren Stand an.
+    /// Läuft nach `applyLive` auf dem aktuellen `reportedAt`: eine Meldung während der awaits gewinnt.
+    private func settleStaleReports(_ merged: inout [Session], agents: [Agent], pids: [Int: String]) {
+        let files = Dictionary(agents.compactMap { a in a.pid.flatMap { pids[$0] }.map { ($0, a) } }, uniquingKeysWith: { a, _ in a })
+        let now = Date().timeIntervalSince1970 * 1000
+        for i in merged.indices {
+            let key = merged[i].id
+            guard reported.contains(key), let at = reportedAt[key],
+                  let fix = ReportFallback.correction(current: merged[i].status, reportedAt: at, file: files[key], now: now) else { continue }
+            Self.log.info("status \(fix.status, privacy: .public) für \(key.prefix(8), privacy: .public) aus der Session-Datei (kein Hook)")
+            merged[i].rawStatus = fix.status
+            merged[i].waitingFor = fix.waitingFor
+            if merged[i].status == .idle { transcriptDue.insert(key) }
+        }
     }
 
     /// Bei Terminals ohne Claude folgt der Ordner dem `cd` der Shell.

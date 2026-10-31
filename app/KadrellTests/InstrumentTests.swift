@@ -458,62 +458,6 @@ final class InstrumentTests: XCTestCase {
         }
     }
 
-    func testMeterLightsInSteps() {
-        let saved = Feedback.reduceMotion; defer { Feedback.reduceMotion = saved }
-        Feedback.reduceMotion = false
-        XCTAssertEqual(Feedback.meterLit(now: 0.00), 1)
-        XCTAssertEqual(Feedback.meterLit(now: 0.17), 2)
-        XCTAssertEqual(Feedback.meterLit(now: 0.49), 4)
-        XCTAssertEqual(Feedback.meterLit(now: 0.65), 1)
-    }
-
-    func testMeterStillWithReduceMotion() {
-        let saved = Feedback.reduceMotion; defer { Feedback.reduceMotion = saved }
-        Feedback.reduceMotion = true
-        XCTAssertNil(Feedback.meterLit(now: 0.17))
-    }
-
-    func testMeterDrawsLitAndDimBars() {
-        // 12×10, lit = 2: Mitte von Strich 1 und 2 deckend, von Strich 3 und 4 ca. 25 %
-        let rep = render(width: 12, height: 10) { Instrument.meter(CGRect(x: 0, y: 0, width: 12, height: 10), lit: 2, color: .white) }
-        XCTAssertEqual(alpha(rep, x: 1, y: 5), 1, accuracy: 0.05)
-        XCTAssertEqual(alpha(rep, x: 10, y: 5), 0.25, accuracy: 0.08)
-    }
-
-    func testMeterWithoutLitDrawsAllBarsSolid() {
-        let rep = render(width: 12, height: 10) { Instrument.meter(CGRect(x: 0, y: 0, width: 12, height: 10), lit: nil, color: .white) }
-        for x in [1, 4, 7, 10] { XCTAssertEqual(alpha(rep, x: x, y: 5), 1, accuracy: 0.05, "x \(x)") }
-        XCTAssertEqual(alpha(rep, x: 2, y: 5), 0, accuracy: 0.05, "Lücke zwischen Strich 1 und 2")
-    }
-
-    /// Längen der Folgen deckender Pixel (Striche) und der Lücken dazwischen in einer Bitmap-Zeile.
-    private func runs(_ rep: NSBitmapImageRep, y: Int) -> (bars: [Int], gaps: [Int]) {
-        var bars: [Int] = [], gaps: [Int] = [], len = 0, solid = false
-        for x in 0..<rep.pixelsWide {
-            let on = alpha(rep, x: x, y: y) > 0.5
-            if on == solid { len += 1; continue }
-            if len > 0 { if solid { bars.append(len) } else if !bars.isEmpty { gaps.append(len) } }
-            solid = on; len = 1
-        }
-        if solid && len > 0 { bars.append(len) }
-        return (bars, gaps)
-    }
-
-    func testMeterGapsEvenAtEveryScale() {
-        for s: CGFloat in [0.9, 1, 1.1, 1.2, 1.3] {
-            let w = Int((14 * s).rounded(.up)), h = Int((12 * s).rounded(.up))
-            let rep = render(theme: Theme.current, width: w, height: h, scale: s) {
-                Instrument.meter(CGRect(x: 1, y: 1, width: 12, height: 10), lit: nil, color: .white)
-            }
-            // Zeile in der Mitte abtasten: Folgen deckender Pixel (Striche) und Lücken dazwischen
-            let (bars, gaps) = runs(rep, y: Int(6 * s))
-            XCTAssertEqual(bars.count, 4, "\(s)")
-            XCTAssertEqual(Set(bars).count, 1, "\(s): Striche gleich breit \(bars)")
-            XCTAssertEqual(Set(gaps).count, 1, "\(s): Lücken gleich breit \(gaps)")
-            XCTAssertGreaterThanOrEqual(gaps.first ?? 0, 1)
-        }
-    }
-
     func testRimDarkOutsideLightInsideWithoutBottom() {
         let rep = render(theme: .named("instrument-dark"), width: 40, height: 20, scale: 1) {
             panelCanvas(40, 20)

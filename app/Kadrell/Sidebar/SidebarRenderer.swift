@@ -34,9 +34,9 @@ struct SidebarSessionItem {
     let dot: NSColor
     /// Ohne Gruppierung steht der Projektname vor dem Titel, sonst trägt ihn die Gruppenzeile darüber.
     var project: String? = nil
-    /// Strich-Anzeige statt Punkt: gesetzt, wenn angehängt und Claude arbeitet oder (untätig) noch ein Kommando läuft.
-    /// Warten und Fehler behalten den Punkt. `lit` = leuchtende Striche (nil = alle, bei „Bewegung reduzieren“).
-    var meter: (color: NSColor, lit: Int?)? = nil
+    /// Atmender Punkt statt Statuspunkt (`Theme.activityColor`): den zeichnet die View als Core-Animation-Ebene
+    /// (`BreathingDots`), der Renderer lässt die Stelle frei. Warten und Fehler behalten den Punkt.
+    var breathing = false
     /// Claude-Prozess läuft (angehängt): steuert die Punktform bei „Farben nicht unterscheiden“ (Ring = nicht gestartet).
     let attached: Bool
     let selected: Bool
@@ -48,12 +48,6 @@ struct SidebarSessionItem {
     let showAge: Bool
     /// Fertig oder wartet, ungesehen: fetter heller Titel und Marke „neu“, auch an der fokussierten Zeile.
     let unread: Bool
-}
-
-extension SidebarSessionItem {
-    static func meter(for s: Session, attached: Bool, lit: Int?) -> (color: NSColor, lit: Int?)? {
-        Theme.meterColor(s, attached: attached).map { ($0, lit) }
-    }
 }
 
 enum SidebarStyle: String, CaseIterable {
@@ -80,11 +74,8 @@ extension SidebarRenderer {
     /// Höhe der Nachrichtenzeile unter der Kopfzeile einer Session (Einstellung „letzte Nachricht zeigen“). 2 pt mehr
     /// als die Schrift braucht: mit Tastaturring rückt der Umriss unten 2 pt ein und bliebe sonst an den Unterlängen.
     var messageLine: CGFloat { 16 }
+    /// Statuspunkt, auch die Stelle des atmenden Punkts arbeitender Sessions.
     func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
-    /// Strich-Anzeige arbeitender Sessions, sitzt anstelle des Punkts.
-    func meterRect(_ row: CGRect) -> CGRect { CGRect(x: 26, y: headRect(row).midY - 5, width: 12, height: 10) }
-    /// Alles, was der Status der Zeile je belegt: die Striche zeichnen nur diese Fläche neu.
-    func statusRect(_ row: CGRect) -> CGRect { dotRect(row).union(meterRect(row)) }
 
     /// Fläche einer hervorgehobenen Zeile: eingerückt und rund, in der Modulfarbe wie die Kachelfläche. Maße und
     /// Zeichnen kommen aus dem Kit, damit Dialog-Listen und rechte Sidebar genau so auswählen wie der Baum.
@@ -171,10 +162,10 @@ extension SidebarRenderer {
         sessionTitle(s).draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
-    /// Strich-Anzeige für arbeitende Sessions, sonst der Statuspunkt.
+    /// Statuspunkt; arbeitende Sessions bekommen den atmenden Punkt der View, hier bleibt die Stelle dann frei.
     func drawStatus(_ s: SidebarSessionItem, row: CGRect) {
-        if let m = s.meter { Instrument.meter(meterRect(row), lit: m.lit, color: m.color) }
-        else { Icons.statusDot(in: dotRect(row), status: s.session.status, attached: s.attached, color: s.dot) }
+        guard !s.breathing else { return }
+        Icons.statusDot(in: dotRect(row), status: s.session.status, attached: s.attached, color: s.dot)
     }
 
     /// Marke „neu“ links von `right`, liefert ihre linke Kante. Sie bleibt innerhalb des Umrisses der Zeilenfläche,
