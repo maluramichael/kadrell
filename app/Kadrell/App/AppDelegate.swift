@@ -901,7 +901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await self.updateChecker.checkNow() }
         }
         model.onClose = { [weak self, weak model] in model?.stopRecording(); self?.sheets.dismiss() }
-        sheets.present(SettingsView(model: model), onCancel: { model.onClose?() }, onPrimary: { model.onClose?() })
+        sheets.present(SettingsView(model: model), placement: .fullWindow, onCancel: { model.onClose?() }, onPrimary: { model.onClose?() })
     }
     @objc private func menuFontBigger() { Settings.terminalFontSize += 1; applyAppearance() }
     @objc private func menuFontSmaller() { Settings.terminalFontSize -= 1; applyAppearance() }
