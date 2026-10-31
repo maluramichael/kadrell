@@ -51,6 +51,10 @@ struct ExtensionDetail: View {
         case "bool":
             Toggle("", isOn: Binding(get: { model.stored[s.key]?.bool ?? false }, set: { save(.bool($0)) }))
                 .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(Theme.accentColor)
+        case "choice":
+            ChoiceMenu(options: s.options ?? [], selected: model.stored[s.key]?.string) { save(.string($0)) }
+        case "number":
+            SettingField(model: model, initial: model.stored[s.key].map(Self.numberText) ?? "", secure: false) { save(.string($0)) }
         case "secret":
             HStack(spacing: 8) {
                 (model.secretsSet.contains(s.key) ? Text("gesetzt") : Text("nicht gesetzt")).foregroundStyle(Theme.mutedColor).lineLimit(1)
@@ -59,6 +63,12 @@ struct ExtensionDetail: View {
         default:
             SettingField(model: model, initial: model.stored[s.key]?.string ?? "", secure: false) { save(.string($0)) }
         }
+    }
+
+    /// Zahl ohne überflüssiges „.0“, so wie sie jemand eintippen würde.
+    nonisolated static func numberText(_ v: JSONValue) -> String {
+        guard case .number(let n) = v else { return v.string ?? "" }
+        return n == n.rounded() && abs(n) < 1e15 ? String(Int(n)) : String(n)
     }
 
     /// Abstand der Logzeilen oben und unten innerhalb des Feldes, zusätzlich zu dessen 3 pt.
@@ -113,5 +123,32 @@ private struct SettingField: View {
         guard let d = draft, d != initial, !(secure && d.isEmpty) else { return }
         draft = nil
         commit(d)
+    }
+}
+
+/// Auswahl für `choice` im Stil der Einstellungen: eingelassenes Feld mit Pfeilen, ein Klick öffnet das Menü.
+private struct ChoiceMenu: View {
+    let options: [ExtensionManifest.Option]
+    let selected: String?
+    let pick: (String) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.value) { o in
+                Button { pick(o.value) } label: {
+                    if o.value == selected { Label(o.label, systemImage: "checkmark") } else { Text(o.label) }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(options.first { $0.value == selected }?.label ?? selected ?? "–").lineLimit(1).foregroundStyle(Theme.fgColor)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9 * Theme.scale)).foregroundStyle(Theme.mutedColor)
+            }
+            .instrumentWell()
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).kbdFocusRing()
     }
 }

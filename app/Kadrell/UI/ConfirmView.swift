@@ -40,6 +40,6 @@ struct ConfirmView: View {
             }
             .padding(16)
         }
-        .frame(width: 520 * Theme.scale, alignment: .leading)
+        .overlayWidth(520, alignment: .leading)
     }
 }

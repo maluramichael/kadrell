@@ -298,9 +298,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.onMoveGroup = { [weak self] gid, target in self?.store.moveGroup(gid, to: target); self?.reloadViews() }
         workspace.onMoveSession = { [weak self] id, target in self?.moveSession(id, to: target) }
         sidebar.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
+        sidebar.onGroupContextMenu = { [weak self] gid in self?.groupMenu(for: gid) }
+        sidebar.onMoveToGroup = { [weak self] ids, gid in self?.moveSessions(ids, toGroup: gid) }
+        sidebar.onPassKey = { [weak self] event in self?.passKeyToFocusedSession(event) }
         workspace.onContextMenu = { [weak self] id in self?.sessionMenu(for: id) }
         workspace.onPickLanguage = { [weak self] language in
             Settings.language = language
+            self?.emitLocale()
             self?.buildMenu()
             self?.reloadViews()
         }
@@ -901,7 +905,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await self.updateChecker.checkNow() }
         }
         model.onClose = { [weak self, weak model] in model?.stopRecording(); self?.sheets.dismiss() }
-        sheets.present(SettingsView(model: model), onCancel: { model.onClose?() }, onPrimary: { model.onClose?() })
+        sheets.present(SettingsView(model: model), placement: .fullWindow, onCancel: { model.onClose?() }, onPrimary: { model.onClose?() })
     }
     @objc private func menuFontBigger() { Settings.terminalFontSize += 1; applyAppearance() }
     @objc private func menuFontSmaller() { Settings.terminalFontSize -= 1; applyAppearance() }
@@ -918,6 +922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Theme.scale = CGFloat(Settings.uiScale)
             if palette.isVisible { palette.dismiss() }
             palette = PaletteWindow()
+            if languageChanged { emitLocale() }
             paletteLanguage = Settings.language
         }
         for c in windows { c.applyAppearance(themeChanged: themeChanged) }
@@ -1004,10 +1009,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else if let f = workspace.focused { workspace.setFocus(f) }
     }
 
-    /// Ordner der Fokus-Session im eingestellten Editor öffnen. Über die Login-Shell, damit `code` und Co. im PATH liegen.
-    private func openEditor() {
+    /// Ordner der Fokus-Session im eingestellten Editor öffnen.
+    private func openEditor() { openEditor(in: workspace.focused.flatMap { workspace.session($0) }?.cwd ?? "") }
+
+    /// Ordner im eingestellten Editor öffnen (Fokus-Session, Kontextmenü der Gruppe). Über die Login-Shell, damit
+    /// `code` und Co. im PATH liegen.
+    func openEditor(in cwd: String) {
         let cmd = Settings.editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cwd = workspace.focused.flatMap { workspace.session($0) }?.cwd ?? ""
         guard !cmd.isEmpty, !cwd.isEmpty else { NSSound.beep(); return }
         do { _ = try ProcessRunner.spawn("/bin/zsh", ["-lc", cmd + " ."], environment: cli?.environment, cwd: cwd) }
         catch { sheets.report(String(describing: error)) }
@@ -1091,6 +1099,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         commands += accounts.accounts.map { a in (String(localized: "Zu Konto wechseln: \(a.title)", bundle: Bundle.app), { [weak self] in self?.switchAccount(a.id) }) }
         commands += store.groups.map { g in (String(localized: "Alle Sessions von \(g.name)", bundle: Bundle.app), { [weak self] in self?.workspace.select(g.sessionIds, add: false) }) }
+        if let s = focusedSession, let own = workspace.group(forSession: s.id) {
+            commands += store.groups.filter { $0.id != own.id }.map { g in
+                (String(localized: "Fokussierte Session verschieben nach: \(g.name)", bundle: Bundle.app), { [weak self] in self?.moveSessions([s.id], toGroup: g.id) })
+            }
+        }
+        commands += extensionCommands()
         src.commands = commands
         palette.source = src
         palette.onClose = { [weak self] in self?.workspace.refocusTerminal() }
@@ -1179,12 +1193,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// ⌘ auf dem „+“ einer Gruppe: Terminal ohne Claude im Ordner der Gruppe, direkt in derselben Gruppe.
-    private func openNewTerminal(groupId: String) {
+    func openNewTerminal(groupId: String) {
         guard let g = store.group(id: groupId), !pickRemoteSession(in: g) else { return }
         startShell(group: g, cwd: g.cwd)
     }
 
-    private func openNewSession(groupId: String?) {
+    func openNewSession(groupId: String?) {
         if let gid = groupId, let g = store.group(id: gid) {
             if !pickRemoteSession(in: g) { startSession(group: g, cwd: g.cwd) }
             return
@@ -1248,9 +1262,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sheets.present(RenameSessionView(model: model), onPrimary: { model.save() })
     }
 
-    private func openEditGroup(_ gid: String) {
+    func openEditGroup(_ gid: String) {
         guard let g = store.group(id: gid) else { return }
-        let model = EditGroupModel(group: g)
+        let model = EditGroupModel(group: g, others: store.groups.filter { $0.id != gid })
         model.onSave = { [weak self] updated in
             guard let self else { return }
             sheets.dismiss()

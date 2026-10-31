@@ -23,8 +23,16 @@ enum ExtensionSettings {
             if let text { await Keychain.write(service: keychainService, account: account, value: text) }
             else { await Keychain.delete(service: keychainService, account: account) }
         case "bool": Profile.defaults.set(value.bool, forKey: defaultsKey(ext.name, key))
+        case "number": Profile.defaults.set(number(value), forKey: defaultsKey(ext.name, key))
         default: Profile.defaults.set(text, forKey: defaultsKey(ext.name, key))
         }
+    }
+
+    /// Zahl aus dem Formular: Text mit Punkt oder Komma, oder schon eine Zahl. Alles andere löscht den Wert.
+    static func number(_ value: JSONValue) -> Double? {
+        if case .number(let v) = value { return v.isFinite ? v : nil }
+        let text = value.string?.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".") ?? ""
+        return Double(text).flatMap { $0.isFinite ? $0 : nil }
     }
 
     static func account(_ name: String, _ key: String) -> String { "\(Profile.name ?? "default")/\(name)/\(key)" }
@@ -35,6 +43,7 @@ enum ExtensionSettings {
         switch s.type {
         case "secret": await Keychain.read(service: keychainService, account: account(name, s.key)).map(JSONValue.string)
         case "bool": (Profile.defaults.object(forKey: defaultsKey(name, s.key)) as? Bool).map(JSONValue.bool)
+        case "number": (Profile.defaults.object(forKey: defaultsKey(name, s.key)) as? Double).map(JSONValue.number)
         default: Profile.defaults.string(forKey: defaultsKey(name, s.key)).map(JSONValue.string)
         }
     }

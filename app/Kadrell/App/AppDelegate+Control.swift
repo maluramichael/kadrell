@@ -57,9 +57,7 @@ extension AppDelegate {
         case .layout(let m): workspace.setMode(m)
         case .zoom(let t): try controlZoom(target: t, req)
         case let .rename(t, name): registry.rename(try session(t, req).id, to: name)
-        case let .move(t, target):
-            store.attach(sessionId: try session(t, req).id, to: try group(target, req).id)
-            reloadViews()
+        case let .move(t, target): moveSessions([try session(t, req).id], toGroup: try group(target, req).id)
         case let .setGroup(t, name, color, favorite): try controlSetGroup(target: t, name: name, color: color, favorite: favorite, req)
         case .stop(let t): try controlStop(target: t, req)
         case .resume(let t): attach.attachNow(try session(t, req))

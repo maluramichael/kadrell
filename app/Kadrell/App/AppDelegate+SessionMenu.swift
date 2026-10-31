@@ -4,10 +4,21 @@ import AppKit
 /// (Kontextmenü, `representedObject` trägt die Session-Id) sowie am Hauptmenü „Session“ (Kürzel, wirkt
 /// auf die fokussierte Session, `representedObject` bleibt nil). Ein Menü, eine Stelle für Enabled-Logik.
 extension AppDelegate {
+    /// Im Kontextmenü dazu: die ganze Auswahl verschieben (wenn die Session dazugehört) und die Aktionen ihrer Gruppe.
     func sessionMenu(for id: String) -> NSMenu? {
         guard workspace.session(id) != nil else { return nil }
         let menu = NSMenu()
         for item in sessionMenuItems(for: id, shortcuts: false) { menu.addItem(item) }
+        let selection = workspace.selected
+        if selection.count > 1, selection.contains(id), let i = menu.items.firstIndex(where: { $0.submenu is MoveToGroupMenu }) {
+            menu.insertItem(moveMenuItem(for: selection, title: String(localized: "Auswahl verschieben nach (\(selection.count))", bundle: Bundle.app)), at: i + 1)
+        }
+        if let g = store.group(forSession: id), let groupMenu = groupMenu(for: g.id) {
+            menu.addItem(.separator())
+            let item = NSMenuItem(title: String(localized: "Gruppe „\(g.name)“", bundle: Bundle.app), action: nil, keyEquivalent: "")
+            item.submenu = groupMenu
+            menu.addItem(item)
+        }
         return menu
     }
 
@@ -26,6 +37,7 @@ extension AppDelegate {
             item(String(localized: "Nur diese zeigen", bundle: Bundle.app), #selector(menuContextIsolate(_:))),
             item(String(localized: "Aus Ansicht nehmen", bundle: Bundle.app), #selector(menuContextRemoveFromView(_:))),
             item(String(localized: "Neue Session hier", bundle: Bundle.app), #selector(menuContextNewHere(_:))),
+            moveMenuItem(for: id.map { [$0] }, title: String(localized: "Verschieben nach", bundle: Bundle.app)),
             .separator(),
             item(String(localized: "Pfad kopieren", bundle: Bundle.app), #selector(menuContextCopyPath(_:))),
             item(String(localized: "Im Finder zeigen", bundle: Bundle.app), #selector(menuContextShowInFinder(_:))),
