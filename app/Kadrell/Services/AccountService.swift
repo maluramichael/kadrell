@@ -86,6 +86,8 @@ final class AccountService {
     var onChange: (() -> Void)?
     /// Nach einem automatischen Wechsel aufgerufen, mit dem jetzt aktiven Account (für die Meldung an den Nutzer).
     var onAutoSwitch: ((Account) -> Void)?
+    /// Nach jeder Messung eines Accounts, aktiv oder inaktiv (für den Verlauf der Limits).
+    var onUsageStored: ((String, CachedUsage) -> Void)?
     private var lastSwitch = Date.distantPast
     /// Ein Schlüsselbund-Vorgang läuft (Wechsel oder Token-Refresh). Alles Weitere wartet, sonst läse ein Wechsel einen
     /// halb geschriebenen Eintrag oder einen Refresh-Token, den der Refresh gerade verbraucht hat.
@@ -128,15 +130,40 @@ final class AccountService {
 
     /// Nutzung des aktiven Accounts aus dem Poll merken, damit das Menü sie später auch für den inaktiven zeigt.
     func recordUsage(_ u: Usage) {
-        guard let activeId else { return }
+        guard let activeId else {
+            onUsageStored?(Self.noAccountId, Self.cached(u))
+            return
+        }
         store(u, for: activeId)
     }
 
     private func store(_ u: Usage, for id: String) {
         guard let i = accounts.firstIndex(where: { $0.id == id }) else { return }
-        accounts[i].usage = CachedUsage(session: u.session, weekly: u.weekly, fable: u.fable,
-                                        sessionResets: u.sessionResets, weeklyResets: u.weeklyResets, at: Date())
+        let cached = Self.cached(u)
+        accounts[i].usage = cached
         persist()
+        onUsageStored?(id, cached)
+    }
+
+    private static func cached(_ u: Usage) -> CachedUsage {
+        CachedUsage(session: u.session, weekly: u.weekly, fable: u.fable,
+                    sessionResets: u.sessionResets, weeklyResets: u.weeklyResets, at: Date())
+    }
+
+    /// Verlauf ohne hinterlegten Account: Wer nur angemeldet ist und nie einen Slot angelegt hat, hat keine Id.
+    static let noAccountId = "current"
+
+    /// Kacheln der Statistik: je Account eine, ohne hinterlegten Account eine für den angemeldeten.
+    var limitSources: [LimitSource] {
+        guard !accounts.isEmpty else {
+            return [LimitSource(id: Self.noAccountId, title: String(localized: "Aktueller Account", bundle: Bundle.app), detail: "",
+                                kinds: LimitKind.allCases, current: nil)]
+        }
+        return accounts.map { a in
+            LimitSource(id: a.id, title: a.title, detail: Self.usageDetail(a.usage, session: a.hasSessionLimit),
+                        kinds: a.hasSessionLimit ? LimitKind.allCases : [.weekly, .fable],
+                        current: a.usage.map { UsageSample(account: a.id, usage: $0) })
+        }
     }
 
     private func persist() {

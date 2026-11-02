@@ -17,10 +17,15 @@ final class SheetPresenter {
     enum Panel { case about, stats, extensions }
     /// Das F4-Modell kennt sein Fenster nur, solange das Panel offen ist (danach verfallen Formular-Entwürfe).
     private(set) var openPanel: Panel? {
-        didSet { extensionsModel?.window = openPanel == .extensions ? overlay : nil }
+        didSet {
+            extensionsModel?.window = openPanel == .extensions ? overlay : nil
+            statsModel.setOpen(openPanel == .stats)
+        }
     }
     /// Für F4, gesetzt mit dem Start der Extensions. Lebt so lange wie die App und sammelt die Meldungen des Managers.
     var extensionsModel: ExtensionsModel?
+    /// Für F3. Liest nur, solange das Panel offen ist; bis zum Start der Dienste leer.
+    var statsModel = StatsModel()
 
     init(host: @escaping () -> MainWindowController?, palette: @escaping () -> PaletteWindow?) {
         self.host = host
@@ -65,7 +70,7 @@ final class SheetPresenter {
         let close: () -> Void = { [weak self] in self?.dismiss() }
         switch panel {
         case .about: present(AboutView(), panel: panel, onPrimary: close)
-        case .stats: present(StatsView(), panel: panel, onPrimary: close)
+        case .stats: present(StatsView(model: statsModel), panel: panel, placement: .fullWindow, onPrimary: close)
         case .extensions:
             guard let model = extensionsModel else { return NSSound.beep() }
             // ⏎ gehört den Textfeldern der Einstellungen (speichern), schließen mit Esc, F4 oder ⌘⏎.

@@ -41,7 +41,7 @@ Kadrell keeps them all in a single window:
 - **Pulsing blue dot for background commands.** If a background command is still running in a session while Claude is already waiting again, its dot pulses blue instead of sitting still, in the tree, the tile bar and the stack view.
 - **Disconnect all finished at once.** A button in the bar disconnects every finished session in one go; the tiles stay, a click resumes the conversation. Finished sessions can also auto-disconnect after an adjustable delay.
 - **Switch language without a restart.** German and English, changeable in settings and applied immediately, so a restart never takes your Claude processes with it.
-- **Statistics (F3).** Messages sent, sessions and terminals opened, tile switches and the record for simultaneously open sessions.
+- **Statistics (F3).** Limits of every account over time, prompts over time per project, plus lifetime counters. Everything stays on your Mac.
 - **Grouping is optional.** Turn off grouping by project (⌥G) and all sessions stand in a single list with the project name before the title. Grouped and flat keep separate drag orders.
 - **Resume after restart.** When Kadrell quits, the processes end; on the next start each shown session resumes with its history.
 - **Terminal font, scaling and scrollback.** Pick any installed monospace font, adjust size, line spacing and padding, and set the scrollback buffer from 1,000 to 50,000 lines.

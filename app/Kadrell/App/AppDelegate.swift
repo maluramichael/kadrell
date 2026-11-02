@@ -535,6 +535,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startExtensions(environment: cli.environment)
         LocalModels.shared.environment = cli.environment
         LocalModels.shared.server.sweepStale()
+        accounts.onUsageStored = { id, cached in UsageHistory.shared.append(UsageSample(account: id, usage: cached)) }
+        sheets.statsModel = StatsModel(
+            sources: { [weak self] in self?.accounts.limitSources ?? [] },
+            samples: { await UsageHistory.shared.samples() },
+            sessions: { [configDir = registry.cli.configDir] in await SessionHistory.shared.sessions(configDir: configDir) })
         usage.onMeasured = { [weak self] u in
             self?.accounts.recordUsage(u)
             self?.refreshUsageBars()

@@ -37,6 +37,15 @@ final class SessionHistoryTests: XCTestCase {
         XCTAssertEqual(e.title, "Lokale Modelle")
     }
 
+    /// Die Statistik zählt jede Eingabe mit ihrem Zeitpunkt, auch wiederholte; Zeilen ohne Eingabe zählen nicht.
+    func testRecordsTimeOfEveryPrompt() {
+        let at = #","timestamp":"2026-11-02T09:53:59.845Z""#
+        let e = parse([user("weiter", extra: at), user("weiter", extra: at), user("<command-name>/x", extra: at), user("ohne Zeit")])
+        XCTAssertEqual(e.prompts, ["weiter", "ohne Zeit"])
+        XCTAssertEqual(e.promptTimes.count, 2)
+        XCTAssertEqual(e.promptTimes.first ?? 0, 1_793_613_239.845, accuracy: 0.01)
+    }
+
     func testCustomTitleWinsOverAiTitle() {
         let e = parse([#"{"type":"custom-title","customTitle":"Mein Name"}"#, #"{"type":"ai-title","aiTitle":"KI"}"#, user("x")])
         XCTAssertEqual(e.title, "Mein Name")

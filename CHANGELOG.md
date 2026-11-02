@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.77.0 (2026-11-02)
+
+- Feature: Die Statistik (F3) füllt jetzt das Fenster und zeigt die Limits aller Accounts im Zeitverlauf: 5 Stunden, 7 Tage und Fable, je Account ein Chart.
+- Feature: Die Statistik zeigt alle Prompts als Balken über die Zeit, nach Projekt gestapelt, mit Liste der Projekte. Auch ältere Prompts und Sessions außerhalb von Kadrell zählen mit.
+- Feature: In der Statistik wählen 1 bis 4 oder die Pfeiltasten den Zeitraum: 24 Stunden, 7 Tage, 30 Tage oder 1 Jahr.
+
 ## 1.76.0 (2026-10-31)
 
 - Feature: Verlaufssuche (⌘⇧H oder `#` in der Suche): findet jede frühere Claude-Session über ihren Titel und deine eigenen Prompts, auch längst beendete. ⏎ setzt sie in ihrem Ordner fort oder springt zu ihr, wenn sie schon läuft.

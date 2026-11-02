@@ -10,6 +10,9 @@ struct HistorySession: Codable, Sendable, Equatable {
     var customTitle: String?
     var aiTitle: String?
     var prompts: [String] = []
+    /// Zeitpunkt jeder Eingabe in Sekunden seit 1970, auch wiederholter, für die Statistik. Hier zählt jede Eingabe,
+    /// `prompts` fasst gleiche direkt hintereinander zusammen.
+    var promptTimes: [Double] = []
     /// Änderungszeit des Transcripts in Sekunden seit 1970.
     var lastActive: Double = 0
     /// Dateigröße beim letzten Lesen: gleich groß heißt unverändert, die Datei wird nicht geöffnet.
@@ -65,7 +68,14 @@ enum SessionHistoryParser {
         if entry.cwd.isEmpty, let cwd = obj["cwd"] as? String { entry.cwd = cwd }
         guard !isMachineWritten(obj), let text = Transcript.userText(object: obj), !text.hasPrefix(peerPrefix),
               let flat = Transcript.flatPrompt(text, limit: promptLimit) else { return }
+        if let time = time(obj["timestamp"]) { entry.promptTimes.append(time) }
         if entry.prompts.last != flat { entry.prompts.append(flat) }
+    }
+
+    private static func time(_ value: Any?) -> Double? {
+        guard let text = value as? String else { return nil }
+        let style = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        return (try? style.parse(text))?.timeIntervalSince1970
     }
 
     /// Ältere Transcripts haben noch kein `origin`: Nachrichten anderer Sessions erkennt man dort nur am Anfang.
@@ -248,6 +258,13 @@ final class SessionHistory {
         }
     }
 
+    /// Nachlesen und danach alle Sessions mit Eingaben oder Titel (für die Statistik).
+    func sessions(configDir: String) async -> [HistorySession] {
+        await withCheckedContinuation { done in
+            refresh(configDir: configDir) { [weak self] _ in done.resume(returning: self?.index?.sessions ?? []) }
+        }
+    }
+
     private func finish(_ fresh: [String: HistorySession], _ next: HistoryIndex?) {
         entries = fresh
         if let next { index = next }
@@ -263,7 +280,7 @@ final class SessionHistory {
     nonisolated static func cacheURL(configDir: String) -> URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let name = configDir.replacingOccurrences(of: "/", with: "_")
-        return caches.appendingPathComponent("de.malura.kadrell/session-history-v1\(name).plist")
+        return caches.appendingPathComponent("de.malura.kadrell/session-history-v2\(name).plist")
     }
 
     nonisolated private static func loadCache(_ url: URL) -> [String: HistorySession] {

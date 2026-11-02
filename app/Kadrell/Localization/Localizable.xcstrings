@@ -1,6 +1,150 @@
 {
   "sourceLanguage": "de",
   "strings": {
+    "1 bis 4 oder ←/→ wählen den Zeitraum": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "1 bis 4 oder ←/→ wählen den Zeitraum" } },
+        "en": { "stringUnit": { "state": "translated", "value": "1 to 4 or ←/→ choose the period" } }
+      }
+    },
+    "GESAMT": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "GESAMT" } },
+        "en": { "stringUnit": { "state": "translated", "value": "TOTAL" } }
+      }
+    },
+    "24 Std.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "24 Std." } },
+        "en": { "stringUnit": { "state": "translated", "value": "24 h" } }
+      }
+    },
+    "7 Tage": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "7 Tage" } },
+        "en": { "stringUnit": { "state": "translated", "value": "7 days" } }
+      }
+    },
+    "30 Tage": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "30 Tage" } },
+        "en": { "stringUnit": { "state": "translated", "value": "30 days" } }
+      }
+    },
+    "1 Jahr": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "1 Jahr" } },
+        "en": { "stringUnit": { "state": "translated", "value": "1 year" } }
+      }
+    },
+    "5 Stunden": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "5 Stunden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "5 hours" } }
+      }
+    },
+    "Fable": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Fable" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Fable" } }
+      }
+    },
+    "LIMITS": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "LIMITS" } },
+        "en": { "stringUnit": { "state": "translated", "value": "LIMITS" } }
+      }
+    },
+    "Verbraucht in Prozent": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Verbraucht in Prozent" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Used, in percent" } }
+      }
+    },
+    "Noch keine Messwerte in diesem Zeitraum.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Noch keine Messwerte in diesem Zeitraum." } },
+        "en": { "stringUnit": { "state": "translated", "value": "No measurements in this period yet." } }
+      }
+    },
+    "Zeit": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Zeit" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Time" } }
+      }
+    },
+    "Prozent": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Prozent" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Percent" } }
+      }
+    },
+    "Linie": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Linie" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Line" } }
+      }
+    },
+    "Prompts": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Prompts" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Prompts" } }
+      }
+    },
+    "PROMPTS": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "PROMPTS" } },
+        "en": { "stringUnit": { "state": "translated", "value": "PROMPTS" } }
+      }
+    },
+    "Aus den Transcripts, auch von Sessions außerhalb von Kadrell.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Aus den Transcripts, auch von Sessions außerhalb von Kadrell." } },
+        "en": { "stringUnit": { "state": "translated", "value": "From the transcripts, including sessions outside Kadrell." } }
+      }
+    },
+    "Transcripts werden gelesen …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Transcripts werden gelesen …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Reading transcripts …" } }
+      }
+    },
+    "Keine Prompts in diesem Zeitraum.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Keine Prompts in diesem Zeitraum." } },
+        "en": { "stringUnit": { "state": "translated", "value": "No prompts in this period." } }
+      }
+    },
+    "%lld Prompts": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%lld Prompts" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%lld prompts" } }
+      }
+    },
+    "Andere": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Andere" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Other" } }
+      }
+    },
+    "und %lld weitere": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "und %lld weitere" } },
+        "en": { "stringUnit": { "state": "translated", "value": "and %lld more" } }
+      }
+    },
+    "%lld %%": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%lld %%" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%lld %%" } }
+      }
+    },
+    "Aktueller Account": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Aktueller Account" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Current account" } }
+      }
+    },
     "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, # alle Claude-Sessions, @ Remote )": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, # alle Claude-Sessions, @ Remote )" } },
@@ -5763,18 +5907,18 @@
         }
       }
     },
-    "Statistik: Nachrichten, Sessions, Kachelwechsel, Rekord": {
+    "Statistik: Limits, Prompts und Zähler": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Statistik: Nachrichten, Sessions, Kachelwechsel, Rekord"
+            "value": "Statistik: Limits, Prompts und Zähler"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stats: messages, sessions, tile switches, record"
+            "value": "Stats: limits, prompts and counters"
           }
         }
       }
