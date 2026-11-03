@@ -1,8 +1,7 @@
 import AppKit
 
 /// Schnellstart (⌘⇧I): Idee rein, Session raus. Kandidaten aus Gruppen, Sessions, benutzten Ordnern und Git-Repos;
-/// gestartet wird wie `kadrell new -c <ordner> <prompt>` über `startSession(…, prompt:)`, mit Tab als Pi-Session
-/// auf dem lokalen Modell der Funktion „Pi-Sessions“.
+/// gestartet wird über `startNewSession(…, prompt:)`, also nach der Harness-Auswahl wie jede neue Session.
 extension AppDelegate {
     func openQuickStart() {
         guard registry != nil else { NSSound.beep(); return }
@@ -11,10 +10,8 @@ extension AppDelegate {
         let ask: ((String, String) async throws -> String)? = ref.map { _ in
             { system, user in try await local.complete(for: .quickStart, system: system, user: user, schema: QuickStartPrompt.schema) }
         }
-        let pi = piSessionModel()
-        let model = QuickStartModel(candidates: quickStartCandidates(), modelName: ref?.name, piModel: pi?.name, ask: ask)
+        let model = QuickStartModel(candidates: quickStartCandidates(), modelName: ref?.name, ask: ask)
         local.warmUp(for: .quickStart)
-        if model.usePi { local.warmUp(for: .piSession) }
         // Repos neben bekannten Projekten nachladen wie bei ⌘N; bis der Scan steht, gilt der gespeicherte Stand.
         let known = store.groups.map(\.cwd) + FolderIndex.shared.uses.keys
         FolderIndex.shared.refresh(roots: [Settings.startFolder] + known.map { ($0 as NSString).deletingLastPathComponent }) { [weak self, weak model] in
@@ -22,12 +19,10 @@ extension AppDelegate {
             model?.updateCandidates(quickStartCandidates())
         }
         model.onClose = { [weak self] in self?.sheets.dismiss() }
-        model.onStart = { [weak self, weak model] c, prompt in
+        model.onStart = { [weak self] c, prompt in
             guard let self else { return }
             sheets.dismiss()
-            let piRef = model?.usePi == true ? pi : nil
-            startSession(group: c.groupId.flatMap { self.store.group(id: $0) }, cwd: c.path, prompt: prompt.isEmpty ? nil : prompt,
-                         sessionId: piRef.map { _ in Session.newPiId() }, model: piRef)
+            startNewSession(group: c.groupId.flatMap { self.store.group(id: $0) }, cwd: c.path, prompt: prompt.isEmpty ? nil : prompt)
         }
         sheets.present(QuickStartView(model: model), onCancel: { model.cancel() }, onPrimary: { model.submit() })
     }

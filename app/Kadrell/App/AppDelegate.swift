@@ -287,7 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         sidebar.onNewSession = { [weak self] gid in self?.openNewSession(groupId: gid) }
         sidebar.onNewTerminal = { [weak self] gid in self?.openNewTerminal(groupId: gid) }
-        sidebar.onDropFolder = { [weak self] dir in self?.startSession(group: nil, cwd: dir) }
+        sidebar.onDropFolder = { [weak self] dir in self?.startNewSession(group: nil, cwd: dir) }
         sidebar.onEditGroup = { [weak self] gid in self?.openEditGroup(gid) }
         sidebar.onToggleFavorite = { [weak self] gid in self?.store.toggleFavorite(id: gid); self?.reloadViews() }
         sidebar.onCloseGroup = { [weak self] gid, force in self?.closeGroup(gid, force: force) }
@@ -867,7 +867,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Ohne fokussierte Session gibt es keinen Ordner: dann wie ⌘N.
     private func newSessionInFocusedFolder() {
         guard let s = workspace.focused.flatMap({ workspace.session($0) }), !s.cwd.isEmpty else { openNewSession(groupId: nil); return }
-        startSession(group: workspace.group(forSession: s.id), cwd: s.cwd)
+        startNewSession(group: workspace.group(forSession: s.id), cwd: s.cwd)
     }
     /// ⌘⇧N: Palette im Remote-Modus, `@host` verbindet per ssh mit dessen tmux, `@host:` wählt die Session.
     @objc private func menuRemote() { togglePalette(prefix: "@") }
@@ -1233,7 +1233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func openNewSession(groupId: String?) {
         if let gid = groupId, let g = store.group(id: gid) {
-            if !pickRemoteSession(in: g) { startSession(group: g, cwd: g.cwd) }
+            if !pickRemoteSession(in: g) { startNewSession(group: g, cwd: g.cwd) }
             return
         }
         let sessions = workspace.sessions
@@ -1249,7 +1249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Bis `boot` Claude Code gefunden hat, gibt es keine Registry: der Dialog bleibt offen, statt die Session still zu verlieren.
             guard registry != nil else { NSSound.beep(); return }
             sheets.dismiss()
-            startSession(group: g, cwd: cwd)
+            startNewSession(group: g, cwd: cwd)
         }
         sheets.present(view, onPrimary: { model.start() })
     }

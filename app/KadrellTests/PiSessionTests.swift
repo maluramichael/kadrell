@@ -75,21 +75,4 @@ final class PiSessionTests: XCTestCase {
         XCTAssertTrue(PiCLI.installExtension(source: source, home: home))
         XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: file)[.modificationDate] as? Date, written, "gleiche Fassung bleibt liegen")
     }
-
-    func testQuickStartTabSwitchesToPiOnlyWithModel() {
-        let saved = LocalModelSettings.quickStartUsePi
-        defer { LocalModelSettings.quickStartUsePi = saved }
-        LocalModelSettings.quickStartUsePi = false
-        let none = QuickStartModel(candidates: [], modelName: nil, piModel: nil, ask: nil)
-        none.toggleAgent()
-        XCTAssertFalse(none.usePi, "ohne Pi-Modell bleibt es bei Claude")
-        XCTAssertNil(none.agentText)
-
-        let m = QuickStartModel(candidates: [], modelName: nil, piModel: "qwen3:4b", ask: nil)
-        XCTAssertFalse(m.usePi)
-        m.toggleAgent()
-        XCTAssertTrue(m.usePi)
-        XCTAssertTrue(m.agentText?.contains("qwen3:4b") == true)
-        XCTAssertTrue(QuickStartModel(candidates: [], modelName: nil, piModel: "qwen3:4b", ask: nil).usePi, "die Wahl gilt beim nächsten Mal weiter")
-    }
 }

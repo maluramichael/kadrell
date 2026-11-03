@@ -23,10 +23,6 @@ final class QuickStartModel {
     private(set) var error: String?
     /// Anzeigename des Modells der Funktion, nil = Schnellstart ohne Modell (nur Namenssuche).
     let modelName: String?
-    /// Modell für Pi-Sessions, nil = Pi fehlt oder hat kein Modell: dann startet immer Claude.
-    let piModel: String?
-    /// Tab in der Idee: Pi mit lokalem Modell statt Claude. Gilt auch für den nächsten Schnellstart.
-    private(set) var usePi: Bool
 
     @ObservationIgnored private var ranked: [QuickStartCandidate] = []
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -35,26 +31,10 @@ final class QuickStartModel {
     @ObservationIgnored var onClose: (() -> Void)?
 
     /// `ask` schickt System- und Nutzertext an das Modell der Funktion; nil, wenn sie aus ist oder kein Modell hat.
-    init(candidates: [QuickStartCandidate], modelName: String?, piModel: String? = nil, ask: ((String, String) async throws -> String)?) {
+    init(candidates: [QuickStartCandidate], modelName: String?, ask: ((String, String) async throws -> String)?) {
         self.candidates = candidates
         self.modelName = modelName
-        self.piModel = piModel
-        self.usePi = piModel != nil && LocalModelSettings.quickStartUsePi
         self.ask = ask
-    }
-
-    /// Tab in der Idee: zwischen Claude und Pi wechseln, ohne Pi-Modell nur ein Piep.
-    func toggleAgent() {
-        guard piModel != nil else { NSSound.beep(); return }
-        usePi.toggle()
-        LocalModelSettings.quickStartUsePi = usePi
-    }
-
-    /// Womit die Session startet, als Zeile für Idee und Projektwahl.
-    var agentText: String? {
-        guard let piModel else { return nil }
-        return usePi ? String(localized: "startet mit Pi · \(piModel)", bundle: Bundle.app)
-                     : String(localized: "startet mit Claude", bundle: Bundle.app)
     }
 
     var prompt: String { (useCleaned ? cleaned : nil) ?? idea.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -228,11 +208,7 @@ struct QuickStartView: View {
     private var ideaPhase: some View {
         VStack(alignment: .leading, spacing: 8) {
             PathField(text: $model.idea, placeholder: String(localized: "Idee tippen, z. B. „In Kadrell habe ich die Idee, dass …“", bundle: Bundle.app),
-                      size: 14, onTab: model.toggleAgent, onSubmit: model.submit, onMove: { _ in })
-            if let agent = model.agentText {
-                Text(agent + " · " + String(localized: "Tab wechselt", bundle: Bundle.app))
-                    .font(Theme.ui(11)).foregroundStyle(model.usePi ? Theme.accentTextColor : Theme.mutedColor)
-            }
+                      size: 14, onTab: {}, onSubmit: model.submit, onMove: { _ in })
             HStack(spacing: 6) {
                 if model.phase == .thinking {
                     ProgressView().controlSize(.small)
@@ -259,9 +235,6 @@ struct QuickStartView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text("ERSTER PROMPT").capsLabel()
-                    if let agent = model.agentText {
-                        Text(agent).font(Theme.ui(10.5)).foregroundStyle(model.usePi ? Theme.accentTextColor : Theme.mutedColor)
-                    }
                     if model.cleaned != nil {
                         Text(model.useCleaned ? String(localized: "Projektverweis entfernt · Tab: Originaltext", bundle: Bundle.app)
                                               : String(localized: "Originaltext · Tab: ohne Projektverweis", bundle: Bundle.app))

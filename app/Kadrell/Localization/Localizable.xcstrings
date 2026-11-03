@@ -1,6 +1,30 @@
 {
   "sourceLanguage": "de",
   "strings": {
+    "STARTEN MIT": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "STARTEN MIT" } },
+        "en": { "stringUnit": { "state": "translated", "value": "START WITH" } }
+      }
+    },
+    "Tippen filtert": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Tippen filtert" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Type to filter" } }
+      }
+    },
+    "Nichts gefunden.": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Nichts gefunden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Nothing found." } }
+      }
+    },
+    "⏎ starten · ↑↓ wählt · Esc abbrechen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "⏎ starten · ↑↓ wählt · Esc abbrechen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "⏎ start · ↑↓ chooses · Esc cancel" } }
+      }
+    },
     "1 bis 4 oder ←/→ Zeitraum · ↑/↓ Projekt · Leertaste filtert · ⌫ alle · s sortiert": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "1 bis 4 oder ←/→ Zeitraum · ↑/↓ Projekt · Leertaste filtert · ⌫ alle · s sortiert" } },
@@ -233,24 +257,6 @@
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "kein Modell (nur Claude)" } },
         "en": { "stringUnit": { "state": "translated", "value": "no model (Claude only)" } }
-      }
-    },
-    "startet mit Pi · %@": {
-      "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "startet mit Pi · %@" } },
-        "en": { "stringUnit": { "state": "translated", "value": "starts with Pi · %@" } }
-      }
-    },
-    "startet mit Claude": {
-      "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "startet mit Claude" } },
-        "en": { "stringUnit": { "state": "translated", "value": "starts with Claude" } }
-      }
-    },
-    "Tab wechselt": {
-      "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Tab wechselt" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Tab switches" } }
       }
     },
     "Pi oder das Modell der Session fehlt (Einstellungen › Modelle für Funktionen)": {

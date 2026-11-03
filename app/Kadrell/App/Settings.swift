@@ -35,6 +35,13 @@ enum Settings {
         return candidates.map { home + "/" + $0 }.first { FolderIndex.isDirectory($0) } ?? home
     }
 
+    /// Zuletzt in der Auswahl vor dem Start gewählter Agent, dort oben und markiert. Ohne Wahl gilt die frühere
+    /// Schnellstart-Einstellung (Tab auf Pi), damit wer Pi schon nutzte, es weiter oben findet.
+    static var lastAgent: AgentKind {
+        get { enumValue("lastAgent", value("local.quickStart.usePi", false) ? .pi : .claude) }
+        set { store("lastAgent", newValue.rawValue) }
+    }
+
     /// Kommando des externen Editors, so wie im Terminal getippt (`code`, `subl`, `zed`). "" = Hotkey tut nichts.
     static var editorCommand: String { get { value("editorCommand", "") } set { store("editorCommand", newValue) } }
     /// Letzte Antwort von Claude als zweite Zeile unter jeder Session im Baum.

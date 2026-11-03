@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.80.0 (2026-11-03)
+
+- Feature: Neue Sessions fragen vor dem Start, ob Claude oder Pi laufen soll. Der zuletzt gewählte steht oben, ⏎ startet ihn, ↑↓ oder Tippen wählt den anderen. Gilt für ⌘N, ⌘⏎, die Kontextmenüs, Ordner im Baum und den Schnellstart. Ohne eingerichtetes Pi startet Claude wie bisher sofort.
+- Entfernt: Tab im Schnellstart schaltet nicht mehr zwischen Claude und Pi um, das übernimmt die neue Auswahl.
+
 ## 1.79.0 (2026-11-03)
 
 - Änderung: Hilfe, Umbenennen, Statistik und Extensions liegen jetzt auf ⌥F1, ⌥F2, ⌥F3 und ⌥F4. Die F-Tasten ohne ⌥ gehen an das Programm im Terminal, etwa htop über ssh.

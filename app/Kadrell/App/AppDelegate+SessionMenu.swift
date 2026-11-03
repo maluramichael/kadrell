@@ -78,7 +78,7 @@ extension AppDelegate {
 
     @objc private func menuContextNewHere(_ sender: NSMenuItem) {
         guard let s = contextSession(sender), !s.cwd.isEmpty else { return }
-        startSession(group: store.group(forSession: s.id), cwd: s.cwd)
+        startNewSession(group: store.group(forSession: s.id), cwd: s.cwd)
     }
 
     @objc private func menuContextCopyPath(_ sender: NSMenuItem) {

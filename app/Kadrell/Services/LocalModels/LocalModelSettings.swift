@@ -66,8 +66,4 @@ enum LocalModelSettings {
     static var quickStartStripReference: Bool {
         get { value("local.quickStart.stripReference", true) } set { store("local.quickStart.stripReference", newValue) }
     }
-    /// Schnellstart: zuletzt mit Tab gewählter Agent, true = Pi mit lokalem Modell statt Claude.
-    static var quickStartUsePi: Bool {
-        get { value("local.quickStart.usePi", false) } set { store("local.quickStart.usePi", newValue) }
-    }
 }
