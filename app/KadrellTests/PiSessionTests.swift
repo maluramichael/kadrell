@@ -47,6 +47,15 @@ final class PiSessionTests: XCTestCase {
         XCTAssertNil(l.env["KADRELL_PI_BASE_URL"])
     }
 
+    /// Aus Dock oder Finder gestartet fehlt `~/.local/bin` oft im PATH der Login-Shell: Kadrell findet `pi` dort trotzdem,
+    /// `#!/usr/bin/env node` aber nicht den `node` daneben. Der Ordner von `pi` gehört deshalb vorne in den PATH.
+    func testPathGetsBinaryFolderOnce() {
+        XCTAssertEqual(PiCLI.path(for: "/Users/x/.local/bin/pi", in: "/usr/bin:/bin"), "/Users/x/.local/bin:/usr/bin:/bin")
+        XCTAssertEqual(PiCLI.path(for: "/Users/x/.local/bin/pi", in: "/usr/bin:/Users/x/.local/bin"), "/usr/bin:/Users/x/.local/bin",
+                       "schon im PATH: Reihenfolge bleibt")
+        XCTAssertEqual(PiCLI.path(for: "/opt/pi/bin/pi", in: nil), "/opt/pi/bin")
+    }
+
     func testPromptIsNeverReadAsOptionOrFile() {
         XCTAssertEqual(PiCLI.safePrompt("--help mir"), " --help mir")
         XCTAssertEqual(PiCLI.safePrompt("@datei.md lesen"), " @datei.md lesen")

@@ -16,6 +16,15 @@ enum PiCLI {
         return path.lazy.map { $0 + "/pi" }.first { fm.isExecutableFile(atPath: $0) }
     }
 
+    /// PATH für die Pi-Kachel mit dem Ordner von `pi` vorne, falls er fehlt. Aus Dock oder Finder gestartet hat die
+    /// Login-Shell `~/.local/bin` oft nicht im PATH; `binary` findet `pi` dort trotzdem, `#!/usr/bin/env node` aber
+    /// nicht den `node` daneben (Exit 127). Auch Pis Bash-Werkzeug sieht dann dieselben Programme wie im Terminal.
+    static func path(for binary: String, in path: String?) -> String {
+        let dir = (binary as NSString).deletingLastPathComponent
+        guard let path, !path.isEmpty else { return dir }
+        return path.split(separator: ":").contains { $0 == dir } ? path : dir + ":" + path
+    }
+
     /// Aufruf und zusätzliche Umgebung für eine Pi-Kachel. `baseURL` ist die Adresse des Providers ohne `/v1`;
     /// fehlt sie (llama.cpp ließ sich nicht starten), startet Pi trotzdem und zeigt den Fehler selbst.
     static func launch(binary: String, session: Session, model: LocalModelRef, baseURL: URL?, prompt: String?) -> (args: [String], env: [String: String]) {

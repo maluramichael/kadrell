@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.80.1 (2026-11-03)
+
+- Fix: Pi-Sessions starten wieder, wenn Kadrell aus dem Dock oder Finder kommt und `node` neben `pi` liegt, statt mit „node: No such file or directory“ abzubrechen.
+
 ## 1.80.0 (2026-11-03)
 
 - Feature: Neue Sessions fragen vor dem Start, ob Claude oder Pi laufen soll. Der zuletzt gewählte steht oben, ⏎ startet ihn, ↑↓ oder Tippen wählt den anderen. Gilt für ⌘N, ⌘⏎, die Kontextmenüs, Ordner im Baum und den Schnellstart. Ohne eingerichtetes Pi startet Claude wie bisher sofort.

@@ -203,6 +203,7 @@ final class AttachManager {
         PiCLI.installExtension()
         let launch = PiCLI.launch(binary: binary, session: session, model: model, baseURL: LocalModels.shared.baseURLNow(model.provider), prompt: prompt)
         env.merge(launch.env) { _, new in new }
+        env["PATH"] = PiCLI.path(for: binary, in: env["PATH"])
         AttachManager.log.info("pi \(launch.args.dropLast(prompt == nil ? 0 : 1).joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
         return (binary, launch.args, "pi")
     }
