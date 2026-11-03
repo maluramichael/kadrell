@@ -2,6 +2,13 @@
 
 Neueste Version oben.
 
+## 1.78.0 (2026-11-03)
+
+- Feature: Die Statistik zeigt jeden Tagesbeginn als Linie in den Charts, in 24 Stunden und 30 Tagen mit Datum daran.
+- Feature: Die Limit-Linien laufen jetzt über den ganzen Zeitraum. Wo nichts gemessen wurde, ist die Linie gestrichelt.
+- Feature: In der Statistik lassen sich Projekte filtern: ↑/↓ wählt ein Projekt, Leertaste oder Klick zeigt nur die gewählten im Chart, ⌫ zeigt wieder alle.
+- Feature: Die Projektliste der Statistik zeigt alle Projekte und sortiert mit s nach Anzahl, Name oder letzter Aktivität.
+
 ## 1.77.1 (2026-11-03)
 
 - Änderung: Sessions in der Seitenleiste sind nicht mehr eingerückt, Statuspunkt und Titel stehen ganz links unter dem Gruppenpfeil.

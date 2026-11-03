@@ -1,10 +1,10 @@
 {
   "sourceLanguage": "de",
   "strings": {
-    "1 bis 4 oder ←/→ wählen den Zeitraum": {
+    "1 bis 4 oder ←/→ Zeitraum · ↑/↓ Projekt · Leertaste filtert · ⌫ alle · s sortiert": {
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "1 bis 4 oder ←/→ wählen den Zeitraum" } },
-        "en": { "stringUnit": { "state": "translated", "value": "1 to 4 or ←/→ choose the period" } }
+        "de": { "stringUnit": { "state": "translated", "value": "1 bis 4 oder ←/→ Zeitraum · ↑/↓ Projekt · Leertaste filtert · ⌫ alle · s sortiert" } },
+        "en": { "stringUnit": { "state": "translated", "value": "1 to 4 or ←/→ period · ↑/↓ project · Space filters · ⌫ all · s sorts" } }
       }
     },
     "GESAMT": {
@@ -127,10 +127,28 @@
         "en": { "stringUnit": { "state": "translated", "value": "Other" } }
       }
     },
-    "und %lld weitere": {
+    "Anzahl": {
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "und %lld weitere" } },
-        "en": { "stringUnit": { "state": "translated", "value": "and %lld more" } }
+        "de": { "stringUnit": { "state": "translated", "value": "Anzahl" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Count" } }
+      }
+    },
+    "Zuletzt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Zuletzt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Recent" } }
+      }
+    },
+    "Sortiert:": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Sortiert:" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Sorted:" } }
+      }
+    },
+    "%lld gewählt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%lld gewählt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%lld selected" } }
       }
     },
     "%lld %%": {

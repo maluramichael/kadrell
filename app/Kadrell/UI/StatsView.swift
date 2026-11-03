@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// F3: Limits je Account und Prompts im Zeitverlauf, darunter die Lebenszeit-Zähler des Profils (siehe `Stats`).
-/// Füllt das Fenster. 1 bis 4 oder ←/→ wählen den Zeitraum, Esc, ⏎ oder F3 schließt.
+/// Füllt das Fenster. 1 bis 4 oder ←/→ wählen den Zeitraum, ↑/↓, Leertaste, ⌫ und s bedienen die Projektliste,
+/// Esc, ⏎ oder F3 schließt.
 struct StatsView: View {
     let model: StatsModel
 
@@ -14,7 +15,7 @@ struct StatsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 if let snapshot = model.snapshot {
                     LimitsSection(snapshot: snapshot)
-                    PromptsSection(snapshot: snapshot, reading: model.readingPrompts)
+                    PromptsSection(snapshot: snapshot, reading: model.readingPrompts, model: model)
                 }
                 CountersSection()
             }
@@ -48,7 +49,7 @@ struct StatsView: View {
 
     private var footer: some View {
         HStack {
-            Text("1 bis 4 oder ←/→ wählen den Zeitraum")
+            Text("1 bis 4 oder ←/→ Zeitraum · ↑/↓ Projekt · Leertaste filtert · ⌫ alle · s sortiert")
             Spacer(minLength: 12)
             Text("Esc oder F3 schließen")
         }

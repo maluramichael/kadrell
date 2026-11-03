@@ -67,12 +67,66 @@ struct PromptBar: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Ein Projekt der Liste neben dem Chart. `slot` ist die Farbe im Chart, nil heißt „Andere“ oder herausgefiltert.
 struct ProjectCount: Identifiable, Equatable, Sendable {
     let name: String
     let count: Int
     let slot: Int?
+    /// Letzter Prompt im Zeitraum, für die Sortierung „Zuletzt“.
+    var last: Date = .distantPast
+    /// Steht im Chart: ohne Filter alle, mit Filter nur die gewählten.
+    var included = true
 
     var id: String { name }
+}
+
+/// Reihenfolge der Projektliste, `s` schaltet reihum.
+enum ProjectSort: Int, CaseIterable, Sendable {
+    case count, name, recent
+
+    var next: ProjectSort { ProjectSort(rawValue: rawValue + 1) ?? .count }
+
+    func sorted(_ projects: [ProjectCount]) -> [ProjectCount] {
+        projects.sorted { a, b in
+            let byName = a.name.localizedStandardCompare(b.name) == .orderedAscending
+            switch self {
+            case .count: return a.count != b.count ? a.count > b.count : byName
+            case .name: return byName
+            case .recent: return a.last != b.last ? a.last > b.last : byName
+            }
+        }
+    }
+}
+
+/// Beginn eines Tags (in der Jahresansicht eines Monats) als Trennlinie in den Charts. `labeled`: mit Datum daran.
+struct DayMark: Identifiable, Equatable, Sendable {
+    let date: Date
+    let labeled: Bool
+
+    var id: Double { date.timeIntervalSince1970 }
+
+    /// 24 Std. und 30 Tage beschriften die Linie selbst (an jedem Tag bzw. Wochenanfang), 7 Tage und 1 Jahr tragen das
+    /// Datum schon an der Achse.
+    static func marks(range: StatsRange, from: Date, to: Date, calendar: Calendar = .current) -> [DayMark] {
+        let step: Calendar.Component = range == .year ? .month : .day
+        guard var date = calendar.dateInterval(of: step, for: from)?.start else { return [] }
+        if date < from, let next = calendar.date(byAdding: step, value: 1, to: date) { date = next }
+        var out: [DayMark] = []
+        while date <= to {
+            out.append(DayMark(date: date, labeled: labeled(date, range: range, calendar: calendar)))
+            guard let next = calendar.date(byAdding: step, value: 1, to: date) else { break }
+            date = next
+        }
+        return out
+    }
+
+    private static func labeled(_ date: Date, range: StatsRange, calendar: Calendar) -> Bool {
+        switch range {
+        case .day: return true
+        case .month: return calendar.component(.weekday, from: date) == calendar.firstWeekday
+        case .week, .year: return false
+        }
+    }
 }
 
 enum PromptStats {
@@ -144,12 +198,32 @@ enum PromptStats {
         }
     }
 
-    /// Alle Projekte des Zeitraums, meiste Prompts zuerst.
-    static func projects(_ events: [PromptEvent], slots: [String: Int]) -> [ProjectCount] {
+    /// Alle Projekte des Zeitraums, auch herausgefilterte (sonst ließen sie sich nicht wieder wählen), in `sort`.
+    static func projects(_ events: [PromptEvent], slots: [String: Int], filter: Set<String> = [], sort: ProjectSort = .count) -> [ProjectCount] {
+        var counts: [String: Int] = [:], last: [String: Double] = [:]
+        for event in events {
+            counts[event.project, default: 0] += 1
+            last[event.project] = max(last[event.project] ?? 0, event.time)
+        }
+        return sort.sorted(counts.map { name, count in
+            let included = filter.isEmpty || filter.contains(name)
+            return ProjectCount(name: name, count: count, slot: included ? slots[name] : nil,
+                                last: Date(timeIntervalSince1970: last[name] ?? 0), included: included)
+        })
+    }
+
+    /// Mit Filter bekommen gewählte Projekte ohne eigene Farbe die frei gewordenen: Sonst stünde ein gewähltes Projekt
+    /// grau als „Andere“ im Chart. Projekte mit Farbe behalten sie.
+    static func slots(_ slots: [String: Int], filter: Set<String>, events: [PromptEvent]) -> [String: Int] {
+        guard !filter.isEmpty else { return slots }
+        var out = slots.filter { filter.contains($0.key) }
+        var free = (0..<colorSlots).filter { !out.values.contains($0) }
         var counts: [String: Int] = [:]
-        for event in events { counts[event.project, default: 0] += 1 }
-        return counts.map { ProjectCount(name: $0.key, count: $0.value, slot: slots[$0.key]) }
-            .sorted { $0.count != $1.count ? $0.count > $1.count : $0.name < $1.name }
+        for event in events where filter.contains(event.project) && out[event.project] == nil { counts[event.project, default: 0] += 1 }
+        for name in counts.keys.sorted(by: { (counts[$0, default: 0], $1) > (counts[$1, default: 0], $0) }) where !free.isEmpty {
+            out[name] = free.removeFirst()
+        }
+        return out
     }
 }
 
@@ -167,16 +241,17 @@ enum LimitKind: Int, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// `segment` trennt die Linie an Messlücken: Lief Kadrell nicht, gibt es für die Zeit keine Werte, und eine
-/// durchgezogene Linie würde welche vortäuschen.
+/// `segment` trennt die Linie an Messlücken: Lief Kadrell nicht, gibt es für die Zeit keine Werte. Die Lücke
+/// überbrückt eine gestrichelte Linie (`bridge`), damit sichtbar bleibt, dass dort nichts gemessen wurde.
 struct LimitPoint: Identifiable, Equatable, Sendable {
     let date: Date
     let value: Int
     let kind: LimitKind
     let segment: Int
+    var bridge = false
 
-    var id: String { "\(kind.rawValue)-\(date.timeIntervalSince1970)" }
-    var series: String { "\(kind.rawValue)-\(segment)" }
+    var id: String { "\(series)-\(date.timeIntervalSince1970)" }
+    var series: String { "\(kind.rawValue)-\(bridge ? "b" : "")\(segment)" }
 }
 
 enum LimitStats {
@@ -208,6 +283,48 @@ enum LimitStats {
         return segmented(peaks, kind: kind, gap: max(minGap, 3 * width))
     }
 
+    /// Gestrichelte Stücke, mit denen jede Linie den ganzen Zeitraum durchläuft: über Messlücken von Punkt zu Punkt,
+    /// vorn ab dem Rand (Richtung letzter Wert davor), hinten mit dem letzten Wert bis jetzt. Je Stück zwei Punkte.
+    static func bridges(_ points: [LimitPoint], samples: [UsageSample], range: StatsRange, now: Date, kinds: [LimitKind]) -> [LimitPoint] {
+        let from = now.addingTimeInterval(-range.span)
+        var index = 0
+        return kinds.flatMap { kind -> [LimitPoint] in
+            let line = points.filter { $0.kind == kind }
+            let pairs = lead(line, before: last(samples, kind: kind, before: from), from: from, now: now) + inner(line) + trail(line, now: now)
+            return pairs.flatMap { pair -> [LimitPoint] in
+                defer { index += 1 }
+                return [pair.0, pair.1].map { LimitPoint(date: $0.date, value: $0.value, kind: kind, segment: index, bridge: true) }
+            }
+        }
+    }
+
+    private typealias Bridge = ((date: Date, value: Int), (date: Date, value: Int))
+
+    private static func last(_ samples: [UsageSample], kind: LimitKind, before: Date) -> (date: Date, value: Int)? {
+        samples.filter { $0.t < before.timeIntervalSince1970 && kind.value($0) != nil }.max { $0.t < $1.t }
+            .flatMap { s in kind.value(s).map { (Date(timeIntervalSince1970: s.t), $0) } }
+    }
+
+    /// Vom linken Rand zum ersten Punkt, auf der Geraden vom letzten Wert vor dem Zeitraum. Gibt es im Zeitraum
+    /// keinen Punkt, gilt der Wert davor bis jetzt. Ohne Wert davor beginnt die Linie beim ersten Punkt.
+    private static func lead(_ line: [LimitPoint], before: (date: Date, value: Int)?, from: Date, now: Date) -> [Bridge] {
+        guard let before else { return [] }
+        guard let first = line.first else { return [((from, before.value), (now, before.value))] }
+        let share = from.timeIntervalSince(before.date) / max(1, first.date.timeIntervalSince(before.date))
+        let value = Int((Double(before.value) + Double(first.value - before.value) * share).rounded())
+        return first.date > from ? [((from, value), (first.date, first.value))] : []
+    }
+
+    private static func inner(_ line: [LimitPoint]) -> [Bridge] {
+        zip(line, line.dropFirst()).compactMap { a, b in a.segment != b.segment ? ((a.date, a.value), (b.date, b.value)) : nil }
+    }
+
+    /// Der letzte Wert gilt bis jetzt, bis eine neue Messung kommt.
+    private static func trail(_ line: [LimitPoint], now: Date) -> [Bridge] {
+        guard let last = line.last, now > last.date else { return [] }
+        return [((last.date, last.value), (now, last.value))]
+    }
+
     private static func segmented(_ peaks: [(t: Double, value: Int)], kind: LimitKind, gap: TimeInterval) -> [LimitPoint] {
         var segment = 0
         var previous: Double?
@@ -234,6 +351,10 @@ struct AccountLimits: Identifiable, Equatable, Sendable {
     let title: String
     let detail: String
     let points: [LimitPoint]
+    /// Gestrichelte Stücke über Lücken und bis an die Ränder, siehe `LimitStats.bridges`.
+    var bridges: [LimitPoint] = []
+
+    var isEmpty: Bool { points.isEmpty && bridges.isEmpty }
 }
 
 /// Was die Statistik-Seite zeigt, fertig gerechnet. Entsteht außerhalb des Main-Actors, ein Jahr Verlauf dauert spürbar.
@@ -245,19 +366,31 @@ struct StatsSnapshot: Equatable, Sendable {
     var bars: [PromptBar]
     var projects: [ProjectCount]
     var promptTotal: Int
+    var days: [DayMark] = []
+    /// Gewählte Projekte; leer heißt alle.
+    var filter: Set<String> = []
+    var sort: ProjectSort = .count
 
-    static func make(range: StatsRange, now: Date, samples: [UsageSample], sources: [LimitSource], events: [PromptEvent]) -> StatsSnapshot {
+    static func make(range: StatsRange, now: Date, samples: [UsageSample], sources: [LimitSource], events: [PromptEvent],
+                     filter: Set<String> = [], sort: ProjectSort = .count) -> StatsSnapshot {
         let visible = PromptStats.inRange(events, range, now: now)
-        let slots = PromptStats.slots(events, now: now)
+        let shown = filter.isEmpty ? visible : visible.filter { filter.contains($0.project) }
+        let slots = PromptStats.slots(PromptStats.slots(events, now: now), filter: filter, events: visible)
+        let from = now.addingTimeInterval(-range.span)
+        return StatsSnapshot(range: range, from: from, now: now, limits: limits(range: range, now: now, samples: samples, sources: sources),
+                             bars: PromptStats.bars(shown, range: range, slots: slots),
+                             projects: PromptStats.projects(visible, slots: slots, filter: filter, sort: sort), promptTotal: shown.count,
+                             days: DayMark.marks(range: range, from: from, to: now), filter: filter, sort: sort)
+    }
+
+    private static func limits(range: StatsRange, now: Date, samples: [UsageSample], sources: [LimitSource]) -> [AccountLimits] {
         let grouped = Dictionary(grouping: samples, by: \.account)
-        let limits = sources.map { source -> AccountLimits in
+        return sources.map { source in
             let own = merged(grouped[source.id] ?? [], current: source.current)
             let points = LimitStats.points(own, range: range, now: now, kinds: source.kinds)
-            return AccountLimits(id: source.id, title: source.title, detail: source.detail, points: points)
+            return AccountLimits(id: source.id, title: source.title, detail: source.detail, points: points,
+                                 bridges: LimitStats.bridges(points, samples: own, range: range, now: now, kinds: source.kinds))
         }
-        return StatsSnapshot(range: range, from: now.addingTimeInterval(-range.span), now: now, limits: limits,
-                             bars: PromptStats.bars(visible, range: range, slots: slots),
-                             projects: PromptStats.projects(visible, slots: slots), promptTotal: visible.count)
     }
 
     /// Der Cache-Stand zählt nur, wenn er neuer ist als die letzte Zeile, sonst stünde dieselbe Messung doppelt da.

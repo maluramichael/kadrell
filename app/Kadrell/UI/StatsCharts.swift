@@ -54,6 +54,16 @@ extension StatsRange {
     }
 }
 
+extension ProjectSort {
+    var label: LocalizedStringKey {
+        switch self {
+        case .count: return "Anzahl"
+        case .name: return "Name"
+        case .recent: return "Zuletzt"
+        }
+    }
+}
+
 extension LimitKind {
     var label: LocalizedStringKey {
         switch self {
@@ -92,6 +102,56 @@ private struct ChartHover: ViewModifier {
                     date = proxy.value(atX: location.x - geometry[plot].minX, as: Date.self)
                 }
             }
+        }
+    }
+}
+
+/// Linie an jedem Tagesbeginn (Jahr: Monatsbeginn), unter den Daten. Kräftiger als das Raster, damit man sieht,
+/// wo ein Tag anfängt.
+private struct DaySeparators: ChartContent {
+    let days: [DayMark]
+    let range: StatsRange
+
+    var body: some ChartContent {
+        ForEach(days) { day in
+            RuleMark(x: .value("Zeit", day.date))
+                .foregroundStyle(Theme.mutedColor.opacity(opacity(day)))
+                .lineStyle(StrokeStyle(lineWidth: 1))
+        }
+    }
+
+    /// In 30 Tagen stehen die Linien dicht, dort tritt nur der Wochenanfang mit Datum hervor.
+    private func opacity(_ day: DayMark) -> Double { range == .month && !day.labeled ? 0.25 : 0.55 }
+}
+
+/// Datum oben rechts neben den beschrifteten Tageslinien. Eigene Ebene statt Annotation: Die verschöbe die Plotfläche.
+private struct DayLabels: ViewModifier {
+    let days: [DayMark]
+    var background: Color = .clear
+    /// Platz, den ein Datum rechts der Linie braucht.
+    private static var labelRoom: CGFloat { 110 * Theme.scale }
+
+    func body(content: Content) -> some View {
+        content.chartOverlay(alignment: .topLeading) { proxy in
+            GeometryReader { geometry in
+                if let plot = proxy.plotFrame {
+                    let frame = geometry[plot]
+                    ZStack(alignment: .topLeading) {
+                        ForEach(days.filter(\.labeled)) { day in
+                            if let x = proxy.position(forX: day.date) {
+                                Text(day.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
+                                    .font(Theme.ui(10, bold: true)).foregroundStyle(Theme.mutedColor).lineLimit(1).fixedSize()
+                                    .padding(.horizontal, 3).background(background)
+                                    // Breite null an der Linie: Das Datum hängt rechts daran, am rechten Rand links,
+                                    // sonst ragte es aus dem Chart. Jedes Label für sich, die ZStack richtet nichts aus.
+                                    .frame(width: 0, alignment: x > frame.width - Self.labelRoom ? .trailing : .leading)
+                                    .offset(x: frame.minX + x, y: frame.minY + 1)
+                            }
+                        }
+                    }
+                }
+            }
+            .allowsHitTesting(false)
         }
     }
 }
@@ -176,7 +236,7 @@ private struct LimitCard: View {
                 Spacer(minLength: 8)
                 Text(account.detail).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).lineLimit(1)
             }
-            if account.points.isEmpty {
+            if account.isEmpty {
                 Text("Noch keine Messwerte in diesem Zeitraum.").font(Theme.ui(12)).foregroundStyle(Theme.mutedColor)
                     .frame(maxWidth: .infinity, minHeight: chartHeight)
             } else {
@@ -191,6 +251,13 @@ private struct LimitCard: View {
 
     private var chart: some View {
         Chart {
+            DaySeparators(days: snapshot.days, range: snapshot.range)
+            // Nicht gemessen: gestrichelt, dünner und blasser, damit die Messwerte vorn bleiben.
+            ForEach(account.bridges) { point in
+                LineMark(x: .value("Zeit", point.date), y: .value("Prozent", point.value), series: .value("Linie", point.series))
+                    .foregroundStyle(StatsPalette.limit(point.kind).opacity(0.6))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+            }
             ForEach(account.points) { point in
                 LineMark(x: .value("Zeit", point.date), y: .value("Prozent", point.value), series: .value("Linie", point.series))
                     .foregroundStyle(StatsPalette.limit(point.kind))
@@ -215,6 +282,7 @@ private struct LimitCard: View {
             }
         }
         .statsAxes(snapshot)
+        .modifier(DayLabels(days: snapshot.days, background: Theme.bgColor))
         .modifier(ChartHover(date: $hover))
         .frame(height: chartHeight)
     }
@@ -238,6 +306,7 @@ private struct LimitCard: View {
 struct PromptsSection: View {
     let snapshot: StatsSnapshot
     let reading: Bool
+    let model: StatsModel
     @Environment(\.overlayMaxWidth) private var maxWidth
     @State private var hover: Date?
 
@@ -277,6 +346,7 @@ struct PromptsSection: View {
 
     private var chart: some View {
         Chart {
+            DaySeparators(days: snapshot.days, range: snapshot.range)
             ForEach(snapshot.bars) { bar in
                 let span = bar.visibleSpan(from: snapshot.from, to: snapshot.now)
                 RectangleMark(xStart: .value("Zeit", span.lowerBound), xEnd: .value("Zeit", span.upperBound),
@@ -297,6 +367,7 @@ struct PromptsSection: View {
             }
         }
         .statsAxes(snapshot)
+        .modifier(DayLabels(days: snapshot.days, background: Theme.raisedColor.opacity(0.85)))
         .modifier(ChartHover(date: $hover))
         .frame(height: chartHeight)
     }
@@ -322,20 +393,51 @@ struct PromptsSection: View {
         }
     }
 
-    /// Macht die Farben auch als Zahlen lesbar, die Tabelle zum Chart.
+    /// Macht die Farben auch als Zahlen lesbar, die Tabelle zum Chart. Alle Projekte des Zeitraums, scrollbar; ↑/↓
+    /// bewegt den Cursor, Leertaste oder Klick wählt Projekte für den Chart, s sortiert.
     private var projectList: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(snapshot.projects.prefix(10)) { project in
-                HStack(spacing: 6) {
-                    Swatch(color: StatsPalette.project(slot: project.slot))
-                    Text(verbatim: project.name).font(Theme.ui(12)).foregroundStyle(Theme.fgColor).lineLimit(1).truncationMode(.middle)
-                    Spacer(minLength: 8)
-                    Text(project.count, format: .number).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.fgColor)
+            listHeader
+            ScrollViewReader { reader in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(snapshot.projects) { projectRow($0) }
+                    }
+                }
+                .frame(maxHeight: chartHeight)
+                .onChange(of: model.cursor) { _, cursor in
+                    if let cursor { reader.scrollTo(cursor) }
                 }
             }
-            if snapshot.projects.count > 10 {
-                Text("und \(snapshot.projects.count - 10) weitere").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
-            }
+        }
+    }
+
+    private var listHeader: some View {
+        HStack(spacing: 4) {
+            Text("Sortiert:")
+            Text(snapshot.sort.label).foregroundStyle(Theme.fgColor)
+            Spacer(minLength: 8)
+            if !snapshot.filter.isEmpty { Text("\(snapshot.filter.count) gewählt").foregroundStyle(Theme.accentTextColor) }
+        }
+        .font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).lineLimit(1)
+        .padding(.horizontal, 12)
+    }
+
+    private func projectRow(_ project: ProjectCount) -> some View {
+        let color = project.included ? Theme.fgColor : Theme.mutedColor
+        return HStack(spacing: 6) {
+            Swatch(color: project.included ? StatsPalette.project(slot: project.slot) : Theme.mutedColor.opacity(0.4))
+            Text(verbatim: project.name).font(Theme.ui(12)).foregroundStyle(color).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 8)
+            Text(project.count, format: .number).font(Theme.ui(12, bold: true)).foregroundStyle(color)
+        }
+        // Die Zeilenfläche rückt 6 pt ein, der Inhalt braucht innen nochmal so viel Luft.
+        .padding(.horizontal, 12).padding(.vertical, 4)
+        .instrumentRow(selected: model.cursor == project.name)
+        .id(project.name)
+        .onTapGesture {
+            model.cursor = project.name
+            model.toggle(project.name)
         }
     }
 }

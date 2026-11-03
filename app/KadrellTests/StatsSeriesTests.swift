@@ -73,9 +73,65 @@ final class StatsSeriesTests: XCTestCase {
         let events = [event(10, "a"), event(20, "a"), event(30, "b"), event(2 * 24 * 3600, "b")]
         let visible = PromptStats.inRange(events, .day, now: now)
         XCTAssertEqual(visible.count, 3)
-        XCTAssertEqual(PromptStats.projects(visible, slots: ["a": 0]), [
-            ProjectCount(name: "a", count: 2, slot: 0), ProjectCount(name: "b", count: 1, slot: nil),
-        ])
+        let projects = PromptStats.projects(visible, slots: ["a": 0])
+        XCTAssertEqual(projects.map(\.name), ["a", "b"])
+        XCTAssertEqual(projects.map(\.count), [2, 1])
+        XCTAssertEqual(projects.map(\.slot), [0, nil])
+        XCTAssertEqual(projects[0].last, now.addingTimeInterval(-10), "letzter Prompt des Projekts")
+    }
+
+    // MARK: Filtern und Sortieren
+
+    /// Gefiltert stehen nur die gewählten Projekte im Chart, die Liste behält alle, damit man sie wieder wählen kann.
+    func testFilterKeepsAllProjectsInList() {
+        let events = [event(10, "a"), event(20, "b"), event(30, "b"), event(40, "c")]
+        let snap = StatsSnapshot.make(range: .day, now: now, samples: [], sources: [], events: events, filter: ["b"])
+        XCTAssertEqual(snap.promptTotal, 2)
+        XCTAssertEqual(Set(snap.bars.map(\.project)), ["b"])
+        XCTAssertEqual(snap.projects.map(\.name), ["b", "a", "c"])
+        XCTAssertEqual(snap.projects.map(\.included), [true, false, false])
+        XCTAssertNil(snap.projects[1].slot, "herausgefiltert: keine Farbe")
+    }
+
+    /// Ein gewähltes Projekt ohne eigene Farbe bekommt eine freie, statt grau als „Andere“ zu erscheinen.
+    func testFilteredProjectWithoutColorGetsFreeSlot() {
+        let slots = Dictionary(uniqueKeysWithValues: (0..<PromptStats.colorSlots).map { ("p\($0)", $0) })
+        let events = [event(10, "p0"), event(20, "rest")]
+        let out = PromptStats.slots(slots, filter: ["p0", "rest"], events: events)
+        XCTAssertEqual(out["p0"], 0, "behält die eigene Farbe")
+        XCTAssertEqual(out["rest"], 1, "erste freie Farbe")
+        XCTAssertEqual(PromptStats.slots(slots, filter: [], events: events), slots, "ohne Filter unverändert")
+    }
+
+    func testProjectSortOrders() {
+        let events = [event(300, "b"), event(200, "b"), event(100, "C"), event(50, "a")]
+        let names = { (sort: ProjectSort) in PromptStats.projects(events, slots: [:], sort: sort).map(\.name) }
+        XCTAssertEqual(names(.count), ["b", "a", "C"])
+        XCTAssertEqual(names(.name), ["a", "b", "C"], "ohne Rücksicht auf Groß- und Kleinschreibung")
+        XCTAssertEqual(names(.recent), ["a", "C", "b"])
+        XCTAssertEqual(ProjectSort.recent.next, .count, "reihum")
+    }
+
+    // MARK: Tagestrenner
+
+    func testDayMarksAtMidnight() {
+        let marks = DayMark.marks(range: .week, from: now.addingTimeInterval(-StatsRange.week.span), to: now, calendar: calendar)
+        XCTAssertEqual(marks.count, 7)
+        XCTAssertTrue(marks.allSatisfy { calendar.component(.hour, from: $0.date) == 0 && calendar.component(.minute, from: $0.date) == 0 })
+        XCTAssertFalse(marks.contains { $0.labeled }, "7 Tage: Datum steht an der Achse")
+        let day = DayMark.marks(range: .day, from: now.addingTimeInterval(-StatsRange.day.span), to: now, calendar: calendar)
+        XCTAssertEqual(day.count, 1, "24 Std.: genau ein Tageswechsel")
+        XCTAssertTrue(day[0].labeled)
+    }
+
+    func testDayMarksMonthLabelsWeekStartYearUsesMonths() {
+        let month = DayMark.marks(range: .month, from: now.addingTimeInterval(-StatsRange.month.span), to: now, calendar: calendar)
+        XCTAssertEqual(month.count, 30)
+        XCTAssertTrue(month.filter(\.labeled).allSatisfy { calendar.component(.weekday, from: $0.date) == calendar.firstWeekday })
+        XCTAssertEqual(month.filter(\.labeled).count, 4)
+        let year = DayMark.marks(range: .year, from: now.addingTimeInterval(-StatsRange.year.span), to: now, calendar: calendar)
+        XCTAssertEqual(year.count, 12)
+        XCTAssertTrue(year.allSatisfy { calendar.component(.day, from: $0.date) == 1 })
     }
 
     // MARK: Limits
@@ -89,6 +145,38 @@ final class StatsSeriesTests: XCTestCase {
         let samples = [sample(3 * 3600, weekly: 10), sample(3 * 3600 - 900, weekly: 11), sample(1200, weekly: 20), sample(300, weekly: 21)]
         let points = LimitStats.points(samples, range: .day, now: now, kinds: [.weekly])
         XCTAssertEqual(points.map(\.segment), [0, 0, 1, 1])
+    }
+
+    /// Lücken und Ränder füllen gestrichelte Stücke: über die Lücke von Punkt zu Punkt, hinten bis jetzt.
+    func testBridgesSpanGapAndTrail() {
+        let samples = [sample(3 * 3600, weekly: 10), sample(3 * 3600 - 900, weekly: 11), sample(1200, weekly: 20), sample(300, weekly: 21)]
+        let points = LimitStats.points(samples, range: .day, now: now, kinds: [.weekly])
+        let bridges = LimitStats.bridges(points, samples: samples, range: .day, now: now, kinds: [.weekly])
+        XCTAssertTrue(bridges.allSatisfy(\.bridge))
+        XCTAssertEqual(bridges.map(\.value), [11, 20, 21, 21], "Lücke, dann bis jetzt")
+        XCTAssertEqual(bridges.last?.date, now)
+        XCTAssertEqual(Set(bridges.map(\.series)).count, 2, "zwei getrennte Stücke")
+        XCTAssertTrue(Set(bridges.map(\.series)).isDisjoint(with: Set(points.map(\.series))), "eigene Serien, nicht an die Messlinie gehängt")
+    }
+
+    /// Vorn beginnt die Linie am Rand, auf der Geraden vom letzten Wert davor zum ersten im Zeitraum.
+    func testBridgeLeadsFromValueBeforeRange() {
+        let samples = [sample(30 * 3600, weekly: 0), sample(18 * 3600, weekly: 60)]
+        let points = LimitStats.points(samples, range: .day, now: now, kinds: [.weekly])
+        let bridges = LimitStats.bridges(points, samples: samples, range: .day, now: now, kinds: [.weekly])
+        XCTAssertEqual(bridges.first?.date, now.addingTimeInterval(-StatsRange.day.span))
+        XCTAssertEqual(bridges.first?.value, 30, "halber Weg von 0 zu 60")
+    }
+
+    /// Nichts gemessen im Zeitraum, aber davor: der letzte Wert gilt über den ganzen Zeitraum.
+    func testBridgeCarriesOldValueThroughEmptyRange() {
+        let samples = [sample(2 * 24 * 3600, weekly: 42)]
+        let limits = StatsSnapshot.make(range: .day, now: now, samples: samples,
+                                        sources: [LimitSource(id: "a", title: "A", detail: "", kinds: [.weekly], current: nil)], events: []).limits[0]
+        XCTAssertTrue(limits.points.isEmpty)
+        XCTAssertFalse(limits.isEmpty)
+        XCTAssertEqual(limits.bridges.map(\.value), [42, 42])
+        XCTAssertEqual(limits.bridges.map(\.date), [now.addingTimeInterval(-StatsRange.day.span), now])
     }
 
     /// Über ein Jahr fasst ein Punkt viele Messungen zusammen: Die Spitze vor dem Reset bleibt, der kleinere Wert fällt weg.
@@ -127,6 +215,26 @@ final class StatsSeriesTests: XCTestCase {
         XCTAssertNil(StatsModel.range(after: .week, characters: "x", special: nil))
         XCTAssertEqual(StatsModel.range(after: .week, characters: nil, special: .rightArrow), .month)
         XCTAssertEqual(StatsModel.range(after: .day, characters: nil, special: .leftArrow), .day, "bleibt am Rand stehen")
+    }
+
+    func testListKeys() {
+        XCTAssertEqual(StatsListAction(characters: nil, special: .upArrow), .up)
+        XCTAssertEqual(StatsListAction(characters: nil, special: .downArrow), .down)
+        XCTAssertEqual(StatsListAction(characters: " ", special: nil), .toggle)
+        XCTAssertEqual(StatsListAction(characters: "s", special: nil), .sort)
+        XCTAssertEqual(StatsListAction(characters: nil, special: .delete), .clear)
+        XCTAssertNil(StatsListAction(characters: "x", special: nil))
+        XCTAssertNil(StatsModel.range(after: .week, characters: " ", special: nil), "Leertaste wählt keinen Zeitraum")
+    }
+
+    func testCursorMoves() {
+        let names = ["a", "b", "c"]
+        XCTAssertEqual(StatsModel.moved(nil, in: names, down: true), "a")
+        XCTAssertEqual(StatsModel.moved(nil, in: names, down: false), "c")
+        XCTAssertEqual(StatsModel.moved("a", in: names, down: true), "b")
+        XCTAssertEqual(StatsModel.moved("c", in: names, down: true), "c", "bleibt am Ende")
+        XCTAssertEqual(StatsModel.moved("gone", in: names, down: true), "a", "verschwundenes Projekt: von vorn")
+        XCTAssertNil(StatsModel.moved("a", in: [], down: true))
     }
 }
 
