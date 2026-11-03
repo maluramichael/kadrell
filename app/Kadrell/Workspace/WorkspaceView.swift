@@ -659,6 +659,12 @@ final class WorkspaceView: NSView {
         }
     }
 
+    /// Zweite Zeile im Leerzustand mit Auswahl; das Hilfe-Kürzel nur, wenn eins belegt ist.
+    private static var selectionHint: String {
+        guard let k = Hotkeys.display(.showHelp) else { return String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle", bundle: Bundle.app) }
+        return String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · \(k) Hilfe", bundle: Bundle.app)
+    }
+
     /// Ein- oder zweizeiliger Hinweis mittig in `r` (logische Koordinaten).
     private func drawCentered(_ a: NSAttributedString, _ b: NSAttributedString? = nil, in r: CGRect) {
         a.draw(at: CGPoint(x: r.midX - a.size().width / 2, y: r.midY - 16))
@@ -673,8 +679,7 @@ final class WorkspaceView: NSView {
         let shortcuts: [(String, String)] = [
             ("⌘N", String(localized: "sucht Projekt oder Ordner", bundle: Bundle.app)),
             ("⌘⏎", String(localized: "zweite Session im selben Ordner", bundle: Bundle.app)),
-            ("F1", String(localized: "alle Kürzel", bundle: Bundle.app)),
-        ]
+        ] + (Hotkeys.display(.showHelp).map { [($0, String(localized: "alle Kürzel", bundle: Bundle.app))] } ?? [])
         let hint: NSAttributedString? = otherInteractiveCount > 0 ? NSAttributedString(
             string: otherInteractiveCount == 1 ? String(localized: "1 Claude-Session läuft interaktiv in anderen Terminals", bundle: Bundle.app)
                 : String(localized: "\(otherInteractiveCount) Claude-Sessions laufen interaktiv in anderen Terminals", bundle: Bundle.app),
@@ -742,7 +747,7 @@ final class WorkspaceView: NSView {
             case .hint:
                 let idle = auto && !autoPool.isEmpty
                 let a = NSAttributedString(string: idle ? String(localized: "Gerade wartet keine Session", bundle: Bundle.app) : String(localized: "Session im Baum wählen", bundle: Bundle.app), attributes: Theme.attrs(12, Theme.muted))
-                let b = NSAttributedString(string: idle ? String(localized: "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will", bundle: Bundle.app) : String(localized: "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe", bundle: Bundle.app), attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
+                let b = NSAttributedString(string: idle ? String(localized: "Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will", bundle: Bundle.app) : Self.selectionHint, attributes: Theme.attrs(11, Theme.muted.withAlphaComponent(0.7)))
                 Theme.scaled(bounds) { drawCentered(a, b, in: $0) }
             }
             emptyHitRects = collected

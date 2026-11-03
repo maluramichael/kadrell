@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.79.0 (2026-11-03)
+
+- Änderung: Hilfe, Umbenennen, Statistik und Extensions liegen jetzt auf ⌥F1, ⌥F2, ⌥F3 und ⌥F4. Die F-Tasten ohne ⌥ gehen an das Programm im Terminal, etwa htop über ssh.
+- Feature: Die Kürzel für Hilfe, Statistik und Extensions lassen sich in den Einstellungen selbst belegen, auch wieder auf die blanken F-Tasten.
+
 ## 1.78.0 (2026-11-03)
 
 - Feature: Die Statistik zeigt jeden Tagesbeginn als Linie in den Charts, in 24 Stunden und 30 Tagen mit Datum daran.

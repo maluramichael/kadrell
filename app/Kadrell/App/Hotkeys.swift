@@ -3,10 +3,11 @@ import AppKit
 /// Virtuelle Tastencodes (US-Layout-Position), statt nackter Zahlen in `keyDown`.
 enum KeyCode {
     static let returnKey: UInt16 = 36, space: UInt16 = 49, delete: UInt16 = 51, escape: UInt16 = 53, keypadEnter: UInt16 = 76
-    static let f1: UInt16 = 122, f3: UInt16 = 99, f4: UInt16 = 118, f10: UInt16 = 109, left: UInt16 = 123, right: UInt16 = 124, down: UInt16 = 125, up: UInt16 = 126
+    static let f10: UInt16 = 109, left: UInt16 = 123, right: UInt16 = 124, down: UInt16 = 125, up: UInt16 = 126
 }
 
 /// Frei belegbare Kürzel, Defaults nach Michaels tmux-Config (M-Pfeile, M-z, M-1…9, M-Tab, M-Enter).
+/// F-Tasten nur mit ⌥: blanke F1…F4 brauchen Programme im Terminal selbst (htop, mc).
 /// Der Event-Monitor im AppDelegate fängt sie fensterweit ab, bevor das Terminal sie sieht.
 enum HotkeyAction: String, CaseIterable, Sendable {
     case focusLeft, focusRight, focusUp, focusDown
@@ -21,6 +22,7 @@ enum HotkeyAction: String, CaseIterable, Sendable {
     case focusSidebar, focusWorkspace, cycleSort, toggleGrouping
     case focusRightSidebar, toggleRightSidebar
     case quickStart, searchHistory
+    case showHelp, showStats, showExtensions
     case restart
 
     /// 0-basiert für focus1…focus9.
@@ -62,6 +64,9 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .syncInput: return String(localized: "Sync: Eingabe an alle Kacheln", bundle: Bundle.app)
         case .quickStart: return String(localized: "Schnellstart: Idee rein, Session raus", bundle: Bundle.app)
         case .searchHistory: return String(localized: "Alle Claude-Sessions durchsuchen, auch beendete", bundle: Bundle.app)
+        case .showHelp: return String(localized: "Hilfe mit allen Kürzeln", bundle: Bundle.app)
+        case .showStats: return String(localized: "Statistik", bundle: Bundle.app)
+        case .showExtensions: return String(localized: "Extensions", bundle: Bundle.app)
         case .restart: return String(localized: "Kadrell neu starten", bundle: Bundle.app)
         default: return String(localized: "Fokus-Kachel schließen", bundle: Bundle.app)
         }
@@ -85,6 +90,9 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .toggleGrouping: return String(localized: "Gruppen aus: alle Sessions in einer flachen Liste, mit eigener Handreihenfolge", bundle: Bundle.app)
         case .quickStart: return String(localized: "Idee tippen, Kadrell erkennt das Projekt und startet dort eine Session mit der Idee als erstem Prompt", bundle: Bundle.app)
         case .searchHistory: return String(localized: "Sucht in Titeln und eigenen Prompts aller bisherigen Claude-Sessions · ⏎ setzt sie im alten Ordner fort oder springt zur laufenden", bundle: Bundle.app)
+        case .showHelp: return String(localized: "diese Hilfe", bundle: Bundle.app)
+        case .showStats: return String(localized: "Statistik: Limits, Prompts und Zähler", bundle: Bundle.app)
+        case .showExtensions: return String(localized: "Extensions: an- und abschalten, neu laden, Einstellungen, Log", bundle: Bundle.app)
         case .focusRightSidebar: return String(localized: "Rechte Sidebar der Extensions: ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ alle Aktionen, Esc zurück", bundle: Bundle.app)
         default: return title
         }
@@ -120,12 +128,15 @@ enum HotkeyAction: String, CaseIterable, Sendable {
         case .focusRightSidebar: return Hotkey(.command, "3")
         case .toggleRightSidebar: return Hotkey([.command, .option], "b")
         case .openEditor: return Hotkey(.option, "e")
-        case .renameSession: return Hotkey([], "F2")
+        case .renameSession: return Hotkey(.option, "F2")
         case .cycleSort: return Hotkey(.option, "o")
         case .toggleGrouping: return Hotkey(.option, "g")
         case .syncInput: return Hotkey(.option, "i")
         case .quickStart: return Hotkey([.command, .shift], "i")   // ⌘⇧N ist schon „Remote verbinden“
         case .searchHistory: return Hotkey([.command, .shift], "h")
+        case .showHelp: return Hotkey(.option, "F1")
+        case .showStats: return Hotkey(.option, "F3")
+        case .showExtensions: return Hotkey(.option, "F4")
         case .restart: return Hotkey([], "")   // Default unbelegt, in den Einstellungen belegbar
         default: return Hotkey(.option, "Esc")
         }
@@ -202,6 +213,18 @@ enum Hotkeys {
             for a in HotkeyAction.allCases where newValue[a] != a.defaultKey { saved[a.rawValue] = newValue[a]?.string ?? "" }
             Profile.defaults.set(saved, forKey: defaultsKey)
         }
+    }
+
+    /// Anzeige der aktuellen Belegung, nil ohne Kürzel (für Hinweistexte wie „⌥F1 Hilfe“).
+    static func display(_ action: HotkeyAction) -> String? {
+        guard let k = current[action], !k.key.isEmpty else { return nil }
+        return k.display
+    }
+
+    /// Fußzeile eines Panels, das sich mit seinem eigenen Kürzel wieder schließt.
+    static func closeHint(_ action: HotkeyAction) -> String {
+        guard let k = display(action) else { return String(localized: "Esc schließt", bundle: Bundle.app) }
+        return String(localized: "Esc oder \(k) schließen", bundle: Bundle.app)
     }
 
     static func action(for event: NSEvent) -> HotkeyAction? {

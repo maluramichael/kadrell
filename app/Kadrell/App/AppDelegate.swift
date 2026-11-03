@@ -422,12 +422,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: handleScroll)
     }
 
-    /// Belegbare Kürzel (Einstellungen) und F1 gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
-    /// Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert.
+    /// Belegbare Kürzel (Einstellungen) gehen vor, egal ob Terminal oder Fläche die Tastatur hat.
+    /// Dialoge sind eigene Fenster und bekommen ihre Tasten unverändert, nur das Kürzel eines Panels schließt es.
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         let code = event.keyCode, mods = event.modifierFlags.intersection(Hotkey.modMask)
-        if code == KeyCode.f1, sheets.isPanel(.about, event.window) { sheets.dismiss(); return nil }
-        if code == KeyCode.f3, sheets.isPanel(.stats, event.window) { sheets.dismiss(); return nil }
+        if let panel = Hotkeys.action(for: event).flatMap(Self.panel), sheets.isPanel(panel, event.window) { sheets.dismiss(); return nil }
         if handleExtensionsPanelKey(event) { return nil }
         guard controller(for: event.window) != nil else { return event }
         if code == KeyCode.escape, sheets.cancelVisible() { return nil }
@@ -439,9 +438,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let action = Hotkeys.action(for: event) { perform(action); return nil }
         // ⌘⏎: neue Session im Ordner der fokussierten. Vor dem Terminal abgefangen.
         if code == KeyCode.returnKey, mods == .command { newSessionInFocusedFolder(); return nil }
-        if code == KeyCode.f1 { sheets.togglePanel(.about); return nil }
-        if code == KeyCode.f3 { sheets.togglePanel(.stats); return nil }
-        if code == KeyCode.f4 { sheets.togglePanel(.extensions); return nil }
         forwardSync(event, mods: mods)
         return event
     }
@@ -842,7 +838,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Belegbare Kürzel: das Menü zeigt die aktuelle Belegung, ausgelöst werden sie im Event-Monitor.
         let keys = Hotkeys.current
         let tiles = NSMenu(title: String(localized: "Kachel wählen", bundle: Bundle.app))
-        for a in HotkeyAction.allCases {
+        for a in HotkeyAction.allCases where Self.panel(a) == nil {   // Panels stehen schon im App-Menü
             let item = NSMenuItem(title: a.title, action: #selector(menuHotkey(_:)), keyEquivalent: keys[a]?.menuEquivalent ?? "")
             item.keyEquivalentModifierMask = keys[a]?.flags ?? []
             item.representedObject = a.rawValue
@@ -998,9 +994,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .quickStart: openQuickStart()
         case .searchHistory: togglePalette(prefix: "#")
         case .restart: restart()
-        default: return false
+        default:
+            guard let panel = Self.panel(action) else { return false }
+            sheets.togglePanel(panel)
         }
         return true
+    }
+
+    /// Kürzel, die ein Panel auf- und mit demselben Kürzel wieder zumachen.
+    static func panel(_ action: HotkeyAction) -> SheetPresenter.Panel? {
+        switch action {
+        case .showHelp: return .about
+        case .showStats: return .stats
+        case .showExtensions: return .extensions
+        default: return nil
+        }
     }
 
     private func cycleSort() { Settings.sidebarSort = Settings.sidebarSort.next; syncSidebar() }

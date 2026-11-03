@@ -30,10 +30,10 @@ extension AppDelegate {
         }
     }
 
-    /// Tasten im offenen F4-Panel: F4 schließt, ↑↓, Leertaste, R und L gehen ans Modell (siehe `ExtensionsModel.panelKey`).
+    /// Tasten im offenen Extensions-Panel: ↑↓, Leertaste, R und L gehen ans Modell (siehe `ExtensionsModel.panelKey`).
+    /// Sein eigenes Kürzel schließt es schon vorher in `handleKey`.
     func handleExtensionsPanelKey(_ event: NSEvent) -> Bool {
         guard sheets.isPanel(.extensions, event.window), let model = sheets.extensionsModel else { return false }
-        if event.keyCode == KeyCode.f4 { sheets.dismiss(); return true }
         guard let key = ExtensionsModel.panelKey(event, in: event.window) else { return false }
         return model.handleKey(key)
     }

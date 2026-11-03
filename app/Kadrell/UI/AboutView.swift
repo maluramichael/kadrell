@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// F1 und „Über Kadrell“: Autor, Link, Tastenkürzel. Esc oder ⏎ schließt.
+/// Hilfe-Kürzel (Standard ⌥F1) und „Über Kadrell“: Autor, Link, Tastenkürzel. Esc oder ⏎ schließt.
 struct AboutView: View {
     private var sections: [(String, [(String, String)])] {
         [
@@ -27,10 +27,8 @@ struct AboutView: View {
                 (String(localized: "Rundes X", bundle: Bundle.app), String(localized: "Fenster nur verstecken, Sessions laufen weiter", bundle: Bundle.app)), (String(localized: "Menüleisten-Icon / Dock", bundle: Bundle.app), String(localized: "Fenster zurückholen", bundle: Bundle.app)),
                 ("⌘⇧T", String(localized: "Neues Fenster: eigene Auswahl und eigenes Layout, dieselben Sessions", bundle: Bundle.app)), ("⌘⇧W", String(localized: "Fenster schließen, Sessions laufen weiter", bundle: Bundle.app)),
                 ("⌘M", String(localized: "Im Dock ablegen", bundle: Bundle.app)), (String(localized: "⌘ Mausrad", bundle: Bundle.app), String(localized: "Terminal-Schrift aller Sessions größer/kleiner", bundle: Bundle.app)),
-                ("⌘,", String(localized: "Einstellungen: Projektordner, Darstellung, Tastenkürzel", bundle: Bundle.app)), ("F1", String(localized: "diese Hilfe", bundle: Bundle.app)),
-                ("F3", String(localized: "Statistik: Limits, Prompts und Zähler", bundle: Bundle.app)),
-                ("F4", String(localized: "Extensions: an- und abschalten, neu laden, Einstellungen, Log", bundle: Bundle.app)),
-            ]),
+                ("⌘,", String(localized: "Einstellungen: Projektordner, Darstellung, Tastenkürzel", bundle: Bundle.app)),
+            ] + rows([.showHelp, .showStats, .showExtensions])),
         ]
     }
 
@@ -87,7 +85,7 @@ struct AboutView: View {
             }
             .padding(16)
             SeamLine()
-            Text("Esc oder F1 schließen").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+            Text(Hotkeys.closeHint(.showHelp)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .overlayWidth(640, alignment: .leading)

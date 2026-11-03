@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// F4: alle gefundenen Extensions mit Zustand, an/aus, Neu laden, Ordner, Log und Einstellungen.
-/// Tasten laufen über `ExtensionsModel.handleKey` (aus dem Tasten-Monitor der App), Esc und F4 schließen.
+/// Tasten laufen über `ExtensionsModel.handleKey` (aus dem Tasten-Monitor der App), Esc und das eigene Kürzel (Standard ⌥F4) schließen.
 struct ExtensionsView: View {
     static let docs = URL(string: "https://kadrell.malura.de/extensions")!
 
@@ -29,7 +29,7 @@ struct ExtensionsView: View {
             SeamLine()
             discover
             SeamLine()
-            Text("↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+            Text("↑↓ wählen · Leertaste an/aus · R neu laden · L Log · \(Hotkeys.closeHint(.showExtensions))").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .overlayWidth(760, alignment: .leading)

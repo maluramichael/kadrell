@@ -2,7 +2,7 @@ import SwiftUI
 
 /// F3: Limits je Account und Prompts im Zeitverlauf, darunter die Lebenszeit-Zähler des Profils (siehe `Stats`).
 /// Füllt das Fenster. 1 bis 4 oder ←/→ wählen den Zeitraum, ↑/↓, Leertaste, ⌫ und s bedienen die Projektliste,
-/// Esc, ⏎ oder F3 schließt.
+/// Esc, ⏎ oder das eigene Kürzel (Standard ⌥F3) schließt.
 struct StatsView: View {
     let model: StatsModel
 
@@ -51,7 +51,7 @@ struct StatsView: View {
         HStack {
             Text("1 bis 4 oder ←/→ Zeitraum · ↑/↓ Projekt · Leertaste filtert · ⌫ alle · s sortiert")
             Spacer(minLength: 12)
-            Text("Esc oder F3 schließen")
+            Text(Hotkeys.closeHint(.showStats))
         }
         .font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).lineLimit(1)
         .padding(.horizontal, 16).padding(.vertical, 10)

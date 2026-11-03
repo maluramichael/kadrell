@@ -42,6 +42,30 @@ final class HotkeyTests: XCTestCase {
         XCTAssertEqual(Hotkey(event: esc), HotkeyAction.closeFocused.defaultKey)
     }
 
+    /// Blanke F-Tasten gehören dem Programm im Terminal (htop, mc über ssh), Kadrell nimmt sie nur mit ⌥.
+    @MainActor func testPanelsDefaultToOptionFunctionKeys() {
+        XCTAssertEqual(HotkeyAction.showHelp.defaultKey, Hotkey(.option, "F1"))
+        XCTAssertEqual(HotkeyAction.renameSession.defaultKey, Hotkey(.option, "F2"))
+        XCTAssertEqual(HotkeyAction.showStats.defaultKey, Hotkey(.option, "F3"))
+        XCTAssertEqual(HotkeyAction.showExtensions.defaultKey, Hotkey(.option, "F4"))
+        for a in HotkeyAction.allCases where a.defaultKey.key.hasPrefix("F") { XCTAssertFalse(a.defaultKey.flags.isEmpty, a.rawValue) }
+        XCTAssertEqual(AppDelegate.panel(.showHelp), .about)
+        XCTAssertEqual(AppDelegate.panel(.showStats), .stats)
+        XCTAssertEqual(AppDelegate.panel(.showExtensions), .extensions)
+        XCTAssertNil(AppDelegate.panel(.zoom))
+    }
+
+    func testFunctionKeyNeedsExactModifiers() throws {
+        func f1(_ mods: NSEvent.ModifierFlags) throws -> Hotkey? {
+            let e = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: mods.union(.function), timestamp: 0, windowNumber: 0,
+                                                   context: nil, characters: "\u{F704}", charactersIgnoringModifiers: "\u{F704}", isARepeat: false, keyCode: 122))
+            return Hotkey(event: e)
+        }
+        XCTAssertEqual(try f1(.option), HotkeyAction.showHelp.defaultKey)
+        XCTAssertNotEqual(try f1([]), HotkeyAction.showHelp.defaultKey)
+        XCTAssertNotEqual(try f1(.shift), HotkeyAction.showHelp.defaultKey)
+    }
+
     func testTileIndex() {
         XCTAssertEqual(HotkeyAction.focus1.tileIndex, 0)
         XCTAssertEqual(HotkeyAction.focus9.tileIndex, 8)

@@ -2493,36 +2493,16 @@
         }
       }
     },
-    "Esc oder F1 schließen": {
+    "Esc oder %@ schließen": {
       "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esc oder F1 schließen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esc or F1 to close"
-          }
-        }
+        "de": { "stringUnit": { "state": "translated", "value": "Esc oder %@ schließen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Esc or %@ closes" } }
       }
     },
-    "Esc oder F3 schließen": {
+    "Esc schließt": {
       "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esc oder F3 schließen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esc or F3 closes"
-          }
-        }
+        "de": { "stringUnit": { "state": "translated", "value": "Esc schließt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Esc closes" } }
       }
     },
     "Externer Editor (Kommando wie im Terminal)": {
@@ -7323,6 +7303,12 @@
         }
       }
     },
+    "Hilfe mit allen Kürzeln": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Hilfe mit allen Kürzeln" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Help with all shortcuts" } }
+      }
+    },
     "fertig": {
       "localizations": {
         "de": {
@@ -8161,20 +8147,16 @@
         }
       }
     },
-    "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe": {
+    "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · %@ Hilfe": {
       "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · F1 Hilfe"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "⌘-click for several · ⇧-click range · group = all · F1 help"
-          }
-        }
+        "de": { "stringUnit": { "state": "translated", "value": "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle · %@ Hilfe" } },
+        "en": { "stringUnit": { "state": "translated", "value": "⌘-click for several · ⇧-click range · group = all · %@ help" } }
+      }
+    },
+    "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "⌘-Klick für mehrere · ⇧-Klick Bereich · Gruppe = alle" } },
+        "en": { "stringUnit": { "state": "translated", "value": "⌘-click for several · ⇧-click range · group = all" } }
       }
     },
     "⌘N startet eine": {
@@ -8503,20 +8485,10 @@
         }
       }
     },
-    "↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen": {
+    "↑↓ wählen · Leertaste an/aus · R neu laden · L Log · %@": {
       "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "↑↓ wählen · Leertaste an/aus · R neu laden · L Log · Esc oder F4 schließen"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "↑↓ select · Space on/off · R reload · L log · Esc or F4 closes"
-          }
-        }
+        "de": { "stringUnit": { "state": "translated", "value": "↑↓ wählen · Leertaste an/aus · R neu laden · L Log · %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "↑↓ select · Space on/off · R reload · L log · %@" } }
       }
     },
     "Extensions-Ordner öffnen": {
