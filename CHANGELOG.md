@@ -4,7 +4,7 @@ Neueste Version oben.
 
 ## 1.80.1 (2026-11-03)
 
-- Fix: Pi-Sessions starten wieder, wenn Kadrell aus dem Dock oder Finder kommt und `node` neben `pi` liegt, statt mit „node: No such file or directory“ abzubrechen.
+- Fix: Pi-Sessions brechen nicht mehr mit „node: No such file or directory“ ab, wenn Kadrell aus dem Dock oder Finder gestartet wurde.
 
 ## 1.80.0 (2026-11-03)
 
