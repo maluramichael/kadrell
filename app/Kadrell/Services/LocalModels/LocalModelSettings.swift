@@ -59,8 +59,18 @@ enum LocalModelSettings {
 
     static func featureEnabled(_ f: LocalFeature) -> Bool { value("local.feature.\(f.rawValue).enabled", false) }
     static func setFeatureEnabled(_ f: LocalFeature, _ on: Bool) { store("local.feature.\(f.rawValue).enabled", on) }
-    static func featureModel(_ f: LocalFeature) -> LocalModelRef? { LocalModelRef(string: value("local.feature.\(f.rawValue).model", "")) }
-    static func setFeatureModel(_ f: LocalFeature, _ ref: LocalModelRef?) { store("local.feature.\(f.rawValue).model", ref?.string ?? "") }
+    static func featureModel(_ f: LocalFeature) -> LocalModelRef? { LocalModelRef(string: featureModelSetting(f)) }
+    static func setFeatureModel(_ f: LocalFeature, _ ref: LocalModelRef?) { setFeatureModelSetting(f, ref?.string ?? "") }
+    /// Gespeicherter Wert der Modellauswahl: `provider|name`, "" = kein Modell, bei Pi auch `PiModel.piDefaultSetting`.
+    static func featureModelSetting(_ f: LocalFeature) -> String { value("local.feature.\(f.rawValue).model", "") }
+    static func setFeatureModelSetting(_ f: LocalFeature, _ v: String) { store("local.feature.\(f.rawValue).model", v) }
+
+    /// Womit Pi-Sessions starten, nil = Funktion aus oder kein Modell gewählt.
+    @MainActor static var piModel: PiModel? {
+        guard featureEnabled(.piSession) else { return nil }
+        if featureModelSetting(.piSession) == PiModel.piDefaultSetting { return .piDefault }
+        return LocalModels.shared.activeModel(for: .piSession).map(PiModel.local)
+    }
 
     /// Schnellstart: das Modell darf den Verweis auf das Projekt aus dem ersten Prompt nehmen, wenn es sicher ist.
     static var quickStartStripReference: Bool {

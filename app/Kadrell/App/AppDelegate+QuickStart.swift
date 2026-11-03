@@ -27,9 +27,9 @@ extension AppDelegate {
         sheets.present(QuickStartView(model: model), onCancel: { model.cancel() }, onPrimary: { model.submit() })
     }
 
-    /// Modell für Pi-Sessions, nil = Funktion aus, kein Modell oder `pi` nicht installiert.
-    func piSessionModel() -> LocalModelRef? {
-        PiCLI.binary(environment: registry.cli.environment) != nil ? LocalModels.shared.activeModel(for: .piSession) : nil
+    /// Womit Pi-Sessions starten, nil = Funktion aus, kein Modell oder `pi` nicht installiert.
+    func piSessionModel() -> PiModel? {
+        PiCLI.binary(environment: registry.cli.environment) != nil ? LocalModelSettings.piModel : nil
     }
 
     private func quickStartCandidates() -> [QuickStartCandidate] {

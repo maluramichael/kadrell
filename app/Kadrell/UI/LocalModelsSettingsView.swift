@@ -153,21 +153,27 @@ struct LocalFeatureSettings: SettingsBlock {
 
     /// Auswahl eines Modells schaltet die Funktion gleich mit an; „kein Modell“ lässt den Schalter, wie er ist.
     private func modelChoice(_ f: LocalFeature) -> Binding<String> {
-        flags.binding({ LocalModelSettings.featureModel(f)?.string ?? "" }, { v in
-            let ref = LocalModelRef(string: v)
-            LocalModelSettings.setFeatureModel(f, ref)
-            if ref != nil { LocalModelSettings.setFeatureEnabled(f, true) }
+        flags.binding({ LocalModelSettings.featureModelSetting(f) }, { v in
+            LocalModelSettings.setFeatureModelSetting(f, v)
+            if !v.isEmpty { LocalModelSettings.setFeatureEnabled(f, true) }
         })
     }
 
     /// Nur vorhandene Modelle; ein gewähltes, das gerade fehlt (gelöscht, Provider aus), bleibt sichtbar markiert.
+    /// Pi kann zusätzlich mit seinem eigenen Standard starten (`~/.pi/agent/settings.json`).
     private func modelItems(_ f: LocalFeature) -> [(String, String)] {
         var items = [("", f.noModel)]
+        if f == .piSession { items.append((PiModel.piDefaultSetting, piDefaultLabel)) }
         items += local.available.map { ($0.ref.string, $0.ref.display) }
         if let current = LocalModelSettings.featureModel(f), !items.contains(where: { $0.0 == current.string }) {
             items.append((current.string, String(localized: "\(current.display) (nicht vorhanden)", bundle: Bundle.app)))
         }
         return items
+    }
+
+    private var piDefaultLabel: String {
+        let pi = String(localized: "Standard von Pi", bundle: Bundle.app)
+        return PiCLI.defaultModel().map { "\(pi) (\($0))" } ?? pi
     }
 }
 

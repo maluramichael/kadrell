@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.81.0 (2026-11-04)
+
+- Feature: Pi-Sessions können mit dem Standardmodell starten, das in Pi selbst eingestellt ist (Einstellungen › Modelle für Funktionen › Pi-Sessions › „Standard von Pi“), zum Beispiel ein Modell über Olla.
+
 ## 1.80.1 (2026-11-03)
 
 - Fix: Pi-Sessions brechen nicht mehr mit „node: No such file or directory“ ab, wenn Kadrell aus dem Dock oder Finder gestartet wurde.

@@ -193,15 +193,17 @@ final class AttachManager {
         onChange?()
     }
 
-    /// Pi mit dem lokalen Modell der Session. Ohne `pi` startet die Login-Shell mit Hinweis, statt still zu scheitern.
+    /// Pi mit dem lokalen Modell der Session, ohne Modell mit Pis eigenem Standard. Ohne `pi` startet die Login-Shell
+    /// mit Hinweis, statt still zu scheitern.
     private func piLaunch(_ session: Session, key: String, env: inout [String: String]) -> (String, [String], String) {
         let prompt = initialPrompts.removeValue(forKey: key)
-        guard let binary = PiCLI.binary(environment: env), let model = session.localModel else {
-            let msg = String(localized: "Pi oder das Modell der Session fehlt (Einstellungen › Modelle für Funktionen)", bundle: Bundle.app)
+        guard let binary = PiCLI.binary(environment: env) else {
+            let msg = String(localized: "Pi ist nicht installiert (pi im PATH oder unter ~/.local/bin)", bundle: Bundle.app)
             return ("/bin/sh", ["-c", #"printf '%s\n' "$1"; exec "${SHELL:-/bin/zsh}" -l"#, "sh", msg], "sh")
         }
         PiCLI.installExtension()
-        let launch = PiCLI.launch(binary: binary, session: session, model: model, baseURL: LocalModels.shared.baseURLNow(model.provider), prompt: prompt)
+        let model = session.localModel
+        let launch = PiCLI.launch(binary: binary, session: session, model: model, baseURL: model.flatMap { LocalModels.shared.baseURLNow($0.provider) }, prompt: prompt)
         env.merge(launch.env) { _, new in new }
         env["PATH"] = PiCLI.path(for: binary, in: env["PATH"])
         AttachManager.log.info("pi \(launch.args.dropLast(prompt == nil ? 0 : 1).joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")

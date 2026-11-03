@@ -10,7 +10,7 @@ extension AppDelegate {
         guard registry != nil else { NSSound.beep(); return }
         guard let pi = piSessionModel() else { startSession(group: group, cwd: cwd, prompt: prompt); return }
         let options = [AgentPickModel.Option(kind: .claude, detail: Settings.claudeSummary),
-                       AgentPickModel.Option(kind: .pi, detail: pi.name)]
+                       AgentPickModel.Option(kind: .pi, detail: piDetail(pi))]
         let model = AgentPickModel(folder: cwd, options: options, last: Settings.lastAgent)
         if model.list.first?.kind == .pi { LocalModels.shared.warmUp(for: .piSession) }
         model.onPick = { [weak self] kind in
@@ -22,10 +22,16 @@ extension AppDelegate {
         sheets.present(AgentPickView(model: model), onPrimary: { model.start() })
     }
 
-    private func startPicked(_ kind: AgentKind, group: Group?, cwd: String, prompt: String?, pi: LocalModelRef) {
+    private func startPicked(_ kind: AgentKind, group: Group?, cwd: String, prompt: String?, pi: PiModel) {
         switch kind {
         case .claude: startSession(group: group, cwd: cwd, prompt: prompt)
-        case .pi: startSession(group: group, cwd: cwd, prompt: prompt, sessionId: Session.newPiId(), model: pi)
+        case .pi: startSession(group: group, cwd: cwd, prompt: prompt, sessionId: Session.newPiId(), model: pi.local)
         }
+    }
+
+    /// Zeile unter „Pi“: das lokale Modell oder Pis eigener Standard aus dessen Einstellungen.
+    private func piDetail(_ pi: PiModel) -> String {
+        if let ref = pi.local { return ref.name }
+        return PiCLI.defaultModel() ?? String(localized: "Standard von Pi", bundle: Bundle.app)
     }
 }

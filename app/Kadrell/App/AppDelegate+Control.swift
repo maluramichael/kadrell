@@ -138,7 +138,7 @@ extension AppDelegate {
         let caller = req.caller.flatMap { c in registry.sessions.first { $0.id == c } }
         if target == nil, dir == nil, let caller { g = store.group(forSession: caller.id) }
         let cwd = try dir.map { try existingDir($0, req) } ?? (target == nil ? caller?.cwd : nil) ?? g?.cwd ?? existingDir(req.cwd, req)
-        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt, sessionId: piRef.map { _ in Session.newPiId() } ?? resume, model: piRef)
+        let key = startSession(group: g, cwd: cwd, show: !detached, prompt: prompt, sessionId: piRef.map { _ in Session.newPiId() } ?? resume, model: piRef?.local)
         if let name { registry.rename(key, to: name) }
         return key
     }

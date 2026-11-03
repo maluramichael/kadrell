@@ -259,10 +259,16 @@
         "en": { "stringUnit": { "state": "translated", "value": "no model (Claude only)" } }
       }
     },
-    "Pi oder das Modell der Session fehlt (Einstellungen › Modelle für Funktionen)": {
+    "Pi ist nicht installiert (pi im PATH oder unter ~/.local/bin)": {
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Pi oder das Modell der Session fehlt (Einstellungen › Modelle für Funktionen)" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Pi or the session's model is missing (Settings › Models for features)" } }
+        "de": { "stringUnit": { "state": "translated", "value": "Pi ist nicht installiert (pi im PATH oder unter ~/.local/bin)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Pi is not installed (pi in PATH or in ~/.local/bin)" } }
+      }
+    },
+    "Standard von Pi": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Standard von Pi" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Pi's default" } }
       }
     },
     "Kadrell neu starten": {

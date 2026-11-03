@@ -38,7 +38,7 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var host: String? = nil
     /// tmux-Session auf dem Host; nil hängt sich an die zuletzt benutzte (`tmux attach`).
     var tmuxSession: String? = nil
-    /// Pi-Session: lokales Modell als `provider|name` (`LocalModelRef.string`), mit dem Pi startet.
+    /// Pi-Session: lokales Modell als `provider|name` (`LocalModelRef.string`), mit dem Pi startet, nil = Pis Standard.
     var model: String? = nil
 
     enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, host, tmuxSession, model }

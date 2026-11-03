@@ -47,6 +47,42 @@ final class PiSessionTests: XCTestCase {
         XCTAssertNil(l.env["KADRELL_PI_BASE_URL"])
     }
 
+    /// Ohne Modell nimmt Pi seinen eigenen Standard (z. B. Olla): kein Provider „kadrell“, keine Adresse.
+    func testLaunchWithoutModelUsesPiDefault() {
+        let id = Session.newPiId()
+        let s = Session(id: id, cwd: "/p/kadrell", startedAt: 1, sessionId: id, name: "", model: nil)
+        XCTAssertTrue(s.isPi)
+        let l = PiCLI.launch(binary: "/bin/pi", session: s, model: s.localModel, baseURL: URL(string: "http://127.0.0.1:11434"), prompt: "Idee")
+        XCTAssertEqual(l.args, ["--session-id", s.piSessionId, "Idee"])
+        XCTAssertEqual(l.env, ["KADRELL_PI": "1"])
+    }
+
+    func testDefaultModelFromPiSettings() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "pi-\(UUID().uuidString)").path
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        XCTAssertNil(PiCLI.defaultModel(home: home), "ohne settings.json kein Standard")
+        try FileManager.default.createDirectory(atPath: home + "/.pi/agent", withIntermediateDirectories: true)
+        let file = home + "/.pi/agent/settings.json"
+        try Data(#"{"defaultProvider":"olla","defaultModel":"qwen3.8:27b"}"#.utf8).write(to: URL(fileURLWithPath: file))
+        XCTAssertEqual(PiCLI.defaultModel(home: home), "olla/qwen3.8:27b")
+        try Data(#"{"defaultModel":"qwen3.8:27b"}"#.utf8).write(to: URL(fileURLWithPath: file))
+        XCTAssertEqual(PiCLI.defaultModel(home: home), "qwen3.8:27b")
+    }
+
+    func testPiModelSettingPicksDefaultOrLocal() {
+        let key = "local.feature.piSession", saved = (Profile.defaults.object(forKey: key + ".enabled"), Profile.defaults.object(forKey: key + ".model"))
+        defer { Profile.defaults.set(saved.0, forKey: key + ".enabled"); Profile.defaults.set(saved.1, forKey: key + ".model") }
+        LocalModelSettings.setFeatureEnabled(.piSession, true)
+        LocalModelSettings.setFeatureModelSetting(.piSession, PiModel.piDefaultSetting)
+        XCTAssertEqual(LocalModelSettings.piModel, .piDefault)
+        XCTAssertNil(LocalModelSettings.featureModel(.piSession), "der Pi-Standard ist kein lokales Modell")
+        LocalModelSettings.setFeatureModelSetting(.piSession, "")
+        XCTAssertNil(LocalModelSettings.piModel)
+        LocalModelSettings.setFeatureModelSetting(.piSession, PiModel.piDefaultSetting)
+        LocalModelSettings.setFeatureEnabled(.piSession, false)
+        XCTAssertNil(LocalModelSettings.piModel, "Funktion aus heißt nur Claude")
+    }
+
     /// Aus Dock oder Finder gestartet fehlt `~/.local/bin` oft im PATH der Login-Shell: Kadrell findet `pi` dort trotzdem,
     /// `#!/usr/bin/env node` aber nicht den `node` daneben. Der Ordner von `pi` gehört deshalb vorne in den PATH.
     func testPathGetsBinaryFolderOnce() {
