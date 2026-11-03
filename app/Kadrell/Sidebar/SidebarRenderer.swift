@@ -74,8 +74,11 @@ extension SidebarRenderer {
     /// Höhe der Nachrichtenzeile unter der Kopfzeile einer Session (Einstellung „letzte Nachricht zeigen“). 2 pt mehr
     /// als die Schrift braucht: mit Tastaturring rückt der Umriss unten 2 pt ein und bliebe sonst an den Unterlängen.
     var messageLine: CGFloat { 16 }
-    /// Statuspunkt, auch die Stelle des atmenden Punkts arbeitender Sessions.
-    func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 27, y: headRect(row).midY - 4, width: 8, height: 8) }
+    /// Statuspunkt, auch die Stelle des atmenden Punkts arbeitender Sessions. Sitzt ganz links unter dem Chevron
+    /// der Gruppe, Sessions sind nicht eingerückt.
+    func dotRect(_ row: CGRect) -> CGRect { CGRect(x: 12, y: headRect(row).midY - 4, width: 8, height: 8) }
+    /// Linke Kante von Titel und Nachrichtenzeile einer Session ohne Typ-Symbol.
+    var sessionTextX: CGFloat { 26 }
 
     /// Fläche einer hervorgehobenen Zeile: eingerückt und rund, in der Modulfarbe wie die Kachelfläche. Maße und
     /// Zeichnen kommen aus dem Kit, damit Dialog-Listen und rechte Sidebar genau so auswählen wie der Baum.
@@ -145,13 +148,10 @@ extension SidebarRenderer {
             var attrs = Theme.attrs(10.5, Theme.muted)
             attrs[.paragraphStyle] = style
             NSAttributedString(string: String(m.suffix(300)), attributes: attrs)
-                .draw(in: CGRect(x: 42, y: r.maxY - 4, width: max(0, row.maxX - 10 - 42), height: 14))
+                .draw(in: CGRect(x: sessionTextX, y: r.maxY - 4, width: max(0, row.maxX - 10 - sessionTextX), height: 14))
         }
         drawStatus(s, row: row)
-        let iconRect = CGRect(x: 12, y: r.midY - 6, width: 12, height: 12), iconColor = s.selected || s.hover ? Theme.fg : Theme.muted
-        if s.session.isRemote { Icons.server(in: iconRect, color: iconColor) }
-        else if s.session.isShell { Icons.computer(in: iconRect, color: iconColor) }
-        else if s.session.isPi { Icons.pi(in: iconRect, color: iconColor) }
+        let left = drawTypeIcon(s, head: r)
         var right = r.maxX - 10
         if s.showAge {
             let age = NSAttributedString(string: s.session.elapsed(), attributes: Theme.attrs(10.5, Theme.muted))
@@ -160,7 +160,17 @@ extension SidebarRenderer {
             right -= 8
         }
         if s.unread { right = drawUnreadPill(s, head: r, right: right, shape: sessionShape(s, row: row)) - 8 }
-        sessionTitle(s).draw(with: CGRect(x: 42, y: r.midY - 8, width: max(0, right - 42), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        sessionTitle(s).draw(with: CGRect(x: left, y: r.midY - 8, width: max(0, right - left), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+
+    /// Symbol für Server-, Shell- und Pi-Sessions direkt hinter dem Punkt; liefert die linke Kante des Titels.
+    func drawTypeIcon(_ s: SidebarSessionItem, head r: CGRect) -> CGFloat {
+        let iconRect = CGRect(x: sessionTextX, y: r.midY - 6, width: 12, height: 12), iconColor = s.selected || s.hover ? Theme.fg : Theme.muted
+        if s.session.isRemote { Icons.server(in: iconRect, color: iconColor) }
+        else if s.session.isShell { Icons.computer(in: iconRect, color: iconColor) }
+        else if s.session.isPi { Icons.pi(in: iconRect, color: iconColor) }
+        else { return sessionTextX }
+        return iconRect.maxX + 5
     }
 
     /// Statuspunkt; arbeitende Sessions bekommen den atmenden Punkt der View, hier bleibt die Stelle dann frei.

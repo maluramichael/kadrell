@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.77.1 (2026-11-03)
+
+- Änderung: Sessions in der Seitenleiste sind nicht mehr eingerückt, Statuspunkt und Titel stehen ganz links unter dem Gruppenpfeil.
+
 ## 1.77.0 (2026-11-02)
 
 - Feature: Die Statistik (F3) füllt jetzt das Fenster und zeigt die Limits aller Accounts im Zeitverlauf: 5 Stunden, 7 Tage und Fable, je Account ein Chart.

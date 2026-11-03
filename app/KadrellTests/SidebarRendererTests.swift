@@ -260,7 +260,7 @@ final class SidebarRendererTests: XCTestCase {
     /// Arbeitet: die Zeile lässt die Stelle frei, den Punkt zeichnet `BreathingDots` als Ebene darüber.
     func testWorkingSessionLeavesDotToBreathingLayer() {
         let rep = renderSession(session(status: "busy"), theme: dark)
-        withTheme(dark) { assertColor(rep, 31, 22, Theme.panel, "kein gezeichneter Punkt") }
+        withTheme(dark) { assertColor(rep, 16, 22, Theme.panel, "kein gezeichneter Punkt") }
     }
 
     func testBreathingOnlyWhenAttachedAndWorking() {
@@ -287,14 +287,24 @@ final class SidebarRendererTests: XCTestCase {
     func testWaitingSessionKeepsDot() {
         let rep = renderSession(session(status: "waiting"), theme: dark)
         withTheme(dark) {
-            assertColor(rep, 31, 22, Theme.waiting, "Punkt in der Mitte von dotRect")
-            assertColor(rep, 37, 22, Theme.panel, "rechts vom Punkt: Hintergrund")
+            assertColor(rep, 16, 22, Theme.waiting, "Punkt in der Mitte von dotRect")
+            assertColor(rep, 23, 22, Theme.panel, "rechts vom Punkt: Hintergrund")
         }
+    }
+
+    /// Sessions sind nicht eingerückt: Punkt unter dem Chevron der Gruppe, Titel direkt dahinter.
+    func testSessionRowIsNotIndented() {
+        let renderer = CompactSidebarRenderer()
+        XCTAssertEqual(renderer.dotRect(CGRect(x: 0, y: 0, width: 200, height: 22)).midX, 16)
+        let rep = renderSession(session(status: "waiting"), theme: dark, renderer: renderer)
+        func inked(_ x: Int) -> Bool { (16...28).contains { distance(pixel(rep, x: x, y: $0), dark.panel) > 0.1 } }
+        XCTAssertTrue((26..<34).contains(where: inked), "Titel beginnt bei x = 26")
+        XCTAssertFalse(inked(24), "Luft zwischen Punkt und Titel")
     }
 
     func testWaitingWithShellKeepsWaitingDot() {
         let rep = renderSession(session(status: "waiting", shellRunning: true), theme: dark)
-        withTheme(dark) { assertColor(rep, 31, 22, Theme.waiting, "Punkt in Warte-Farbe, nicht Shell-Farbe") }
+        withTheme(dark) { assertColor(rep, 16, 22, Theme.waiting, "Punkt in Warte-Farbe, nicht Shell-Farbe") }
     }
 
     func testShellRunningUsesShellColor() {
