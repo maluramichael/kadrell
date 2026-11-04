@@ -1,6 +1,6 @@
 #!/bin/bash
 # Release ohne App Store: Archiv (Release, Hardened Runtime) -> Export mit Developer ID ->
-# DMG -> Notarisierung bei Apple -> Staple -> Upload nach kadrell.malura.de/download/ -> Cask im Homebrew-Tap.
+# gestaltetes DMG (tools/dmg) -> Notarisierung bei Apple -> Staple -> Upload nach kadrell.malura.de/download/ -> Cask im Homebrew-Tap.
 #
 # Einmalig vorher (interaktiv, macht Michael):
 #   1. Zertifikat "Developer ID Application" im Developer-Portal anlegen und in den Schlüsselbund
@@ -62,9 +62,14 @@ codesign --verify --deep --strict "$APP"
 codesign -d --entitlements - "$APP" 2>/dev/null | grep -q audio-input || { echo "FEHLER: Mikrofon-Entitlement fehlt." >&2; exit 1; }
 
 echo "==> DMG"
-STAGE=$(mktemp -d); cp -R "$APP" "$STAGE/"; ln -s /Applications "$STAGE/Applications"
-hdiutil create -quiet -volname "Kadrell $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
-rm -rf "$STAGE"
+# Gestaltetes Fenster: Hintergrund mit Version (1x und @2x), feste Icon-Plätze, Volume-Icon. dmgbuild schreibt die
+# .DS_Store ohne Finder-Fernsteuerung; gepinnt, vor jedem Versionswechsel auf Supply-Chain-Risiken prüfen.
+BG_DIR=$(mktemp -d)
+swift "$SCRIPT_DIR/dmg/background.swift" "$VERSION" "$BG_DIR/background.png" 1
+swift "$SCRIPT_DIR/dmg/background.swift" "$VERSION" "$BG_DIR/background@2x.png" 2
+uv tool run --from dmgbuild==1.6.7 dmgbuild -s "$SCRIPT_DIR/dmg/settings.py" -D app="$APP" \
+  -D background="$BG_DIR/background.png" -D icon=Kadrell/Resources/Kadrell.icns "Kadrell $VERSION" "$DMG"
+rm -rf "$BG_DIR"
 codesign --sign "Developer ID Application" --timestamp "$DMG"
 
 echo "==> Notarisierung (wartet auf Apple, meist 1 bis 5 Minuten)"
