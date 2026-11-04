@@ -143,6 +143,34 @@ final class FolderIndex {
         return Array(starts.flatMap { d in subdirectories(of: d).sorted { $0.lowercased() < $1.lowercased() }.map { join(d, $0) } }.prefix(limit))
     }
 
+    // MARK: Neuer Ordner
+
+    /// Ordner, den ⌘N für die Eingabe neu anlegen würde, oder nil. Ein bloßer Name landet im Startordner, ein Pfad
+    /// mit „/“ oder „~“ dort, wo er hinzeigt; der übergeordnete Teil darf wie bei der Suche abgekürzt sein
+    /// (`~/d/p/neu` → `~/development/projects/neu`). Nil, wenn der Ordner schon existiert, außerhalb von `home`
+    /// läge, „.“ oder „..“ enthält oder ein bloßer Name Leerzeichen hat (dort trennen sie Suchwörter).
+    nonisolated static func creationTarget(_ typed: String, startFolder: String, home: String = NSHomeDirectory()) -> String? {
+        let q = normalize(typed)
+        let parts = q.split(separator: "/").map(String.init)
+        guard let name = parts.last, !parts.contains(where: { $0 == "." || $0 == ".." }) else { return nil }
+        let isPath = q.hasPrefix("/") || q.contains("/")
+        if !isPath, name.contains(" ") { return nil }
+        let parent = isPath ? resolvedParent(of: q, startFolder: startFolder, home: home) : normalize(startFolder)
+        let path = join(parent, name)
+        let root = normalize(home)
+        guard path.hasPrefix(root + "/"), !FileManager.default.fileExists(atPath: path) else { return nil }
+        return path
+    }
+
+    /// Übergeordneter Ordner eines getippten Pfads: wörtlich, wenn es ihn gibt (relativ zum Startordner), sonst die
+    /// erste Auflösung der Abkürzung, sonst wörtlich (die fehlenden Zwischenordner entstehen beim Anlegen mit).
+    nonisolated private static func resolvedParent(of q: String, startFolder: String, home: String) -> String {
+        let typed = (q as NSString).deletingLastPathComponent
+        let literal = q.hasPrefix("/") ? (typed.isEmpty ? "/" : typed) : join(normalize(startFolder), typed)
+        if isDirectory(literal) { return literal }
+        return expandAbbreviated(typed.isEmpty ? "/" : typed, base: normalize(home)).first ?? literal
+    }
+
     nonisolated static func subdirectories(of dir: String) -> [String] {
         let fm = FileManager.default
         guard let names = try? fm.contentsOfDirectory(atPath: dir) else { return [] }

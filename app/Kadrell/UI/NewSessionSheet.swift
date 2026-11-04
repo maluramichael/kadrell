@@ -14,6 +14,8 @@ final class NewSessionModel {
         var title: String?
         var detail: String?
         var select: (() -> Void)?
+        /// Eintrag „Ordner anlegen“: `path` gibt es noch nicht, ⏎ fragt einmal nach, das zweite ⏎ legt an und startet.
+        var isCreate = false
         var id: String { path }
     }
 
@@ -21,12 +23,20 @@ final class NewSessionModel {
     let counts: [String: Int]
     /// Von Extensions beigesteuerte Einträge (Repos zum Klonen). Auswahl ruft `select` statt `onStart`.
     let cloneCandidates: [Candidate]
-    var query = "" { didSet { if query != oldValue { notFoundPath = nil; update() } } }
+    var query = "" { didSet { if query != oldValue { notFoundPath = nil; confirmPath = nil; createError = nil; update() } } }
     private(set) var candidates: [Candidate] = []
     var selected = 0
     var onStart: ((Group?, String) -> Void)?
     /// ⏎ auf einem getippten Pfad ohne Treffer, der auch nicht existiert: Grundlage für ⌘⏎ (anlegen und starten).
     private(set) var notFoundPath: String?
+    /// Ordner, den die Eingabe neu anlegen würde (nur unter `home`), siehe `FolderIndex.creationTarget`.
+    private(set) var createTarget: String?
+    /// Das erste ⏎ auf „Ordner anlegen“ hat nachgefragt: das nächste ⏎ auf diesem Pfad legt an.
+    private(set) var confirmPath: String?
+    /// Anlegen gescheitert: der Grund steht sichtbar in der Liste.
+    private(set) var createError: String?
+    private let startFolder: String
+    private let home: String
     private var context: [(path: String, tag: String)] = []
     private let index: FolderIndex
     /// Läuft der Repo-Scan gerade im Hintergrund (⌘N kurz nach dem Start).
@@ -34,7 +44,9 @@ final class NewSessionModel {
 
     /// `askFinder: false` in Tests: sonst fragt macOS nach der Erlaubnis, den Finder zu steuern.
     init(groups: [Group], counts: [String: Int], index: FolderIndex = .shared, askFinder: Bool = true,
-         cloneCandidates: [Candidate] = []) {
+         cloneCandidates: [Candidate] = [], startFolder: String = Settings.startFolder, home: String = NSHomeDirectory()) {
+        self.startFolder = startFolder
+        self.home = home
         self.groups = groups
         self.counts = counts
         self.cloneCandidates = cloneCandidates
@@ -88,7 +100,40 @@ final class NewSessionModel {
             let clones = cloneMatches(q)
             candidates = q.isEmpty ? folders + clones : clones + folders
         }
+        offerCreate(q)
         selected = 0
+    }
+
+    /// Gibt es den getippten Ordner noch nicht, steht „Ordner anlegen“ in der Liste: ganz oben, wenn kein Treffer
+    /// den neuen Namen enthält (dann tippt man offensichtlich etwas Neues), sonst ganz unten, damit ⏎ wie gewohnt
+    /// den besten Treffer startet.
+    private func offerCreate(_ q: String) {
+        createTarget = q.isEmpty ? nil : FolderIndex.creationTarget(q, startFolder: startFolder, home: home)
+        guard let target = createTarget else { return }
+        let name = (target as NSString).lastPathComponent
+        let row = Candidate(path: target, group: nil, tag: String(localized: "neu", bundle: Bundle.app),
+                            select: { [weak self] in self?.confirmCreate(target) }, isCreate: true)
+        let matched = candidates.contains { c in c.select == nil && (FolderIndex.rank(name, path: c.path) ?? 3) <= 2 }
+        if matched { candidates.append(row) } else { candidates.insert(row, at: 0) }
+    }
+
+    /// Erstes ⏎ auf „Ordner anlegen“ fragt nach, das zweite legt an und startet.
+    private func confirmCreate(_ path: String) {
+        guard confirmPath == path else { confirmPath = path; createError = nil; return }
+        create(path)
+    }
+
+    private func create(_ dir: String) {
+        do {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        } catch {
+            createError = error.localizedDescription
+            NSSound.beep()
+            return
+        }
+        notFoundPath = nil
+        confirmPath = nil
+        onStart?(nil, dir)
     }
 
     /// Von Extensions gelieferte Einträge, bei Eingabe nach Titel und Gruppe gefiltert und sortiert.
@@ -130,12 +175,10 @@ final class NewSessionModel {
         NSSound.beep()
     }
 
-    /// ⌘⏎: den zuletzt nicht gefundenen Ordner anlegen und dort starten.
+    /// ⌘⏎: den getippten, noch fehlenden Ordner ohne Nachfrage anlegen und dort starten (nur unter `home`).
     func createAndStart() {
-        guard let dir = notFoundPath else { return }
-        guard (try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)) != nil else { return }
-        notFoundPath = nil
-        onStart?(nil, dir)
+        guard let dir = createTarget else { NSSound.beep(); return }
+        create(dir)
     }
 
     /// ⌘O: nativer Ordnerdialog, für alles, was die Suche nicht findet.
@@ -202,8 +245,13 @@ struct NewSessionView: View {
                         Text("Suche Git-Repos unter ~ …").font(Theme.ui(10)).foregroundStyle(Theme.mutedColor)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 8)
                     }
+                    if let error = model.createError {
+                        Text(String(localized: "Ordner nicht angelegt: \(error)", bundle: Bundle.app))
+                            .foregroundStyle(Theme.errorTextColor)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                    }
                     if items.isEmpty, let bad = model.notFoundPath {
-                        Text(String(localized: "\(Theme.shortPath(bad)) existiert nicht · ⌘⏎ anlegen und starten", bundle: Bundle.app))
+                        Text(String(localized: "\(Theme.shortPath(bad)) existiert nicht · anlegen geht nur im Home-Ordner", bundle: Bundle.app))
                             .foregroundStyle(Theme.errorTextColor)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                     } else if items.isEmpty {
@@ -220,10 +268,18 @@ struct NewSessionView: View {
         }
     }
 
+    private func title(_ c: NewSessionModel.Candidate) -> String {
+        guard c.isCreate else { return c.title ?? c.group?.name ?? (c.path as NSString).lastPathComponent }
+        let name = (c.path as NSString).lastPathComponent
+        return model.confirmPath == c.path
+            ? String(localized: "⏎ noch einmal: „\(name)“ anlegen und starten", bundle: Bundle.app)
+            : String(localized: "Neuen Ordner „\(name)“ anlegen", bundle: Bundle.app)
+    }
+
     private func row(_ c: NewSessionModel.Candidate, on: Bool) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(c.title ?? c.group?.name ?? (c.path as NSString).lastPathComponent).foregroundStyle(Theme.fgColor).lineLimit(1)
+                Text(title(c)).foregroundStyle(c.isCreate ? Theme.accentTextColor : Theme.fgColor).lineLimit(1)
                 Text(c.detail ?? Theme.shortPath(c.path)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).lineLimit(1).truncationMode(.head)
             }
             Spacer()
