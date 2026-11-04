@@ -35,7 +35,9 @@ einer Kachel sortiert um, beide Seiten zeigen dieselbe Reihenfolge (Kachel auf e
 Eine Session im Baum auf eine andere Gruppe gezogen (Kopf oder eine ihrer Sessions, die Zielgruppe leuchtet im Akzent auf)
 wechselt in diese Gruppe, auch bei sortiertem Baum; dasselbe per Rechtsklick „Verschieben nach ▸“ (mit Mehrfachauswahl
 „Auswahl verschieben nach ▸“) oder in der Suche (`> verschieben`). Sie behält ihren Ordner und läuft weiter, wie bei
-`kadrell move`; eine dadurch leere Gruppe ohne Herz verschwindet. Rechtsklick auf eine Gruppenzeile zeigt deren Menü:
+`kadrell move`; eine dadurch leere Gruppe ohne Herz verschwindet. ⌘⌥N (Datei › Neue Gruppe, in der Suche
+`> neue gruppe`) legt eine leere Gruppe mit Name, Ordner und Farbe an; sie trägt das Herz und bleibt deshalb auch ohne
+Session stehen, neue Sessions in ihrem Ordner landen darin. Rechtsklick auf eine Gruppenzeile zeigt deren Menü:
 neue Session oder Terminal darin, alle zeigen, Bearbeiten, Favorit, Pfad, Finder, Editor, Schließen. Bearbeiten (Stift
 am Gruppenkopf) ändert Name, Farbe und Ordner (Kürzel wie bei ⌘N, Tab schreibt aus, ⌘O Finder, Ordner hineinziehen):
 laufende Sessions bleiben in ihrem Ordner, neue starten im neuen.

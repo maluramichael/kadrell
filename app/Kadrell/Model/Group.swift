@@ -163,6 +163,14 @@ final class GroupStore {
     }
 
     func add(_ group: Group) { groups.append(group); save() }
+
+    /// Von Hand angelegte Gruppe (Menü, Palette, `kadrell new-group`): sie bekommt das Herz, damit sie auch ohne
+    /// Session stehen bleibt, bis man sie schließt. Neue Sessions in ihrem Ordner landen von selbst darin.
+    func addKept(_ group: Group) {
+        var g = group
+        g.favorite = true
+        add(g)
+    }
     func update(_ group: Group) {
         guard let i = groups.firstIndex(where: { $0.id == group.id }) else { return }
         groups[i] = group

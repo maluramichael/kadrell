@@ -788,6 +788,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         file.addItem(withTitle: String(localized: "Neues Terminal ohne Claude", bundle: Bundle.app), action: #selector(menuNewShell), keyEquivalent: "t")
         let remote = file.addItem(withTitle: String(localized: "Remote verbinden …", bundle: Bundle.app), action: #selector(menuRemote), keyEquivalent: "n")
         remote.keyEquivalentModifierMask = [.command, .shift]
+        let newGroup = file.addItem(withTitle: String(localized: "Neue Gruppe …", bundle: Bundle.app), action: #selector(menuNewGroup), keyEquivalent: "n")
+        newGroup.keyEquivalentModifierMask = [.command, .option]
         file.addItem(.separator())
         let newWindow = file.addItem(withTitle: String(localized: "Neues Fenster", bundle: Bundle.app), action: #selector(menuNewWindow), keyEquivalent: "t")
         newWindow.keyEquivalentModifierMask = [.command, .shift]
@@ -871,6 +873,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     /// ⌘⇧N: Palette im Remote-Modus, `@host` verbindet per ssh mit dessen tmux, `@host:` wählt die Session.
     @objc private func menuRemote() { togglePalette(prefix: "@") }
+    @objc private func menuNewGroup() { openNewGroup() }
 
     /// Remote-Kachel: Gruppe je Host, der Schlüssel trägt das ssh-Präfix wie Shells das ihre.
     /// `show: false` startet im Hintergrund (Auswahl bleibt), für `kadrell new --host -d`.
@@ -1118,6 +1121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (String(localized: "Alle Claude-Sessions durchsuchen, auch beendete", bundle: Bundle.app), { [weak self] in self?.togglePalette(prefix: "#") }),
             (String(localized: "Neues Terminal ohne Claude", bundle: Bundle.app), { [weak self] in self?.menuNewShell() }),
             (String(localized: "Remote verbinden (ssh → tmux)", bundle: Bundle.app), { [weak self] in self?.menuRemote() }),
+            (String(localized: "Neue Gruppe (leer)", bundle: Bundle.app), { [weak self] in self?.openNewGroup() }),
             (String(localized: "Session stoppen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.stopSession(s) } }),
             (String(localized: "Session fortsetzen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.attach.attachNow(s); self?.workspace.select([s.id], add: false) } }),
             (String(localized: "Session umbenennen (fokussierte)", bundle: Bundle.app), { [weak self] in if let s = focusedSession { self?.renameSession(s.id) } }),
@@ -1294,6 +1298,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             registry.rename(key, to: name)
         }
         sheets.present(RenameSessionView(model: model), onPrimary: { model.save() })
+    }
+
+    /// ⌘⌥N: leere Gruppe mit Name, Ordner und Farbe anlegen, Vorschlag ist der Projektordner für ⌘N. Sie bleibt ohne
+    /// Session stehen (Herz); Sessions kommen über „Neue Session in dieser Gruppe“, ⌘N oder Verschieben hinein.
+    func openNewGroup() {
+        let draft = store.makeGroup(cwd: FolderIndex.normalize(Settings.startFolder))
+        let model = EditGroupModel(group: draft, others: store.groups, isNew: true)
+        model.onSave = { [weak self] g in
+            guard let self else { return }
+            sheets.dismiss()
+            store.addKept(g)
+            reloadViews()
+        }
+        sheets.present(EditGroupView(model: model), onPrimary: { model.save() })
     }
 
     func openEditGroup(_ gid: String) {
