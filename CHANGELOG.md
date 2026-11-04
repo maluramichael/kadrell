@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.83.0 (2026-11-04)
+
+- Feature: Mit ⌘⌥N (oder Datei › Neue Gruppe) legst du eine leere Gruppe mit Name, Ordner und Farbe an. Sie bleibt auch ohne Session stehen.
+- Feature: Neue Session (⌘N) bietet an, einen noch nicht vorhandenen Ordner anzulegen, und startet die Session gleich darin.
+
 ## 1.82.0 (2026-11-04)
 
 - Feature: Das Kontomenü zeigt bei jedem Limit, bis wann es läuft, in deiner Zeitzone (heute nur die Uhrzeit, sonst mit Wochentag).
