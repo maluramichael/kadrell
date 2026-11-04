@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## Unreleased
+
+- Feature: In den Einstellungen unter Claude lässt sich ein Advisor wählen (Opus, Sonnet, Fable). Claude fragt dieses stärkere Modell vor einem Plan, bei wiederkehrenden Fehlern und vor dem Abschluss.
+
 ## 1.83.0 (2026-11-04)
 
 - Feature: Mit ⌘⌥N (oder Datei › Neue Gruppe) legst du eine leere Gruppe mit Name, Ordner und Farbe an. Sie bleibt auch ohne Session stehen.

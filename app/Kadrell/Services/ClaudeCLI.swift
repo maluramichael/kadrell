@@ -82,11 +82,12 @@ final class ClaudeCLI: Sendable {
     static func promptArgs(_ prompt: String) -> [String] { ["--", prompt] }
 
     /// Start-Flags aus den Einstellungen. Leerer String = Claude-Default, Flag entfällt.
-    static func launchArgs(allowBypass: Bool, mode: String, model: String, effort: String) -> [String] {
+    static func launchArgs(allowBypass: Bool, mode: String, model: String, effort: String, advisor: String = "") -> [String] {
         (allowBypass ? ["--allow-dangerously-skip-permissions"] : [])
             + (mode.isEmpty ? [] : ["--permission-mode", mode])
             + (model.isEmpty ? [] : ["--model", model])
             + (effort.isEmpty ? [] : ["--effort", effort])
+            + (advisor.isEmpty ? [] : ["--advisor", advisor])
     }
 
     /// Zuletzt gegen `docs/kadrell-verifikation.md` geprüfte Version: dort ist ab dieser CLI-Version das

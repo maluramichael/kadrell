@@ -44,6 +44,7 @@ struct ClaudeSettings: SettingsBlock {
             setting(String(localized: "Startmodus", bundle: Bundle.app)) { options(Settings.claudeModes, model.binding(\.claudeMode)) }
             setting(String(localized: "Modell", bundle: Bundle.app)) { options(Settings.claudeModels, model.binding(\.claudeModel)) }
             setting(String(localized: "Effort", bundle: Bundle.app)) { options(Settings.claudeEfforts, model.binding(\.claudeEffort)) }
+            setting(String(localized: "Advisor (stärkeres Modell für Plan, Fehler, Abschluss)", bundle: Bundle.app)) { options(Settings.claudeAdvisors, model.binding(\.claudeAdvisor)) }
             setting(String(localized: "Sessions dürfen andere Sessions steuern (kadrell send, capture, kill)", bundle: Bundle.app)) { onOff(model.binding(\.controlOtherSessions)) }
         }
     }

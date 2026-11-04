@@ -1,6 +1,18 @@
 {
   "sourceLanguage": "de",
   "strings": {
+    "Advisor (stärkeres Modell für Plan, Fehler, Abschluss)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Advisor (stärkeres Modell für Plan, Fehler, Abschluss)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Advisor (stronger model for plan, errors, sign-off)" } }
+      }
+    },
+    "Advisor %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Advisor %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Advisor %@" } }
+      }
+    },
     "%@ existiert nicht · anlegen geht nur im Home-Ordner": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "%@ existiert nicht · anlegen geht nur im Home-Ordner" } },

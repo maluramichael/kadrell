@@ -62,6 +62,8 @@ final class SessionParsingTests: XCTestCase {
         XCTAssertEqual(ClaudeCLI.launchArgs(allowBypass: false, mode: "", model: "", effort: ""), [])
         XCTAssertEqual(ClaudeCLI.launchArgs(allowBypass: true, mode: "bypassPermissions", model: "opus", effort: "high"),
                        ["--allow-dangerously-skip-permissions", "--permission-mode", "bypassPermissions", "--model", "opus", "--effort", "high"])
+        XCTAssertEqual(ClaudeCLI.launchArgs(allowBypass: false, mode: "", model: "sonnet", effort: "", advisor: "opus"),
+                       ["--model", "sonnet", "--advisor", "opus"])
     }
 
     func testElapsed() {

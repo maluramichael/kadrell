@@ -179,7 +179,8 @@ final class AttachManager {
         } else {
             let hasTranscript = Transcript.path(sessionId: session.sessionId, configDir: cli.configDir) != nil
             var claudeArgs = ClaudeCLI.sessionArgs(sessionId: session.sessionId, hasTranscript: hasTranscript)
-                + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort)
+                + ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode, model: Settings.claudeModel, effort: Settings.claudeEffort,
+                                       advisor: Settings.claudeAdvisor)
                 + ClaudeHook.launchArgs
             AttachManager.log.info("claude \(claudeArgs.joined(separator: " "), privacy: .private) in \(session.cwd, privacy: .private)")
             if let prompt = initialPrompts.removeValue(forKey: key), !hasTranscript { claudeArgs += ClaudeCLI.promptArgs(prompt) }

@@ -98,10 +98,14 @@ enum Settings {
     static let claudeModes = ["", "acceptEdits", "auto", "plan", "dontAsk", "bypassPermissions"]
     static let claudeModels = ["", "fable", "opus", "claude-opus-4-8[1m]", "sonnet", "haiku"]
     static let claudeEfforts = ["", "low", "medium", "high", "xhigh", "max"]
+    /// Advisor-Modell (`--advisor`), das Claude an Entscheidungspunkten fragt. "" = `advisorModel` aus den
+    /// Claude-Settings bzw. kein Advisor. Haiku fehlt, weil es kein Advisor eines stärkeren Hauptmodells sein darf.
+    static let claudeAdvisors = ["", "opus", "sonnet", "fable"]
     static var claudeAllowBypass: Bool { get { value("claude.allowBypass", false) } set { store("claude.allowBypass", newValue) } }
     static var claudeMode: String { get { value("claude.mode", "") } set { store("claude.mode", newValue) } }
     static var claudeModel: String { get { value("claude.model", "") } set { store("claude.model", newValue) } }
     static var claudeEffort: String { get { value("claude.effort", "") } set { store("claude.effort", newValue) } }
+    static var claudeAdvisor: String { get { value("claude.advisor", "") } set { store("claude.advisor", newValue) } }
     /// Claude im Fullscreen-Renderer (Alternate-Screen) starten statt im klassischen Puffer, Default an. Verhindert,
     /// dass die wiederholten Neuzeichnungen des klassischen Renderers beim Scrollen als doppelter Text im Scrollback
     /// auftauchen. Setzt `CLAUDE_CODE_NO_FLICKER=1` für neu gestartete Claude-Prozesse.
@@ -145,6 +149,7 @@ enum Settings {
         var parts = [claudeModel.isEmpty ? String(localized: "Standardmodell", bundle: Bundle.app) : claudeModel,
                      claudeMode.isEmpty ? String(localized: "fragt nach Rechten", bundle: Bundle.app) : claudeMode]
         if !claudeEffort.isEmpty { parts.append(claudeEffort) }
+        if !claudeAdvisor.isEmpty { parts.append(String(localized: "Advisor \(claudeAdvisor)", bundle: Bundle.app)) }
         if claudeAllowBypass { parts.append(String(localized: "Bypass", bundle: Bundle.app)) }
         return parts.joined(separator: " · ")
     }
