@@ -1,6 +1,30 @@
 {
   "sourceLanguage": "de",
   "strings": {
+    "%@ existiert nicht · anlegen geht nur im Home-Ordner": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ existiert nicht · anlegen geht nur im Home-Ordner" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%@ doesn't exist · folders can only be created in your home folder" } }
+      }
+    },
+    "Ordner nicht angelegt: %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Ordner nicht angelegt: %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Folder not created: %@" } }
+      }
+    },
+    "⏎ noch einmal: „%@“ anlegen und starten": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "⏎ noch einmal: „%@“ anlegen und starten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "⏎ again: create “%@” and start" } }
+      }
+    },
+    "Neuen Ordner „%@“ anlegen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neuen Ordner „%@“ anlegen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Create new folder “%@”" } }
+      }
+    },
     "STARTEN MIT": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "STARTEN MIT" } },
@@ -489,22 +513,6 @@
     },
     "%@  ⏎": {
       "shouldTranslate": false
-    },
-    "%@ existiert nicht · ⌘⏎ anlegen und starten": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ existiert nicht · ⌘⏎ anlegen und starten"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ doesn't exist · ⌘⏎ create and start"
-          }
-        }
-      }
     },
     "%@ fertig": {
       "localizations": {
