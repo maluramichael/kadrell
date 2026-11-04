@@ -109,7 +109,7 @@ final class AccountService {
         accounts.map { ($0.id, $0.title, $0.id == activeId, Self.usageDetail($0.usage, session: $0.hasSessionLimit)) }
     }
 
-    /// „5h 45% · 7d 56% · vor 12 min“ aus dem gecachten Stand, leer wenn nie ein Stand gemerkt wurde. Ein Fenster,
+    /// „5h 45% bis 14:00 · 7d 56% bis Do., 09:00 · vor 12 min“ aus dem gecachten Stand, leer wenn nie ein Stand gemerkt wurde. Ein Fenster,
     /// das seit der Messung zurückgesetzt hat, steht als „frei“.
     /// Ohne 5-Stunden-Limit (`session` false) entfällt der 5h-Teil.
     static func usageDetail(_ u: CachedUsage?, session: Bool = true) -> String {
@@ -124,8 +124,9 @@ final class AccountService {
 
     private static func dim(_ label: String, _ pct: Int?, _ resets: Date?, _ now: Date) -> String {
         guard let pct else { return "" }
-        if let resets, resets <= now { return label + " " + String(localized: "frei", bundle: Bundle.app) }
-        return "\(label) \(pct)%"
+        guard let resets else { return "\(label) \(pct)%" }
+        if resets <= now { return label + " " + String(localized: "frei", bundle: Bundle.app) }
+        return "\(label) \(pct)% " + String(localized: "bis \(Usage.resetClock(resets, now: now))", bundle: Bundle.app)
     }
 
     /// Nutzung des aktiven Accounts aus dem Poll merken, damit das Menü sie später auch für den inaktiven zeigt.
@@ -179,9 +180,11 @@ final class AccountService {
     func addCurrent() async -> Bool {
         guard let raw = await Keychain.read(service: Self.liveService),
               let oauth = Self.oauth(from: raw), let token = oauth["accessToken"] as? String else { return false }
-        let email = await Self.profileEmail(token: token)
+        let profile = await Self.profile(token: token)
+        let email = profile?.email
         let sub = oauth["subscriptionType"] as? String
-        let tier = oauth["rateLimitTier"] as? String
+        // Der Token kennt nur die Stufe vom Login, das Profil die aktuelle (Upgrade danach, Umbenennung Max 20x → Ultra).
+        let tier = profile?.tier ?? oauth["rateLimitTier"] as? String
         guard let blob = Self.string(from: oauth) else { return false }
 
         if let email, let i = accounts.firstIndex(where: { $0.email == email }) {
@@ -219,7 +222,9 @@ final class AccountService {
         guard let merged = Self.string(from: full),
               await Keychain.write(service: Self.liveService, account: NSUserName(), value: merged) else { return false }
         lastSwitch = Date()
-        if let i = accounts.firstIndex(where: { $0.id == id }), let t = targetOauth["rateLimitTier"] as? String { accounts[i].tier = t }
+        if let i = accounts.firstIndex(where: { $0.id == id }), accounts[i].tier == nil, let t = targetOauth["rateLimitTier"] as? String {
+            accounts[i].tier = t
+        }
         setActive(id)
         Self.log.notice("Account gewechselt")
         return true
@@ -243,20 +248,33 @@ final class AccountService {
         return await body()
     }
 
-    /// Stufe (`rateLimitTier`) für Accounts nachtragen, die vor ihrer Speicherung angelegt wurden: aus dem Live-Eintrag
-    /// für den aktiven, aus dem Slot für die übrigen. Nur lesen, nichts rotieren.
+    /// Aktuelle Stufe jedes Accounts über `/api/oauth/profile` holen. Das `rateLimitTier` im Token stammt vom Login
+    /// und bleibt nach einem Upgrade stehen (Max 5x → Ultra), das Profil kennt die gültige. Scheitert die Abfrage,
+    /// bleibt die gemerkte Stufe, fehlt auch die, kommt sie aus dem Token.
     func loadTiers() async {
-        for a in accounts where a.tier == nil {
-            let raw = await exclusive {
-                await Keychain.read(service: a.id == activeId ? Self.liveService : Self.storeService,
-                                    account: a.id == activeId ? nil : a.id)
-            }
-            // Der Live-Eintrag hat den Block unter `claudeAiOauth`, ein Slot ist der Block selbst.
-            let block = raw.flatMap { Self.oauth(from: $0) ?? Self.object(from: $0) }
-            guard let t = block?["rateLimitTier"] as? String, let i = accounts.firstIndex(where: { $0.id == a.id }) else { continue }
-            accounts[i].tier = t
+        for a in accounts {
+            var tier = await profileTier(a.id)
+            if tier == nil, a.tier == nil { tier = await keychainTier(a.id) }
+            guard let tier, let i = accounts.firstIndex(where: { $0.id == a.id }) else { continue }
+            accounts[i].tier = tier
         }
         persist()
+    }
+
+    /// Stufe laut Profil, mit dem Live-Token für den aktiven Account und dem Slot-Token für die übrigen.
+    private func profileTier(_ id: String) async -> String? {
+        let token = id == activeId ? await UsageService.token() : await exclusive { await slotToken(id) }
+        guard let token else { return nil }
+        return await Self.profile(token: token)?.tier
+    }
+
+    /// Stufe aus dem Schlüsselbund: aus dem Live-Eintrag für den aktiven, aus dem Slot für die übrigen. Nur lesen.
+    private func keychainTier(_ id: String) async -> String? {
+        let raw = await exclusive {
+            await Keychain.read(service: id == activeId ? Self.liveService : Self.storeService, account: id == activeId ? nil : id)
+        }
+        // Der Live-Eintrag hat den Block unter `claudeAiOauth`, ein Slot ist der Block selbst.
+        return raw.flatMap { Self.oauth(from: $0) ?? Self.object(from: $0) }?["rateLimitTier"] as? String
     }
 
     // MARK: Inaktive Accounts abfragen
@@ -453,7 +471,10 @@ final class AccountService {
     }
 
     /// E-Mail des Accounts über `api.anthropic.com/api/oauth/profile`, für den Anzeigenamen. Scheitert still.
-    static func profileEmail(token: String) async -> String? {
+    static func profileEmail(token: String) async -> String? { await profile(token: token)?.email }
+
+    /// E-Mail und aktuelle Stufe (`organization.rate_limit_tier`) aus `api.anthropic.com/api/oauth/profile`. Scheitert still.
+    static func profile(token: String) async -> (email: String?, tier: String?)? {
         guard let url = URL(string: "https://api.anthropic.com/api/oauth/profile") else { return nil }
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -461,7 +482,13 @@ final class AccountService {
         req.setValue("Kadrell", forHTTPHeaderField: "User-Agent")
         guard let (data, resp) = try? await URLSession.shared.data(for: req), (resp as? HTTPURLResponse)?.statusCode == 200,
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return parseProfile(root)
+    }
+
+    /// Rein, testbar: E-Mail und Stufe aus der Profil-Antwort.
+    static func parseProfile(_ root: [String: Any]) -> (email: String?, tier: String?) {
         let account = root["account"] as? [String: Any]
-        return (account?["email"] as? String) ?? (account?["email_address"] as? String) ?? (root["email"] as? String)
+        let email = (account?["email"] as? String) ?? (account?["email_address"] as? String) ?? (root["email"] as? String)
+        return (email, (root["organization"] as? [String: Any])?["rate_limit_tier"] as? String)
     }
 }

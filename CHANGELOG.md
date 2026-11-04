@@ -2,6 +2,12 @@
 
 Neueste Version oben.
 
+## 1.82.0 (2026-11-04)
+
+- Feature: Das Kontomenü zeigt bei jedem Limit, bis wann es läuft, in deiner Zeitzone (heute nur die Uhrzeit, sonst mit Wochentag).
+- Feature: 5-Stunden-Limit, 7-Tage-Limit und Fable-Kontingent lassen sich in den Einstellungen unter Konten einzeln aus der Leiste nehmen.
+- Fix: Der Plan eines Kontos kommt jetzt von Anthropic statt aus dem Login. Wer nach dem Anmelden auf Ultra gewechselt hat, sieht Ultra statt Max, und das 5-Stunden-Limit verschwindet.
+
 ## 1.81.0 (2026-11-04)
 
 - Feature: Pi-Sessions können mit dem Standardmodell starten, das in Pi selbst eingestellt ist (Einstellungen › Modelle für Funktionen › Pi-Sessions › „Standard von Pi“), zum Beispiel ein Modell über Olla.

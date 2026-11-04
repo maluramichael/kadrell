@@ -1801,6 +1801,30 @@
         }
       }
     },
+    "bis %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "bis %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "until %@" } }
+      }
+    },
+    "5-Stunden-Limit in der Leiste (bei Ultra nie)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "5-Stunden-Limit in der Leiste (bei Ultra nie)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "5-hour limit in the bar (never on Ultra)" } }
+      }
+    },
+    "7-Tage-Limit in der Leiste": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "7-Tage-Limit in der Leiste" } },
+        "en": { "stringUnit": { "state": "translated", "value": "7-day limit in the bar" } }
+      }
+    },
+    "Fable-Kontingent in der Leiste": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Fable-Kontingent in der Leiste" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Fable allowance in the bar" } }
+      }
+    },
     "Wechsel-Meldung anzeigen": {
       "localizations": {
         "de": {

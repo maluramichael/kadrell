@@ -523,7 +523,17 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
             UsageRow(name: "7d", pct: usage.weekly, from: usageFrom.weekly, label: String(localized: "Claude-Nutzung der letzten 7 Tage", bundle: Bundle.app), plan: usage.weeklyPlan(), reset: usage.weeklyResets),
             UsageRow(name: "5h", pct: usage.session, from: usageFrom.session, label: String(localized: "Claude-Nutzung der letzten 5 Stunden", bundle: Bundle.app), plan: nil, reset: usage.sessionResets),
         ]
-        return showSession ? rows : rows.filter { $0.name != "5h" }
+        return rows.filter { Self.usageShown($0.name, session: showSession) }
+    }
+
+    /// Ein Nutzungswert steht nur in der Leiste, wenn er in den Einstellungen an ist; 5h zusätzlich nur mit 5-Stunden-Limit.
+    static func usageShown(_ name: String, session: Bool) -> Bool {
+        switch name {
+        case "5h": return session && Settings.barShowSession
+        case "7d": return Settings.barShowWeekly
+        case "fable": return Settings.barShowFable
+        default: return true
+        }
     }
 
     /// Claude-Nutzung als flache Module. Fehlt ein Wert, steht „–%“ statt nichts. Vor dem 7-Tage-Wert steht der
@@ -561,7 +571,7 @@ final class StatusBarView: NSView, NSViewToolTipOwner {
         guard let resets, resets > Date() else { return "" }
         Self.relative.locale = Localization.locale
         let rel = Self.relative.localizedString(for: resets, relativeTo: Date())
-        return " · " + String(localized: "Reset \(Self.clock.string(from: resets)) (\(rel))", bundle: Bundle.app)
+        return " · " + String(localized: "Reset \(Usage.resetClock(resets)) (\(rel))", bundle: Bundle.app)
     }
 
     /// Nutzungswerte, die aus Platzmangel nicht in der Leiste stehen, für Tooltip und VoiceOver des Displays

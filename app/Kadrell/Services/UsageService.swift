@@ -11,6 +11,16 @@ struct Usage: Equatable, Sendable {
     var weeklyResets: Date?
     static let empty = Usage()
 
+    /// Reset-Zeitpunkt in der lokalen Zeitzone, 24 Stunden: heute nur die Uhrzeit („14:00“), sonst mit Wochentag
+    /// („Do., 14:00“ bzw. „Thu 14:00“). Sprache folgt der eingestellten Oberfläche.
+    static func resetClock(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let f = DateFormatter()
+        f.locale = Localization.locale
+        f.timeZone = calendar.timeZone
+        f.setLocalizedDateFormatFromTemplate(calendar.isDate(date, inSameDayAs: now) ? "HHmm" : "EEEHHmm")
+        return f.string(from: date)
+    }
+
     /// Der Stand, den man bei gleichmäßiger Verteilung über die Woche gerade haben dürfte, tageweise hochgerechnet:
     /// Tag 1 gibt gleich nach dem Reset rund 100/7 % frei, jeder weitere angebrochene Tag rund 100/7 % mehr, der
     /// 7. Tag 100 %. Bewusst nicht sekündlich, sonst stünde direkt nach dem Reset 0 % und jede Nutzung wäre „über

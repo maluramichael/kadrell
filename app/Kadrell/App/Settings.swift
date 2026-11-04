@@ -136,6 +136,10 @@ enum Settings {
         get { Int(min(max(value("autoswitch.threshold", 90.0), autoswitchRange.lowerBound), autoswitchRange.upperBound)) }
         set { store("autoswitch.threshold", Double(newValue)) }
     }
+    /// Welche Nutzungswerte die Leiste zeigt. Bei Ultra entfällt 5h ohnehin, hier lässt sich jeder Wert auch so ausblenden.
+    static var barShowSession: Bool { get { value("bar.usage.session", true) } set { store("bar.usage.session", newValue) } }
+    static var barShowWeekly: Bool { get { value("bar.usage.weekly", true) } set { store("bar.usage.weekly", newValue) } }
+    static var barShowFable: Bool { get { value("bar.usage.fable", true) } set { store("bar.usage.fable", newValue) } }
     /// Kompakte Zeile für den ⌘N-Dialog: mit welchen Start-Flags eine neue Session gleich läuft (Kanboard #75).
     static var claudeSummary: String {
         var parts = [claudeModel.isEmpty ? String(localized: "Standardmodell", bundle: Bundle.app) : claudeModel,

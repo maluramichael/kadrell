@@ -182,6 +182,41 @@ final class AccountServiceTests: XCTestCase {
         XCTAssertFalse(AccountService.usageDetail(u, session: false).contains("5h"))
     }
 
+    /// Das Profil liefert die gültige Stufe, auch wenn der Token noch die vom Login trägt.
+    func testProfileCarriesCurrentTier() {
+        let root: [String: Any] = ["account": ["email": "a@b.de"], "organization": ["rate_limit_tier": "default_claude_max_20x"]]
+        let p = AccountService.parseProfile(root)
+        XCTAssertEqual(p.email, "a@b.de")
+        XCTAssertEqual(p.tier, "default_claude_max_20x")
+        XCTAssertNil(AccountService.parseProfile([:]).tier)
+    }
+
+    /// Im Konto-Menü steht, bis wann ein Fenster läuft: heute nur die Uhrzeit, sonst mit Wochentag.
+    func testUsageDetailShowsReset() {
+        let cal = Calendar.current
+        let soon = cal.date(byAdding: .minute, value: 1, to: Date())!
+        let today = cal.isDate(soon, inSameDayAs: Date()) ? soon : Date().addingTimeInterval(1)
+        let later = Date().addingTimeInterval(3 * 24 * 3600)
+        let u = CachedUsage(session: 40, weekly: 20, fable: nil, sessionResets: today, weeklyResets: later, at: Date())
+        let detail = AccountService.usageDetail(u)
+        XCTAssertTrue(detail.contains(Usage.resetClock(today)), detail)
+        XCTAssertTrue(detail.contains(Usage.resetClock(later)), detail)
+        XCTAssertNotEqual(Usage.resetClock(later), Usage.resetClock(later, now: later), "anderer Tag trägt den Wochentag")
+    }
+
+    /// Ausgeschaltete Nutzungswerte fehlen in der Leiste, 5h zusätzlich ohne 5-Stunden-Limit.
+    func testBarUsageFollowsSettings() {
+        let saved = (Settings.barShowSession, Settings.barShowWeekly, Settings.barShowFable)
+        defer { (Settings.barShowSession, Settings.barShowWeekly, Settings.barShowFable) = saved }
+        (Settings.barShowSession, Settings.barShowWeekly, Settings.barShowFable) = (true, true, false)
+        XCTAssertTrue(StatusBarView.usageShown("5h", session: true))
+        XCTAssertFalse(StatusBarView.usageShown("5h", session: false))
+        XCTAssertTrue(StatusBarView.usageShown("7d", session: true))
+        XCTAssertFalse(StatusBarView.usageShown("fable", session: true))
+        Settings.barShowSession = false
+        XCTAssertFalse(StatusBarView.usageShown("5h", session: true))
+    }
+
     // MARK: Inaktive Accounts abfragen
 
     /// Fällig ist ein Account erst, wenn weder sein Stand noch der letzte Versuch jünger als das Intervall ist.

@@ -83,6 +83,9 @@ struct AccountsSettings: SettingsBlock {
             setting(String(localized: "Wechsel-Meldung anzeigen", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchNotice)) }
             setting(String(localized: "Warnen bei zu schnellem 7-Tage-Verbrauch", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchPaceWarning)) }
             setting(String(localized: "Nach Wochentempo verteilen", bundle: Bundle.app)) { onOff(model.binding(\.autoswitchOnPace)) }
+            setting(String(localized: "5-Stunden-Limit in der Leiste (bei Ultra nie)", bundle: Bundle.app)) { onOff(model.binding(\.barShowSession)) }
+            setting(String(localized: "7-Tage-Limit in der Leiste", bundle: Bundle.app)) { onOff(model.binding(\.barShowWeekly)) }
+            setting(String(localized: "Fable-Kontingent in der Leiste", bundle: Bundle.app)) { onOff(model.binding(\.barShowFable)) }
         }
     }
 }
