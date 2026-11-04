@@ -4,6 +4,8 @@ import SwiftUI
 @MainActor
 final class EditGroupModel {
     let group: Group
+    /// Neue, noch leere Gruppe statt einer bestehenden: anderer Titel, kein Hinweis auf laufende Sessions.
+    let isNew: Bool
     /// Die übrigen Gruppen: Hinweis, wenn der neue Ordner schon einer anderen gehört.
     let others: [Group]
     var name: String
@@ -19,12 +21,13 @@ final class EditGroupModel {
     /// Remote-Gruppe: der Ordner ist nur Platzhalter, sie hängt am ssh-Host.
     var isRemote: Bool { group.host != nil }
     /// Neuer Ordner gewählt: laufende Sessions bleiben, wo sie sind, neue starten dort.
-    var folderMoved: Bool { resolvedFolder.map { $0 != group.cwd } ?? false }
+    var folderMoved: Bool { !isNew && resolvedFolder.map { $0 != group.cwd } ?? false }
     /// Eine andere lokale Gruppe hat schon diesen Ordner. Erlaubt (auch per `kadrell new-group` möglich), nur ein Hinweis.
     var sharedWith: Group? { resolvedFolder.flatMap { f in others.first { $0.cwd == f && $0.host == nil } } }
 
-    init(group: Group, others: [Group] = []) {
+    init(group: Group, others: [Group] = [], isNew: Bool = false) {
         self.group = group
+        self.isNew = isNew
         self.others = others
         name = group.name
         color = Color(nsColor: NSColor(hexString: group.color))
@@ -74,11 +77,13 @@ final class EditGroupModel {
         guard let dir = resolvedFolder else {
             return (String(localized: "Ordner nicht gefunden · Tab vervollständigt, ⌘O wählt im Finder", bundle: Bundle.app), true)
         }
-        guard folderMoved else { return (String(localized: "Tab vervollständigt · ⌘O Finder · Ordner hineinziehen", bundle: Bundle.app), false) }
         // Kürzel getippt: der ausgeschriebene Ordner davor, sonst stünde er nirgends.
         var lines = FolderIndex.normalize(folder) == dir ? [] : ["→ " + Theme.shortPath(dir)]
-        lines.append(String(localized: "Neue Sessions starten im neuen Ordner, laufende bleiben in ihrem.", bundle: Bundle.app))
+        if folderMoved { lines.append(String(localized: "Neue Sessions starten im neuen Ordner, laufende bleiben in ihrem.", bundle: Bundle.app)) }
         if let other = sharedWith { lines.append(String(localized: "Den Ordner hat auch die Gruppe „\(other.name)“.", bundle: Bundle.app)) }
+        guard !lines.isEmpty, isNew || folderMoved else {
+            return (String(localized: "Tab vervollständigt · ⌘O Finder · Ordner hineinziehen", bundle: Bundle.app), false)
+        }
         return (lines.joined(separator: "\n"), false)
     }
 
@@ -104,7 +109,7 @@ struct EditGroupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("GRUPPE BEARBEITEN").dialogTitle()
+            (model.isNew ? Text("NEUE GRUPPE") : Text("GRUPPE BEARBEITEN")).dialogTitle()
             HStack(spacing: 12) {
                 TextField("Name", text: $model.name).textFieldStyle(.plain).font(Theme.ui(15))
                     .focused($focused)
@@ -120,7 +125,8 @@ struct EditGroupView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 14)
             palettes
-            DialogFoot(hint: String(localized: "Esc abbrechen", bundle: Bundle.app), button: String(localized: "Speichern", bundle: Bundle.app)) { model.save() }
+            DialogFoot(hint: String(localized: "Esc abbrechen", bundle: Bundle.app),
+                       button: model.isNew ? String(localized: "Anlegen", bundle: Bundle.app) : String(localized: "Speichern", bundle: Bundle.app)) { model.save() }
         }
         .dialogFrame()
         .overlay { if dropping { RoundedRectangle(cornerRadius: Instrument.dialogRadius * Theme.scale).strokeBorder(Theme.accentColor, lineWidth: 2) } }

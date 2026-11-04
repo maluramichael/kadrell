@@ -25,6 +25,36 @@
         "en": { "stringUnit": { "state": "translated", "value": "Create new folder “%@”" } }
       }
     },
+    "Neue Gruppe …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue Gruppe …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New group …" } }
+      }
+    },
+    "Neue Gruppe (leer)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue Gruppe (leer)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New group (empty)" } }
+      }
+    },
+    "NEUE GRUPPE": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "NEUE GRUPPE" } },
+        "en": { "stringUnit": { "state": "translated", "value": "NEW GROUP" } }
+      }
+    },
+    "Anlegen": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Anlegen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Create" } }
+      }
+    },
+    "Neue leere Gruppe mit Name, Ordner und Farbe": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neue leere Gruppe mit Name, Ordner und Farbe" } },
+        "en": { "stringUnit": { "state": "translated", "value": "New empty group with name, folder and color" } }
+      }
+    },
     "STARTEN MIT": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "STARTEN MIT" } },

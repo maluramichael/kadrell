@@ -117,8 +117,7 @@ extension AppDelegate {
     private func controlNewGroup(dir: String, name: String?, color: String?, _ req: ControlRequest) throws -> String {
         var g = store.makeGroup(cwd: try existingDir(dir, req), name: name)
         if let color { g.color = color }
-        g.favorite = true
-        store.add(g)
+        store.addKept(g)
         reloadViews()
         return g.id
     }

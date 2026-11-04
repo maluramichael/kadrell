@@ -89,6 +89,27 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(GroupStore(url: url).groups.map(\.cwd), ["/p/b"])
     }
 
+    /// Von Hand angelegte leere Gruppe (⌘⌥N) überlebt Abgleich, Verschieben der letzten Session und Neustart, und
+    /// eine neue Session in ihrem Ordner landet darin statt in einer frischen Gruppe.
+    func testKeptEmptyGroupSurvivesAndCollectsSessions() throws {
+        let store = GroupStore(url: url)
+        store.assign([session("t1", cwd: "/p/b")])
+        store.addKept(store.makeGroup(cwd: "/p/neu", name: "Neu"))
+        XCTAssertTrue(store.groups[1].isFavorite)
+        store.assign([session("t1", cwd: "/p/b")])
+        XCTAssertEqual(GroupStore(url: url).groups.map(\.name), ["b", "Neu"])
+
+        store.assign([session("t1", cwd: "/p/b"), session("n1", cwd: "/p/neu")])
+        XCTAssertEqual(store.group(forSession: "n1")?.name, "Neu")
+        XCTAssertEqual(store.groups.count, 2)
+
+        let neu = store.groups[1].id
+        store.move(sessions: ["n1"], to: store.groups[0].id)
+        XCTAssertNotNil(store.group(id: neu), "leer geworden bleibt sie stehen")
+        let edit = EditGroupModel(group: store.makeGroup(cwd: "/p/x"), isNew: true)
+        XCTAssertFalse(edit.folderMoved)
+    }
+
     func testEmptyPollNeitherPrunesNorRemovesGroups() throws {
         let store = GroupStore(url: url)
         store.assign([session("s1", cwd: "/p/a")])
