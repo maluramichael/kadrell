@@ -121,10 +121,11 @@ enum ExtHost {
     }
 
     /// `kadrell.system`: nur lesend, gemessen wird nur auf Anfrage. Die Platte fragt im Hintergrund (ein langsames
-    /// Netzlaufwerk soll Lua nicht aufhalten), die CPU-Zähler sind ein billiger Kernel-Aufruf.
+    /// Netzlaufwerk soll Lua nicht aufhalten), CPU- und RAM-Zähler sind billige Kernel-Aufrufe.
     private static func system(id: Int, _ msg: [String: Any]) {
         switch msg["op"] as? String {
         case "cpu": cpu(id: id)
+        case "mem": deliver(id: id, SystemProbe.mem() ?? ["error": "memory stats not available"])
         case "disk":
             let path = (msg["path"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "/"
             Task.detached { deliver(id: id, SystemProbe.disk(path) ?? ["error": "volume not readable: \(path)"]) }

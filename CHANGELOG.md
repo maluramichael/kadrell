@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.84.0 (2026-11-04)
+
+- Feature: Erweiterungen können die Auslastung des Hauptspeichers (RAM) in die Statusleiste unten schreiben, wie die Aktivitätsanzeige misst.
+
 ## 1.83.0 (2026-11-04)
 
 - Feature: Mit ⌘⌥N (oder Datei › Neue Gruppe) legst du eine leere Gruppe mit Name, Ordner und Farbe an. Sie bleibt auch ohne Session stehen.

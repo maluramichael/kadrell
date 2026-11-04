@@ -40,4 +40,13 @@ enum SystemProbe {
         let t = Double(total), f = min(max(free, 0), t)
         return ["total": t, "free": f, "used": t - f, "fraction": (t - f) / t, "name": v.volumeName ?? ""]
     }
+
+    /// Auslastung des Hauptspeichers wie in der Aktivitätsanzeige: `used` = aktiv + wired + komprimiert, `free`
+    /// der Rest. Bytes und `fraction` 0…1, nil wenn der Kernel nichts liefert. Ein billiger Kernel-Aufruf.
+    static func mem() -> [String: Any]? {
+        var total = UInt64(0), used = UInt64(0), free = UInt64(0)
+        guard ks_mem_stats(&total, &used, &free) == 0, total > 0 else { return nil }
+        let t = Double(total), u = Double(min(used, total))
+        return ["total": t, "used": u, "free": Double(free), "fraction": u / t]
+    }
 }

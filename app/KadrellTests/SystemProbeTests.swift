@@ -47,6 +47,17 @@ final class SystemProbeTests: XCTestCase {
         XCTAssertNil(SystemProbe.disk("/gibt/es/nicht"))
     }
 
+    func testRealMem() throws {
+        let mem = try XCTUnwrap(SystemProbe.mem())
+        let total = try XCTUnwrap(mem["total"] as? Double), used = try XCTUnwrap(mem["used"] as? Double)
+        let free = try XCTUnwrap(mem["free"] as? Double), fraction = try XCTUnwrap(mem["fraction"] as? Double)
+        XCTAssertGreaterThan(total, 0)
+        XCTAssertLessThanOrEqual(used, total)
+        XCTAssertEqual(used, total - free, accuracy: 1)
+        XCTAssertEqual(fraction, used / total, accuracy: 1e-12)
+        XCTAssertLessThanOrEqual(fraction, 1)
+    }
+
     // MARK: Lua
 
     func testCpuAndDiskFromLua() throws {
@@ -63,6 +74,18 @@ final class SystemProbeTests: XCTestCase {
         XCTAssertEqual(next(p, "ready")?["t"] as? String, "ready")
         p.send(["t": "event", "name": "app.ready", "data": [:]])
         XCTAssertEqual(logs(p, count: 3), ["cores \(ProcessInfo.processInfo.processorCount) total true", "disk true", "missing nil true"])
+    }
+
+    func testMemFromLua() throws {
+        let p = try start("""
+        kadrell.on("app.ready", function()
+            local m = kadrell.system.mem()
+            kadrell.log("mem " .. tostring(m.total > 0 and m.used <= m.total and m.fraction >= 0 and m.fraction <= 1))
+        end)
+        """)
+        XCTAssertEqual(next(p, "ready")?["t"] as? String, "ready")
+        p.send(["t": "event", "name": "app.ready", "data": [:]])
+        XCTAssertEqual(logs(p, count: 1), ["mem true"])
     }
 
     func testSystemOutsideHandlerFails() throws {

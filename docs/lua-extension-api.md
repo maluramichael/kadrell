@@ -100,6 +100,8 @@ Gemessen wird im Helfer selbst, ohne Prozess und nur, wenn die Extension fragt. 
 - `kadrell.system.disk(path)` → `{ total, free, used, fraction, name }`: Bytes des Volumes, auf dem `path` liegt
   (Default `"/"`, `~` geht), `fraction` = belegter Anteil 0 bis 1, `free` wie im Finder (mit Platz, den macOS bei Bedarf
   freiräumt), `name` = Volume-Name.
+- `kadrell.system.mem()` → `{ total, used, free, fraction }`: Bytes des Hauptspeichers, `used` wie „Memory Used" in der
+  Aktivitätsanzeige (aktiv + wired + komprimiert), `fraction` = belegter Anteil 0 bis 1. Ein billiger Kernel-Aufruf.
 
 ### Zeit
 - `kadrell.after(sekunden, fn)` – einmalig.
@@ -228,5 +230,5 @@ kadrell.every(5, function() ticks = ticks + 1; render() end)
 - Der Ordnername kommt aus dem Manifest-`name`; Kadrell merkt sich die Herkunft (`owner/repo`) und lässt ein fremdes
   Repo keinen schon belegten Namen überschreiben.
 - Beispiel mit der vollen API: https://github.com/maluramichael/kadrell-example
-- Beispiel für Statusleiste unten und `kadrell.system`: die Extension `system-info` (CPU-Last und Plattenbelegung)
+- Beispiel für Statusleiste unten und `kadrell.system`: die Extension `system-info` (CPU-Last, RAM und Plattenbelegung)
 ```

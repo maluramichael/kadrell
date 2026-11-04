@@ -126,6 +126,8 @@ end
 -- Systemwerte, nur lesend, im Helfer selbst gemessen. Bei einem Fehler nil und der Grund.
 -- cpu(): { cores = { 0..1, … }, total = 0..1 }, Last seit dem letzten Aufruf (der erste misst 250 ms).
 -- disk(path): { total, free, used, fraction, name } in Bytes, für das Volume, auf dem path liegt (Default "/").
+-- mem(): { total, used, free, fraction } in Bytes, Auslastung wie in der Aktivitätsanzeige (aktiv + wired +
+-- komprimiert).
 local function systemResult(r)
     if r.error then return nil, r.error end
     return r
@@ -137,6 +139,10 @@ end
 
 function kadrell.system.disk(path)
     return systemResult(request("system.disk", { t = "system", op = "disk", path = path and tostring(path) or nil }))
+end
+
+function kadrell.system.mem()
+    return systemResult(request("system.mem", { t = "system", op = "mem" }))
 end
 
 -- Timer: der Host meldet den Ablauf mit {"t":"timer","id"}, every plant sich nach jedem Lauf neu.

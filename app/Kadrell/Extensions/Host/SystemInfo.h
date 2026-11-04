@@ -10,4 +10,8 @@
 // (2 * max Werte). Gibt die Zahl der Kerne zurück (höchstens `max`), -1 bei Fehler.
 int ks_cpu_ticks(uint64_t *out, int max);
 
+// Hauptspeicher in Bytes: `total` physik, `used` aktiv + wired + komprimiert (wie „Memory Used" in der
+// Aktivitätsanzeige), `free` = total - used. 0 bei Erfolg, -1 wenn der Kernel nichts liefert.
+int ks_mem_stats(uint64_t *total, uint64_t *used, uint64_t *free);
+
 #endif
