@@ -14,6 +14,7 @@
 # Idempotent: liegt Kadrell-<version>.dmg schon unter /download/, passiert nichts (Exit 0).
 # Alle Versionen bleiben dort liegen, Kadrell.dmg zeigt immer auf die neueste.
 set -euo pipefail
+unset CDPATH   # sonst gibt cd den Pfad aus und SCRIPT_DIR hat zwei Zeilen
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$(dirname "$0")/../app"
 
