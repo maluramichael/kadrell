@@ -488,6 +488,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         attach = AttachManager(cli: cli)
         for c in windows { c.workspace.attach = attach; c.sidebar.attach = attach }
         attach.onChange = { [weak self] in self?.windows.forEach { $0.workspace.relayout() } }
+        attach.onOpenPath = { [weak self] path, isDirectory in self?.openPath(path, isDirectory: isDirectory) }
         // Einstellung: Kachel einer beendeten Session schließen statt mit „Klick setzt fort" stehen zu lassen.
         attach.onEnded = { [weak self] key in
             guard let self else { return }
@@ -1051,6 +1052,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cmd = Settings.editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cmd.isEmpty, !cwd.isEmpty else { NSSound.beep(); return }
         do { _ = try ProcessRunner.spawn("/bin/zsh", ["-lc", cmd + " ."], environment: cli?.environment, cwd: cwd) }
+        catch { sheets.report(String(describing: error)) }
+    }
+
+    /// Klick auf einen Pfad im Terminal: im eingestellten Editor, sonst in der Standard-App (Ordner im Finder).
+    func openPath(_ path: String, isDirectory: Bool) {
+        let cmd = Settings.editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cmd.isEmpty else { NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: isDirectory)); return }
+        do { _ = try ProcessRunner.spawn("/bin/zsh", ["-lc", cmd + " " + SSHConfig.shellQuote(path)], environment: cli?.environment) }
         catch { sheets.report(String(describing: error)) }
     }
 

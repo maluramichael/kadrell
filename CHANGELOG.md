@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.84.1 (2026-11-06)
+
+- Fix: Relative Pfade im Terminal (z. B. `docs/readme.md`) lassen sich anklicken und öffnen sich ab dem Ordner der Session. Ist ein Editor eingestellt, öffnet er sie, sonst die Standard-App.
+
 ## 1.84.0 (2026-11-04)
 
 - Feature: Erweiterungen können die Auslastung des Hauptspeichers (RAM) in die Statusleiste unten schreiben, wie die Aktivitätsanzeige misst.

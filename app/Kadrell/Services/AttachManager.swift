@@ -51,8 +51,22 @@ final class KadrellTerminalView: LocalProcessTerminalView {
         return s
     }
 
+    /// Ordner der Session, gegen den relative Pfade im Terminal gelten. nil bei Remote-Sessions: ihre Pfade liegen
+    /// auf dem anderen Rechner, dort bleibt es beim Verhalten von SwiftTerm.
+    var linkBase: String?
+    /// Öffnet eine gefundene Datei oder einen Ordner (Editor aus den Einstellungen, sonst Standard-App).
+    var onOpenPath: ((String, Bool) -> Void)?
+
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        super.requestOpenLink(source: source, link: Self.trimmedLink(link), params: params)
+        let link = Self.trimmedLink(link)
+        guard let linkBase else { super.requestOpenLink(source: source, link: link, params: params); return }
+        // Der laufende Prozess kennt den aktuellen Ordner (Shell nach `cd`), sonst der gespeicherte der Session.
+        let base = SessionRegistry.cwd(pid: process.shellPid) ?? linkBase
+        switch LinkTarget.resolve(link, base: base) {
+        case .url(let u)?: super.requestOpenLink(source: source, link: u, params: params)
+        case .path(let p, let isDir)?: onOpenPath?(p, isDir)
+        case nil: break
+        }
     }
 }
 
@@ -86,6 +100,8 @@ final class AttachManager {
     var onChange: (() -> Void)?
     /// Claude hat sich selbst beendet (`/exit`, zweimal ⌃C, Absturz), nicht von Kadrell gestoppt.
     var onEnded: ((String) -> Void)?
+    /// Klick auf einen Pfad im Terminal (Pfad, ist Ordner), die App öffnet ihn.
+    var onOpenPath: ((String, Bool) -> Void)?
 
     init(cli: ClaudeCLI) {
         self.cli = cli
@@ -143,6 +159,10 @@ final class AttachManager {
         t.lineSpacing = CGFloat(Settings.terminalLineSpacing)
         t.nativeBackgroundColor = Theme.bg
         applyColors(t)
+        if !session.isRemote {
+            t.linkBase = session.cwd
+            t.onOpenPath = { [weak self] path, isDirectory in self?.onOpenPath?(path, isDirectory) }
+        }
         attachStarted[key] = CFAbsoluteTimeGetCurrent()
         t.onExit = { [weak self] exitCode in
             // `t` hält die Closure und die Closure `t`: erst nach dem gemeldeten Ende lösen, sonst bleibt jedes Terminal im Speicher.
