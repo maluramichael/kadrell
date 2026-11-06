@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.85.0 (2026-11-06)
+
+- Feature: Neue Claude-Sessions bekommen nach dem ersten Prompt einen kurzen Titel von einem lokalen Modell (Ollama). Einschalten unter „Modelle für Funktionen“ (⌘,) bei „Sessiontitel“, Kadrell bietet dort `qwen3:1.7b` zum Laden an und startet Ollama bei Bedarf selbst. Ein eigener Name (F2) geht weiter vor.
+
 ## 1.84.1 (2026-11-06)
 
 - Fix: Relative Pfade im Terminal (z. B. `docs/readme.md`) lassen sich anklicken und öffnen sich ab dem Ordner der Session. Ist ein Editor eingestellt, öffnet er sie, sonst die Standard-App.

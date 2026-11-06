@@ -301,6 +301,36 @@
         "en": { "stringUnit": { "state": "translated", "value": "Pi sessions" } }
       }
     },
+    "Sessiontitel": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Sessiontitel" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Session title" } }
+      }
+    },
+    "gibt neuen Claude-Sessions nach dem ersten Prompt einen kurzen Titel, startet dafür bei Bedarf Ollama": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "gibt neuen Claude-Sessions nach dem ersten Prompt einen kurzen Titel, startet dafür bei Bedarf Ollama" } },
+        "en": { "stringUnit": { "state": "translated", "value": "gives new Claude sessions a short title after the first prompt, starts Ollama if needed" } }
+      }
+    },
+    "kein Modell (Titel von Claude Code)": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "kein Modell (Titel von Claude Code)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "no model (title from Claude Code)" } }
+      }
+    },
+    "Empfohlenes Modell": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Empfohlenes Modell" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Recommended model" } }
+      }
+    },
+    "%@ laden und einschalten": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%@ laden und einschalten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Download %@ and turn on" } }
+      }
+    },
     "Modell für Pi statt Claude, im Schnellstart mit Tab umschalten": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "Modell für Pi statt Claude, im Schnellstart mit Tab umschalten" } },

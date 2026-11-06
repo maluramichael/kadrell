@@ -147,7 +147,24 @@ struct LocalFeatureSettings: SettingsBlock {
                         onOff(flags.binding({ LocalModelSettings.quickStartStripReference }, { LocalModelSettings.quickStartStripReference = $0 }))
                     }
                 }
+                if let ref = missingSuggestion(f) { suggestionRow(f, ref) }
             }
+        }
+    }
+
+    /// Vorgeschlagenes Modell der Funktion, solange es nicht installiert ist und nicht gerade geladen wird.
+    private func missingSuggestion(_ f: LocalFeature) -> LocalModelRef? {
+        guard let ref = f.suggestedModel, !local.available.contains(where: { $0.ref == ref }), !local.pulls.contains(where: { $0.ref == ref }) else { return nil }
+        return ref
+    }
+
+    private func suggestionRow(_ f: LocalFeature, _ ref: LocalModelRef) -> some View {
+        setting(String(localized: "Empfohlenes Modell", bundle: Bundle.app)) {
+            smallKey(String(localized: "\(ref.name) laden und einschalten", bundle: Bundle.app)) {
+                LocalModelSettings.setFeatureModel(f, ref)
+                LocalModelSettings.setFeatureEnabled(f, true)
+                local.pull(ref.name)
+            }.fixedSize()
         }
     }
 

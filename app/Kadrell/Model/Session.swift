@@ -22,6 +22,8 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var name: String
     /// Von Hand vergeben (F2, Stift). Geht immer vor `name`, Titel von Claude Code ändern daran nichts.
     var customName: String? = nil
+    /// Kurzer Titel von einem lokalen Modell (`SessionTitler`), geht vor `name`, aber nach `customName`.
+    var localTitle: String? = nil
     var rawStatus: String? = nil
     var pid: Int? = nil
     var waitingFor: String? = nil
@@ -41,12 +43,13 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Pi-Session: lokales Modell als `provider|name` (`LocalModelRef.string`), mit dem Pi startet, nil = Pis Standard.
     var model: String? = nil
 
-    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, host, tmuxSession, model }
+    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, localTitle, host, tmuxSession, model }
 
     var title: String { customName ?? autoTitle }
     var autoTitle: String {
         if let host { return tmuxSession ?? host }
         if isShell { return URL(fileURLWithPath: cwd).lastPathComponent }
+        if let localTitle { return localTitle }
         return name.isEmpty ? firstPrompt ?? URL(fileURLWithPath: cwd).lastPathComponent + " · " + String(id.prefix(4)) : name
     }
     /// Terminal ohne Claude (⌘T): Login-Shell statt `claude`, erkennbar am Schlüssel.

@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = GroupStore()
     private var cli: ClaudeCLI!
     var registry: SessionRegistry!
+    lazy var sessionTitler = makeSessionTitler()
     var attach: AttachManager!
     private let usage = UsageService()
     let accounts = AccountService()

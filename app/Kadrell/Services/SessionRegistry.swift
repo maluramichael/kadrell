@@ -114,6 +114,14 @@ final class SessionRegistry {
         onChange?(sessions)
     }
 
+    /// Titel vom lokalen Modell (`SessionTitler`). Ein vorhandener bleibt, ein eigener Name (F2) geht ohnehin vor.
+    func setLocalTitle(_ id: String, _ title: String) {
+        guard let i = sessions.firstIndex(where: { $0.id == id }), sessions[i].localTitle == nil else { return }
+        sessions[i].localTitle = title
+        save()
+        onChange?(sessions)
+    }
+
     func remove(_ ids: Set<String>) {
         let removed = sessions.filter { ids.contains($0.id) }
         for s in removed { Hooks.fire(.sessionRemove, s, environment: cli.environment) }
@@ -350,7 +358,7 @@ final class SessionRegistry {
 }
 
 private extension Session {
-    var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? "", model ?? ""] }
+    var stored: [String] { [id, cwd, String(startedAt), sessionId, name, customName ?? "", localTitle ?? "", model ?? ""] }
 }
 
 /// Eintrag in `closed.json`: die Session, wie sie beim Schließen zuletzt aussah, plus Zeitpunkt.

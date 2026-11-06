@@ -4,12 +4,13 @@ import Foundation
 /// eigenes Modell. Neue Funktionen: Fall ergänzen, Titel und Beschreibung dazu, fertig; Einstellungen und
 /// `LocalModels.complete(for:…)` sind generisch.
 enum LocalFeature: String, CaseIterable, Sendable {
-    case quickStart, piSession
+    case quickStart, piSession, sessionTitle
 
     var title: String {
         switch self {
         case .quickStart: String(localized: "Schnellstart: Idee rein, Session raus", bundle: Bundle.app)
         case .piSession: String(localized: "Pi-Sessions", bundle: Bundle.app)
+        case .sessionTitle: String(localized: "Sessiontitel", bundle: Bundle.app)
         }
     }
 
@@ -17,6 +18,7 @@ enum LocalFeature: String, CaseIterable, Sendable {
         switch self {
         case .quickStart: String(localized: "ordnet die Idee einem Projekt zu, wenn der Name im Text nicht eindeutig ist", bundle: Bundle.app)
         case .piSession: String(localized: "Modell für Pi statt Claude, im Schnellstart mit Tab umschalten", bundle: Bundle.app)
+        case .sessionTitle: String(localized: "gibt neuen Claude-Sessions nach dem ersten Prompt einen kurzen Titel, startet dafür bei Bedarf Ollama", bundle: Bundle.app)
         }
     }
 
@@ -25,6 +27,7 @@ enum LocalFeature: String, CaseIterable, Sendable {
         switch self {
         case .quickStart: String(localized: "kein Modell (nur Namenssuche)", bundle: Bundle.app)
         case .piSession: String(localized: "kein Modell (nur Claude)", bundle: Bundle.app)
+        case .sessionTitle: String(localized: "kein Modell (Titel von Claude Code)", bundle: Bundle.app)
         }
     }
 
@@ -33,6 +36,15 @@ enum LocalFeature: String, CaseIterable, Sendable {
         switch self {
         case .quickStart: 12
         case .piSession: 0
+        case .sessionTitle: 8
+        }
+    }
+
+    /// Modell, das Kadrell zum Laden anbietet, wenn die Funktion noch keins hat (gemessen: 0,1 s je Titel, brauchbar).
+    var suggestedModel: LocalModelRef? {
+        switch self {
+        case .sessionTitle: LocalModelRef(provider: .ollama, name: "qwen3:1.7b")
+        case .quickStart, .piSession: nil
         }
     }
 }
