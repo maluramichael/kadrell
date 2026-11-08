@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.85.3 (2026-11-08)
+
+- Fix: Nach ⌘Q startet Kadrell nicht mehr von selbst wieder. Ein Aufruf der Kommandozeile (Skript, Statusleiste, Claude-Session) öffnet die App zehn Minuten lang nicht neu, wenn du sie gerade beendet hast. Selbst öffnen geht jederzeit, ebenso der Neustart-Befehl.
+
 ## 1.85.2 (2026-11-08)
 
 - Fix: Ein Klick auf einen Bild-, PDF- oder anderen Binärpfad im Terminal öffnet die Datei in der Standard-App von macOS statt im eingestellten Editor. Text und Ordner gehen weiter in den Editor.

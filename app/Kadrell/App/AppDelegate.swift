@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        Profile.clearQuitMarker()
         Profile.sweepStale()
         Feedback.observeReduceMotion()
         // Dock-Icon direkt aus dem Bundle: LaunchServices hält für Debug-Builds am selben Pfad gern das alte, leere Icon.
@@ -142,6 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         autoDetachTask?.cancel()
+        // Vor dem Schließen des Sockets: ab jetzt starten CLI-Aufrufe die App nicht mehr neu (Neustart ausgenommen).
+        markQuitUnlessRelaunch()
         // Nur noch Reste (z. B. Abmelden ohne Prozesse): SIGHUP, beim nächsten Start setzt `--resume` fort.
         attach?.detachAll()
         controlServer?.stop()
@@ -150,6 +153,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Profile.cleanUp()
         // Zuletzt, nach dem Lösen des Profil-Locks: den losgelösten Helfer starten, der neu startet, sobald wir weg sind.
         if relaunchOnTerminate { Profile.relaunchAfterExit() }
+    }
+
+    /// Nicht im Temp-Profil (verschwindet ohnehin) und nicht unter XCTest (der Testhost darf dem echten Profil nichts setzen).
+    private func markQuitUnlessRelaunch() {
+        guard !relaunchOnTerminate, !Profile.isTemporary, NSClassFromString("XCTestCase") == nil else { return }
+        Profile.markQuit()
     }
 
     private var quitConfirmed = false

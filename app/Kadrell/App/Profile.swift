@@ -116,6 +116,31 @@ enum Profile {
         }
     }
 
+    // MARK: Beenden-Marker
+
+    /// So lange nach einem Beenden durch den Nutzer startet kein CLI-Aufruf die App von selbst wieder.
+    static let quitMarkerWindow: TimeInterval = 600
+
+    private static func quitMarker(in dir: URL) -> URL { dir.appendingPathComponent("quit.marker") }
+
+    /// Beim Beenden (nicht beim Neustart) setzen, bevor der Socket verschwindet: Skripte, Statusleisten oder Claude-Sessions
+    /// rufen die CLI auch im Moment des Beendens auf, und die startet die App sonst sofort wieder.
+    static func markQuit(in dir: URL = directory, now: Date = Date()) {
+        try? String(now.timeIntervalSince1970).write(to: quitMarker(in: dir), atomically: true, encoding: .utf8)
+    }
+
+    /// Jeder Start räumt den Marker weg: wer die App selbst öffnet, will sie laufen haben.
+    static func clearQuitMarker(in dir: URL = directory) {
+        try? FileManager.default.removeItem(at: quitMarker(in: dir))
+    }
+
+    /// Wurde die App vor Kurzem vom Nutzer beendet? Dann soll die CLI sie nicht neu starten.
+    static func quitRecently(in dir: URL, now: Date = Date()) -> Bool {
+        guard let text = try? String(contentsOf: quitMarker(in: dir), encoding: .utf8), let t = TimeInterval(text) else { return false }
+        let age = now.timeIntervalSince1970 - t
+        return age >= 0 && age < quitMarkerWindow
+    }
+
     /// Weitere Instanz mit frischem Temp-Profil, derselbe Build.
     static func launchTemporary() {
         _ = try? ProcessRunner.spawn("/usr/bin/open", ["-n", Bundle.main.bundlePath, "--args", "--profile", "tmp"])

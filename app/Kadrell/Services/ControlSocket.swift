@@ -166,16 +166,8 @@ enum ControlClient {
             var resp = try send(req, path: path)
             // Mit Profil kann eine andere Instanz laufen, ohne dass dieses Profil offen ist.
             let alreadyRunning = Profile.name == nil && !NSRunningApplication.runningApplications(withBundleIdentifier: "de.malura.kadrell").isEmpty
-            if resp == nil, !alreadyRunning { launchApp() }
-            // Kein Socket (App startet gerade erst) oder Socket da, aber `boot()` läuft noch (startingStatus):
-            // beides bis 30 s abwarten, die App braucht fürs Einlesen der Login-Shell-Umgebung ein paar Sekunden.
-            if resp == nil || resp?.status == ControlResponse.startingStatus {
-                let deadline = Date().addingTimeInterval(30)
-                while resp == nil || resp?.status == ControlResponse.startingStatus, Date() < deadline {
-                    usleep(250_000)
-                    resp = try send(req, path: path)
-                }
-            }
+            if resp == nil, !alreadyRunning { try launchUnlessQuit() }
+            resp = try waitForApp(resp, req, path: path)
             guard let resp, resp.status != ControlResponse.startingStatus else {
                 if alreadyRunning { throw ControlError("Kadrell läuft, lauscht aber nicht auf \(path). Alte Version? Kadrell neu starten.") }
                 throw ControlError("Kadrell antwortet nicht (\(path))")
@@ -204,6 +196,25 @@ enum ControlClient {
         _ = try? send(ControlRequest(argv: status, cwd: FileManager.default.currentDirectoryPath, caller: env["KADRELL_SESSION_KEY"]), path: path)
         return 0
     }
+
+    /// Kein Socket (App startet gerade erst) oder Socket da, aber `boot()` läuft noch (startingStatus): beides bis 30 s
+    /// abwarten, die App braucht fürs Einlesen der Login-Shell-Umgebung ein paar Sekunden.
+    private static func waitForApp(_ first: ControlResponse?, _ req: ControlRequest, path: String) throws -> ControlResponse? {
+        var resp = first
+        let deadline = Date().addingTimeInterval(30)
+        while resp == nil || resp?.status == ControlResponse.startingStatus, Date() < deadline {
+            usleep(250_000)
+            resp = try send(req, path: path)
+        }
+        return resp
+    }
+
+    private static func launchUnlessQuit() throws {
+        guard !quitRecently() else { throw ControlError("Kadrell wurde gerade beendet und startet nicht von selbst neu. Von Hand öffnen, dann geht es wieder.") }
+        launchApp()
+    }
+
+    private static func quitRecently() -> Bool { !Profile.isTemporary && Profile.quitRecently(in: Profile.directory) }
 
     /// Startet genau das Bundle, zu dem dieses Binary gehört (auch über den Symlink), im Hintergrund.
     private static func launchApp() {
