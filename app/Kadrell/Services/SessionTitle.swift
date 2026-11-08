@@ -5,12 +5,14 @@ enum SessionTitlePrompt {
     static let maxLength = 60
     static let readmeLimit = 400
 
-    /// Beispiele nutzen erfundene Projekte: ein kleines Modell kopiert ein Beispiel, wenn der Prompt ihm gleicht.
+    /// Beispiele ohne Projektnamen: die Gruppe in der Seitenleiste zeigt das Projekt schon, und ein kleines Modell
+    /// macht nach, womit die Beispiele anfangen. Sie sind erfunden, weil es sie sonst kopiert.
     static let system = """
     You name a coding session. Reply with JSON only: {"title": "<title>"}
-    The title has 2 to 5 words and says WHAT the session is about (project + topic), like a commit subject.
+    The title has 2 to 5 words and says WHAT the session is about (topic only), like a commit subject.
+    The project is already shown next to the title: never start with or repeat the project or folder name.
     Never copy the prompt. Never write "check", "look", "work on" or the folder path. Use the language of the prompt.
-    Examples: "Zorbo login timeout fix", "Mondlicht Newsletter-Versand", "Tabula CSV import".
+    Examples: "Login timeout fix", "Newsletter-Versand", "CSV import".
     """
 
     static let schema: Data = LocalHTTP.json([

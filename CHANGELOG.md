@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.87.1 (2026-11-08)
+
+- Änderung: Der Titel, den das lokale Modell neuen Sessions gibt, nennt nur noch das Thema und wiederholt nicht mehr den Projektnamen, den die Gruppe in der Seitenleiste schon zeigt.
+
 ## 1.87.0 (2026-11-08)
 
 - Feature: Die Hilfe (⌥F1) lässt sich genauso durchsuchen: `/` öffnet ein Suchfeld, die Kürzel und Erklärungen filtern sich beim Tippen, Esc beendet die Suche und schließt danach die Hilfe.
