@@ -1252,7 +1252,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let sessions = workspace.sessions
         let counts = Dictionary(uniqueKeysWithValues: store.groups.map { ($0.id, $0.sessionIds.filter { sessions[$0] != nil }.count) })
-        // Repos unter dem Startordner und neben allen bekannten Projekten; bis der Scan steht, gilt der gespeicherte Stand.
+        // Repos unter dem Startordner und neben allen bekannten Projekten; bis der Scan steht, gilt der gespeicherte
+        // Stand, aber ohne Ordner, die es nicht mehr gibt.
+        FolderIndex.shared.dropMissing()
         let model = NewSessionModel(groups: store.groups, counts: counts, cloneCandidates: extensionCloneCandidates())
         let known = store.groups.map(\.cwd) + FolderIndex.shared.uses.keys
         FolderIndex.shared.refresh(roots: [Settings.startFolder] + known.map { ($0 as NSString).deletingLastPathComponent }) { [weak model] in

@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.85.1 (2026-11-08)
+
+- Fix: Neue Session (⌘N) zeigt keine Ordner mehr, die es nicht mehr gibt. Die Liste wird beim Öffnen gegen die Platte geprüft, auch Gruppen mit gelöschtem Ordner fehlen dort.
+
 ## 1.85.0 (2026-11-06)
 
 - Feature: Neue Claude-Sessions bekommen nach dem ersten Prompt einen kurzen Titel von einem lokalen Modell (Ollama). Einschalten unter „Modelle für Funktionen“ (⌘,) bei „Sessiontitel“, Kadrell bietet dort `qwen3:1.7b` zum Laden an und startet Ollama bei Bedarf selbst. Ein eigener Name (F2) geht weiter vor.

@@ -57,4 +57,28 @@ final class FolderIndexTests: XCTestCase {
         let reloaded = FolderIndex(directory: dir)
         XCTAssertEqual(reloaded.uses.keys.sorted(), [existingDir])
     }
+
+    /// ⌘N räumt den gespeicherten Stand auf: gelöschte Repos und Nutzungen verschwinden sofort, auch in der Datei.
+    @MainActor
+    func testDropMissingRemovesDeletedReposAndUses() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kadrell-folders-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let alive = dir.appendingPathComponent("alive").path
+        try FileManager.default.createDirectory(atPath: alive, withIntermediateDirectories: true)
+        let gone = dir.path + "/gone"
+        try JSONEncoder().encode([alive, gone]).write(to: dir.appendingPathComponent("folders.json"), options: .atomic)
+        let use = FolderIndex.Use(count: 1, last: Date().timeIntervalSince1970)
+        try JSONEncoder().encode([alive: use, gone: use]).write(to: dir.appendingPathComponent("folders-uses.json"), options: .atomic)
+
+        let index = FolderIndex(directory: dir)
+        XCTAssertEqual(index.repos, [alive, gone])
+        index.dropMissing()
+        XCTAssertEqual(index.repos, [alive])
+        XCTAssertEqual(index.uses.keys.sorted(), [alive])
+
+        let reloaded = FolderIndex(directory: dir)
+        XCTAssertEqual(reloaded.repos, [alive])
+        XCTAssertEqual(reloaded.uses.keys.sorted(), [alive])
+    }
 }

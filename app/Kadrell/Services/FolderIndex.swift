@@ -46,6 +46,19 @@ final class FolderIndex {
         uses = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
     }
 
+    /// Gelöschte oder umbenannte Ordner sofort aus dem gespeicherten Stand nehmen, ohne den Scan abzuwarten:
+    /// ⌘N ruft das beim Öffnen auf, damit nie ein Ordner erscheint, den es nicht mehr gibt.
+    func dropMissing() {
+        let alive = repos.filter { Self.isDirectory($0) }
+        if alive.count != repos.count {
+            repos = alive
+            if let d = try? JSONEncoder().encode(alive) { try? d.write(to: reposURL, options: .atomic) }
+        }
+        let before = uses.count
+        pruneUses()
+        if uses.count != before { JSONFile.saveDict(uses, to: usesURL) }
+    }
+
     /// Neu einlesen, ohne zu warten: bis der Scan fertig ist, gilt der gespeicherte Stand. `then` läuft danach.
     func refresh(roots: [String], then: (@MainActor () -> Void)? = nil) {
         guard !scanning else { return }

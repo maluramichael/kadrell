@@ -77,7 +77,8 @@ final class NewSessionModel {
             var order: [String] = []
             func add(_ p: String, _ tag: String) { if tags[p] == nil { tags[p] = tag; order.append(p) } }
             for c in context { add(c.path, c.tag) }
-            for g in groups { add(g.cwd, "") }
+            // Host-Gruppen haben keinen lokalen Ordner, alle anderen nur, solange es ihn gibt.
+            for g in groups where g.host != nil || FolderIndex.isDirectory(g.cwd) { add(g.cwd, "") }
             for p in index.uses.keys where FolderIndex.isDirectory(p) { add(p, "") }
             for p in index.repos { add(p, "Git") }
             let contextPaths = Set(context.map(\.path))
