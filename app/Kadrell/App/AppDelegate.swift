@@ -1056,10 +1056,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         catch { sheets.report(String(describing: error)) }
     }
 
-    /// Klick auf einen Pfad im Terminal: im eingestellten Editor, sonst in der Standard-App (Ordner im Finder).
+    /// Klick auf einen Pfad im Terminal: Text und Ordner im eingestellten Editor, alles andere (Bilder, PDFs, …) und
+    /// jeder Pfad ohne Editor in der Standard-App (Ordner im Finder).
     func openPath(_ path: String, isDirectory: Bool) {
         let cmd = Settings.editorCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cmd.isEmpty else { NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: isDirectory)); return }
+        guard !cmd.isEmpty, LinkTarget.prefersEditor(path, isDirectory: isDirectory) else { NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: isDirectory)); return }
         do { _ = try ProcessRunner.spawn("/bin/zsh", ["-lc", cmd + " " + SSHConfig.shellQuote(path)], environment: cli?.environment) }
         catch { sheets.report(String(describing: error)) }
     }

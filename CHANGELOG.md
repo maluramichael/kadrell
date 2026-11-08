@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.85.2 (2026-11-08)
+
+- Fix: Ein Klick auf einen Bild-, PDF- oder anderen Binärpfad im Terminal öffnet die Datei in der Standard-App von macOS statt im eingestellten Editor. Text und Ordner gehen weiter in den Editor.
+
 ## 1.85.1 (2026-11-08)
 
 - Fix: Neue Session (⌘N) zeigt keine Ordner mehr, die es nicht mehr gibt. Die Liste wird beim Öffnen gegen die Platte geprüft, auch Gruppen mit gelöschtem Ordner fehlen dort.

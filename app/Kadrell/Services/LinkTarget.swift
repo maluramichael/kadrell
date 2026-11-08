@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 /// Ziel eines Klicks auf einen Link im Terminal. SwiftTerm erkennt Pfade, prüft sie beim Öffnen aber relativ zum
 /// Arbeitsordner von Kadrell. Hier gelten relative Pfade ab dem Ordner der Session, wie in iTerm2.
@@ -18,6 +19,17 @@ enum LinkTarget: Equatable {
             if fm.fileExists(atPath: full, isDirectory: &isDir) { return .path(full, isDirectory: isDir.boolValue) }
         }
         return nil
+    }
+
+    /// Eingestellter Editor nur für Ordner und Textdateien. Bilder, PDFs, Archive und sonstige Binärdateien öffnet
+    /// die Standard-App von macOS, ein Editor zeigt dort nur Zeichensalat. Nicht lesbar = Editor, wie bisher.
+    static func prefersEditor(_ path: String, isDirectory: Bool) -> Bool {
+        if isDirectory { return true }
+        if let type = UTType(filenameExtension: (path as NSString).pathExtension), type.conforms(to: .image) { return false }
+        guard let handle = FileHandle(forReadingAtPath: path) else { return true }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 8192)) ?? Data()
+        return !head.contains(0)
     }
 
     private static func absolute(_ path: String, base: String, home: String) -> String {
