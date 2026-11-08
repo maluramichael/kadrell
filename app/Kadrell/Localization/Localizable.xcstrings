@@ -9503,6 +9503,42 @@
         "de": { "stringUnit": { "state": "translated", "value": "Neue Modelle: einmal im Terminal mit llama-server -hf <Repo> laden (landet im Cache) oder GGUF-Dateien in den Modellordner legen" } },
         "en": { "stringUnit": { "state": "translated", "value": "New models: load once in the terminal with llama-server -hf <repo> (goes to the cache) or put GGUF files into the model folder" } }
       }
+    },
+    "Filtern …": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Filtern …" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Filter …" } }
+      }
+    },
+    "%lld Treffer": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "%lld Treffer" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%lld results" } }
+      }
+    },
+    "⏎ zum ersten Treffer · Esc beendet die Suche": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "⏎ zum ersten Treffer · Esc beendet die Suche" } },
+        "en": { "stringUnit": { "state": "translated", "value": "⏎ first result · Esc ends the search" } }
+      }
+    },
+    "Änderungen gelten sofort · / sucht · Esc schließt": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Änderungen gelten sofort · / sucht · Esc schließt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Changes apply immediately · / searches · Esc closes" } }
+      }
+    },
+    "Esc beendet die Suche": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Esc beendet die Suche" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Esc ends the search" } }
+      }
+    },
+    "/ sucht · %@": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "/ sucht · %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "/ searches · %@" } }
+      }
     }
   },
   "version": "1.0"

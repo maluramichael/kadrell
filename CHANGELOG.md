@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.86.0 (2026-11-08)
+
+- Feature: In den Einstellungen (⌘,) öffnet `/` ein Suchfeld. Die Einstellungen filtern sich beim Tippen nach Titel und Abschnitt, ⏎ springt zum ersten Treffer, Esc beendet die Suche. In einem Textfeld bleibt `/` ein normales Zeichen.
+
 ## 1.85.3 (2026-11-08)
 
 - Fix: Nach ⌘Q startet Kadrell nicht mehr von selbst wieder. Ein Aufruf der Kommandozeile (Skript, Statusleiste, Claude-Session) öffnet die App zehn Minuten lang nicht neu, wenn du sie gerade beendet hast. Selbst öffnen geht jederzeit, ebenso der Neustart-Befehl.

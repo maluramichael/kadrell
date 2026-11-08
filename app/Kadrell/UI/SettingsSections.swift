@@ -219,14 +219,29 @@ struct HotkeySettings: SettingsBlock {
         part == .navigation ? String(localized: "Navigation", bundle: Bundle.app) : String(localized: "Kacheln verwalten", bundle: Bundle.app)
     }
 
+    @Environment(\.listFilter) private var filter
+
+    /// Mit offenem Filter nur Aktionen, deren Name, Hilfetext oder Kürzel passt (alle, wenn der Bereichsname passt).
+    private var shown: [HotkeyAction] {
+        guard let filter, filter.isActive, !filter.keeps([title, String(localized: "Tastenkürzel", bundle: Bundle.app)]) else { return actions }
+        let current = Hotkeys.current
+        return actions.filter { filter.keeps([$0.title, $0.helpText, current[$0]?.display ?? ""]) }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if part == .navigation {
-                SettingsHeading(title: String(localized: "Tastenkürzel", bundle: Bundle.app), note: String(localized: "Kürzel anklicken, Tasten drücken · ⌫ entfernt", bundle: Bundle.app))
+        let rows = shown
+        if filter?.isActive == true && rows.isEmpty {
+            SettingsHidden()
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                if part == .navigation {
+                    SettingsHeading(title: String(localized: "Tastenkürzel", bundle: Bundle.app), note: String(localized: "Kürzel anklicken, Tasten drücken · ⌫ entfernt", bundle: Bundle.app))
+                }
+                Text(title).capsLabel(bold: true)
+                    .padding(.horizontal, 16).padding(.top, part == .navigation ? 0 : 14).padding(.bottom, 4)
+                SettingsTable { ForEach(rows, id: \.self) { a in HotkeyRow(model: model, action: a) } }
             }
-            Text(title).capsLabel(bold: true)
-                .padding(.horizontal, 16).padding(.top, part == .navigation ? 0 : 14).padding(.bottom, 4)
-            SettingsTable { ForEach(actions, id: \.self) { a in HotkeyRow(model: model, action: a) } }
+            .preference(key: FilterHitsKey.self, value: filter?.isActive == true ? rows.count : 0)
         }
     }
 }

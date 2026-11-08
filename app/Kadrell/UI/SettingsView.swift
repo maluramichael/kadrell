@@ -96,6 +96,14 @@ final class SettingsModel {
 /// Änderungen gelten sofort, ⏎ und Esc schließen.
 struct SettingsView: View {
     @Bindable var model: SettingsModel
+    @State private var filter: ListFilter
+    @State private var hits = 0
+
+    /// `filter` nur für Tests, die den Filter vorbelegen.
+    init(model: SettingsModel, filter: ListFilter = ListFilter()) {
+        self.model = model
+        _filter = State(initialValue: filter)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -105,15 +113,23 @@ struct SettingsView: View {
                 Text("Kadrell v\(Settings.version)").font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
             }
             .padding(.horizontal, 16).padding(.top, 12)
+            FilterBar(filter: filter, hits: hits)
             SeamLine().padding(.top, 12)
             SettingsColumns { sections }
             Color.clear.frame(height: 12)
-            DialogFoot(hint: String(localized: "Änderungen gelten sofort · Esc schließt", bundle: Bundle.app), button: String(localized: "Fertig", bundle: Bundle.app)) { model.stopRecording(); model.onClose?() }
+            DialogFoot(hint: footHint, button: String(localized: "Fertig", bundle: Bundle.app)) { model.stopRecording(); model.onClose?() }
         }
         // Im Overlay so breit wie das Panel; allein (Tests, Vorschau) in der früheren festen Breite.
         .frame(idealWidth: 900 * Theme.scale, maxWidth: .infinity, alignment: .leading)
         .environment(\.locale, model.locale)
+        .listFilter(filter)
+        .onPreferenceChange(FilterHitsKey.self) { hits = $0 }
         .onDisappear { model.stopRecording() }
+    }
+
+    private var footHint: String {
+        filter.isOpen ? String(localized: "⏎ zum ersten Treffer · Esc beendet die Suche", bundle: Bundle.app)
+                      : String(localized: "Änderungen gelten sofort · / sucht · Esc schließt", bundle: Bundle.app)
     }
 
     /// Alle Abschnitte in Lese- und Tab-Reihenfolge. Ein neuer Abschnitt ist eine eigene `SettingsBlock`-View und

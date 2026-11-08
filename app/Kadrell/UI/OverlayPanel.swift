@@ -12,6 +12,8 @@ final class OverlayPanel: ChildPanel {
 
     var onCancel: (() -> Void)?
     var onPrimary: (() -> Void)?
+    /// Sieht jede Taste vor Esc und ⏎ (Listenfilter mit `/`). `true` heißt verbraucht.
+    var keyHook: ((NSEvent) -> Bool)?
     /// ⏎ bestätigt, ⌘⏎ immer. Aus nur bei destruktiven Rückfragen: dort zählt allein ⌘⏎.
     var primaryOnPlainReturn = true
     let placement: Placement
@@ -84,6 +86,7 @@ final class OverlayPanel: ChildPanel {
     private func finishDismiss() { super.dismiss() }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if keyHook?(event) == true { return true }
         if event.keyCode == KeyCode.escape { onCancel?(); return true }
         if event.keyCode == KeyCode.returnKey, event.modifierFlags.contains(.command) || primaryOnPlainReturn { onPrimary?(); return true }
         return super.performKeyEquivalent(with: event)

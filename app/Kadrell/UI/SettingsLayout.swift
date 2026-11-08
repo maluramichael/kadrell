@@ -5,10 +5,13 @@ import SwiftUI
 // oder zwei Spalten. Ein neuer Abschnitt braucht nur eine eigene View und eine Zeile in `SettingsView.sections`.
 
 /// Abschnitt der Einstellungen: Überschrift wie in der F1-Hilfe, darunter die Zeilen als Tabelle mit Fugen.
+/// Mit offenem Filter bleiben die Zeilen, deren Titel passt (alle, wenn Titel oder Hinweis des Abschnitts passt);
+/// ohne Zeile verschwindet der Abschnitt samt Überschrift.
 struct SettingsSection<Rows: View>: View {
     let title: String
     var note = ""
     @ViewBuilder let rows: Rows
+    @Environment(\.listFilter) private var filter
 
     init(_ title: String, note: String = "", @ViewBuilder rows: () -> Rows) {
         self.title = title
@@ -17,10 +20,36 @@ struct SettingsSection<Rows: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SettingsHeading(title: title, note: note)
-            SettingsTable { rows }
+        SwiftUI.Group(subviews: rows) { subviews in
+            let shown = visible(subviews)
+            let filtering = filter?.isActive == true
+            if filtering && shown.isEmpty {
+                SettingsHidden()
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    SettingsHeading(title: title, note: note)
+                    SettingsSubviewTable(subviews: shown)
+                }
+                .preference(key: FilterHitsKey.self, value: filtering ? shown.count : 0)
+            }
         }
+    }
+
+    private func visible(_ subviews: SubviewsCollection) -> [Subview] {
+        guard let filter, filter.isActive, !filter.keeps([title, note]) else { return Array(subviews) }
+        return subviews.filter { sub in sub.containerValues.settingTitle.map { filter.keeps([$0]) } ?? false }
+    }
+}
+
+extension ContainerValues {
+    /// Titel einer Zeile (`setting(_:_:)`), nach dem der Filter sie findet.
+    @Entry var settingTitle: String?
+}
+
+/// Platzhalter für einen ausgeblendeten Abschnitt: ohne Höhe und ohne den Spaltenabstand, der sonst bliebe.
+struct SettingsHidden: View {
+    var body: some View {
+        Color.clear.frame(height: 0).padding(.top, -SettingsColumns<EmptyView>.spacing)
     }
 }
 
@@ -43,12 +72,19 @@ struct SettingsTable<Rows: View>: View {
     @ViewBuilder let rows: Rows
 
     var body: some View {
+        SwiftUI.Group(subviews: rows) { SettingsSubviewTable(subviews: Array($0)) }
+    }
+}
+
+/// Die Tabelle aus schon gesammelten Zeilen: `SettingsSection` filtert sie vorher.
+struct SettingsSubviewTable: View {
+    let subviews: [Subview]
+
+    var body: some View {
         VStack(spacing: 0) {
-            SwiftUI.Group(subviews: rows) { subviews in
-                ForEach(subviews.indices, id: \.self) { i in
-                    if i > 0 { SeamLine() }
-                    subviews[i]
-                }
+            ForEach(subviews.indices, id: \.self) { i in
+                if i > 0 { SeamLine() }
+                subviews[i]
             }
         }
         .instrumentGroup()
@@ -149,8 +185,8 @@ enum ColumnBalance {
 protocol SettingsBlock: View {}
 
 extension SettingsBlock {
-    func setting<C: View>(_ title: String, @ViewBuilder _ control: () -> C) -> SettingRow<C> {
-        SettingRow(title: title, control: control)
+    func setting<C: View>(_ title: String, @ViewBuilder _ control: () -> C) -> some View {
+        SettingRow(title: title, control: control).containerValue(\.settingTitle, title)
     }
 
     /// Dropdown im App-Stil, füllt die rechte Spalte. Das native Popup nimmt nur die Breite seines Textes.
