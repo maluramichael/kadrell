@@ -41,6 +41,21 @@ final class ListFilterTests: XCTestCase {
         XCTAssertEqual(wells(filter: none), 1, "nur das Suchfeld")
     }
 
+    /// Gefilterte Hilfe wird kürzer, ohne Treffer bleibt nur der Kopf mit dem Suchfeld.
+    func testHelpShrinksWithFilter() {
+        let some = ListFilter(); some.open(); some.query = "Statistik"
+        let none = ListFilter(); none.open(); none.query = "qqqxyz"
+        let all = helpHeight(ListFilter()), few = helpHeight(some), zero = helpHeight(none)
+        XCTAssertGreaterThan(all, few + 200)
+        XCTAssertGreaterThan(few, zero)
+    }
+
+    private func helpHeight(_ filter: ListFilter) -> CGFloat {
+        let host = NSHostingView(rootView: AboutView(filter: filter).frame(width: 640))
+        host.layoutSubtreeIfNeeded()
+        return host.fittingSize.height
+    }
+
     private func key(_ chars: String, code: UInt16) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
                          characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code)!

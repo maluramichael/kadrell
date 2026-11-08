@@ -2,6 +2,11 @@ import SwiftUI
 
 /// Hilfe-Kürzel (Standard ⌥F1) und „Über Kadrell“: Autor, Link, Tastenkürzel. Esc oder ⏎ schließt.
 struct AboutView: View {
+    @State private var filter: ListFilter
+
+    /// `filter` nur für Tests, die den Filter vorbelegen.
+    init(filter: ListFilter = ListFilter()) { _filter = State(initialValue: filter) }
+
     private var sections: [(String, [(String, String)])] {
         [
             (String(localized: "Sessions öffnen", bundle: Bundle.app), [
@@ -32,6 +37,20 @@ struct AboutView: View {
         ]
     }
 
+    /// Mit offenem Filter nur Zeilen, deren Kürzel oder Text passt (alle Zeilen eines Bereichs, wenn sein Name passt).
+    private var shownSections: [(String, [(String, String)])] {
+        guard filter.isActive else { return sections }
+        return sections.compactMap { title, keys in
+            let rows = filter.keeps([title]) ? keys : keys.filter { filter.keeps([$0.0, $0.1]) }
+            return rows.isEmpty ? nil : (title, rows)
+        }
+    }
+
+    private var footHint: String {
+        filter.isOpen ? String(localized: "Esc beendet die Suche", bundle: Bundle.app)
+                      : String(localized: "/ sucht · \(Hotkeys.closeHint(.showHelp))", bundle: Bundle.app)
+    }
+
     /// Belegbare Kürzel, eine Zeile je Hilfetext; lange Reihen (Kachel 1–9) nur erstes … letztes.
     private func rows(_ actions: [HotkeyAction]) -> [(String, String)] {
         let current = Hotkeys.current
@@ -51,6 +70,7 @@ struct AboutView: View {
     }
 
     var body: some View {
+        let shown = shownSections
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("Kadrell").font(Theme.ui(18, bold: true)).foregroundStyle(Theme.fgColor)
@@ -70,11 +90,12 @@ struct AboutView: View {
             }
             .font(Theme.ui(12)).padding(.horizontal, 16).padding(.top, 4)
             Text(Self.credits).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor).padding(.horizontal, 16).padding(.top, 4)
+            FilterBar(filter: filter, hits: shown.reduce(0) { $0 + $1.1.count })
             SeamLine().padding(.top, 14)
             VStack(alignment: .leading, spacing: 5) {
-                ForEach(sections, id: \.0) { title, keys in
+                ForEach(shown, id: \.0) { title, keys in
                     Text(title.uppercased()).sectionTitle()
-                        .padding(.leading, 172 * Theme.scale).padding(.top, title == sections.first?.0 ? 0 : 12).padding(.bottom, 2)
+                        .padding(.leading, 172 * Theme.scale).padding(.top, title == shown.first?.0 ? 0 : 12).padding(.bottom, 2)
                     ForEach(keys, id: \.1) { k, t in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(k).font(Theme.ui(12, bold: true)).foregroundStyle(Theme.fgColor).frame(width: 160 * Theme.scale, alignment: .trailing)
@@ -85,9 +106,10 @@ struct AboutView: View {
             }
             .padding(16)
             SeamLine()
-            Text(Hotkeys.closeHint(.showHelp)).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
+            Text(footHint).font(Theme.ui(11)).foregroundStyle(Theme.mutedColor)
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.horizontal, 16).padding(.vertical, 10)
         }
         .overlayWidth(640, alignment: .leading)
+        .listFilter(filter)
     }
 }

@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.87.0 (2026-11-08)
+
+- Feature: Die Hilfe (⌥F1) lässt sich genauso durchsuchen: `/` öffnet ein Suchfeld, die Kürzel und Erklärungen filtern sich beim Tippen, Esc beendet die Suche und schließt danach die Hilfe.
+
 ## 1.86.0 (2026-11-08)
 
 - Feature: In den Einstellungen (⌘,) öffnet `/` ein Suchfeld. Die Einstellungen filtern sich beim Tippen nach Titel und Abschnitt, ⏎ springt zum ersten Treffer, Esc beendet die Suche. In einem Textfeld bleibt `/` ein normales Zeichen.
