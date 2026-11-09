@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.88.0 (2026-11-09)
+
+- Feature: `kadrell new` kennt `--model` und `--effort`. Die neue Claude-Session startet damit mit dem gewünschten Modell (Alias wie `opus` oder Id wie `claude-opus-5-5`) und Effort (`low` bis `max`), ohne die Einstellung zu ändern. Das gilt auch mit `--resume` und bleibt nach einem Neustart der Session erhalten. Mit `--pi` oder `--host` gibt es eine Fehlermeldung. Ohne die Optionen bleibt alles wie bisher.
+
 ## 1.87.2 (2026-11-09)
 
 - Fix: Nach einem Kontowechsel zeigt die Nutzungsanzeige oben sofort den letzten Stand des neuen Kontos statt der Zahlen des alten. Das gilt auch bei automatischem Wechsel.

@@ -42,8 +42,19 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
     var tmuxSession: String? = nil
     /// Pi-Session: lokales Modell als `provider|name` (`LocalModelRef.string`), mit dem Pi startet, nil = Pis Standard.
     var model: String? = nil
+    /// Modell und Effort nur dieser Claude-Session (`kadrell new --model --effort`), bleiben auch nach einem Neustart.
+    /// nil = Einstellung der App.
+    var claudeModel: String? = nil
+    var claudeEffort: String? = nil
 
-    enum CodingKeys: String, CodingKey { case id, cwd, startedAt, sessionId, name, customName, localTitle, host, tmuxSession, model }
+    enum CodingKeys: String, CodingKey {
+        case id, cwd, startedAt, sessionId, name, customName, localTitle, host, tmuxSession, model, claudeModel, claudeEffort
+    }
+
+    var launchArgs: [String] {
+        ClaudeCLI.launchArgs(allowBypass: Settings.claudeAllowBypass, mode: Settings.claudeMode,
+                             model: claudeModel ?? Settings.claudeModel, effort: claudeEffort ?? Settings.claudeEffort)
+    }
 
     var title: String { customName ?? autoTitle }
     var autoTitle: String {
@@ -105,6 +116,12 @@ struct Session: Codable, Equatable, Sendable, Identifiable {
         if m < 1440 { return "\(Int((Double(m) / 60).rounded()))h" }
         return "\(Int((Double(m) / 1440).rounded()))d"
     }
+}
+
+/// Modell und Effort für eine einzelne Claude-Session, nil = Einstellung der App.
+struct ClaudeOverrides: Equatable, Sendable {
+    var model: String? = nil
+    var effort: String? = nil
 }
 
 /// Ein Eintrag aus `claude agents --json --all`.

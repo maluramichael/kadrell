@@ -38,6 +38,37 @@ final class ControlTests: XCTestCase {
         XCTAssertThrowsError(try ControlCommand.parse(["new", "--tmux", "main"]))
     }
 
+    func testNewModelAndEffort() throws {
+        XCTAssertEqual(try ControlCommand.parse(["new", "-d", "--model", "claude-opus-5-5", "--effort", "medium", "Hallo"]),
+                       .newSession(target: nil, dir: nil, name: nil, detached: true, prompt: "Hallo", model: "claude-opus-5-5", effort: "medium"))
+        XCTAssertEqual(try ControlCommand.parse(["new", "--model", "opus"]),
+                       .newSession(target: nil, dir: nil, name: nil, detached: false, prompt: nil, model: "opus"))
+        XCTAssertEqual(try ControlCommand.parse(["new", "--model", "claude-opus-4-8[1m]"]),
+                       .newSession(target: nil, dir: nil, name: nil, detached: false, prompt: nil, model: "claude-opus-4-8[1m]"))
+        let uuid = "0b7e1c2a-3f4d-4e5f-8a9b-0c1d2e3f4a5b"
+        XCTAssertEqual(try ControlCommand.parse(["new", "--resume", uuid, "--effort", "max"]),
+                       .newSession(target: nil, dir: nil, name: nil, detached: false, prompt: nil, resume: uuid, effort: "max"))
+        for bad in [["--effort", "extreme"], ["--effort", ""], ["--model", ""], ["--model", "--dangerously-skip-permissions"],
+                    ["--model", "a b"], ["--model"], ["--effort"], ["--pi", "--model", "opus"], ["--host", "vault", "--effort", "low"]] {
+            XCTAssertThrowsError(try ControlCommand.parse(["new"] + bad), "\(bad)")
+        }
+    }
+
+    func testSessionOverridesLaunchArgs() throws {
+        var s = Session(id: "a", cwd: "/tmp", startedAt: 0, sessionId: "a", name: "")
+        let base = s.launchArgs
+        s.claudeModel = "claude-opus-5-5"
+        s.claudeEffort = "medium"
+        XCTAssertTrue(s.launchArgs.joined(separator: " ").hasSuffix("--model claude-opus-5-5 --effort medium"))
+        XCTAssertNotEqual(s.launchArgs, base)
+        // Überschreibung übersteht Speichern und Laden, eine alte Datei ohne die Felder bleibt lesbar.
+        let back = try JSONDecoder().decode(Session.self, from: JSONEncoder().encode(s))
+        XCTAssertEqual(back.claudeModel, "claude-opus-5-5")
+        XCTAssertEqual(back.claudeEffort, "medium")
+        let old = try JSONDecoder().decode(Session.self, from: Data(#"{"id":"a","cwd":"/","startedAt":0,"sessionId":"a","name":""}"#.utf8))
+        XCTAssertNil(old.claudeModel)
+    }
+
     func testParseErrors() {
         for argv in [["frobnicate"], ["ls", "--jsn"], ["new-group"], ["new", "-t"], ["layout", "tiles"],
                      ["set-group", "--favorite", "ja"], ["new-group", "/p", "--color", "red"], ["send", "-k", "Hyper"], ["send"]] {

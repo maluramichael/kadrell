@@ -79,7 +79,7 @@ Unter „Modelle für Funktionen“ bekommt jede Funktion ihr Modell aus den ins
 
 Pi-Sessions: statt Claude läuft [Pi](https://github.com/earendil-works/pi) mit dem lokalen Modell der Funktion „Pi-Sessions“.
 Sobald Pi nutzbar ist, fragt jede neue Session (⌘N, ⌘⏎, Kontextmenüs, Baum, Schnellstart) vorher „Starten mit“: der zuletzt
-gewählte Agent steht oben, ⏎ startet ihn, ↑↓ oder Tippen wählt den anderen. Per CLI `kadrell new --pi`. Kadrell legt vor dem Start
+gewählte Agent steht oben, ⏎ startet ihn, ↑↓ oder Tippen wählt den anderen. Per CLI `kadrell new --pi`. (Claude-Sessions per CLI starten mit `kadrell new --model <alias|id> --effort <low…max>` mit eigenem Modell und Effort, ohne die Einstellung zu ändern, auch mit `--resume`; mit `--pi` oder `--host` ein Fehler.) Kadrell legt vor dem Start
 `~/.pi/agent/extensions/kadrell.ts` an (Quelle `Services/Pi/kadrell.ts`): sie registriert den Provider „kadrell“ aus
 `KADRELL_PI_BASE_URL`/`KADRELL_PI_MODEL` und meldet den Status per `kadrell status` (`agent_start`, `ui_prompt_*`,
 `agent_settled`), außerhalb einer Pi-Kachel tut sie nichts. Der Schlüssel `pi-<uuid>` ist zugleich Pis `--session-id`,

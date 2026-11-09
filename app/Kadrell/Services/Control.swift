@@ -36,7 +36,7 @@ enum ControlCommand: Equatable {
     /// Hosts aus `~/.ssh/config` (folgt `Include`), für die SSH-Extension und die Remote-Palette.
     case sshHosts(json: Bool)
     case newGroup(dir: String, name: String?, color: String?)
-    case newSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String? = nil, host: String? = nil, tmux: String? = nil, pi: Bool = false)
+    case newSession(target: String?, dir: String?, name: String?, detached: Bool, prompt: String?, resume: String? = nil, host: String? = nil, tmux: String? = nil, pi: Bool = false, model: String? = nil, effort: String? = nil)
     case select(target: String?, add: Bool)
     case layout(LayoutMode)
     case zoom(target: String?)
@@ -65,9 +65,12 @@ enum ControlCommand: Equatable {
       kadrell ssh-hosts [--json]                           Hosts aus ~/.ssh/config und zuletzt verbundene
       kadrell new-group <ordner> [--name N] [--color #rrggbb]
                                                            Gruppe anlegen (als Favorit, bleibt auch leer stehen)
-      kadrell new [-t gruppe] [-c ordner] [--name N] [-d] [--pi] [--resume sessionId] [prompt …]
+      kadrell new [-t gruppe] [-c ordner] [--name N] [-d] [--pi] [--resume sessionId]
+                  [--model alias|id] [--effort low|medium|high|xhigh|max] [prompt …]
                                                            Session starten, optional mit erster Nachricht;
                                                            -d: im Hintergrund, Auswahl bleibt;
+                                                           --model/--effort: nur für diese Claude-Session statt der
+                                                           Einstellung (auch mit --resume, nicht mit --pi oder --host);
                                                            --pi: Pi mit dem lokalen Modell der Pi-Sessions;
                                                            --resume: bestehende Konversation übernehmen
                                                            (Claude darf dort nicht mehr laufen, -c = ihr Ordner)
@@ -118,18 +121,7 @@ enum ControlCommand: Equatable {
                 guard a.positional.count == 1 else { throw ControlError("new-group braucht genau einen Ordner") }
                 return .newGroup(dir: a.positional[0], name: a["--name"], color: try color(a["--color"]))
             },
-            "new": parser(values: ["-t", "-c", "--name", "--resume", "--host", "--tmux"], bools: ["-d", "--pi"], positional: true) { a in
-                let prompt = a.positional.joined(separator: " ")
-                if a["--resume"] != nil, !prompt.isEmpty { throw ControlError("--resume und prompt schließen sich aus") }
-                if let r = a["--resume"], UUID(uuidString: r) == nil { throw ControlError("--resume braucht eine sessionId (UUID)") }
-                if a["--host"] != nil, a["--resume"] != nil || !prompt.isEmpty || a["-c"] != nil || a["-t"] != nil {
-                    throw ControlError("--host hat eigenen Ordner und eigene Gruppe, nicht mit -t, -c, --resume oder prompt kombinieren")
-                }
-                if a["--tmux"] != nil, a["--host"] == nil { throw ControlError("--tmux braucht --host") }
-                if a.has("--pi"), a["--resume"] != nil || a["--host"] != nil { throw ControlError("--pi nicht mit --resume oder --host kombinieren") }
-                return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt,
-                                   resume: a["--resume"], host: a["--host"], tmux: a["--tmux"], pi: a.has("--pi"))
-            },
+            "new": parser(values: ["-t", "-c", "--name", "--resume", "--host", "--tmux", "--model", "--effort"], bools: ["-d", "--pi"], positional: true, newSession),
             "select": parser(values: ["-t"], bools: ["-a"]) { .select(target: $0["-t"], add: $0.has("-a")) },
             "layout": { rest in
                 guard rest.count == 1, let m = LayoutMode(rawValue: rest[0]) else { throw ControlError("layout grid|main|spiral|custom|scroll|row|stack") }
@@ -176,6 +168,51 @@ enum ControlCommand: Equatable {
             if !positional { try a.noPositional() }
             return try make(a)
         }
+    }
+
+    private static let efforts = ["low", "medium", "high", "xhigh", "max"]
+
+    /// `new`: Kombinationen prüfen, die sich ausschließen, dann die Werte von `--model` und `--effort`.
+    private static func newSession(_ a: Args) throws -> ControlCommand {
+        let prompt = a.positional.joined(separator: " ")
+        try checkNewCombination(a, hasPrompt: !prompt.isEmpty)
+        return .newSession(target: a["-t"], dir: a["-c"], name: a["--name"], detached: a.has("-d"), prompt: prompt.isEmpty ? nil : prompt,
+                           resume: a["--resume"], host: a["--host"], tmux: a["--tmux"], pi: a.has("--pi"),
+                           model: try model(a["--model"]), effort: try effort(a["--effort"]))
+    }
+
+    private static func checkNewCombination(_ a: Args, hasPrompt: Bool) throws {
+        if a["--resume"] != nil, hasPrompt { throw ControlError("--resume und prompt schließen sich aus") }
+        if let r = a["--resume"], UUID(uuidString: r) == nil { throw ControlError("--resume braucht eine sessionId (UUID)") }
+        if a["--host"] != nil, a["--resume"] != nil || hasPrompt || a["-c"] != nil || a["-t"] != nil {
+            throw ControlError("--host hat eigenen Ordner und eigene Gruppe, nicht mit -t, -c, --resume oder prompt kombinieren")
+        }
+        if a["--tmux"] != nil, a["--host"] == nil { throw ControlError("--tmux braucht --host") }
+        try checkNonClaude(a)
+    }
+
+    /// Pi und Remote-Kacheln starten kein eigenes `claude`: dort gelten weder `--resume` noch `--model` und `--effort`.
+    private static func checkNonClaude(_ a: Args) throws {
+        let other = a.has("--pi") || a["--host"] != nil
+        if a.has("--pi"), a["--resume"] != nil || a["--host"] != nil { throw ControlError("--pi nicht mit --resume oder --host kombinieren") }
+        if other, a["--model"] != nil || a["--effort"] != nil {
+            throw ControlError("--model und --effort gelten nur für Claude-Sessions, nicht mit --pi oder --host")
+        }
+    }
+
+    /// Alias (`opus`, `sonnet`) oder Modell-Id (`claude-opus-5-5`, auch mit `[1m]`); führendes `-` wäre für claude eine Option.
+    private static func model(_ m: String?) throws -> String? {
+        guard let m else { return nil }
+        guard m.range(of: #"^[A-Za-z0-9][A-Za-z0-9._\-]*(\[[0-9a-z]+\])?$"#, options: .regularExpression) != nil else {
+            throw ControlError("--model braucht einen Alias oder eine Modell-Id, z. B. opus oder claude-opus-5-5")
+        }
+        return m
+    }
+
+    private static func effort(_ e: String?) throws -> String? {
+        guard let e else { return nil }
+        guard efforts.contains(e) else { throw ControlError("--effort \(efforts.joined(separator: "|"))") }
+        return e
     }
 
     private static func color(_ c: String?) throws -> String? {
