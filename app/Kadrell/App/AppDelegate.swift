@@ -360,8 +360,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bar.needsDisplay = true
     }
 
-    /// Auf einen anderen Account umschalten (Global-Swap), danach die Nutzung sofort neu holen.
-    private func switchAccount(_ id: String) { Task { if await accounts.switchTo(id) { usage.refreshNow() } } }
+    /// Auf einen anderen Account umschalten (Global-Swap). Die Leiste folgt über `onActiveChange`.
+    private func switchAccount(_ id: String) { Task { await accounts.switchTo(id) } }
+
+    /// Der aktive Account hat gewechselt (auch automatisch): die Leiste zeigt sofort dessen letzten Stand statt den des
+    /// alten Accounts, danach wird live nachgefragt.
+    private func activeAccountChanged() {
+        let cached = accounts.active?.usage
+        usage.replace(cached?.asUsage() ?? .empty, at: cached?.at)
+        refreshUsageBars()
+        usage.refreshNow()
+    }
 
     /// Den gerade angemeldeten Account als Slot aufnehmen; scheitert, wenn keiner angemeldet ist.
     private func addAccount() {
@@ -562,6 +571,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         usage.start()
         accounts.startInactivePolling()
         Task { [weak self] in await self?.accounts.loadTiers() }
+        usage.accountId = { [weak self] in self?.accounts.activeId }
+        accounts.onActiveChange = { [weak self] in self?.activeAccountChanged() }
         accounts.onChange = { [weak self] in self?.refreshAccountBars() }
         accounts.onAutoSwitch = { [weak self] to in self?.notifyAutoSwitch(to) }
         updateChecker.onChange = { [weak self] m in self?.bar.updateAvailable = m; self?.bar.needsDisplay = true }

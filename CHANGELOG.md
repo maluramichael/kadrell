@@ -2,6 +2,11 @@
 
 Neueste Version oben.
 
+## 1.87.2 (2026-11-09)
+
+- Fix: Nach einem Kontowechsel zeigt die Nutzungsanzeige oben sofort den letzten Stand des neuen Kontos statt der Zahlen des alten. Das gilt auch bei automatischem Wechsel.
+- Fix: Meldet der Nutzungsdienst „zu viele Anfragen“, wartet Kadrell jetzt die genannte Zeit vollständig ab, statt nach höchstens 15 Minuten erneut zu fragen. Ein Messwert, der erst nach einem Kontowechsel ankommt, landet nicht mehr beim falschen Konto.
+
 ## 1.87.1 (2026-11-08)
 
 - Änderung: Der Titel, den das lokale Modell neuen Sessions gibt, nennt nur noch das Thema und wiederholt nicht mehr den Projektnamen, den die Gruppe in der Seitenleiste schon zeigt.

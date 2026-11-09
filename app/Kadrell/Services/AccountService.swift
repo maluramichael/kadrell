@@ -84,6 +84,8 @@ final class AccountService {
     private(set) var accounts: [Account] = []
     private(set) var activeId: String? { didSet { Settings.activeAccountId = activeId } }
     var onChange: (() -> Void)?
+    /// Nach jedem Wechsel auf einen anderen Account (manuell oder automatisch), nicht beim Hinzufügen des angemeldeten.
+    var onActiveChange: (() -> Void)?
     /// Nach einem automatischen Wechsel aufgerufen, mit dem jetzt aktiven Account (für die Meldung an den Nutzer).
     var onAutoSwitch: ((Account) -> Void)?
     /// Nach jeder Messung eines Accounts, aktiv oder inaktiv (für den Verlauf der Limits).
@@ -226,6 +228,7 @@ final class AccountService {
             accounts[i].tier = t
         }
         setActive(id)
+        onActiveChange?()
         Self.log.notice("Account gewechselt")
         return true
     }

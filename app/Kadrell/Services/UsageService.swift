@@ -107,8 +107,8 @@ final class UsageService {
         measuredAt = at
     }
 
-    /// Alle fünf Minuten; bei HTTP 429 (der Endpunkt limitiert streng) verdoppelt sich die Pause bis 15 min,
-    /// `Retry-After` wird beachtet. Ein Fehler verwirft nie die letzten bekannten Werte.
+    /// Alle fünf Minuten; bei HTTP 429 (der Endpunkt limitiert streng) gilt `Retry-After` voll, sonst verdoppelt sich
+    /// die Pause bis 15 min. Ein Fehler verwirft nie die letzten bekannten Werte.
     func start(interval: TimeInterval = 300) {
         task?.cancel()
         task = Task { [weak self] in
@@ -120,19 +120,7 @@ final class UsageService {
                 if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
             }
             while !Task.isCancelled {
-                if let self {
-                    let r = await UsageService.fetch()
-                    switch r {
-                    case .ok(let fresh):
-                        delay = interval
-                        self.apply(fresh)
-                    case .rateLimited(let retryAfter):
-                        delay = min(900, max(retryAfter ?? delay * 2, interval))
-                        UsageService.log.warning("usage: 429, nächster Versuch in \(Int(delay), privacy: .public) s")
-                    case .failed:
-                        delay = min(900, delay * 2)
-                    }
-                }
+                if let self { delay = await self.measure(delay: delay, interval: interval) }
                 try? await Task.sleep(for: .seconds(delay))
             }
         }
@@ -140,9 +128,50 @@ final class UsageService {
 
     /// Sofort einmal abfragen, etwa direkt nach einem Account-Wechsel, ohne den laufenden Poll-Takt zu stören.
     func refreshNow() {
-        Task { [weak self] in
-            if case .ok(let fresh) = await UsageService.fetch(), let self { self.apply(fresh) }
+        Task { [weak self] in _ = await self?.measure(delay: 300, interval: 300) }
+    }
+
+    /// Welcher Account gerade live angemeldet ist (nil: keiner hinterlegt). Ein Ergebnis, das ankommt, nachdem der
+    /// Account gewechselt hat, gehört dem alten und wird verworfen, sonst landete es im Cache des neuen.
+    var accountId: (() -> String?)?
+    /// Bis wann der Endpunkt für den jeweiligen Account sperrt (429), je Account-Id. Davor wird nicht gefragt.
+    private var backoff: [String: Date] = [:]
+
+    /// Eine Abfrage für den aktuellen Account, gibt die Wartezeit bis zur nächsten zurück.
+    private func measure(delay: TimeInterval, interval: TimeInterval) async -> TimeInterval {
+        let id = accountId?()
+        let key = id ?? ""
+        if let until = backoff[key], until > Date() { return until.timeIntervalSinceNow }
+        let result = await UsageService.fetch()
+        guard accountId?() == id else { return interval }
+        let next = Self.nextDelay(after: result, current: delay, interval: interval)
+        switch result {
+        case .ok(let fresh):
+            backoff[key] = nil
+            apply(fresh)
+        case .rateLimited:
+            backoff[key] = Date().addingTimeInterval(next)
+            Self.log.warning("usage: 429, nächster Versuch in \(Int(next), privacy: .public) s")
+        case .failed: break
         }
+        return next
+    }
+
+    /// Wartezeit bis zur nächsten Abfrage (rein, testbar). `Retry-After` gilt voll (höchstens zwei Stunden), nur die
+    /// selbst geschätzte Pause ist bei 15 min gedeckelt.
+    static func nextDelay(after result: Result, current: TimeInterval, interval: TimeInterval) -> TimeInterval {
+        switch result {
+        case .ok: return interval
+        case .rateLimited(let retryAfter): return min(7200, max(retryAfter ?? min(900, current * 2), interval))
+        case .failed: return min(900, current * 2)
+        }
+    }
+
+    /// Nach einem Account-Wechsel den Stand des neuen Accounts zeigen (leer, wenn nie einer gemessen wurde), statt die
+    /// Werte des alten stehen zu lassen, bis die nächste Abfrage durchkommt.
+    func replace(_ u: Usage, at: Date?) {
+        usage = u
+        measuredAt = at
     }
 
     private func apply(_ fresh: Usage) {
