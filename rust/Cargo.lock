@@ -2553,6 +2553,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "kadrell-control"
+version = "0.1.0"
+dependencies = [
+ "kadrell-core",
+ "libc",
+ "serde",
+ "serde_json",
+ "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "kadrell-core"
 version = "0.1.0"
 dependencies = [
