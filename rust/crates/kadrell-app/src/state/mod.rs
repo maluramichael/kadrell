@@ -4,6 +4,7 @@
 
 pub mod attention;
 mod handler;
+mod poll;
 pub mod launch;
 pub mod mapping;
 mod tiles;
@@ -302,6 +303,13 @@ impl AppState {
     pub fn add_group(&mut self, mut group: Group) {
         group.favorite = true;
         self.store.groups.add(group);
+    }
+
+    /// Beendet und entfernt alle Sessions der Gruppe, dann die Gruppe selbst (auch mit Herz).
+    pub fn close_group(&mut self, id: &str) {
+        let keys = self.store.groups.group(id).map(|g| g.session_ids.clone()).unwrap_or_default();
+        self.remove_sessions(&keys);
+        self.store.groups.remove(id);
     }
 
     pub fn toggle_collapsed(&mut self, group_id: &str) {

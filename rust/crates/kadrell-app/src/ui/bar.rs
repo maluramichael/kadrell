@@ -15,8 +15,9 @@ use super::menubar::{MenuBar, TITLE_HEIGHT};
 use super::model::Status;
 use super::pill::{Pill, PillKind};
 use super::theme;
+use kadrell_core::SidebarSort;
 
-const LEFT: [&str; 8] = ["▦", "‹", "AUTO COL", "›", "AUTO", "SYNC", "GRP", "A-Z"];
+const LEFT: [&str; 9] = ["▦", "‹", "AUTO COL", "›", "AUTO", "SYNC", "GRP", "A-Z", "STATUS"];
 
 const LEFT_INSET: f32 = 8.;
 
@@ -30,6 +31,16 @@ pub struct LayoutCtl {
     pub cycle: Handler,
     pub dec: Handler,
     pub inc: Handler,
+    /// Gruppierung des Baums (GRP) und seine Sortierung (A-Z, STATUS).
+    pub grouped: bool,
+    pub sort: SidebarSort,
+    pub toggle_grouped: Handler,
+    pub toggle_alpha: Handler,
+    pub toggle_status: Handler,
+    /// Zähler rechts: laufende, getrennte (ohne Prozess) und wartende Sessions.
+    pub running: usize,
+    pub detached: usize,
+    pub waiting: usize,
 }
 
 fn with_click(pill: Pill, h: &Handler) -> Pill {
@@ -45,9 +56,15 @@ fn left_pill(i: usize, label: &'static str, ink: Hsla, ctl: &LayoutCtl) -> Pill 
         "‹" => with_click(pill.icon(icons::arrow(true, ink)).min_width(22.), &ctl.dec),
         "›" => with_click(pill.icon(icons::arrow(false, ink)).min_width(22.), &ctl.inc),
         "AUTO COL" => Pill::new(("bar", i), ctl.cols_label.clone()),
-        "A-Z" => pill.kind(PillKind::Active),
+        "GRP" => with_click(toggled(pill, ctl.grouped), &ctl.toggle_grouped),
+        "A-Z" => with_click(toggled(pill, ctl.sort == SidebarSort::Alpha), &ctl.toggle_alpha),
+        "STATUS" => with_click(toggled(pill, ctl.sort == SidebarSort::Status), &ctl.toggle_status),
         _ => pill,
     }
+}
+
+fn toggled(pill: Pill, on: bool) -> Pill {
+    if on { pill.kind(PillKind::Active) } else { pill }
 }
 
 fn left_pills(ink: Hsla, ctl: &LayoutCtl) -> impl IntoElement + use<> {
@@ -55,25 +72,22 @@ fn left_pills(ink: Hsla, ctl: &LayoutCtl) -> impl IntoElement + use<> {
     div().flex().flex_none().items_center().gap(px(4.)).children(pills)
 }
 
-fn usage_text(text: &'static str, cx: &App) -> impl IntoElement + use<> {
-    div().flex_none().text_size(px(11.5)).text_color(theme(cx).muted).child(text)
-}
-
-fn right_side(clock: &str, cx: &App) -> impl IntoElement + use<> {
+/// Rechts: wartende Sessions (nur wenn es welche gibt), getrennte, laufende. Nutzung und Konten stehen noch aus
+/// (`kadrell-accounts` ist nicht verdrahtet).
+fn right_side(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
     let t = theme(cx);
-    let running = Pill::new("running", format!("1 RUNNING  {clock}"))
+    let running = Pill::new("running", format!("{} RUNNING  {clock}", ctl.running))
         .kind(PillKind::Dark)
         .dot(Status::Running.color(&t));
+    let waiting = (ctl.waiting > 0).then(|| Pill::new("waiting", format!("wartet {}", ctl.waiting)).dot(Status::Waiting.color(&t)));
     div()
         .flex()
         .flex_none()
         .items_center()
         .gap(px(10.))
         .pr(px(if cfg!(target_os = "windows") { 6. } else { 8. }))
-        .child(usage_text("7d 14%/1%", cx))
-        .child(usage_text("fable 0%", cx))
-        .child(Pill::new("konto", "konto 1"))
-        .child(Pill::new("detach", "detach 6").kind(PillKind::Green))
+        .children(waiting)
+        .child(Pill::new("detach", format!("detach {}", ctl.detached)).kind(PillKind::Green))
         .child(running)
 }
 
@@ -119,6 +133,6 @@ pub fn bar(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
         .pl(px(LEFT_INSET))
         .child(left_pills(t.sub, ctl))
         .child(div().flex_1().min_w(px(24.)))
-        .child(right_side(clock, cx));
+        .child(right_side(clock, ctl, cx));
     div().flex().flex_col().flex_none().bg(t.panel).child(row).child(h_seam(&t))
 }

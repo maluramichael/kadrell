@@ -224,34 +224,13 @@ impl EventEmitter<TerminalEvent> for TerminalPane {}
 impl TerminalPane {
     pub fn new(program: &str, args: &[&str], cwd: PathBuf, cx: &mut Context<Self>) -> Self {
         let spec = TermSpec { program: program.into(), args: args.iter().map(|a| a.to_string()).collect(), cwd, env: Vec::new() };
-        Self::spawn(spec, cx).expect("PTY")
+        Self::from_parts(start_pty(spec).expect("PTY"), cx)
     }
 
-    /// Startet das Programm der Kachel. `spec.env` kommt zur geerbten Umgebung dazu (`TERM` und `COLORTERM` gelten,
-    /// wenn sie fehlen); unter Windows werden die Argumente für die Kommandozeile maskiert (Anführungszeichen in
-    /// `--settings {...}`).
-    pub fn spawn(spec: TermSpec, cx: &mut Context<Self>) -> std::io::Result<Self> {
-        let (tx, rx) = async_channel::unbounded();
-        let exited_flag = Arc::new(AtomicBool::new(false));
-        let listener = Listener { tx, exited: exited_flag.clone() };
-        let grid = Grid { cols: 100, lines: 30 };
-        let term = Arc::new(FairMutex::new(Term::new(Config::default(), &grid, listener.clone())));
-
-        let mut env = HashMap::from([("TERM".to_string(), "xterm-256color".to_string()), ("COLORTERM".to_string(), "truecolor".to_string())]);
-        env.extend(spec.env);
-        let mut options = tty::Options { shell: Some(tty::Shell::new(spec.program, spec.args)), working_directory: Some(spec.cwd), env, ..Default::default() };
-        options.drain_on_exit = false;
-        #[cfg(windows)]
-        {
-            options.escape_args = true;
-        }
-        let pty = tty::new(&options, window_size(grid, size(px(8.), px(16.))), 0)?;
-        let pid = pty_pid(&pty);
-        let event_loop = EventLoop::new(term.clone(), listener, pty, false, false)?;
-        let sender = event_loop.channel();
-        let notifier = Notifier(sender.clone());
-        event_loop.spawn();
-
+    /// Kachel zu einem schon gestarteten Prozess (`start_pty`). Der Start ist von GPUI getrennt, damit ein
+    /// gescheiterter Start (Programm fehlt) ein Fehler bleibt statt einer Kachel.
+    pub fn from_parts(parts: PtyParts, cx: &mut Context<Self>) -> Self {
+        let PtyParts { term, notifier, sender, exited_flag, pid, rx, grid } = parts;
         cx.spawn(async move |this, cx| {
             while let Ok(event) = rx.recv().await {
                 if this.update(cx, |pane, cx| pane.on_event(event, cx)).is_err() {
@@ -261,7 +240,7 @@ impl TerminalPane {
         })
         .detach();
 
-        Ok(Self {
+        Self {
             term,
             notifier,
             sender,
@@ -278,9 +257,56 @@ impl TerminalPane {
             scroll_rest: 0.,
             exited: false,
             title: None,
-        })
+        }
     }
+}
 
+/// Ein gestarteter Prozess samt Terminal-Zustand, noch ohne Oberfläche.
+pub struct PtyParts {
+    term: Arc<FairMutex<Term<Listener>>>,
+    notifier: Notifier,
+    sender: EventLoopSender,
+    exited_flag: Arc<AtomicBool>,
+    pid: Option<u32>,
+    rx: async_channel::Receiver<Event>,
+    grid: Grid,
+}
+
+impl PtyParts {
+    /// Zugriff auf die Kachel ohne GPUI, von jedem Thread (Steuerkanal, Statuspoll).
+    pub fn handle(&self) -> TermHandle {
+        TermHandle { term: self.term.clone(), sender: self.sender.clone(), exited: self.exited_flag.clone(), pid: self.pid }
+    }
+}
+
+/// Startet das Programm der Kachel. `spec.env` kommt zur geerbten Umgebung dazu (`TERM` und `COLORTERM` gelten,
+/// wenn sie fehlen); unter Windows werden die Argumente für die Kommandozeile maskiert (Anführungszeichen in
+/// `--settings {...}`).
+pub fn start_pty(spec: TermSpec) -> std::io::Result<PtyParts> {
+    let (tx, rx) = async_channel::unbounded();
+    let exited_flag = Arc::new(AtomicBool::new(false));
+    let listener = Listener { tx, exited: exited_flag.clone() };
+    let grid = Grid { cols: 100, lines: 30 };
+    let term = Arc::new(FairMutex::new(Term::new(Config::default(), &grid, listener.clone())));
+
+    let mut env = HashMap::from([("TERM".to_string(), "xterm-256color".to_string()), ("COLORTERM".to_string(), "truecolor".to_string())]);
+    env.extend(spec.env);
+    let mut options = tty::Options { shell: Some(tty::Shell::new(spec.program, spec.args)), working_directory: Some(spec.cwd), env, ..Default::default() };
+    options.drain_on_exit = false;
+    #[cfg(windows)]
+    {
+        options.escape_args = true;
+    }
+    let pty = tty::new(&options, window_size(grid, size(px(8.), px(16.))), 0)?;
+    let pid = pty_pid(&pty);
+    let event_loop = EventLoop::new(term.clone(), listener, pty, false, false)?;
+    let sender = event_loop.channel();
+    let notifier = Notifier(sender.clone());
+    event_loop.spawn();
+    Ok(PtyParts { term, notifier, sender, exited_flag, pid, rx, grid })
+}
+
+impl TerminalPane {
     /// Zugriff auf die Kachel ohne GPUI, von jedem Thread (Steuerkanal, Statuspoll).
     pub fn handle(&self) -> TermHandle {
         TermHandle { term: self.term.clone(), sender: self.sender.clone(), exited: self.exited_flag.clone(), pid: self.pid }

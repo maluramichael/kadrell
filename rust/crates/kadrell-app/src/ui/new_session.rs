@@ -3,7 +3,6 @@
 //! Pfadkürzel (`~/d/p/kad`). Dazu die Anbindung an `Shell` (Öffnen, Schließen, Session anlegen).
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 
 use gpui::{
     App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
@@ -13,7 +12,7 @@ use gpui::{
 
 use super::chrome::h_seam;
 use super::folders::{self, Entry};
-use super::model::{Group, claude_session_in};
+use super::model::Group;
 use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_height, overlay_width};
 use super::text_input::{TextInput, TextInputEvent};
 use super::theme;
@@ -60,10 +59,9 @@ pub struct NewSession {
     _typing: Subscription,
 }
 
-/// Ordner einer Gruppe: der ihrer ersten Session, mit `/`.
+/// Ordner einer Gruppe, mit `/`; `None` bei der Sammelgruppe ohne Gruppierung.
 pub fn group_cwd(g: &Group) -> Option<String> {
-    let first = g.sessions.first()?;
-    Some(first.launch.cwd().to_string_lossy().replace('\\', "/"))
+    (!g.cwd.is_empty()).then(|| g.cwd.replace('\\', "/"))
 }
 
 fn folder_name(path: &str) -> String {
@@ -345,39 +343,37 @@ impl Shell {
     /// Schließt den Dialog; der Fokus geht zurück an das Terminal der gewählten Session.
     fn close_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.overlay = None;
-        let (g, s) = self.selected;
-        self.select(g, s, window, cx);
+        self.sync(window, cx);
     }
 
     /// Neue Claude-Session in `path`: in die Gruppe mit diesem Ordner, sonst in eine neue Gruppe; dann wählen.
     fn start_in(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let name = folder_name(path);
-        let title: &'static str = Box::leak(name.clone().into_boxed_str());
-        let session = claude_session_in(title, PathBuf::from(path));
-        let key = path.to_lowercase();
-        let found = self.groups.iter().position(|g| group_cwd(g).is_some_and(|c| c.to_lowercase() == key));
-        let g = match found {
-            Some(g) => g,
-            None => {
-                self.groups.push(new_group(&name, path, self.groups.len()));
-                self.groups.len() - 1
-            }
-        };
-        self.groups[g].collapsed = false;
-        self.groups[g].sessions.push(session);
-        let s = self.groups[g].sessions.len() - 1;
-        self.select(g, s, window, cx);
+        self.state.new_claude_session(path, None, true);
+        self.sync(window, cx);
     }
-}
 
-fn new_group(name: &str, path: &str, index: usize) -> Group {
-    let leak = |s: String| -> &'static str { Box::leak(s.into_boxed_str()) };
-    Group {
-        name: leak(name.to_string()),
-        color: GROUP_COLORS[index % GROUP_COLORS.len()],
-        path: leak(folders::short_path(path, &folders::home_dir())),
-        collapsed: false,
-        sessions: vec![],
+    /// Ordner der fokussierten Session (Strg+Enter, Strg+T): die Gruppe, sonst der Startordner der Einstellungen.
+    fn focused_folder(&self) -> String {
+        let focused = self.state.focused.as_deref().and_then(|k| self.state.session(k));
+        match focused {
+            Some(s) => s.cwd.clone(),
+            None => self.state.settings.start_folder(&self.state.paths.home).trim_end_matches('/').to_string(),
+        }
+    }
+
+    /// Strg+Enter / ⌘↩: neue Claude-Session im Ordner der fokussierten, ohne Dialog.
+    pub fn new_session_here(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let cwd = self.focused_folder();
+        let group = self.state.focused.as_deref().and_then(|k| self.state.store.groups.group_for_session(k)).map(|g| g.id.clone());
+        self.state.new_claude_session(&cwd, group.as_deref(), true);
+        self.sync(window, cx);
+    }
+
+    /// Strg+T / ⌘T: Terminal ohne Claude im Ordner der fokussierten Session.
+    pub fn new_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let cwd = self.focused_folder();
+        self.state.new_shell_session(&cwd, true);
+        self.sync(window, cx);
     }
 }
 

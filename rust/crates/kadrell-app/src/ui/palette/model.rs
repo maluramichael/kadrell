@@ -103,6 +103,8 @@ pub enum Run {
     Menu(Box<dyn Action>),
     Layout(LayoutMode),
     Group(usize),
+    /// Die fokussierte Session in die Gruppe an dieser Position der Ansicht verschieben.
+    MoveFocused(usize),
     /// Wechselt in einen anderen Modus der Suche.
     Mode(Mode),
     Unwired,
@@ -180,7 +182,7 @@ pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
         LayoutMode::ALL.iter().map(|m| plain(&format!("Layout: {}", layout_title(*m)), Run::Layout(*m))).collect();
     list.push(Command { title: "Nächstes Layout".into(), shortcut: key_label("⌘L", "Strg+L"), run: Run::Menu(Box::new(menus::NextLayout)) });
     list.push(plain("Trennlinien zurücksetzen (gleich verteilt)", Run::Unwired));
-    list.push(plain("Zoom ein/aus (fokussierte)", Run::Unwired));
+    list.push(via_menu(&mut pool, "Zoom ein/aus (fokussierte)", "Kachel zoomen"));
     list.push(via_menu(&mut pool, "Neue Session", "Neue Session"));
     list.push(plain("Schnellstart: Idee rein, Session raus", Run::Unwired));
     list.push(plain("Alle Claude-Sessions durchsuchen, auch beendete", Run::Mode(Mode::History)));
@@ -189,9 +191,9 @@ pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
     list.push(via_menu(&mut pool, "Neue Gruppe (leer)", "Neue Gruppe …"));
     list.push(via_menu(&mut pool, "Session stoppen (fokussierte)", "Stoppen"));
     list.push(via_menu(&mut pool, "Session fortsetzen (fokussierte)", "Fortsetzen"));
-    list.push(plain("Session umbenennen (fokussierte)", Run::Unwired));
+    list.push(via_menu(&mut pool, "Session umbenennen (fokussierte)", "Umbenennen"));
     list.push(via_menu(&mut pool, "Session schließen (fokussierte)", "Session schließen"));
-    list.push(plain("Gruppe bearbeiten (der fokussierten Session)", Run::Unwired));
+    list.push(via_menu(&mut pool, "Gruppe bearbeiten (der fokussierten Session)", "Gruppe umbenennen"));
     list.push(via_menu(&mut pool, "Statistik", "Statistik"));
     list.push(via_menu(&mut pool, "Extensions", "Extensions …"));
     list.push(plain("Reload", Run::Unwired));
@@ -200,7 +202,7 @@ pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
     list.extend(snap.groups.iter().map(|g| plain(&format!("Alle Sessions von {}", g.name), Run::Group(g.index))));
     if let Some(own) = focused_group(snap) {
         let others = snap.groups.iter().filter(|g| g.index != own);
-        list.extend(others.map(|g| plain(&format!("Fokussierte Session verschieben nach: {}", g.name), Run::Unwired)));
+        list.extend(others.map(|g| plain(&format!("Fokussierte Session verschieben nach: {}", g.name), Run::MoveFocused(g.index))));
     }
     list.extend(pool.rest());
     list

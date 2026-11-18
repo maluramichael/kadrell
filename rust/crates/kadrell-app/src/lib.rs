@@ -1,21 +1,31 @@
-//! Kadrell-Fenster mit Baum, Leiste und Terminal-Kacheln (GPUI).
-#![allow(dead_code)] // Mock-Daten und Theme: nicht alle Felder werden schon benutzt.
+//! Kadrell-Fenster mit Baum, Leiste und Terminal-Kacheln (GPUI), verdrahtet mit dem Zustand (`state`): echte Sessions,
+//! Steuerkanal, Status. Der Einstieg ist [`run`].
+#![allow(dead_code)] // Theme: nicht alle Felder werden schon benutzt.
 
 mod menus;
 mod state;
 mod theme;
 mod ui;
+mod wire;
+
+use std::collections::HashMap;
 
 use gpui::{
-    App, Bounds, Context, Entity, FocusHandle, Focusable, Global, IntoElement, KeyDownEvent, Render, Window,
-    WindowBounds, WindowOptions, div, prelude::*, px, size,
+    App, Bounds, Context, Entity, FocusHandle, Focusable, Global, IntoElement, KeyDownEvent, Render, Window, WindowBounds,
+    WindowOptions, div, prelude::*, px, size,
 };
 use gpui_platform::application;
 
+use kadrell_control::ControlServer;
+use kadrell_control::endpoint::endpoint_path;
+use kadrell_core::profile::Acquire;
+use kadrell_core::{Paths, Profile, SessionStatus, SidebarSort};
 use kadrell_term::{TermThemeGlobal, TerminalPane};
+use state::launch::LaunchEnv;
+use state::{AppState, Parts};
 use theme::Theme;
 use ui::layout::{Direction, Id, LayoutMode, LayoutState, Selection};
-use ui::model::{Group, flat_index, mock_groups};
+use ui::model::{Group, flat_index};
 
 pub struct ThemeGlobal(pub Theme);
 impl Global for ThemeGlobal {}
@@ -27,9 +37,14 @@ fn set_theme(cx: &mut App, theme: Theme) {
 }
 
 pub struct Shell {
+    /// Zustand der App: Sessions, Gruppen, Auswahl, Kacheln, Status. Die Felder darunter sind Ansicht davon und
+    /// werden nach jeder Änderung neu gebaut (`rebuild`).
+    state: AppState,
     groups: Vec<Group>,
-    /// Fokus-Kachel (Tastaturziel), immer Teil der Auswahl.
-    selected: (usize, usize),
+    /// Terminal-Oberflächen je Session-Schlüssel.
+    panes: HashMap<String, Entity<TerminalPane>>,
+    /// Fokus-Kachel (Tastaturziel), immer Teil der Auswahl. `None` ohne Sessions.
+    selected: Option<Id>,
     /// Sichtbare Sessions (Kacheln), Anker für Shift-Klick.
     selection: Selection,
     layout: LayoutState,
@@ -37,67 +52,84 @@ pub struct Shell {
     menubar: Entity<ui::menubar::MenuBar>,
     overlay: Option<Entity<ui::new_session::NewSession>>,
     palette: Option<Entity<ui::palette::Palette>>,
+    rename: Option<Entity<ui::rename::Rename>>,
+    context: Option<ui::context_menu::ContextMenu>,
+    /// Tastaturziel, solange keine Kachel da ist.
+    idle_focus: FocusHandle,
+    /// Der Steuerkanal; mit der Shell lebt und stirbt er.
+    server: Option<ControlServer>,
+    down: bool,
 }
 
-/// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"`.
-fn start_selection(groups: &[Group]) -> Vec<Id> {
-    let Ok(v) = std::env::var("KADRELL_DEV_SELECT") else { return Vec::new() };
-    let valid = |id: &Id| groups.get(id.0).is_some_and(|g| id.1 < g.sessions.len());
-    let parse = |p: &str| -> Option<Id> {
-        let (g, s) = p.split_once(',')?;
-        Some((g.trim().parse().ok()?, s.trim().parse().ok()?))
-    };
-    v.split(';').filter_map(parse).filter(valid).collect()
+/// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
+fn dev_selection(groups: &[Group]) -> Vec<String> {
+    std::env::var("KADRELL_DEV_SELECT").map(|v| wire::keys_at(groups, &v)).unwrap_or_default()
 }
 
 /// Start-Layout: `KADRELL_DEV_LAYOUT=grid|main|spiral|stack`.
-fn start_layout() -> LayoutMode {
-    std::env::var("KADRELL_DEV_LAYOUT").ok().and_then(|v| LayoutMode::from_name(&v)).unwrap_or(LayoutMode::Grid)
-}
-
-/// Start-Session für Screenshots ohne Eingabe: `KADRELL_DEV_SESSION=1,0` (Gruppe, Session), sonst die erste.
-fn start_session(groups: &[ui::model::Group]) -> (usize, usize) {
-    let parsed = std::env::var("KADRELL_DEV_SESSION").ok().and_then(|v| {
-        let (g, s) = v.split_once(',')?;
-        Some((g.trim().parse().ok()?, s.trim().parse().ok()?))
-    });
-    match parsed {
-        Some((g, s)) if groups.get(g).is_some_and(|gr: &ui::model::Group| s < gr.sessions.len()) => (g, s),
-        _ => (0, 0),
-    }
+fn start_layout() -> Option<LayoutMode> {
+    std::env::var("KADRELL_DEV_LAYOUT").ok().and_then(|v| LayoutMode::from_name(&v))
 }
 
 fn now_hhmm() -> String {
     chrono::Local::now().format("%H:%M").to_string()
 }
 
+/// Layout der Oberfläche aus dem Layout des Steuerkanals (`kadrell layout`): was die Oberfläche nicht kennt, gilt als Grid.
+fn ui_layout(mode: kadrell_control::LayoutMode) -> LayoutMode {
+    LayoutMode::from_name(mode.as_str()).unwrap_or(LayoutMode::Grid)
+}
+
+fn control_layout(mode: LayoutMode) -> kadrell_control::LayoutMode {
+    kadrell_control::LayoutMode::from_raw(mode.key()).unwrap_or_default()
+}
+
 impl Shell {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>, state: AppState, jobs: async_channel::Receiver<wire::Job>, server: Option<ControlServer>) -> Self {
         let menubar = cx.new(ui::menubar::MenuBar::new);
-        let groups = mock_groups();
-        let first = start_session(&groups);
-        let mut selection = Selection::single(first);
-        let flat = flat_index(&groups);
-        for id in start_selection(&groups) {
-            selection.toggle(id, &flat);
-        }
-        selection.focus_on(first);
+        let mode = ui_layout(state.layout);
         let mut shell = Shell {
-            groups,
-            selected: first,
-            selection,
-            layout: LayoutState::new(start_layout()),
+            state,
+            groups: Vec::new(),
+            panes: HashMap::new(),
+            selected: None,
+            selection: Selection { items: Vec::new(), focus: (0, 0), anchor: (0, 0) },
+            layout: LayoutState::new(mode),
             clock: now_hhmm(),
             menubar,
             overlay: None,
             palette: None,
+            rename: None,
+            context: None,
+            idle_focus: cx.focus_handle(),
+            server,
+            down: false,
         };
-        shell.apply_selection(window, cx);
+        shell.rebuild();
+        shell.apply_dev_view();
+        shell.state.ready = true;
+        shell.sync(window, cx);
         shell.start_clock(cx);
+        shell.start_jobs(jobs, window, cx);
+        shell.start_poll(window, cx);
         shell.open_menu_from_env(window, cx);
         shell.open_overlay_from_env(window, cx);
         shell.open_palette_from_env(window, cx);
         shell
+    }
+
+    /// `KADRELL_DEV_SELECT`, `KADRELL_DEV_SESSION` und `KADRELL_DEV_LAYOUT` setzen Auswahl und Layout beim Start,
+    /// gegen den echten Zustand (Positionen im Baum, die es geben muss).
+    fn apply_dev_view(&mut self) {
+        let keys = dev_selection(&self.groups);
+        let focus = std::env::var("KADRELL_DEV_SESSION").ok().and_then(|v| wire::keys_at(&self.groups, &v).into_iter().next());
+        if !keys.is_empty() || focus.is_some() {
+            let keys = if keys.is_empty() { focus.iter().cloned().collect() } else { keys };
+            self.state.set_selection(keys, focus);
+        }
+        if let Some(mode) = start_layout() {
+            self.layout.mode = mode;
+        }
     }
 
     /// `KADRELL_DEV_MENU=Datei` öffnet beim Start das Menü (Screenshots ohne Eingabe).
@@ -132,31 +164,10 @@ impl Shell {
     }
 
     fn toggle_group(&mut self, g: usize, cx: &mut Context<Self>) {
-        self.groups[g].collapsed = !self.groups[g].collapsed;
+        let id = self.groups[g].id.clone();
+        self.state.toggle_collapsed(&id);
+        self.rebuild();
         cx.notify();
-    }
-
-    fn ensure_pane(&mut self, g: usize, s: usize, cx: &mut Context<Self>) {
-        let session = &mut self.groups[g].sessions[s];
-        if session.pane.is_some() {
-            return;
-        }
-        let l = &session.launch;
-        let (program, args, cwd) = (l.program, l.args, l.cwd());
-        session.pane = Some(cx.new(|cx| TerminalPane::new(program, args, cwd.clone(), cx)));
-        self.load_branch(g, s, cwd, cx);
-    }
-
-    /// Liest den Git-Zweig einmal im Hintergrund und trägt ihn in die Session ein.
-    fn load_branch(&self, g: usize, s: usize, cwd: std::path::PathBuf, cx: &mut Context<Self>) {
-        cx.spawn(async move |this, cx| {
-            let branch = cx.background_executor().spawn(async move { ui::model::git_branch(&cwd) }).await;
-            let _ = this.update(cx, |shell, cx| {
-                shell.groups[g].sessions[s].branch = branch;
-                cx.notify();
-            });
-        })
-        .detach();
     }
 
     /// Springt zu einer Session: ist sie schon sichtbar, wandert nur der Fokus, sonst zeigt sie allein.
@@ -171,23 +182,17 @@ impl Shell {
 
     // --- Auswahl und Layout (Kacheln) ---
 
-    /// Sichtbare Kacheln in Anzeigereihenfolge.
+    /// Sichtbare Kacheln in Anzeigereihenfolge; gezoomt nur die Fokus-Kachel.
     fn visible(&self) -> Vec<Id> {
-        self.selection.items.clone()
+        match (self.state.zoom, self.selected) {
+            (true, Some(focus)) => vec![focus],
+            _ => self.selection.items.clone(),
+        }
     }
 
-    /// Übernimmt `selection`: legt fehlende Terminals an und gibt der Fokus-Kachel die Tastatur.
+    /// Übernimmt `selection` in den Zustand: startet fehlende Terminals und gibt der Fokus-Kachel die Tastatur.
     fn apply_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        for (g, s) in self.selection.items.clone() {
-            self.ensure_pane(g, s, cx);
-        }
-        let (g, s) = self.selection.focus;
-        self.selected = (g, s);
-        let focus = self.groups[g].sessions[s].pane.as_ref().map(|p| p.read(cx).focus.clone());
-        if let Some(focus) = focus {
-            focus.focus(window, cx);
-        }
-        cx.notify();
+        self.commit_selection(window, cx);
     }
 
     /// Klick im Baum: nur diese Session, Strg/Cmd nimmt sie dazu oder weg, Shift markiert den Bereich.
@@ -212,7 +217,9 @@ impl Shell {
 
     /// Klick in eine Kachel: sie wird Fokus, die Auswahl bleibt.
     fn focus_tile(&mut self, g: usize, s: usize, window: &mut Window, cx: &mut Context<Self>) {
-        if self.selection.focus != (g, s) {
+        let key = self.groups[g].sessions[s].key.clone();
+        let ended = matches!(self.state.run(&key), state::Run::Ended | state::Run::Stopped);
+        if self.selection.focus != (g, s) || ended {
             self.selection.focus_on((g, s));
             self.apply_selection(window, cx);
         }
@@ -220,6 +227,8 @@ impl Shell {
 
     pub(crate) fn cycle_layout(&mut self, cx: &mut Context<Self>) {
         self.layout.mode = self.layout.mode.next();
+        self.state.layout = control_layout(self.layout.mode);
+        self.state.save_layout();
         cx.notify();
     }
 
@@ -231,7 +240,7 @@ impl Shell {
     /// Alt+Pfeil: Fokus zur Nachbarkachel in dieser Richtung.
     fn move_focus(&mut self, d: Direction, window: &mut Window, cx: &mut Context<Self>) {
         let visible = self.visible();
-        let Some(i) = visible.iter().position(|id| *id == self.selected) else { return };
+        let Some(i) = self.selected.and_then(|sel| visible.iter().position(|id| *id == sel)) else { return };
         if let Some(j) = ui::layout::neighbor(i, &self.layout.frames, d) {
             self.selection.focus_on(visible[j]);
             self.apply_selection(window, cx);
@@ -240,19 +249,45 @@ impl Shell {
 
     fn layout_ctl(&self, cx: &mut Context<Self>) -> ui::bar::LayoutCtl {
         use std::rc::Rc;
+        let running = self.state.running_count();
         ui::bar::LayoutCtl {
             mode: self.layout.mode,
             cols_label: self.layout.label(),
             cycle: Rc::new(cx.listener(|this, _, _, cx| this.cycle_layout(cx))),
             dec: Rc::new(cx.listener(|this, _, _, cx| this.step_cols(-1, cx))),
             inc: Rc::new(cx.listener(|this, _, _, cx| this.step_cols(1, cx))),
+            grouped: self.state.grouped(),
+            sort: self.state.sort(),
+            toggle_grouped: Rc::new(cx.listener(|this, _, _, cx| this.toggle_grouped(cx))),
+            toggle_alpha: Rc::new(cx.listener(|this, _, _, cx| this.toggle_sort(SidebarSort::Alpha, cx))),
+            toggle_status: Rc::new(cx.listener(|this, _, _, cx| this.toggle_sort(SidebarSort::Status, cx))),
+            running,
+            detached: self.state.store.sessions.sessions.len().saturating_sub(running),
+            waiting: self.waiting_count(),
         }
+    }
+
+    /// Sessions, die auf dich warten.
+    fn waiting_count(&self) -> usize {
+        self.state.store.sessions.sessions.iter().filter(|s| self.state.display_status(&s.id) == Some(SessionStatus::Waiting)).count()
+    }
+
+    fn toggle_grouped(&mut self, cx: &mut Context<Self>) {
+        self.state.toggle_grouped();
+        self.rebuild();
+        cx.notify();
+    }
+
+    fn toggle_sort(&mut self, mode: SidebarSort, cx: &mut Context<Self>) {
+        self.state.toggle_sort(mode);
+        self.rebuild();
+        cx.notify();
     }
 
     /// Springt um `delta` Sessions weiter (zyklisch).
     fn step(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
         let flat = flat_index(&self.groups);
-        let Some(pos) = flat.iter().position(|p| *p == self.selected) else { return };
+        let Some(pos) = self.selected.and_then(|sel| flat.iter().position(|p| *p == sel)) else { return };
         let next = (pos as isize + delta).rem_euclid(flat.len() as isize) as usize;
         self.select(flat[next].0, flat[next].1, window, cx);
     }
@@ -313,12 +348,20 @@ impl Shell {
     }
 }
 
+impl Drop for Shell {
+    fn drop(&mut self) {
+        if !self.down {
+            self.down = true;
+            self.shutdown();
+        }
+    }
+}
+
 impl Focusable for Shell {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        let (g, s) = self.selected;
-        match &self.groups[g].sessions[s].pane {
+        match self.selected.and_then(|(g, s)| self.groups.get(g)?.sessions.get(s)?.pane.as_ref()) {
             Some(p) => p.read(cx).focus.clone(),
-            None => cx.focus_handle(),
+            None => self.idle_focus.clone(),
         }
     }
 }
@@ -353,14 +396,16 @@ impl Render for Shell {
             .child(ui::footer::footer(cx))
             .children(self.overlay.clone())
             .children(self.palette.clone())
+            .children(self.rename.clone())
+            .children(self.context_layer(window, cx))
     }
 }
 
 /// Titelleiste: macOS nutzt die normale des Systems mit Ampel (nicht getestet), Windows blendet sie aus und
 /// zeichnet eigene Titelzeile samt Menü (`ui::bar::titlebar`).
-fn titlebar_options() -> gpui::TitlebarOptions {
+fn titlebar_options(profile: &Profile) -> gpui::TitlebarOptions {
     gpui::TitlebarOptions {
-        title: Some("Kadrell".into()),
+        title: Some(format!("Kadrell{}", profile.label()).into()),
         appears_transparent: !cfg!(target_os = "macos"),
         traffic_light_position: None,
     }
@@ -374,24 +419,81 @@ fn start_theme() -> Theme {
     }
 }
 
-/// Startet die App (Fenster, Event-Schleife) und kehrt beim Schließen des Fensters zurück.
-pub fn run() {
-    application().run(|cx: &mut App| {
+/// Lebt der Prozess noch? Über den Prozessbaum des Systems (`parent` ist `None` für fehlende Prozesse).
+fn process_alive(pid: u32) -> bool {
+    use kadrell_control::ProcessTree;
+    kadrell_control::SystemProcessTree.parent(pid).is_some()
+}
+
+/// Öffnet das Profil, sperrt es und baut den Zustand. `Err`: mit dieser Meldung beenden (Exit-Code 1).
+fn open_state(profile_name: Option<&str>) -> Result<Option<(AppState, async_channel::Receiver<wire::Job>, Option<ControlServer>)>, String> {
+    let paths = Paths::from_env();
+    let profile = Profile::open(profile_name, &paths, std::process::id(), &process_alive).map_err(|e| format!("Profilordner: {e}"))?;
+    let lock = match profile.acquire(&process_alive) {
+        Acquire::Locked(lock) => Some(lock),
+        Acquire::Unprotected => None,
+        Acquire::Running(pid) => {
+            eprintln!("kadrell: dieses Profil läuft schon (pid {pid})");
+            return Ok(None);
+        }
+    };
+    kadrell_core::profile::clear_quit_marker(&profile.dir);
+    let endpoint = endpoint_path(&profile.dir);
+    let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "kadrell".into());
+    let home = paths.home.to_string_lossy().replace('\\', "/");
+    let env = LaunchEnv::from_process(&profile.settings().claude_binary(), exe, endpoint.to_string_lossy().into_owned(), home);
+    let state = AppState::new(Parts { paths, profile, lock, env, endpoint: endpoint.clone() });
+    let (tx, rx) = async_channel::unbounded();
+    let server = match ControlServer::start(&endpoint, wire::service(tx)) {
+        Ok(server) => Some(server),
+        Err(e) => {
+            eprintln!("kadrell: Steuerkanal nicht gestartet: {e}");
+            None
+        }
+    };
+    Ok(Some((state, rx, server)))
+}
+
+/// Startet die App (Profil, Steuerkanal, Fenster, Event-Schleife) und kehrt beim Schließen des Fensters zurück.
+/// Gibt den Exit-Code zurück.
+pub fn run(profile_name: Option<String>) -> i32 {
+    let (state, jobs, server) = match open_state(profile_name.as_deref()) {
+        Ok(Some(parts)) => parts,
+        Ok(None) => return 0,
+        Err(message) => {
+            eprintln!("kadrell: {message}");
+            return 1;
+        }
+    };
+    let title_profile = state.profile.clone();
+    application().run(move |cx: &mut App| {
         kadrell_term::fonts::load(cx);
         ui::text_input::bind_keys(cx);
         ui::new_session::bind_keys(cx);
         ui::palette::bind_keys(cx);
+        ui::rename::bind_keys(cx);
         set_theme(cx, start_theme());
         menus::init(cx);
         let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(titlebar_options()),
+            titlebar: Some(titlebar_options(&title_profile)),
             window_min_size: Some(size(px(640.), px(400.))),
             ..Default::default()
         };
-        cx.open_window(options, |window, cx| cx.new(|cx| Shell::new(window, cx))).unwrap();
+        let handle = cx.open_window(options, |window, cx| cx.new(|cx| Shell::new(window, cx, state, jobs, server))).unwrap();
+        cx.on_app_quit(move |cx| {
+            let _ = handle.update(cx, |shell, _, _| {
+                if !shell.down {
+                    shell.down = true;
+                    shell.shutdown();
+                }
+            });
+            async {}
+        })
+        .detach();
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         cx.activate(true);
     });
+    0
 }

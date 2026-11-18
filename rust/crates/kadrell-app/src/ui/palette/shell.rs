@@ -15,11 +15,11 @@ use crate::ui::layout::Selection;
 use crate::ui::model::Group;
 
 fn path_of(s: &crate::ui::model::Session) -> String {
-    s.launch.cwd().to_string_lossy().replace('\\', "/")
+    s.cwd.replace('\\', "/")
 }
 
 /// Gruppen und Sessions in der Form, die die Palette braucht (ohne Verweis auf die Shell).
-fn snapshot(groups: &[Group], focused: (usize, usize), home: &str) -> Snapshot {
+fn snapshot(groups: &[Group], focused: Option<(usize, usize)>, home: &str) -> Snapshot {
     let rows = groups.iter().enumerate().map(|(g, group)| {
         let sessions: Vec<SessionRow> = group
             .sessions
@@ -29,7 +29,7 @@ fn snapshot(groups: &[Group], focused: (usize, usize), home: &str) -> Snapshot {
                 let path = path_of(session);
                 SessionRow {
                     id: (g, s),
-                    title: session.title.to_string(),
+                    title: session.title.clone(),
                     status: session.status,
                     short: folders::short_path(&path, home),
                     path,
@@ -37,10 +37,10 @@ fn snapshot(groups: &[Group], focused: (usize, usize), home: &str) -> Snapshot {
                 }
             })
             .collect();
-        let path = sessions.first().map(|s| s.path.clone()).unwrap_or_default();
-        GroupRow { index: g, name: group.name.to_string(), short: folders::short_path(&path, home), path, sessions }
+        let path = if group.cwd.is_empty() { sessions.first().map(|s| s.path.clone()).unwrap_or_default() } else { group.cwd.replace('\\', "/") };
+        GroupRow { index: g, name: group.name.clone(), short: folders::short_path(&path, home), path, sessions }
     });
-    Snapshot { groups: rows.collect(), focused: Some(focused) }
+    Snapshot { groups: rows.collect(), focused }
 }
 
 impl Shell {
@@ -101,8 +101,7 @@ impl Shell {
     /// Schließt die Suche; die Tastatur geht zurück an das Terminal der gewählten Session.
     fn close_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.palette = None;
-        let (g, s) = self.selected;
-        self.select(g, s, window, cx);
+        self.sync(window, cx);
     }
 
     /// Zeigt nur diese Session (wie `workspace.select([key], add: false)`).
@@ -123,6 +122,10 @@ impl Shell {
                 if self.groups.get(*g).is_some_and(|gr| !gr.sessions.is_empty()) {
                     self.select_group(*g, window, cx);
                 }
+            }
+            PaletteEvent::MoveFocused(g) => {
+                self.close_palette(window, cx);
+                self.move_focused_to(*g, window, cx);
             }
             PaletteEvent::Layout(mode) => {
                 self.close_palette(window, cx);

@@ -144,9 +144,7 @@ impl ControlHandler for AppState {
     }
 
     fn kill_group(&mut self, group_id: &str) {
-        let keys = self.store.groups.group(group_id).map(|g| g.session_ids.clone()).unwrap_or_default();
-        self.remove_sessions(&keys);
-        self.store.groups.remove(group_id);
+        self.close_group(group_id);
     }
 
     fn terminal_write(&mut self, key: &str, data: &str) {

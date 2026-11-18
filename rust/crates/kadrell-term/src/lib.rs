@@ -7,6 +7,6 @@ mod terminal;
 mod textsearch;
 mod theme;
 
-pub use terminal::{FONT_SIZE, TermHandle, TermSpec, TerminalEvent, TerminalPane, strip_inherited_env};
+pub use terminal::{FONT_SIZE, PtyParts, TermHandle, TermSpec, TerminalEvent, TerminalPane, start_pty, strip_inherited_env};
 pub use textsearch::{find_byte_ranges, find_char_ranges};
 pub use theme::{FONT, TermTheme, TermThemeGlobal};

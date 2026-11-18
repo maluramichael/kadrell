@@ -7,6 +7,7 @@ use crate::theme::Theme;
 
 pub mod bar;
 pub mod chrome;
+pub mod context_menu;
 pub mod footer;
 pub mod icons;
 pub mod menubar;
@@ -18,6 +19,7 @@ pub mod overlay;
 pub mod palette;
 pub mod text_input;
 pub mod pill;
+pub mod rename;
 pub mod sidebar;
 pub mod tile;
 
