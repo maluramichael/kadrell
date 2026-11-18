@@ -166,14 +166,17 @@ fn session_row(
     group: &Group,
     selected: bool,
     focused: bool,
+    keys: bool,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let t = theme(cx);
     let session = &group.sessions[s];
     let mut face = session_face(session, selected, &t).hover(move |st| st.bg(t.bg).text_color(t.fg));
     // Der Rand steht immer, nur seine Farbe wechselt: Inhalt springt bei der Auswahl nicht.
-    // Fokus-Session in `fg`, die übrigen markierten in `muted`.
+    // Fokus-Session in `fg`, die übrigen markierten in `muted`. Hat der Baum die Tastatur (⌘1), trägt die Fokus-Session
+    // die Akzentfarbe.
     let edge = match (focused, selected) {
+        (true, _) if keys => t.accent,
         (true, _) => t.fg,
         (false, true) => t.muted,
         _ => gpui::transparent_black(),
@@ -199,6 +202,7 @@ fn group_block(
     g: usize,
     group: &Group,
     sel: &Selection,
+    keys: bool,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let mut block = div().flex().flex_col().flex_none().child(group_header(g, group, sel.focus.0 == g, cx));
@@ -206,12 +210,13 @@ fn group_block(
         return block;
     }
     for s in 0..group.sessions.len() {
-        block = block.child(session_row(g, s, group, sel.contains((g, s)), sel.focus == (g, s), cx));
+        block = block.child(session_row(g, s, group, sel.contains((g, s)), sel.focus == (g, s), keys, cx));
     }
     block
 }
 
-pub fn sidebar(groups: &[Group], sel: &Selection, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+/// `keys`: die Tastatur gehört dem Baum (⌘1).
+pub fn sidebar(groups: &[Group], sel: &Selection, keys: bool, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let t = theme(cx);
     let mut col = div()
         .id("sidebar")
@@ -226,7 +231,7 @@ pub fn sidebar(groups: &[Group], sel: &Selection, cx: &mut Context<Shell>) -> im
         .bg(t.panel)
         .text_size(px(12.));
     for (g, group) in groups.iter().enumerate() {
-        col = col.child(group_block(g, group, sel, cx));
+        col = col.child(group_block(g, group, sel, keys, cx));
     }
     div().flex().flex_none().h_full().bg(t.panel).child(col).child(v_seam(&t))
 }

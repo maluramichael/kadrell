@@ -632,7 +632,7 @@ impl Render for TerminalPane {
 // ---------- Tasten ----------
 
 /// ⌘ auf dem Mac, Strg+Shift unter Windows (Strg allein gehört dem Terminal).
-fn is_cmd(ks: &Keystroke, key: &str) -> bool {
+pub(crate) fn is_cmd(ks: &Keystroke, key: &str) -> bool {
     let m = ks.modifiers;
     let primary = if cfg!(target_os = "macos") {
         m.platform && !m.control && !m.alt
@@ -644,7 +644,7 @@ fn is_cmd(ks: &Keystroke, key: &str) -> bool {
 
 /// Bytes für Sondertasten und Strg-Kombinationen. `None`: normaler Text, den der Input-Handler bekommt
 /// (dort landen auch Tottasten, AltGr und ⌥-Zeichen wie @ auf der deutschen Mac-Tastatur).
-fn key_bytes(ks: &Keystroke, app_cursor: bool) -> Option<Vec<u8>> {
+pub(crate) fn key_bytes(ks: &Keystroke, app_cursor: bool) -> Option<Vec<u8>> {
     let m = ks.modifiers;
     if m.platform {
         return None;

@@ -3,6 +3,7 @@
 //! bekommen Abstand, Rahmen und Fokuskante (`Bordered`), wie in der Mac-App.
 
 use gpui::{AnyElement, App, Div, FontWeight, IntoElement, ParentElement, Styled, div, px};
+use kadrell_i18n::trd;
 
 use super::chrome::h_seam;
 use super::model::{Group, Session};
@@ -25,6 +26,19 @@ impl TileStyle {
 
 const HEADER_HEIGHT: f32 = 24.;
 
+/// Was an einer Kachel zu sehen ist, über Stil und Inhalt hinaus.
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+pub struct Marks {
+    /// Die Tastaturkachel.
+    pub active: bool,
+    /// Fokuskante in Akzentfarbe: die Tastaturkachel, im Sync-Modus alle (alle bekommen die Eingabe).
+    pub ring: bool,
+    /// Badge „Z“: gezoomt, obwohl mehrere Sessions offen sind (wie in tmux).
+    pub zoomed: bool,
+    /// Vorschau aus dem Baum, ohne Tastatur.
+    pub preview: bool,
+}
+
 fn group_tag(group: &Group, t: &Theme) -> impl IntoElement + use<> {
     div()
         .flex()
@@ -35,7 +49,23 @@ fn group_tag(group: &Group, t: &Theme) -> impl IntoElement + use<> {
         .child(div().text_size(px(10.5)).font_weight(FontWeight::BOLD).text_color(t.sub).child(group.name.to_uppercase()))
 }
 
-fn header(group: &Group, session: &Session, cx: &App) -> impl IntoElement + use<> {
+/// Badge „Z“ in der Titelzeile einer gezoomten Kachel (`drawZoomBadge`).
+fn zoom_badge(t: &Theme) -> impl IntoElement + use<> {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .size(px(16.))
+        .mr(px(8.))
+        .bg(t.waiting)
+        .text_color(t.pill_text_on(t.waiting))
+        .text_size(px(11.))
+        .font_weight(FontWeight::BOLD)
+        .child("Z")
+}
+
+fn header(group: &Group, session: &Session, zoomed: bool, cx: &App) -> impl IntoElement + use<> {
     let t = theme(cx);
     let mut row = div()
         .flex()
@@ -57,9 +87,11 @@ fn header(group: &Group, session: &Session, cx: &App) -> impl IntoElement + use<
     if let Some(branch) = &session.branch {
         row = row.child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(branch.clone()));
     }
-    row.child(group_tag(group, &t))
-        .child(div().flex_1())
-        .child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age.clone()))
+    row = row.child(group_tag(group, &t)).child(div().flex_1());
+    if zoomed {
+        row = row.child(zoom_badge(&t));
+    }
+    row.child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age.clone()))
 }
 
 /// Rahmen der Kachel: Fokus in Akzentfarbe, sonst Linienfarbe. Eine reine Titelzeile (Stack) trägt nur 1 px,
@@ -76,16 +108,31 @@ fn frame(style: TileStyle, focused: bool, body: bool, t: &Theme) -> Div {
     }
 }
 
-/// Eine Kachel: Kopfzeile und, wenn `body`, das Terminal. `focused` ist die Tastaturkachel.
-pub fn tile(group: &Group, session: &Session, style: TileStyle, focused: bool, body: bool, cx: &App) -> AnyElement {
+/// Hinweis mitten im Körper einer Kachel ohne Terminal: die Vorschau einer nie gestarteten Session.
+fn preview_note(t: &Theme) -> impl IntoElement + use<> {
+    div()
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(11.))
+        .font_weight(FontWeight::BOLD)
+        .text_color(t.muted)
+        .child(trd!("VORSCHAU · NICHT GESTARTET · ⏎ ODER KLICK STARTET"))
+}
+
+/// Eine Kachel: Kopfzeile und, wenn `body`, das Terminal.
+pub fn tile(group: &Group, session: &Session, style: TileStyle, marks: Marks, body: bool, cx: &App) -> AnyElement {
     let t = theme(cx);
-    let frame = frame(style, focused, body, &t).child(header(group, session, cx));
+    let frame = frame(style, marks.ring, body, &t).child(header(group, session, marks.zoomed, cx));
     if !body {
         return frame.into_any_element();
     }
     let mut area = div().flex_1().min_h_0().overflow_hidden().bg(t.bg);
-    if let Some(pane) = &session.pane {
-        area = area.child(pane.clone());
+    match &session.pane {
+        Some(pane) => area = area.child(pane.clone()),
+        None if marks.preview => area = area.child(preview_note(&t)),
+        None => {}
     }
     frame.child(h_seam(&t)).child(area).into_any_element()
 }

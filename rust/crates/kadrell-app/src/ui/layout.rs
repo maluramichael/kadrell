@@ -1,6 +1,7 @@
-//! Kacheln der Arbeitsfläche: reine Layout-Mathematik (Port von `app/Kadrell/Workspace/Tiling.swift`),
-//! Auswahlmodell (wie `WorkspaceView`) und die Ansicht, die die Kacheln absolut platziert.
+//! Auswahlmodell (wie `WorkspaceView`), Zustand der Layouts und die Ansicht, die die Kacheln absolut platziert.
+//! Die Layout-Mathematik steht in `tiling` (Port von `Tiling.swift`).
 
+use kadrell_core::Settings;
 use kadrell_i18n::trd;
 use crate::lang::tx;
 use std::cell::Cell;
@@ -8,292 +9,18 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Context, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement,
-    Stateful, Styled, canvas, div, px,
+    AnyElement, Bounds, Context, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement,
+    Pixels, ScrollEvent, Stateful, Styled, canvas, div, px,
 };
 
 use super::model::Group;
 use super::tile::{self, TileStyle};
 use super::theme;
+pub use super::tiling::*;
 use crate::Shell;
-
-/// Abstand zwischen den Kacheln und zum Rand (`Settings.tileGap` der Mac-App).
-pub const GAP: f32 = 6.;
-/// Titelzeile einer Stack-Zeile.
-pub const ROW_HEIGHT: f32 = 26.;
-/// Kleinster Anteil eines Feldes beim Ziehen.
-const MIN_RATIO: f64 = 0.05;
-const MAX_COLS: usize = 9;
 
 /// Gruppe und Session einer Kachel.
 pub type Id = (usize, usize);
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Rect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl Rect {
-    pub fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
-        Self { x, y, w, h }
-    }
-    pub fn max_x(&self) -> f32 {
-        self.x + self.w
-    }
-    pub fn max_y(&self) -> f32 {
-        self.y + self.h
-    }
-    fn inset(&self, d: f32) -> Rect {
-        Rect::new(self.x + d, self.y + d, (self.w - 2. * d).max(0.), (self.h - 2. * d).max(0.))
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum LayoutMode {
-    Grid,
-    Main,
-    Spiral,
-    Stack,
-}
-
-impl LayoutMode {
-    pub const ALL: [LayoutMode; 4] = [LayoutMode::Grid, LayoutMode::Main, LayoutMode::Spiral, LayoutMode::Stack];
-
-    /// Reihum wie tmux `next-layout`.
-    pub fn next(self) -> LayoutMode {
-        let i = Self::ALL.iter().position(|m| *m == self).unwrap_or(0);
-        Self::ALL[(i + 1) % Self::ALL.len()]
-    }
-
-    pub fn from_name(name: &str) -> Option<LayoutMode> {
-        match name {
-            "grid" => Some(LayoutMode::Grid),
-            "main" => Some(LayoutMode::Main),
-            "spiral" => Some(LayoutMode::Spiral),
-            "stack" => Some(LayoutMode::Stack),
-            _ => None,
-        }
-    }
-
-    pub fn key(self) -> &'static str {
-        match self {
-            LayoutMode::Grid => "grid",
-            LayoutMode::Main => "main",
-            LayoutMode::Spiral => "spiral",
-            LayoutMode::Stack => "stack",
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Direction {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-/// Ziehbare Grenze einer Vorlage: gehört zur Verhältnisliste `key` mit `count` Feldern, liegt hinter Feld `index`.
-#[derive(Clone, PartialEq, Debug)]
-pub struct SplitLine {
-    pub key: String,
-    pub index: usize,
-    pub count: usize,
-    /// Senkrechte Linie, wird waagerecht gezogen.
-    pub vertical: bool,
-    /// Griffzone, mindestens 8 px breit, auch bei Abstand 0.
-    pub rect: Rect,
-    /// Fläche, die diese Liste aufteilt.
-    pub span: Rect,
-}
-
-pub fn columns(n: usize) -> usize {
-    if n <= 1 { 1 } else { (n as f64).sqrt().ceil() as usize }
-}
-
-/// Verhältnisse einer Vorlage nach Schlüssel und Feldzahl, `None` = gleich verteilt.
-pub type Ratios<'a> = &'a dyn Fn(&str, usize) -> Option<Vec<f64>>;
-
-/// Abschnitte auf einer Achse nach Verhältnissen, dazwischen `gap`; Kanten auf ganze Pixel,
-/// das letzte Ende sitzt genau am Rand.
-pub fn segments(start: f32, length: f32, gap: f32, ratios: &[f64]) -> Vec<(f32, f32)> {
-    let usable = (length - gap * (ratios.len() as f32 - 1.)).max(0.);
-    let mut acc = 0.0f64;
-    let mut out = Vec::new();
-    for (i, v) in ratios.iter().enumerate() {
-        let s = (start + acc as f32 * usable + i as f32 * gap).round();
-        acc += v;
-        let e = if i == ratios.len() - 1 { start + length } else { (start + acc as f32 * usable + i as f32 * gap).round() };
-        out.push((s, e));
-    }
-    out
-}
-
-/// Teilt Flächen nach den Verhältnissen der Vorlage und sammelt dabei die ziehbaren Grenzen.
-struct Splitter<'a> {
-    gap: f32,
-    ratios: Ratios<'a>,
-    dividers: Vec<SplitLine>,
-}
-
-impl<'a> Splitter<'a> {
-    /// Gespeicherte Verhältnisse normiert, ungültige oder fehlende gleich verteilt.
-    fn normalized(&self, key: &str, count: usize) -> Vec<f64> {
-        match (self.ratios)(key, count) {
-            Some(v) if v.len() == count && v.iter().all(|x| *x > 0.) => {
-                let sum: f64 = v.iter().sum();
-                v.iter().map(|x| x / sum).collect()
-            }
-            _ => vec![1. / count as f64; count],
-        }
-    }
-
-    fn grip(&self, area: Rect, vertical: bool, a: f32, z: f32) -> Rect {
-        let mid = (a + z) / 2.;
-        let w = (z - a).max(8.);
-        if vertical { Rect::new(mid - w / 2., area.y, w, area.h) } else { Rect::new(area.x, mid - w / 2., area.w, w) }
-    }
-
-    fn part_rect(area: Rect, vertical: bool, s: f32, e: f32) -> Rect {
-        if vertical { Rect::new(s, area.y, e - s, area.h) } else { Rect::new(area.x, s, area.w, e - s) }
-    }
-
-    /// Teilt `area` entlang einer Achse nach `key` und merkt sich die Grenzen.
-    fn split(&mut self, area: Rect, vertical: bool, key: &str, count: usize) -> Vec<Rect> {
-        let (start, length) = if vertical { (area.x, area.w) } else { (area.y, area.h) };
-        let parts = segments(start, length, self.gap, &self.normalized(key, count));
-        for i in 0..count - 1 {
-            let rect = self.grip(area, vertical, parts[i].1, parts[i + 1].0);
-            self.dividers.push(SplitLine { key: key.to_string(), index: i, count, vertical, rect, span: area });
-        }
-        parts.iter().map(|(s, e)| Self::part_rect(area, vertical, *s, *e)).collect()
-    }
-
-    fn grid(&mut self, n: usize, b: Rect, fixed: usize) -> Vec<Rect> {
-        let cols = if fixed > 0 { fixed.min(n) } else { columns(n) };
-        let rows = n.div_ceil(cols);
-        let xs = if cols > 1 { self.split(b, true, &format!("grid.cols.{cols}"), cols) } else { vec![b] };
-        let ys = if rows > 1 { self.split(b, false, &format!("grid.rows.{rows}"), rows) } else { vec![b] };
-        (0..n).map(|i| Rect::new(xs[i % cols].x, ys[i / cols].y, xs[i % cols].w, ys[i / cols].h)).collect()
-    }
-
-    fn main(&mut self, n: usize, b: Rect) -> Vec<Rect> {
-        if n <= 1 {
-            return vec![b];
-        }
-        let cols = self.split(b, true, "main.cols", 2);
-        let rest = if n > 2 { self.split(cols[1], false, &format!("main.rows.{}", n - 1), n - 1) } else { vec![cols[1]] };
-        let mut out = vec![cols[0]];
-        out.extend(rest);
-        out
-    }
-
-    /// Spirale (bspwm): jede Kachel teilt den Rest, abwechselnd senkrecht und waagerecht.
-    fn spiral(&mut self, n: usize, b: Rect) -> Vec<Rect> {
-        let mut area = b;
-        let mut frames = Vec::new();
-        for i in 0..n.saturating_sub(1) {
-            let parts = self.split(area, i % 2 == 0, &format!("spiral.{i}"), 2);
-            frames.push(parts[0]);
-            area = parts[1];
-        }
-        frames.push(area);
-        frames
-    }
-}
-
-/// Die Vorlage des Layouts für `n` Kacheln: Felder in Reihenfolge und ihre ziehbaren Grenzen. Stack hat
-/// keine Vorlage (siehe `stack`). `fixed_cols` 0 = Grid wählt ⌈√n⌉ Spalten.
-pub fn layout(mode: LayoutMode, n: usize, b: Rect, gap: f32, fixed_cols: usize, ratios: Ratios) -> (Vec<Rect>, Vec<SplitLine>) {
-    if n == 0 {
-        return (Vec::new(), Vec::new());
-    }
-    let mut s = Splitter { gap, ratios, dividers: Vec::new() };
-    let frames = match mode {
-        LayoutMode::Grid | LayoutMode::Stack => s.grid(n, b, fixed_cols),
-        LayoutMode::Main => s.main(n, b),
-        LayoutMode::Spiral => s.spiral(n, b),
-    };
-    (frames, s.dividers)
-}
-
-/// Neue Verhältnisse, wenn Grenze `d` an Position `p` (x, y) gezogen wird. Kein Feld wird kleiner als 5 %.
-pub fn drag(d: &SplitLine, p: (f32, f32), gap: f32, current: &[f64]) -> Vec<f64> {
-    let mut v = if current.len() == d.count { current.to_vec() } else { vec![1. / d.count as f64; d.count] };
-    let (start, length) = if d.vertical { (d.span.x, d.span.w) } else { (d.span.y, d.span.h) };
-    let usable = length - gap * (d.count as f32 - 1.);
-    if usable <= 0. {
-        return v;
-    }
-    let before: f64 = v[..d.index].iter().sum();
-    let pair = v[d.index] + v[d.index + 1];
-    let at = if d.vertical { p.0 } else { p.1 };
-    let pos = ((at - start - d.index as f32 * gap - gap / 2.) / usable) as f64;
-    v[d.index] = (pos - before).max(MIN_RATIO).min(pair - MIN_RATIO);
-    v[d.index + 1] = pair - v[d.index];
-    v
-}
-
-/// Überlappung zweier Kacheln auf der Achse quer zur Richtung.
-fn overlap(a: Rect, b: Rect, d: Direction) -> f32 {
-    match d {
-        Direction::Left | Direction::Right => a.max_y().min(b.max_y()) - a.y.max(b.y),
-        Direction::Up | Direction::Down => a.max_x().min(b.max_x()) - a.x.max(b.x),
-    }
-}
-
-/// Abstand von `a` zu `b` in Richtung `d`, `None` wenn `b` nicht in dieser Richtung liegt.
-fn distance(a: Rect, b: Rect, d: Direction) -> Option<f32> {
-    let (dist, ok) = match d {
-        Direction::Left => (a.x - b.max_x(), b.max_x() <= a.x + 1.),
-        Direction::Right => (b.x - a.max_x(), b.x >= a.max_x() - 1.),
-        Direction::Up => (a.y - b.max_y(), b.max_y() <= a.y + 1.),
-        Direction::Down => (b.y - a.max_y(), b.y >= a.max_y() - 1.),
-    };
-    ok.then_some(dist)
-}
-
-/// Nachbar nach Geometrie: nächstes Feld in Richtung `d`, bevorzugt eines, das sich auf der anderen Achse überlappt.
-pub fn neighbor(i: usize, frames: &[Rect], d: Direction) -> Option<usize> {
-    let a = *frames.get(i)?;
-    let score = |b: Rect| distance(a, b, d).map(|dist| (overlap(a, b, d) <= 0., dist, -overlap(a, b, d)));
-    let mut best: Option<(usize, (bool, f32, f32))> = None;
-    for (j, b) in frames.iter().enumerate().filter(|(j, _)| *j != i) {
-        let Some(s) = score(*b) else { continue };
-        if best.is_none_or(|(_, o)| s.partial_cmp(&o) == Some(std::cmp::Ordering::Less)) {
-            best = Some((j, s));
-        }
-    }
-    best.map(|(j, _)| j)
-}
-
-/// Stack (i3-Akkordeon): jede Kachel eine Titelzeile, die aktive bekommt ihren Körper direkt darunter,
-/// die Zeilen danach bleiben darunter.
-pub fn stack(n: usize, active: usize, b: Rect, row_h: f32) -> (Vec<Rect>, Rect) {
-    let mut rows = Vec::new();
-    let mut body = Rect::new(0., 0., 0., 0.);
-    let mut y = b.y.round();
-    let body_h = (b.h - n as f32 * row_h).max(0.).round();
-    for i in 0..n {
-        rows.push(Rect::new(b.x, y, b.w, row_h));
-        y += row_h;
-        if i == active {
-            body = Rect::new(b.x, y, b.w, body_h);
-            y += body_h;
-        }
-    }
-    (rows, body)
-}
-
-/// Spaltenzahl nach ‹ ›: 0 = automatisch, davor und danach schrittweise.
-pub fn step_cols(current: usize, n: usize, delta: isize) -> usize {
-    let base = if current == 0 { columns(n) } else { current };
-    let next = base as isize + delta;
-    if next < 1 { 0 } else { (next as usize).min(MAX_COLS) }
-}
 
 // ---------------------------------------------------------------------------------------------------------
 // Auswahl
@@ -369,42 +96,110 @@ impl Selection {
 /// Letzte gemessene Fläche (x, y, Breite, Höhe) der Arbeitsfläche, aus dem Zeichnen zurückgemeldet.
 pub type Measured = Rc<Cell<Option<(f32, f32, f32, f32)>>>;
 
+/// Schlüssel in den Einstellungen für Verhältnisse (`layout.<vorlage>`), Spaltenzahlen und Teilungen von Frei.
+pub const RATIO_PREFIX: &str = "layout.";
+pub const GRID_COLUMNS_KEY: &str = "layout.grid.columns";
+pub const SCROLL_COLUMNS_KEY: &str = "layout.scroll.columns";
+pub const SPLITS_KEY: &str = "workspace.custom.splits";
+
 pub struct LayoutState {
     pub mode: LayoutMode,
     /// Grid: feste Spaltenzahl, 0 = automatisch.
     pub cols: usize,
+    /// Scrollen: sichtbare Spalten ohne eigene Breite, mindestens 1.
+    pub scroll_cols: usize,
+    /// Frei: Teilungsrichtung je Position (`r`, `d`, `a`).
+    pub splits: String,
     /// Verhältnisse je Vorlage, nicht je Session.
     pub ratios: HashMap<String, Vec<f64>>,
     pub dragging: Option<SplitLine>,
     pub measured: Measured,
-    /// Zuletzt berechnete Rahmen (Fokusbewegung).
+    /// Zuletzt berechnete Rahmen aller Kacheln (Fokusbewegung), beim Scrollen samt der außerhalb.
     pub frames: Vec<Rect>,
+    /// Ziehbare Grenzen der aktuellen Vorlage (Pfeiltasten verschieben sie).
+    pub dividers: Vec<SplitLine>,
+    /// Scrollen: seitlicher Versatz der Spalten.
+    pub scroll_x: f32,
+    /// Scrollen: nach Fokuswechsel oder neuer Breite rückt die Fokus-Kachel ins Bild.
+    pub reveal: bool,
+    /// Breite der Fläche beim letzten `plan`: eine neue Breite rückt die Fokus-Kachel ins Bild.
+    planned_width: f32,
 }
 
 impl LayoutState {
     pub fn new(mode: LayoutMode) -> Self {
-        Self { mode, cols: 0, ratios: HashMap::new(), dragging: None, measured: Rc::new(Cell::new(None)), frames: Vec::new() }
+        Self {
+            mode,
+            cols: 0,
+            scroll_cols: 2,
+            splits: String::new(),
+            ratios: HashMap::new(),
+            dragging: None,
+            measured: Rc::new(Cell::new(None)),
+            frames: Vec::new(),
+            dividers: Vec::new(),
+            scroll_x: 0.,
+            reveal: true,
+            planned_width: 0.,
+        }
     }
 
-    pub fn ratios_for(&self, key: &str, count: usize) -> Option<Vec<f64>> {
-        self.ratios.get(key).filter(|v| v.len() == count).cloned()
+    /// Layout samt gespeicherten Spalten, Teilungen und Verhältnissen aus den Einstellungen des Profils.
+    pub fn from_settings(mode: LayoutMode, settings: &Settings) -> Self {
+        let mut state = Self::new(mode);
+        state.cols = settings.i64_or(GRID_COLUMNS_KEY, 0).clamp(0, 9) as usize;
+        state.scroll_cols = settings.i64_or(SCROLL_COLUMNS_KEY, 2).clamp(1, 12) as usize;
+        state.splits = settings.string_or(SPLITS_KEY, "");
+        for key in settings.keys().filter(|k| k.starts_with(RATIO_PREFIX) && *k != GRID_COLUMNS_KEY && *k != SCROLL_COLUMNS_KEY) {
+            let numbers = settings.get(key).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_f64()).collect::<Vec<_>>());
+            if let Some(v) = numbers.filter(|v| !v.is_empty()) {
+                state.ratios.insert(key[RATIO_PREFIX.len()..].to_string(), v);
+            }
+        }
+        state
     }
 
-    fn area(&self) -> Rect {
+    /// Gespeicherte Verhältnisse; die Länge prüft die Vorlage (`Splitter::normalized`), Scrollen kennt beliebige Längen.
+    pub fn ratios_for(&self, key: &str, _count: usize) -> Option<Vec<f64>> {
+        self.ratios.get(key).cloned()
+    }
+
+    pub fn area(&self) -> Rect {
         let (_, _, w, h) = self.measured.get().unwrap_or((0., 0., 1000., 600.));
         Rect::new(0., 0., w, h)
     }
 
-    /// Rahmen und Grenzen für `n` Kacheln mit Fokus `active`; die Rahmen der Stack-Zeilen enthalten beim aktiven den Körper.
-    pub fn plan(&self, n: usize, active: usize) -> (Vec<Rect>, Vec<SplitLine>) {
+    /// Rahmen und Grenzen für `n` Kacheln mit Fokus `active`; die Rahmen der Stack-Zeilen enthalten beim aktiven den
+    /// Körper. Merkt sich Rahmen und Grenzen und führt beim Scrollen den Versatz nach.
+    pub fn plan(&mut self, n: usize, active: usize) -> (Vec<Rect>, Vec<SplitLine>) {
         let area = if n > 1 { self.area().inset(GAP) } else { self.area() };
-        if self.mode == LayoutMode::Stack && n > 1 {
+        if (area.w - self.planned_width).abs() > 0.5 {
+            self.planned_width = area.w;
+            self.reveal = true;
+        }
+        let (frames, dividers) = if self.mode == LayoutMode::Stack && n > 1 {
             let (mut rows, body) = stack(n, active, area, ROW_HEIGHT);
             rows[active].h += body.h;
-            return (rows, Vec::new());
-        }
+            (rows, Vec::new())
+        } else {
+            self.template(n, area, active)
+        };
+        self.frames = frames.clone();
+        self.dividers = dividers.clone();
+        (frames, dividers)
+    }
+
+    fn template(&mut self, n: usize, area: Rect, active: usize) -> (Vec<Rect>, Vec<SplitLine>) {
         let ratios = |k: &str, c: usize| self.ratios_for(k, c);
-        layout(self.mode, n, area, GAP, self.cols, &ratios)
+        let opts = Opts { cols: self.cols, scroll_cols: self.scroll_cols, splits: &self.splits };
+        let (frames, dividers) = layout(self.mode, n, area, GAP, opts, &ratios);
+        if self.mode != LayoutMode::Scroll || n == 0 {
+            return (frames, dividers);
+        }
+        let reveal = self.reveal.then(|| frames.get(active).copied()).flatten();
+        self.reveal = false;
+        self.scroll_x = scroll_offset(self.scroll_x, reveal, frames.last().map_or(0., Rect::max_x), area);
+        (frames.iter().map(|f| f.offset_x(-self.scroll_x)).collect(), dividers)
     }
 
     pub fn drag_to(&mut self, p: (f32, f32)) {
@@ -417,10 +212,51 @@ impl LayoutState {
         self.ratios.remove(key);
     }
 
-    pub fn label(&self) -> String {
-        match self.cols {
-            0 => "AUTO COL".to_string(),
-            c => format!("{c} COL"),
+    /// Alle gezogenen Verhältnisse weg, Spaltenzahl und Teilungen bleiben. Gibt die entfernten Schlüssel zurück.
+    pub fn reset_all(&mut self) -> Vec<String> {
+        self.ratios.drain().map(|(k, _)| k).collect()
+    }
+
+    /// ⌃⌥-Pfeile wie tmux `resize-pane`: die Trennlinie an der Kachel `frame` wandert 5 % in Pfeilrichtung. Gibt den
+    /// Schlüssel der geänderten Liste zurück, `None` ohne passende Linie.
+    pub fn nudge(&mut self, frame: Rect, d: Direction) -> Option<String> {
+        let line = divider_for(&self.dividers, frame, d, GAP + 10.)?.clone();
+        let current = self.ratios.get(&line.key).cloned().unwrap_or_default();
+        self.ratios.insert(line.key.clone(), drag(&line, nudge_target(&line, d), GAP, &current));
+        Some(line.key)
+    }
+
+    /// Scrollen: ← / → schaltet die Breite der Spalte `i` eine Stufe (⅓ ½ ⅔) schmaler bzw. breiter. `false`: nichts zu tun.
+    pub fn step_scroll_width(&mut self, i: usize, d: Direction) -> bool {
+        if !d.horizontal() {
+            return false;
+        }
+        let mut v = self.ratios.get(SCROLL_KEY).cloned().unwrap_or_default();
+        while v.len() <= i {
+            v.push(0.5);
+        }
+        let next = nearest_scroll_width(v[i]) as isize + if d.forward() { 1 } else { -1 };
+        let Some(width) = usize::try_from(next).ok().and_then(|n| SCROLL_WIDTHS.get(n)) else { return false };
+        v[i] = *width;
+        self.ratios.insert(SCROLL_KEY.to_string(), v);
+        self.reveal = true;
+        true
+    }
+
+    /// Seitlich scrollen (Mausrad, Trackpad): positiv schiebt die Ansicht nach rechts.
+    pub fn scroll_by(&mut self, dx: f32) {
+        if self.mode == LayoutMode::Scroll {
+            self.scroll_x += dx;
+        }
+    }
+
+    /// Beschriftung der Spaltentaste: Grid „AUTO SP“ oder „N SP“, Scrollen „N SP“; sonst keine.
+    pub fn cols_label(&self) -> Option<String> {
+        let count = |c: usize| if c == 0 { trd!("AUTO SP") } else { trd!("%lld SP", c as i64) };
+        match self.mode {
+            LayoutMode::Grid => Some(count(self.cols)),
+            LayoutMode::Scroll => Some(count(self.scroll_cols)),
+            _ => None,
         }
     }
 
@@ -438,6 +274,7 @@ fn grip(line: &SplitLine, i: usize, cx: &mut Context<Shell>) -> AnyElement {
         if ev.click_count >= 2 {
             this.layout.reset(&line.key);
             this.layout.dragging = None;
+            this.persist_ratio(&line.key);
         } else {
             this.layout.dragging = Some(line.clone());
         }
@@ -460,18 +297,30 @@ fn placed(r: Rect, g: usize, s: usize, tile: AnyElement, cx: &mut Context<Shell>
         .into_any_element()
 }
 
-/// Sitzt die Fläche anders als zuletzt gemessen, neu zeichnen, damit die Rahmen stimmen.
-fn measure(measured: Measured, entity: gpui::EntityId) -> impl IntoElement {
+/// Sitzt die Fläche anders als zuletzt gemessen, neu zeichnen, damit die Rahmen stimmen. Fängt außerdem das
+/// seitliche Scrollen im Layout Scrollen ab, noch bevor das Terminal darunter es bekommt.
+fn measure(measured: Measured, entity: gpui::Entity<Shell>) -> impl IntoElement {
+    let scroller = entity.clone();
     canvas(
         move |b, _, cx| {
             let now = (b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32());
             let old = measured.get();
             if old.is_none_or(|o| (o.0 - now.0).abs() + (o.1 - now.1).abs() + (o.2 - now.2).abs() + (o.3 - now.3).abs() > 0.5) {
                 measured.set(Some(now));
-                cx.notify(entity);
+                cx.notify(entity.entity_id());
             }
         },
-        |_, _, _, _| (),
+        move |bounds: Bounds<Pixels>, _, window, _| {
+            let scroller = scroller.clone();
+            window.on_mouse_event(move |ev: &ScrollEvent, phase, _, cx| {
+                if phase != gpui::DispatchPhase::Capture || !bounds.contains(&ev.position) {
+                    return;
+                }
+                if scroller.update(cx, |shell, cx| shell.wheel_scroll(ev, cx)) {
+                    cx.stop_propagation();
+                }
+            });
+        },
     )
     .absolute()
     .size_full()
@@ -481,12 +330,17 @@ fn tiles(shell: &Shell, frames: &[Rect], cx: &mut Context<Shell>) -> Vec<AnyElem
     let visible = shell.visible();
     let style = TileStyle::for_count(visible.len());
     let stacked = shell.layout.mode == LayoutMode::Stack && visible.len() > 1;
+    let area = shell.layout.area();
     let mut out = Vec::new();
     for (i, &(g, s)) in visible.iter().enumerate() {
-        let focused = Some((g, s)) == shell.selected;
-        let body = !stacked || focused;
+        // Beim Scrollen liegen Spalten ganz außerhalb: nicht zeichnen, Nachbarn per Pfeil finden sie trotzdem.
+        if shell.layout.mode == LayoutMode::Scroll && visible.len() > 1 && !frames[i].intersects(area) {
+            continue;
+        }
+        let marks = shell.tile_marks((g, s), visible.len());
+        let body = !stacked || marks.active;
         let group: &Group = &shell.groups[g];
-        let el = tile::tile(group, &group.sessions[s], style, focused, body, cx);
+        let el = tile::tile(group, &group.sessions[s], style, marks, body, cx);
         out.push(placed(frames[i], g, s, el, cx));
     }
     out
@@ -509,7 +363,7 @@ fn on_move(this: &mut Shell, ev: &MouseMoveEvent, cx: &mut Context<Shell>) {
         return;
     }
     if ev.pressed_button != Some(MouseButton::Left) {
-        this.layout.dragging = None;
+        this.end_drag();
         return;
     }
     let (ox, oy, _, _) = this.layout.measured.get().unwrap_or((0., 0., 0., 0.));
@@ -520,10 +374,9 @@ fn on_move(this: &mut Shell, ev: &MouseMoveEvent, cx: &mut Context<Shell>) {
 /// Arbeitsfläche: alle sichtbaren Kacheln samt ziehbaren Grenzen.
 pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::Div> {
     let t = theme(cx);
-    let visible_n = shell.visible().len();
-    let active = shell.selected.and_then(|sel| shell.visible().iter().position(|id| *id == sel)).unwrap_or(0);
-    let (frames, dividers) = shell.layout.plan(visible_n, active);
-    shell.layout.frames = frames.clone();
+    let visible = shell.visible();
+    let active = shell.selected.and_then(|sel| visible.iter().position(|id| *id == sel)).unwrap_or(0);
+    let (frames, dividers) = shell.layout.plan(visible.len(), active);
     let mut area = div()
         .id("workspace")
         .relative()
@@ -532,15 +385,15 @@ pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::D
         .min_h_0()
         .overflow_hidden()
         .bg(t.bg)
-        .child(measure(shell.layout.measured.clone(), cx.entity_id()))
+        .child(measure(shell.layout.measured.clone(), cx.entity()))
         .children(tiles(shell, &frames, cx))
-        .children((visible_n == 0).then(|| empty_hint(&t)));
+        .children(visible.is_empty().then(|| empty_hint(&t)));
     for (i, d) in dividers.iter().enumerate() {
         area = area.child(grip(d, i, cx));
     }
     area.on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| on_move(this, ev, cx)))
-        .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.layout.dragging = None))
-        .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, _| this.layout.dragging = None))
+        .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.end_drag()))
+        .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, _| this.end_drag()))
 }
 
 #[cfg(test)]
@@ -548,110 +401,6 @@ mod tests {
     use super::*;
 
     const B: Rect = Rect { x: 0., y: 0., w: 1000., h: 600. };
-
-    fn none(_: &str, _: usize) -> Option<Vec<f64>> {
-        None
-    }
-
-    fn grid(n: usize, gap: f32) -> Vec<Rect> {
-        layout(LayoutMode::Grid, n, B, gap, 0, &none).0
-    }
-
-    #[test]
-    fn grid_columns_and_fill() {
-        assert!(grid(0, 6.).is_empty());
-        assert_eq!(grid(1, 6.), vec![B]);
-        let five = grid(5, 6.);
-        assert_eq!(five.len(), 5);
-        assert_eq!(five[0].x, 0.);
-        assert_eq!(five[2].max_x(), 1000.);
-        assert_eq!(five[1].x, five[0].max_x() + 6.);
-        assert_eq!(five[3].y, five[0].max_y() + 6.);
-        assert_eq!(five[3].x, 0.);
-        assert_eq!(five[4].max_y(), 600.);
-        for r in &five {
-            assert_eq!(r.x, r.x.round());
-            assert_eq!(r.w, r.w.round());
-        }
-        let wide = grid(2, 40.);
-        assert_eq!(wide[1].x, wide[0].max_x() + 40.);
-        assert_eq!(wide[1].max_x(), 1000.);
-    }
-
-    #[test]
-    fn stack_accordion_keeps_rows_below_active() {
-        let (rows, body) = stack(4, 1, B, ROW_HEIGHT);
-        assert_eq!(rows.len(), 4);
-        assert_eq!(rows[0].y, 0.);
-        assert_eq!(rows[1].y, ROW_HEIGHT);
-        assert_eq!(body.y, rows[1].max_y());
-        assert_eq!(rows[2].y, body.max_y());
-        assert_eq!(rows[3].max_y(), 600.);
-        assert_eq!(body.h, 600. - 4. * ROW_HEIGHT);
-    }
-
-    #[test]
-    fn templates_fill_in_order() {
-        let r = |k: &str, _: usize| (k == "main.cols").then(|| vec![0.7, 0.3]);
-        let (f, d) = layout(LayoutMode::Main, 3, B, 0., 0, &r);
-        assert_eq!(f[0], Rect::new(0., 0., 700., 600.));
-        assert_eq!(f[1], Rect::new(700., 0., 300., 300.));
-        assert_eq!(f[2].max_y(), 600.);
-        assert_eq!(d.iter().map(|d| d.key.as_str()).collect::<Vec<_>>(), ["main.cols", "main.rows.2"]);
-        let sp = layout(LayoutMode::Spiral, 3, B, 0., 0, &none).0;
-        assert_eq!(sp[0], Rect::new(0., 0., 500., 600.));
-        assert_eq!(sp[1], Rect::new(500., 0., 500., 300.));
-        assert_eq!(sp[2], Rect::new(500., 300., 500., 300.));
-        let r3 = |k: &str, _: usize| (k == "grid.cols.3").then(|| vec![0.5, 0.25, 0.25]);
-        let g = layout(LayoutMode::Grid, 3, B, 0., 3, &r3).0;
-        assert_eq!(g.iter().map(|r| r.w).collect::<Vec<_>>(), [500., 250., 250.]);
-        let bad = |_: &str, _: usize| Some(vec![1.]);
-        let g = layout(LayoutMode::Grid, 2, B, 0., 0, &bad).0;
-        assert_eq!(g.iter().map(|r| r.w).collect::<Vec<_>>(), [500., 500.]);
-    }
-
-    #[test]
-    fn drag_moves_boundary_and_clamps() {
-        let d = layout(LayoutMode::Main, 2, B, 10., 0, &none).1[0].clone();
-        assert!(d.vertical);
-        let moved = drag(&d, (305., 0.), 10., &[]);
-        assert!((moved[0] - 300. / 990.).abs() < 0.001);
-        assert!((moved.iter().sum::<f64>() - 1.).abs() < 0.0001);
-        assert!((drag(&d, (-500., 0.), 10., &[])[0] - 0.05).abs() < 0.0001);
-        assert!((drag(&d, (5000., 0.), 10., &[])[1] - 0.05).abs() < 0.0001);
-    }
-
-    #[test]
-    fn drag_keeps_other_fields() {
-        let d = layout(LayoutMode::Grid, 3, B, 0., 3, &none).1[1].clone();
-        let v = drag(&d, (600., 0.), 0., &[0.2, 0.4, 0.4]);
-        assert!((v[0] - 0.2).abs() < 1e-6);
-        assert!((v[1] - 0.4).abs() < 1e-6);
-        assert!((v[2] - 0.4).abs() < 1e-6);
-        let v = drag(&d, (800., 0.), 0., &[0.2, 0.4, 0.4]);
-        assert!((v[1] - 0.6).abs() < 1e-6 && (v[2] - 0.2).abs() < 1e-6);
-    }
-
-    #[test]
-    fn neighbor_by_frames() {
-        let f = layout(LayoutMode::Main, 3, B, 0., 0, &none).0;
-        assert_eq!(neighbor(0, &f, Direction::Right), Some(1));
-        assert_eq!(neighbor(2, &f, Direction::Left), Some(0));
-        assert_eq!(neighbor(1, &f, Direction::Down), Some(2));
-        assert_eq!(neighbor(0, &f, Direction::Left), None);
-        assert_eq!(neighbor(9, &f, Direction::Left), None);
-    }
-
-    #[test]
-    fn mode_cycles_and_cols_step() {
-        assert_eq!(LayoutMode::Stack.next(), LayoutMode::Grid);
-        assert_eq!(LayoutMode::Grid.next(), LayoutMode::Main);
-        assert_eq!(columns(5), 3);
-        assert_eq!(step_cols(0, 4, 1), 3);
-        assert_eq!(step_cols(0, 4, -1), 1);
-        assert_eq!(step_cols(1, 4, -1), 0);
-        assert_eq!(step_cols(9, 4, 1), 9);
-    }
 
     #[test]
     fn selection_click_toggle_range_group() {
@@ -681,14 +430,106 @@ mod tests {
         assert_eq!(s.focus, (1, 1));
     }
 
+
     #[test]
     fn plan_stack_and_flat() {
-        let st = LayoutState::new(LayoutMode::Stack);
+        let mut st = LayoutState::new(LayoutMode::Stack);
         st.measured.set(Some((0., 0., 1000., 600.)));
         let (f, d) = st.plan(3, 1);
         assert!(d.is_empty());
         assert_eq!(f[0].h, ROW_HEIGHT);
         assert!(f[1].h > ROW_HEIGHT);
         assert_eq!(st.plan(1, 0).0, vec![B]);
+    }
+
+    fn measured(mode: LayoutMode) -> LayoutState {
+        let st = LayoutState::new(mode);
+        st.measured.set(Some((0., 0., 1000., 600.)));
+        st
+    }
+
+    #[test]
+    fn scroll_plan_reveals_the_focus_tile_once_and_keeps_the_offset() {
+        let mut st = measured(LayoutMode::Scroll);
+        let (f, _) = st.plan(4, 3);
+        assert!(f[3].max_x() <= 1000. - GAP + 0.5, "Fokus-Spalte ganz im Bild: {:?}", f[3]);
+        assert!(st.scroll_x > 0.);
+        assert!(!st.reveal);
+        let x = st.scroll_x;
+        st.plan(4, 0);
+        assert_eq!(st.scroll_x, x, "ohne neuen Anlass bleibt der Versatz");
+        st.reveal = true;
+        st.plan(4, 0);
+        assert_eq!(st.scroll_x, 0.);
+        st.scroll_by(40.);
+        st.plan(4, 0);
+        assert_eq!(st.scroll_x, 40.);
+        let mut other = measured(LayoutMode::Grid);
+        other.scroll_by(40.);
+        assert_eq!(other.scroll_x, 0., "nur Scrollen scrollt");
+    }
+
+    #[test]
+    fn a_new_width_reveals_the_focus_tile_again() {
+        let mut st = measured(LayoutMode::Scroll);
+        st.plan(4, 3);
+        st.reveal = false;
+        st.measured.set(Some((0., 0., 700., 600.)));
+        st.plan(4, 3);
+        assert!(st.scroll_x > 0.);
+        assert!(!st.reveal, "das Nachführen verbraucht den Anlass");
+    }
+
+    #[test]
+    fn scroll_width_steps_through_thirds_and_halves() {
+        let mut st = measured(LayoutMode::Scroll);
+        assert!(st.step_scroll_width(1, Direction::Right));
+        assert_eq!(st.ratios[SCROLL_KEY], vec![0.5, 2. / 3.]);
+        assert!(!st.step_scroll_width(1, Direction::Right), "breiter als ⅔ gibt es nicht");
+        assert!(st.step_scroll_width(1, Direction::Left));
+        assert!(st.step_scroll_width(1, Direction::Left));
+        assert!(!st.step_scroll_width(1, Direction::Left));
+        assert!(!st.step_scroll_width(0, Direction::Up));
+        assert_eq!(st.ratios[SCROLL_KEY], vec![0.5, 1. / 3.]);
+        // Eine gespeicherte Liste mit anderer Länge als die Kachelzahl gilt weiter.
+        assert_eq!(st.ratios_for(SCROLL_KEY, 7), Some(vec![0.5, 1. / 3.]));
+    }
+
+    #[test]
+    fn nudge_changes_the_ratio_of_the_line_next_to_the_focus_tile() {
+        let mut st = measured(LayoutMode::Main);
+        let (frames, _) = st.plan(3, 0);
+        assert_eq!(st.nudge(frames[0], Direction::Right).as_deref(), Some("main.cols"));
+        assert!((st.ratios["main.cols"][0] - 0.55).abs() < 0.02);
+        assert_eq!(st.nudge(frames[0], Direction::Down), None);
+        st.reset("main.cols");
+        assert!(st.ratios.is_empty());
+    }
+
+    #[test]
+    fn settings_restore_columns_splits_and_ratios() {
+        let mut s = Settings::default();
+        s.set(GRID_COLUMNS_KEY, serde_json::json!(3));
+        s.set(SCROLL_COLUMNS_KEY, serde_json::json!(0));
+        s.set(SPLITS_KEY, serde_json::json!("dr"));
+        s.set("layout.main.cols", serde_json::json!([0.7, 0.3]));
+        s.set("layout.broken", serde_json::json!("x"));
+        let st = LayoutState::from_settings(LayoutMode::Custom, &s);
+        assert_eq!((st.cols, st.scroll_cols, st.splits.as_str()), (3, 1, "dr"));
+        assert_eq!(st.ratios.get("main.cols"), Some(&vec![0.7, 0.3]));
+        assert!(!st.ratios.contains_key("broken"));
+        assert!(!st.ratios.contains_key("grid.columns"));
+    }
+
+    #[test]
+    fn column_label_follows_the_mode() {
+        let mut st = LayoutState::new(LayoutMode::Grid);
+        assert_eq!(st.cols_label().as_deref(), Some("AUTO SP"));
+        st.cols = 3;
+        assert_eq!(st.cols_label().as_deref(), Some("3 SP"));
+        st.mode = LayoutMode::Scroll;
+        assert_eq!(st.cols_label().as_deref(), Some("2 SP"));
+        st.mode = LayoutMode::Main;
+        assert_eq!(st.cols_label(), None);
     }
 }

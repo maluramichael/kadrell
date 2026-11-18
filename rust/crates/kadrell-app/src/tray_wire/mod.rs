@@ -231,7 +231,7 @@ impl Shell {
         self.sync(window, cx);
     }
 
-    fn focus_next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn focus_next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let view = self.tray_view();
         match rules::next_waiting(&view.waiting, self.state.focused.as_deref()).cloned() {
             Some(key) => self.focus_session(&key, window, cx),

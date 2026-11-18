@@ -13,6 +13,7 @@ mod theme;
 mod tray_wire;
 mod ui;
 mod usage;
+mod workspace;
 mod wire;
 
 use std::collections::HashMap;
@@ -32,7 +33,7 @@ use kadrell_term::{TermThemeGlobal, TerminalPane};
 use state::launch::LaunchEnv;
 use state::{AppState, Parts};
 use theme::Theme;
-use ui::layout::{Direction, Id, LayoutMode, LayoutState, Selection};
+use ui::layout::{Id, LayoutMode, LayoutState, Selection};
 use ui::model::{Group, flat_index};
 
 pub struct ThemeGlobal(pub Theme);
@@ -81,6 +82,8 @@ pub struct Shell {
     ext_ui: ui::ext::ExtUi,
     /// Konten, Nutzung, Meldungen und die Statistik (`usage`).
     usage: usage::UsageUi,
+    /// Zoom-, Sync-, Vorschau-, Auto- und Baum-Zustand der Arbeitsfläche samt Tabelle der Kürzel (`workspace`).
+    ws: workspace::Ws,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -113,13 +116,15 @@ impl Shell {
         let folder_home = state.home();
         let ext_ui = ui::ext::ExtUi::new(&ext, cx);
         let usage = usage::UsageUi::new(&state);
+        let ws = workspace::Ws::new(&state.settings);
+        let layout = LayoutState::from_settings(mode, &state.settings);
         let mut shell = Shell {
             state,
             groups: Vec::new(),
             panes: HashMap::new(),
             selected: None,
             selection: Selection { items: Vec::new(), focus: (0, 0), anchor: (0, 0) },
-            layout: LayoutState::new(mode),
+            layout,
             clock: now_hhmm(),
             menubar,
             overlay: None,
@@ -137,14 +142,17 @@ impl Shell {
             language_generation: kadrell_i18n::global().generation(),
             ext_ui,
             usage,
+            ws,
         };
         shell.rebuild();
         shell.apply_dev_view();
+        shell.apply_dev_preview();
         shell.state.ready = true;
         shell.sync(window, cx);
         shell.start_clock(cx);
         shell.start_jobs(jobs, window, cx);
         shell.start_poll(window, cx);
+        shell.start_auto_tick(window, cx);
         shell.start_usage(window, cx);
         shell.open_menu_from_env(window, cx);
         shell.open_overlay_from_env(window, cx);
@@ -169,6 +177,7 @@ impl Shell {
     }
 
     fn apply_dev_view(&mut self) {
+        self.apply_workspace_dev();
         let keys = dev_selection(&self.groups);
         let focus = std::env::var("KADRELL_DEV_SESSION").ok().and_then(|v| wire::keys_at(&self.groups, &v).into_iter().next());
         if !keys.is_empty() || focus.is_some() {
@@ -177,6 +186,7 @@ impl Shell {
         }
         if let Some(mode) = start_layout() {
             self.layout.mode = mode;
+            self.state.layout = control_layout(mode);
         }
     }
 
@@ -211,7 +221,7 @@ impl Shell {
         cx.notify();
     }
 
-    fn toggle_group(&mut self, g: usize, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_group(&mut self, g: usize, cx: &mut Context<Self>) {
         let id = self.groups[g].id.clone();
         self.state.toggle_collapsed(&id);
         self.rebuild();
@@ -224,22 +234,18 @@ impl Shell {
             self.selection.focus_on((g, s));
         } else {
             self.selection = Selection::single((g, s));
+            self.state.zoom = false;
         }
         self.apply_selection(window, cx);
     }
 
-    // --- Auswahl und Layout (Kacheln) ---
-
-    /// Sichtbare Kacheln in Anzeigereihenfolge; gezoomt nur die Fokus-Kachel.
-    fn visible(&self) -> Vec<Id> {
-        match (self.state.zoom, self.selected) {
-            (true, Some(focus)) => vec![focus],
-            _ => self.selection.items.clone(),
-        }
-    }
+    // --- Auswahl (Kacheln, Layout und Kürzel stehen in `workspace`) ---
 
     /// Übernimmt `selection` in den Zustand: startet fehlende Terminals und gibt der Fokus-Kachel die Tastatur.
+    /// Eine Vorschau endet damit, die Tastatur verlässt den Baum.
     fn apply_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.ws.tree_focus = false;
+        self.ws.preview.clear();
         self.commit_selection(window, cx);
     }
 
@@ -253,6 +259,7 @@ impl Shell {
         } else {
             self.selection = Selection::single((g, s));
         }
+        self.state.zoom = false;
         self.apply_selection(window, cx);
     }
 
@@ -260,37 +267,24 @@ impl Shell {
     fn select_group(&mut self, g: usize, window: &mut Window, cx: &mut Context<Self>) {
         let ids = (0..self.groups[g].sessions.len()).map(|s| (g, s)).collect();
         self.selection.group(ids);
+        self.state.zoom = false;
         self.apply_selection(window, cx);
     }
 
-    /// Klick in eine Kachel: sie wird Fokus, die Auswahl bleibt.
+    /// Klick in eine Kachel: sie wird Fokus, die Auswahl bleibt. Im Auto-Modus darf es eine Kachel sein, die niemand
+    /// ausgewählt hat.
     fn focus_tile(&mut self, g: usize, s: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.ws.tree_focus = false;
+        if self.ws.preview.is_active() {
+            self.end_preview(true, window, cx);
+            return;
+        }
         let key = self.groups[g].sessions[s].key.clone();
         let ended = matches!(self.state.run(&key), state::Run::Ended | state::Run::Stopped);
-        if self.selection.focus != (g, s) || ended {
+        if !self.selection.contains((g, s)) && self.tiles().contains(&(g, s)) {
+            self.set_focus((g, s), window, cx);
+        } else if self.selection.focus != (g, s) || ended {
             self.selection.focus_on((g, s));
-            self.apply_selection(window, cx);
-        }
-    }
-
-    pub(crate) fn cycle_layout(&mut self, cx: &mut Context<Self>) {
-        self.layout.mode = self.layout.mode.next();
-        self.state.layout = control_layout(self.layout.mode);
-        self.state.save_layout();
-        cx.notify();
-    }
-
-    pub(crate) fn step_cols(&mut self, delta: isize, cx: &mut Context<Self>) {
-        self.layout.cols = ui::layout::step_cols(self.layout.cols, self.visible().len(), delta);
-        cx.notify();
-    }
-
-    /// Alt+Pfeil: Fokus zur Nachbarkachel in dieser Richtung.
-    fn move_focus(&mut self, d: Direction, window: &mut Window, cx: &mut Context<Self>) {
-        let visible = self.visible();
-        let Some(i) = self.selected.and_then(|sel| visible.iter().position(|id| *id == sel)) else { return };
-        if let Some(j) = ui::layout::neighbor(i, &self.layout.frames, d) {
-            self.selection.focus_on(visible[j]);
             self.apply_selection(window, cx);
         }
     }
@@ -300,10 +294,18 @@ impl Shell {
         let running = self.state.running_count();
         ui::bar::LayoutCtl {
             mode: self.layout.mode,
-            cols_label: self.layout.label(),
+            cols_label: self.layout.cols_label(),
             cycle: Rc::new(cx.listener(|this, _, _, cx| this.cycle_layout(cx))),
             dec: Rc::new(cx.listener(|this, _, _, cx| this.step_cols(-1, cx))),
             inc: Rc::new(cx.listener(|this, _, _, cx| this.step_cols(1, cx))),
+            split: (self.layout.mode == ui::layout::LayoutMode::Custom).then(|| self.focused_split()),
+            cycle_split: Rc::new(cx.listener(|this, _, _, cx| this.cycle_split(cx))),
+            auto: self.ws.auto.on,
+            sync: self.ws.sync,
+            zoom: self.state.zoom && self.tiles().len() > 1,
+            toggle_auto: Rc::new(cx.listener(|this, _, window, cx| this.toggle_auto(window, cx))),
+            toggle_sync: Rc::new(cx.listener(|this, _, window, cx| this.toggle_sync(window, cx))),
+            toggle_zoom: Rc::new(cx.listener(|this, _, window, cx| this.zoom_focused(window, cx))),
             grouped: self.state.grouped(),
             sort: self.state.sort(),
             toggle_grouped: Rc::new(cx.listener(|this, _, _, cx| this.toggle_grouped(cx))),
@@ -322,27 +324,20 @@ impl Shell {
         self.state.store.sessions.sessions.iter().filter(|s| self.state.display_status(&s.id) == Some(SessionStatus::Waiting)).count()
     }
 
-    fn toggle_grouped(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_grouped(&mut self, cx: &mut Context<Self>) {
         self.state.toggle_grouped();
         self.rebuild();
         cx.notify();
     }
 
-    fn toggle_sort(&mut self, mode: SidebarSort, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_sort(&mut self, mode: SidebarSort, cx: &mut Context<Self>) {
         self.state.toggle_sort(mode);
         self.rebuild();
         cx.notify();
     }
 
-    /// Springt um `delta` Sessions weiter (zyklisch).
-    fn step(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
-        let flat = flat_index(&self.groups);
-        let Some(pos) = self.selected.and_then(|sel| flat.iter().position(|p| *p == sel)) else { return };
-        let next = (pos as isize + delta).rem_euclid(flat.len() as isize) as usize;
-        self.select(flat[next].0, flat[next].1, window, cx);
-    }
-
-    fn jump(&mut self, n: usize, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    /// Springt zur n-ten Session im Baum (0-basiert).
+    pub(crate) fn jump(&mut self, n: usize, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let flat = flat_index(&self.groups);
         let Some(&(g, s)) = flat.get(n) else { return false };
         self.select(g, s, window, cx);
@@ -355,23 +350,6 @@ impl Shell {
         cx.refresh_windows();
     }
 
-    fn handle_alt(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        match key {
-            "n" => self.step(1, window, cx),
-            "p" => self.step(-1, window, cx),
-            "t" => Self::toggle_theme(cx),
-            "left" => self.move_focus(Direction::Left, window, cx),
-            "right" => self.move_focus(Direction::Right, window, cx),
-            "up" => self.move_focus(Direction::Up, window, cx),
-            "down" => self.move_focus(Direction::Down, window, cx),
-            k => match k.parse::<usize>() {
-                Ok(d) if (1..=9).contains(&d) => return self.jump(d - 1, window, cx),
-                _ => return false,
-            },
-        }
-        true
-    }
-
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
         if std::env::var_os("KADRELL_DEV_KEYLOG").is_some() {
@@ -381,21 +359,18 @@ impl Shell {
             return;
         }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some() || self.usage.overlay_open()) && m.alt {
+        if self.modal_open() && m.alt {
             cx.stop_propagation();
             return;
         }
-        // Strg+L (Cmd+L auf dem Mac) schaltet das Layout reihum.
-        if self.settings.is_none() && m.secondary(cx) && !m.alt && !m.shift && ev.keystroke.key == "l" {
-            self.cycle_layout(cx);
+        // Kürzel aus den Einstellungen, Vorschau, Baumtasten und Sync (`workspace`).
+        if self.workspace_key(ev, window, cx) {
             cx.stop_propagation();
             return;
         }
-        // Strg+Alt ist AltGr unter Windows und gehört dem Terminal.
-        if !m.alt || m.control || m.platform || m.shift {
-            return;
-        }
-        if self.handle_alt(ev.keystroke.key.as_str(), window, cx) {
+        // Alt+T: Farbschema. Strg+Alt ist AltGr unter Windows und gehört dem Terminal.
+        if m.alt && !m.control && !m.platform && !m.shift && ev.keystroke.key == "t" {
+            Self::toggle_theme(cx);
             cx.stop_propagation();
         }
     }
@@ -412,6 +387,10 @@ impl Drop for Shell {
 
 impl Focusable for Shell {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
+        // Im Baum und in der Vorschau gehört die Tastatur nicht dem Terminal der Fokus-Kachel.
+        if self.ws.tree_focus || self.ws.preview.is_active() {
+            return self.idle_focus.clone();
+        }
         match self.selected.and_then(|(g, s)| self.groups.get(g)?.sessions.get(s)?.pane.as_ref()) {
             Some(p) => p.read(cx).focus.clone(),
             None => self.idle_focus.clone(),
@@ -423,7 +402,7 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_language(cx);
         let t = ui::theme(cx);
-        let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, cx);
+        let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, self.ws.tree_focus, cx);
         let sidebar = self.ext_left_column(sidebar, cx);
         let mut ctl = self.layout_ctl(cx);
         ctl.usage = Some(self.bar_ctl(window, cx));

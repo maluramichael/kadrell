@@ -88,12 +88,33 @@ fn stack_strokes() -> Vec<Stroke> {
     vec![rect(1., 1., 8., 1.5), rect(1., 3.7, 8., 3.5), rect(1., 8.4, 8., 0.6)]
 }
 
+/// Frei: links oben ein Feld, rechts daneben die Teilung (`.custom` der Mac-App).
+fn custom_strokes() -> Vec<Stroke> {
+    vec![rect(1., 1., 8., 8.), open(&[(4.2, 1.), (4.2, 9.)]), open(&[(1., 5.), (4.2, 5.)])]
+}
+
+/// Scrollen: zwei Spalten, die dritte ragt rechts hinaus.
+fn scroll_strokes() -> Vec<Stroke> {
+    let w = (8. - 2.) * 0.42;
+    let x = 1. + 2. * w + 4.;
+    vec![rect(1., 1., w, 8.), rect(1. + w + 2., 1., w, 8.), open(&[(9., 1.), (x, 1.), (x, 9.), (9., 9.)])]
+}
+
+/// Reihe: drei gleich breite Spalten, alle sichtbar.
+fn row_strokes() -> Vec<Stroke> {
+    let w = (8. - 4.) / 3.;
+    (0..3).map(|c| rect(1. + c as f32 * (w + 2.), 1., w, 8.)).collect()
+}
+
 /// Layout-Symbol der Leiste, 10 x 10, Strich 1,2 (`Icons.layout`): zeigt das aktuelle Layout.
 pub fn layout(mode: LayoutMode, color: Hsla) -> impl IntoElement {
     let strokes = match mode {
         LayoutMode::Grid => grid_strokes(),
         LayoutMode::Main => main_strokes(),
         LayoutMode::Spiral => spiral_strokes(),
+        LayoutMode::Custom => custom_strokes(),
+        LayoutMode::Scroll => scroll_strokes(),
+        LayoutMode::Row => row_strokes(),
         LayoutMode::Stack => stack_strokes(),
     };
     icon(10., strokes, color, 1.2)

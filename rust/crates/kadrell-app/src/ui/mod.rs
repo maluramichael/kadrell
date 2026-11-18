@@ -30,6 +30,7 @@ pub mod settings;
 pub mod rename;
 pub mod sidebar;
 pub mod tile;
+pub mod tiling;
 
 /// Aktuelles Farbschema aus dem Global.
 pub fn theme(cx: &App) -> Theme {

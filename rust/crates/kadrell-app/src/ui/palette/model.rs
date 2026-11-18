@@ -127,6 +127,9 @@ fn layout_title(mode: LayoutMode) -> &'static str {
         LayoutMode::Grid => de!("Grid"),
         LayoutMode::Main => de!("Haupt + Spalte"),
         LayoutMode::Spiral => de!("Spirale"),
+        LayoutMode::Custom => de!("Frei"),
+        LayoutMode::Scroll => de!("Scrollen"),
+        LayoutMode::Row => de!("Reihe"),
         LayoutMode::Stack => de!("Stack"),
     }
 }
