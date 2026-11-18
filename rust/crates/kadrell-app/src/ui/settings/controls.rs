@@ -63,7 +63,9 @@ pub fn table(rows: Vec<AnyElement>, t: &Theme) -> Div {
 
 /// Zeile: Beschriftung links (höchstens zwei Zeilen), Steuerelement rechts in fester Breite.
 pub fn row(title: &str, control: AnyElement, control_width: f32, t: &Theme) -> Div {
-    let label = div().flex_1().min_w_0().text_color(t.fg).child(title.to_string());
+    // Swift: Beschriftung, Zwischenraum 12, `Spacer(minLength: 12)`, Zwischenraum 12, Steuerelement: der Beschriftung bleiben
+    // 24 pt weniger, lange Titel brechen früher um.
+    let label = div().flex_1().min_w_0().pr(px(24.)).text_color(t.fg).child(title.to_string());
     let control = div().flex_none().w(px(control_width)).child(control);
     div().flex().items_center().gap(px(12.)).px(px(10.)).py(px(5.)).text_size(px(12.)).child(label).child(control)
 }

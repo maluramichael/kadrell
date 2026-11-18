@@ -213,8 +213,22 @@ impl Render for HelpView {
         let shown = self.shown();
         let filter_bar = self.filter.open.then(|| self.filter_bar(help::row_count(&shown), &t));
         let sections = shown.iter().enumerate().map(|(i, s)| section_view(s, i == 0, &t));
-        let list = div().id("help-scroll").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).p(px(16.)).gap(px(5.)).children(sections);
+        let list = div().flex().flex_col().p(px(16.)).gap(px(5.)).children(sections);
         let foot = div().flex().justify_end().px(px(16.)).py(px(10.)).text_size(px(11.)).text_color(t.muted).child(self.foot_hint());
+        // Wie `OverlayPanel`: der ganze Inhalt scrollt, auch Kopf und Fuß, die Fußzeile steht am Ende der Liste.
+        let scroll = div()
+            .id("help-scroll")
+            .flex()
+            .flex_col()
+            .min_h_0()
+            .overflow_y_scroll()
+            .track_scroll(&self.scroll)
+            .child(header(&t))
+            .children(filter_bar)
+            .child(div().pt(px(14.)).child(h_seam(&t)))
+            .child(list)
+            .child(h_seam(&t))
+            .child(foot);
         let frame = overlay_height(overlay_width(dialog_frame(&t), WIDTH), HEIGHT)
             .key_context(CONTEXT)
             .track_focus(&self.focus)
@@ -222,12 +236,7 @@ impl Render for HelpView {
             .on_action(cx.listener(|this, _: &Cancel, window, cx| this.cancel(window, cx)))
             .on_action(cx.listener(|this, _: &Confirm, window, cx| this.confirm(window, cx)))
             .on_key_down(cx.listener(|this, ev, window, cx| this.on_key(ev, window, cx)))
-            .child(header(&t))
-            .children(filter_bar)
-            .child(div().pt(px(14.)).child(h_seam(&t)))
-            .child(list)
-            .child(h_seam(&t))
-            .child(foot);
+            .child(scroll);
         backdrop(cx.listener(|_, _, _, cx| cx.emit(HelpEvent::Close))).child(frame)
     }
 }

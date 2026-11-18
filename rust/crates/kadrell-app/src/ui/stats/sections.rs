@@ -24,6 +24,9 @@ const Y_LABEL_WIDTH: f32 = 38.;
 /// Reicht die Breite nicht für Chart und Liste nebeneinander, steht die Liste darunter.
 const SIDE_BY_SIDE: f32 = 720.;
 const PROMPT_CHART: usize = 1000;
+/// Achsenzeile und Abstand unter dem Plot: `chartHeight` in Swift gilt für das ganze Chart samt Achse.
+const AXIS_ROW: f32 = 14.;
+const AXIS_GAP: f32 = 2.;
 
 fn range_label(range: StatsRange) -> String {
     match range {
@@ -269,7 +272,7 @@ impl StatsView {
             tile(c.sessions, trd!("Sessions geöffnet"), None, lang, t),
             tile(c.terminals, trd!("Terminals geöffnet"), None, lang, t),
             tile(c.switches, trd!("Kachelwechsel"), None, lang, t),
-            tile(c.record, trd!("Meiste Sessions gleichzeitig"), c.record_date.map(|d| format::long_date(d, lang)), lang, t),
+            tile(c.record, trd!("Meiste Sessions gleichzeitig"), c.record_date.map(|d| format::short_date(d, lang)), lang, t),
         ]
     }
 
@@ -371,6 +374,7 @@ fn chart_frame(
 ) -> AnyElement {
     let span = (snap.now - snap.from).max(1.);
     let frac = |at: f64| ((at - snap.from) / span) as f32;
+    let height = height - AXIS_ROW - AXIS_GAP;
     let y_col = div().relative().flex_none().w(px(Y_LABEL_WIDTH)).h(px(height)).children(y_labels.iter().map(|(f, text)| {
         div().absolute().right(px(6.)).top(px(3. + f * (height - 6.) - 7.)).text_size(px(10.)).text_color(t.muted).child(text.clone())
     }));
@@ -397,8 +401,8 @@ fn chart_frame(
     let ticks = format::ticks(snap.range, snap.from, snap.now, lang).into_iter().map(|tick| {
         div().absolute().left(relative(frac(tick.at))).whitespace_nowrap().text_size(px(10.)).text_color(t.muted).child(tick.label)
     });
-    let axis = div().relative().h(px(14.)).ml(px(Y_LABEL_WIDTH)).pr(px(END_PAD)).child(div().relative().size_full().children(ticks));
-    div().flex().flex_col().gap(px(2.)).child(div().flex().child(y_col).child(plot)).child(axis).into_any_element()
+    let axis = div().relative().h(px(AXIS_ROW)).ml(px(Y_LABEL_WIDTH)).pr(px(END_PAD)).child(div().relative().size_full().children(ticks));
+    div().flex().flex_col().gap(px(AXIS_GAP)).child(div().flex().child(y_col).child(plot)).child(axis).into_any_element()
 }
 
 fn tooltip_box(t: &Theme) -> gpui::Div {

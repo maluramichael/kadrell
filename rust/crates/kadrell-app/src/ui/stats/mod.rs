@@ -303,7 +303,6 @@ impl Render for StatsView {
             .id("stats-body")
             .flex()
             .flex_col()
-            .flex_1()
             .min_h_0()
             .overflow_y_scroll()
             .p(px(16.))
@@ -323,7 +322,9 @@ impl Render for StatsView {
             .child(self.footer(cx));
         let travel = super::overlay::area().slide_travel();
         let reduce = crate::appearance::breathing::reduce_motion();
-        backdrop_full(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(slide(dialog, "stats-slide", travel, reduce))
+        // Die Fläche schmiegt sich an den Inhalt (Fußzeile direkt darunter, wie in Swift); `slide` füllt nur den Rahmen.
+        let hug = div().flex().flex_col().size_full().child(dialog.max_h_full());
+        backdrop_full(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(slide(hug, "stats-slide", travel, reduce))
     }
 }
 
