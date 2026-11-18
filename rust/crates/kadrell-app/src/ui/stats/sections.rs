@@ -83,9 +83,7 @@ fn muted(text: impl Into<gpui::SharedString>, size: f32, t: &Theme) -> gpui::Div
 fn group(t: &Theme) -> gpui::Div {
     // Fläche `bg`, Radius 9, geschlossener Fugenring (außen dunkel, innen hell).
     let r = crate::ui::instrument::GROUP_RADIUS * crate::ui::overlay::scale();
-    crate::ui::overlay::border_px(div().relative().rounded(px(r)).bg(t.bg), crate::ui::overlay::hairline())
-        .border_color(crate::ui::chrome::seam_dark(t))
-        .child(crate::ui::overlay::inner_ring(t, r))
+    div().relative().rounded(px(r)).bg(t.bg).child(crate::ui::overlay::seam_ring_overlay(t, r))
 }
 
 impl StatsView {

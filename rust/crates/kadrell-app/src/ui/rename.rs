@@ -7,7 +7,6 @@ use gpui::{
 };
 
 use kadrell_i18n::trd;
-use super::chrome::h_seam;
 use super::dialog_keys;
 use super::instrument::KeyRole;
 use super::overlay::{backdrop, dialog_foot_in, dialog_frame, dialog_title, overlay_width};
@@ -73,14 +72,13 @@ impl Render for Rename {
         let save = cx.listener(|this, _, w, cx| this.confirm(w, cx));
         let foot = dialog_foot_in(trd!("Esc abbrechen"), trd!("Speichern"), KeyRole::Primary, &t, window, cx, save);
         let help = self.auto_title.as_deref().map(|auto| {
-            div().flex_none().w_full().px(px(16. * s)).pb(px(12. * s)).text_size(px(11. * s)).text_color(t.muted).child(help_line(auto))
+            div().flex_none().w_full().px(px(16. * s)).pb(px(12. * s)).text_size(px(11. * s)).line_height(px(super::overlay::line_px(11. * s))).text_color(t.muted).child(help_line(auto))
         });
         let dialog = overlay_width(dialog_frame(&t), 640.).key_context(dialog_keys::context(CONTEXT)).text_color(t.fg);
         let dialog = dialog_keys::keys(dialog, true, cx, Self::confirm, |_, _, cx| cx.emit(RenameEvent::Close))
             .child(dialog_title(self.heading.to_uppercase(), &t))
             .child(div().flex_none().p(px(14. * s)).child(self.input.clone()))
             .children(help)
-            .child(h_seam(&t))
             .child(foot);
         dialog_keys::nav(backdrop(cx.listener(|_, _, _, cx| cx.emit(RenameEvent::Close)))).child(dialog)
     }

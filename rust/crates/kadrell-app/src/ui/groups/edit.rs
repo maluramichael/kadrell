@@ -16,7 +16,6 @@ use super::model::{EditGroupModel, Hint, HintLine, RealFs};
 use super::tool_icons;
 use crate::lang::{file_manager, tx};
 use crate::theme::Theme;
-use crate::ui::chrome::h_seam;
 use crate::ui::model::parse_color;
 use crate::ui::dialog_keys;
 use crate::ui::instrument::{KeyRole, focus_ring, key_focusable};
@@ -142,7 +141,7 @@ impl EditGroup {
     fn hint_line(&self, t: &Theme) -> gpui::Div {
         let (text, error) = hint_text(&self.model);
         let color = if error { t.error_text } else { t.muted };
-        div().px(px(16.)).pt(px(6.)).pb(px(14.)).text_size(px(11.)).text_color(color).child(text)
+        div().px(px(16.)).pt(px(6.)).pb(px(14.)).text_size(px(11.)).line_height(px(crate::ui::overlay::line_px(11.))).text_color(color).child(text)
     }
 
     fn folder_row(&self, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
@@ -242,7 +241,7 @@ impl Render for EditGroup {
             body = body.child(self.folder_row(&t, window, cx));
         }
         let body = body.child(self.hint_line(&t)).child(self.palettes(&t, window, cx));
-        let dialog = dialog.child(body).child(h_seam(&t)).child(foot);
+        let dialog = dialog.child(body).child(foot);
         dialog_keys::nav(backdrop(cx.listener(|_, _, _, cx| cx.emit(EditEvent::Close)))).child(dialog)
     }
 }

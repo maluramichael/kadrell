@@ -11,7 +11,6 @@ use gpui::{
     UnderlineStyle, Window, actions, div, fill, point, prelude::*, px, relative, size,
 };
 
-use super::chrome::seam_dark;
 use super::theme;
 use crate::theme::Theme;
 
@@ -124,12 +123,16 @@ pub fn next_word(text: &str, offset: usize) -> usize {
 }
 
 /// Höhe und Schriftgröße eines Feldes in logischen Punkten: schmal 22 hoch bei 12, sonst aus der Schrift (13 gibt 23,
-/// 15 gibt 26, an den Swift-Dialogen gemessen). `size` 0 nimmt den Standard der Variante.
+/// 14 gibt 24 und 15 gibt 26, an den Swift-Dialogen gemessen). `size` 0 nimmt den Standard der Variante.
 pub fn field_metrics(compact: bool, size: f32) -> (f32, f32) {
     if compact {
         return (22., if size > 0. { size } else { 12. });
     }
     let text = if size > 0. { size } else { 13. };
+    // Die Zeilenhöhe der Schrift rundet AppKit uneinheitlich: 14 pt (Schnellstart) wird 24 statt 24,5 hoch.
+    if (text - 14.).abs() < 0.01 {
+        return (24., text);
+    }
     ((text * 1.5 + 3.5).round(), text)
 }
 
@@ -588,25 +591,24 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let focused = self.focus.is_focused(window);
-        let ring = if focused && !self.large { t.accent } else { seam_dark(&t) };
         let s = super::overlay::scale();
         // Wie `instrumentWell`: Radius 5, Abstand 8 seitlich. Fokus: 2 pt Akzentring innen statt der Fuge; ungefokussiert
-        // eine Haarlinie außen dunkel und direkt innen hell (`seamRing`).
-        let edge = if focused { super::instrument::RING_WIDTH * s } else { super::overlay::hairline() };
+        // eine Haarlinie außen dunkel und direkt innen hell (`seamRing`). Ringe liegen als Overlay und verschieben nichts.
+        let radius = super::instrument::KEY_RADIUS * s;
         let (height, text) = self.metrics();
-        let el = super::overlay::border_px(div(), edge)
+        let ring = if focused && !self.large { super::overlay::ring_inside(t.accent, radius, super::instrument::RING_WIDTH * s) } else { super::overlay::seam_ring_overlay(&t, radius) };
+        let el = div()
             .relative()
             .flex()
             .items_center()
             .w_full()
             .h(px(height * s))
-            .px(px(8. * s - edge))
-            .rounded(px(super::instrument::KEY_RADIUS * s))
-            .border_color(ring)
+            .px(px(8. * s))
+            .rounded(px(radius))
             .bg(super::overlay::well(&t))
             .text_color(t.fg)
-            .text_size(px(text * s));
-        let el = if focused { el } else { el.child(super::overlay::inner_ring(&t, super::instrument::KEY_RADIUS * s)) };
+            .text_size(px(text * s))
+            .child(ring);
         el
             .key_context(CONTEXT)
             .track_focus(&self.focus)
@@ -672,6 +674,7 @@ mod tests {
     #[test]
     fn field_size_follows_the_font() {
         assert_eq!(field_metrics(false, 0.), (23., 13.));
+        assert_eq!(field_metrics(false, 14.), (24., 14.));
         assert_eq!(field_metrics(false, 15.), (26., 15.));
         assert_eq!(field_metrics(true, 0.), (22., 12.));
     }
