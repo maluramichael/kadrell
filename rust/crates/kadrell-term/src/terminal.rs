@@ -71,13 +71,38 @@ pub fn strip_inherited_env() {
 struct Listener {
     tx: async_channel::Sender<Event>,
     /// Vom PTY-Thread gesetzt, sobald der Kindprozess endet: von jedem Thread lesbar (`TermHandle::exited`).
-    exited: Arc<AtomicBool>,
+    exited: Arc<ExitState>,
+}
+
+/// Ende des Kindprozesses: Flag und Exit-Code, vom PTY-Thread gesetzt und von jedem Thread lesbar.
+#[derive(Default)]
+struct ExitState {
+    done: AtomicBool,
+    code: std::sync::Mutex<Option<i32>>,
+}
+
+impl ExitState {
+    fn is_done(&self) -> bool {
+        self.done.load(Ordering::SeqCst)
+    }
+
+    /// Erst der Code, dann das Flag: wer das Ende sieht, sieht auch den Code.
+    fn finish(&self, code: Option<i32>) {
+        *self.code.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = code;
+        self.done.store(true, Ordering::SeqCst);
+    }
+
+    fn code(&self) -> Option<i32> {
+        *self.code.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 impl EventListener for Listener {
     fn send_event(&self, event: Event) {
-        if matches!(event, Event::ChildExit(_) | Event::Exit) {
-            self.exited.store(true, Ordering::SeqCst);
+        match &event {
+            Event::ChildExit(status) => self.exited.finish(status.code()),
+            Event::Exit if !self.exited.is_done() => self.exited.finish(None),
+            _ => {}
         }
         let _ = self.tx.try_send(event);
     }
@@ -99,6 +124,17 @@ pub struct TermSpec {
     pub args: Vec<String>,
     pub cwd: PathBuf,
     pub env: Vec<(String, String)>,
+    /// Zeilen Verlauf zum Zurückscrollen (`terminal.scrollback`); `None` nimmt [`DEFAULT_SCROLLBACK`].
+    pub scrollback: Option<usize>,
+}
+
+/// Verlauf einer Kachel ohne Einstellung.
+pub const DEFAULT_SCROLLBACK: usize = 10_000;
+
+/// Konfiguration des Emulators für `lines` Zeilen Verlauf. Alles andere bleibt Standard, deshalb ersetzt
+/// `Term::set_options` damit die Einstellung, ohne etwas anderes zu verstellen.
+fn term_config(lines: usize) -> Config {
+    Config { scrolling_history: lines, ..Config::default() }
 }
 
 /// Zugriff auf eine Kachel ohne GPUI und von jedem Thread: schreiben, lesen, beenden. Das ist, was Steuerkanal
@@ -107,7 +143,7 @@ pub struct TermSpec {
 pub struct TermHandle {
     term: Arc<FairMutex<Term<Listener>>>,
     sender: EventLoopSender,
-    exited: Arc<AtomicBool>,
+    exited: Arc<ExitState>,
     pid: Option<u32>,
 }
 
@@ -117,9 +153,19 @@ impl TermHandle {
         self.pid
     }
 
+    /// Exit-Code des beendeten Prozesses; `None` solange er läuft oder wenn ein Signal ihn beendet hat.
+    pub fn exit_code(&self) -> Option<i32> {
+        self.exited.code()
+    }
+
+    /// Verlauf auf `lines` Zeilen stellen, auch bei laufendem Prozess; beim Verkleinern fallen die ältesten Zeilen weg.
+    pub fn set_scrollback(&self, lines: usize) {
+        self.term.lock().set_options(term_config(lines));
+    }
+
     /// Der Kindprozess ist beendet.
     pub fn exited(&self) -> bool {
-        self.exited.load(Ordering::SeqCst)
+        self.exited.is_done()
     }
 
     /// Rohe Bytes an den Prozess, springt dabei ans Ende des Verlaufs.
@@ -145,27 +191,18 @@ impl TermHandle {
         (term.topmost_line().0..=term.bottommost_line().0).map(|l| TerminalPane::line_text(&term, Line(l)).0).collect::<Vec<_>>().join("\n")
     }
 
+    /// Beendet nur die Schleife der Kachel, der Prozess bleibt Sache des Aufrufers (`process::terminate_all`).
+    pub fn close_loop(&self) {
+        let _ = self.sender.send(Msg::Shutdown);
+    }
+
     /// Beendet den Prozess (samt Kindern) und die Schleife der Kachel.
     pub fn shutdown(&self) {
         let _ = self.sender.send(Msg::Shutdown);
         if let Some(pid) = self.pid.filter(|_| !self.exited()) {
-            kill_process_tree(pid);
+            crate::process::hang_up(pid);
         }
     }
-}
-
-#[cfg(windows)]
-fn kill_process_tree(pid: u32) {
-    use std::os::windows::process::CommandExt;
-    let mut cmd = std::process::Command::new("taskkill");
-    cmd.args(["/F", "/T", "/PID", &pid.to_string()]).creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    let _ = cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
-}
-
-#[cfg(unix)]
-fn kill_process_tree(pid: u32) {
-    // SAFETY: `kill` mit einer pid und einem Signal hat keine weiteren Voraussetzungen.
-    unsafe { libc::kill(pid as libc::pid_t, libc::SIGHUP) };
 }
 
 #[cfg(windows)]
@@ -205,7 +242,7 @@ pub struct TerminalPane {
     term: Arc<FairMutex<Term<Listener>>>,
     notifier: Notifier,
     sender: EventLoopSender,
-    exited_flag: Arc<AtomicBool>,
+    exited_flag: Arc<ExitState>,
     pid: Option<u32>,
     pub focus: FocusHandle,
     grid: Grid,
@@ -226,7 +263,7 @@ impl EventEmitter<TerminalEvent> for TerminalPane {}
 
 impl TerminalPane {
     pub fn new(program: &str, args: &[&str], cwd: PathBuf, cx: &mut Context<Self>) -> Self {
-        let spec = TermSpec { program: program.into(), args: args.iter().map(|a| a.to_string()).collect(), cwd, env: Vec::new() };
+        let spec = TermSpec { program: program.into(), args: args.iter().map(|a| a.to_string()).collect(), cwd, env: Vec::new(), scrollback: None };
         Self::from_parts(start_pty(spec).expect("PTY"), cx)
     }
 
@@ -269,7 +306,7 @@ pub struct PtyParts {
     term: Arc<FairMutex<Term<Listener>>>,
     notifier: Notifier,
     sender: EventLoopSender,
-    exited_flag: Arc<AtomicBool>,
+    exited_flag: Arc<ExitState>,
     pid: Option<u32>,
     rx: async_channel::Receiver<Event>,
     grid: Grid,
@@ -287,10 +324,10 @@ impl PtyParts {
 /// `--settings {...}`).
 pub fn start_pty(spec: TermSpec) -> std::io::Result<PtyParts> {
     let (tx, rx) = async_channel::unbounded();
-    let exited_flag = Arc::new(AtomicBool::new(false));
+    let exited_flag: Arc<ExitState> = Arc::default();
     let listener = Listener { tx, exited: exited_flag.clone() };
     let grid = Grid { cols: 100, lines: 30 };
-    let term = Arc::new(FairMutex::new(Term::new(Config::default(), &grid, listener.clone())));
+    let term = Arc::new(FairMutex::new(Term::new(term_config(spec.scrollback.unwrap_or(DEFAULT_SCROLLBACK)), &grid, listener.clone())));
 
     let mut env = HashMap::from([("TERM".to_string(), "xterm-256color".to_string()), ("COLORTERM".to_string(), "truecolor".to_string())]);
     env.extend(spec.env);
@@ -1438,6 +1475,33 @@ mod tests {
         let mut parser = alacritty_terminal::vte::ansi::Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::new();
         parser.advance(&mut t, input.as_bytes());
         t
+    }
+
+    fn lines_of(t: &Term<Listener>) -> Vec<String> {
+        (t.topmost_line().0..=t.bottommost_line().0).map(|l| TerminalPane::line_text(t, Line(l)).0).filter(|l| l.starts_with("zeile")).collect()
+    }
+
+    /// Port von `ScrollbackTests.testScrollbackKeepsMoreThanDefault`: mit der Einstellung bleibt mehr Verlauf als der
+    /// Standard der Bibliothek, verkleinern kürzt ihn.
+    #[test]
+    fn scrollback_keeps_more_than_default_and_shrinking_cuts_it() {
+        let grid = Grid { cols: 20, lines: 10 };
+        let mut t = Term::new(term_config(3_000), &grid, Listener { tx: async_channel::unbounded().0, exited: Arc::default() });
+        let mut parser = alacritty_terminal::vte::ansi::Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::new();
+        let text = (1..=2_500).map(|i| format!("zeile {i}")).collect::<Vec<_>>().join("\r\n");
+        parser.advance(&mut t, text.as_bytes());
+        assert_eq!(lines_of(&t).first().map(String::as_str), Some("zeile 1"));
+        assert_eq!(lines_of(&t).len(), 2_500);
+        t.set_options(term_config(1_000));
+        let kept = lines_of(&t);
+        assert!(kept.len() < 1_100, "{} Zeilen", kept.len());
+        assert_eq!(kept.last().map(String::as_str), Some("zeile 2500"));
+    }
+
+    #[test]
+    fn a_new_tile_uses_the_setting_not_the_default() {
+        assert_eq!(term_config(50_000).scrolling_history, 50_000);
+        assert_eq!(TermSpec::default().scrollback.unwrap_or(DEFAULT_SCROLLBACK), 10_000);
     }
 
     fn cell_at(t: &Term<Listener>, col: usize) -> alacritty_terminal::term::cell::Cell {
