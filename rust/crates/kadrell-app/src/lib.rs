@@ -111,6 +111,8 @@ pub struct Shell {
     win: windows::WinState,
     /// Zoom-, Sync-, Vorschau-, Auto- und Baum-Zustand der Arbeitsfläche samt Tabelle der Kürzel (`workspace`).
     ws: workspace::Ws,
+    /// Aufblitzen und Einfahren im Baum (`ui::tree_anim`).
+    tree_anim: ui::tree_anim::TreeAnim,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -186,10 +188,12 @@ impl Shell {
             main_window: None,
             win,
             ws,
+            tree_anim: Default::default(),
         };
         shell.rebuild();
         shell.apply_dev_view();
         shell.apply_dev_preview();
+        shell.apply_dev_tree_focus();
         shell.state.ready = true;
         shell.sync(window, cx);
         shell.start_clock(cx);
@@ -300,13 +304,7 @@ impl Shell {
     /// Klick im Baum: nur diese Session, Strg/Cmd nimmt sie dazu oder weg, Shift markiert den Bereich.
     fn click_session(&mut self, g: usize, s: usize, m: gpui::Modifiers, window: &mut Window, cx: &mut Context<Self>) {
         let flat = flat_index(&self.groups);
-        if m.shift {
-            self.selection.range((g, s), &flat);
-        } else if m.secondary(cx) {
-            self.selection.toggle((g, s), &flat);
-        } else {
-            self.selection = Selection::single((g, s));
-        }
+        self.selection = ui::tree_rules::click_selection(&self.selection, (g, s), m.shift, m.secondary(cx), &flat);
         self.state.zoom = false;
         self.apply_selection(window, cx);
     }
@@ -315,6 +313,18 @@ impl Shell {
     fn select_group(&mut self, g: usize, window: &mut Window, cx: &mut Context<Self>) {
         let ids = (0..self.groups[g].sessions.len()).map(|s| (g, s)).collect();
         self.selection.group(ids);
+        self.state.zoom = false;
+        self.apply_selection(window, cx);
+    }
+
+    /// Klick auf die Gruppenzeile im Baum: ersetzt die Auswahl, mit Umschalt oder Cmd/Strg kommen die Sessions dazu.
+    pub(crate) fn click_group(&mut self, g: usize, m: gpui::Modifiers, window: &mut Window, cx: &mut Context<Self>) {
+        if !(m.shift || m.secondary(cx)) {
+            return self.select_group(g, window, cx);
+        }
+        let ids = (0..self.groups[g].sessions.len()).map(|s| (g, s)).collect();
+        let flat = flat_index(&self.groups);
+        self.selection.add_all(ids, &flat);
         self.state.zoom = false;
         self.apply_selection(window, cx);
     }
@@ -456,6 +466,12 @@ impl Render for Shell {
             appearance::window_theme::apply(window, t.dark);
         }
         self.publish_tree_width(window, cx);
+        let now = std::time::Instant::now();
+        let transitions = self.state.take_transitions();
+        self.tree_anim.sync(&self.groups, &transitions, now);
+        if self.tree_anim.active(now) {
+            window.request_animation_frame();
+        }
         let sidebar_ctx = self.sidebar_ctx();
         let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, &sidebar_ctx, cx);
         let sidebar = self.ext_left_column(sidebar, window, cx);
@@ -582,6 +598,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         kadrell_term::fonts::load(cx);
         appearance::fonts::scan(cx);
         appearance::zoom::bind_keys(cx);
+        ui::tree_actions::bind_keys(cx);
         ui::text_input::bind_keys(cx);
         ui::new_session::bind_keys(cx);
         ui::palette::bind_keys(cx);

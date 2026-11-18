@@ -385,7 +385,7 @@ fn dialog_surfaces(bg: Rgb, panel: Rgb, surface: Rgb, dark: bool) -> [Rgb; 5] {
     [panel, surface, raised_of(bg, panel, surface), well_of(bg, panel, dark), bg]
 }
 
-fn luminance(c: Hsla) -> f32 {
+pub(crate) fn luminance(c: Hsla) -> f32 {
     lum(comps(c))
 }
 

@@ -14,18 +14,17 @@ use crate::Shell;
 use crate::state::attention::patch_setting;
 use model::{OPEN_KEY, WindowSet};
 
-actions!(kadrell_windows, [ToggleSidebar, ToggleAllGroups, ToggleAuto]);
+actions!(kadrell_windows, [ToggleSidebar, ToggleAuto]);
 
-/// Tasten für Baum ein/aus (⌘B) und alle Gruppen auf-/zuklappen (⇧⌘B); unter Windows wie überall Strg statt ⌘.
+/// Taste für Baum ein/aus (⌘B, ⇧⌘B macht `ui::tree_actions`); unter Windows wie überall Strg statt ⌘.
 pub fn bind_keys(cx: &mut gpui::App) {
-    let (tree, groups) = if cfg!(target_os = "macos") { ("cmd-b", "cmd-shift-b") } else { ("ctrl-b", "ctrl-shift-b") };
-    cx.bind_keys([KeyBinding::new(tree, ToggleSidebar, None), KeyBinding::new(groups, ToggleAllGroups, None)]);
+    let tree = if cfg!(target_os = "macos") { "cmd-b" } else { "ctrl-b" };
+    cx.bind_keys([KeyBinding::new(tree, ToggleSidebar, None)]);
 }
 
 /// Aktionen der Ansicht am Wurzelelement des Hauptfensters.
 pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
     root.on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| this.toggle_tree(cx)))
-        .on_action(cx.listener(|this, _: &ToggleAllGroups, _, cx| this.toggle_all_groups(cx)))
         .on_action(cx.listener(|this, _: &ToggleAuto, window, cx| this.toggle_auto(window, cx)))
 }
 

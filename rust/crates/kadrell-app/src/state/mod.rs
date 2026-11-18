@@ -91,6 +91,8 @@ pub struct AppState {
     pending_effects: Vec<Effect>,
     /// Sessions, für die der Fokus-Hook gefeuert hat und die Extensions noch `session.focus` bekommen (`take_focus_fired`).
     focus_fired: Vec<String>,
+    /// Statuswechsel seit dem letzten Abruf: der Baum lässt den Punkt aufblitzen (`take_transitions`).
+    pending_transitions: kadrell_claude::attention::Transitions,
 }
 
 impl AppState {
@@ -142,6 +144,7 @@ impl AppState {
             error: None,
             pending_effects: Vec::new(),
             focus_fired: Vec::new(),
+            pending_transitions: Default::default(),
         };
         state.restore_view();
         state
@@ -469,7 +472,9 @@ impl AppState {
         let looking: HashSet<String> = self.selected.iter().cloned().collect();
         self.attention.focus_hook_enabled = true;
         let input = UpdateInput { sessions: &sessions, waiting: &waiting, statuses: &statuses, focused: self.focused.as_deref(), looking: Some(&looking), is_key: self.window_active };
-        let (_, effects) = self.attention.update(&input);
+        let (changed, effects) = self.attention.update(&input);
+        self.pending_transitions.waiting.extend(changed.waiting);
+        self.pending_transitions.done.extend(changed.done);
         self.attention.prune(&sessions);
         for effect in effects {
             match effect {
@@ -485,6 +490,11 @@ impl AppState {
     /// Die Sessions, die seit dem letzten Abruf den Fokus-Hook ausgelöst haben (für das Extension-Event `session.focus`).
     pub fn take_focus_fired(&mut self) -> Vec<String> {
         std::mem::take(&mut self.focus_fired)
+    }
+
+    /// Die Statuswechsel seit dem letzten Abruf (der Abgleich läuft mehrmals zwischen zwei Bildern, daher vereinigt).
+    pub fn take_transitions(&mut self) -> kadrell_claude::attention::Transitions {
+        std::mem::take(&mut self.pending_transitions)
     }
 
     /// Die Wirkungen seit dem letzten Abruf (Klang, Benachrichtigung, Hüpfen), in der Reihenfolge des Trackers.

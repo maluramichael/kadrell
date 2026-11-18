@@ -82,6 +82,16 @@ impl Selection {
         self.items = ids;
     }
 
+    /// Umschalt- oder Cmd-Klick auf eine Gruppe: ihre Sessions kommen zur Auswahl dazu (`addMissing`), der Fokus bleibt,
+    /// wo er ist, sonst springt er auf die erste neue.
+    pub fn add_all(&mut self, ids: Vec<Id>, flat: &[Id]) {
+        let missing: Vec<Id> = ids.into_iter().filter(|i| !self.contains(*i)).collect();
+        let Some(first) = missing.first().copied() else { return };
+        self.items = sorted([self.items.clone(), missing].concat(), flat);
+        self.focus = first;
+        self.anchor = first;
+    }
+
     /// Fokus auf eine sichtbare Kachel, die Auswahl bleibt.
     pub fn focus_on(&mut self, id: Id) {
         if self.contains(id) {

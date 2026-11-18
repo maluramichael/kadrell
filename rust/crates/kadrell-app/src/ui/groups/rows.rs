@@ -134,7 +134,6 @@ impl Render for DragGhost {
 mod tests {
     use super::*;
     use crate::ui::groups::drag::Dragged;
-    use crate::ui::model::Session;
 
     fn drag(order: usize) -> DragRow {
         DragRow { item: Dragged::Session("a".into()), group: "g1".into(), order, label: "a".into() }
@@ -143,20 +142,9 @@ mod tests {
     fn view_group(keys: &[&str], collapsed: bool) -> Group {
         let sessions = keys
             .iter()
-            .map(|k| Session {
-                key: k.to_string(),
-                title: k.to_string(),
-                status: crate::ui::model::Status::Idle,
-                is_new: false,
-                age: String::new(),
-                branch: None,
-                cwd: String::new(),
-                is_shell: false,
-                ended: false,
-                pane: None,
-            })
+            .map(|k| crate::ui::model::test_session(k))
             .collect();
-        Group { id: "g".into(), name: "g".into(), color: 0, path: String::new(), cwd: String::new(), favorite: false, collapsed, sessions }
+        Group { id: "g".into(), name: "g".into(), color: 0, path: String::new(), cwd: String::new(), favorite: false, collapsed, host: None, sessions }
     }
 
     #[test]

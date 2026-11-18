@@ -141,7 +141,7 @@ pub fn folder(color: Hsla) -> impl IntoElement {
 
 /// Umriss des Herzens als Bézierpfad aus `Icons.heart` (16er-Raster): unten (8 | 13,5), links hoch, Mulde bei
 /// (8 | 5,2), rechts wieder hinunter.
-fn heart_points() -> Vec<(f32, f32)> {
+pub(crate) fn heart_points() -> Vec<(f32, f32)> {
     let mut pts = vec![(8., 13.5)];
     pts.extend(cubic((8., 13.5), (4.2, 11.), (1.8, 8.6), (1.8, 6.2)));
     pts.extend(cubic((1.8, 6.2), (1.8, 2.6), (6., 2.4), (8., 5.2)));

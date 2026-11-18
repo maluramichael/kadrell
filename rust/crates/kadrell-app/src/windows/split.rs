@@ -4,7 +4,6 @@
 //! Dock-Höhe gehen verzögert in die Einstellungen (`layout`). Auch das Ein- und Ausklappen aller Gruppen (⇧⌘B) und die
 //! Verbindung zum aktiven Fenster (`windowDidBecomeKey`) stehen hier.
 
-use std::collections::HashSet;
 use std::time::Duration;
 
 use gpui::{
@@ -52,11 +51,6 @@ pub fn grip<D: Clone + 'static>(id: &'static str, drag: D, vertical: bool) -> St
     let zone = div().id(id).absolute();
     let zone = if vertical { zone.top_0().h_full().w(px(GRAB)).cursor_col_resize() } else { zone.left_0().w_full().h(px(GRAB)).cursor_row_resize() };
     zone.on_drag(drag, |_, _, _, cx| cx.new(|_| Ghost))
-}
-
-/// Ist irgendeine Gruppe offen, gehen alle zu, sonst alle auf (`SidebarView.toggleAllGroups`).
-pub fn collapse_target(ids: &[String], collapsed: &HashSet<String>) -> HashSet<String> {
-    if ids.iter().any(|id| !collapsed.contains(id)) { ids.iter().cloned().collect() } else { HashSet::new() }
 }
 
 fn viewport_width(window: &Window) -> f32 {
@@ -159,14 +153,6 @@ impl Shell {
         cx.notify();
     }
 
-    /// ⇧⌘B: ist irgendeine Gruppe offen, gehen alle zu, sonst alle auf.
-    pub(crate) fn toggle_all_groups(&mut self, cx: &mut Context<Self>) {
-        let ids: Vec<String> = self.groups.iter().map(|g| g.id.clone()).collect();
-        self.state.collapsed = collapse_target(&ids, &self.state.collapsed);
-        self.rebuild();
-        cx.notify();
-    }
-
     // MARK: Fenster
 
     /// Beim Start: Lage des Hauptfensters speichern und das aktive Fenster verfolgen (`windowDidBecomeKey`).
@@ -194,31 +180,3 @@ impl Shell {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn ids(names: &[&str]) -> Vec<String> {
-        names.iter().map(|s| s.to_string()).collect()
-    }
-
-    #[test]
-    fn any_open_group_collapses_all() {
-        let all = ids(&["a", "b"]);
-        assert_eq!(collapse_target(&all, &HashSet::new()), all.iter().cloned().collect());
-        let one: HashSet<String> = ["a".to_string()].into();
-        assert_eq!(collapse_target(&all, &one), all.iter().cloned().collect(), "b ist offen");
-    }
-
-    #[test]
-    fn all_collapsed_expands_all() {
-        let all = ids(&["a", "b"]);
-        let collapsed: HashSet<String> = all.iter().cloned().collect();
-        assert!(collapse_target(&all, &collapsed).is_empty());
-    }
-
-    #[test]
-    fn no_groups_stay_empty() {
-        assert!(collapse_target(&[], &HashSet::new()).is_empty());
-    }
-}

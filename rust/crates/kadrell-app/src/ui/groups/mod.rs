@@ -290,7 +290,7 @@ impl Shell {
 
     /// Das, was der Baum von der Shell braucht (er wird gezeichnet, während die Shell gesperrt ist).
     pub fn sidebar_ctx(&self) -> SidebarCtx {
-        SidebarCtx { view: self.tree_view(), scroll: self.groups_ui.scroll.clone(), keys: self.ws.tree_focus }
+        SidebarCtx { view: self.tree_view(), scroll: self.groups_ui.scroll.clone(), keys: self.ws.tree_focus, anim: self.tree_anim.snapshot(std::time::Instant::now()), cmd: self.tree_anim.cmd_down }
     }
 
     /// Zeile im Baum losgelassen: Session sortieren oder verschieben, Gruppe verschieben.
@@ -405,8 +405,7 @@ impl Shell {
         }
         let Some(key) = self.state.focused.clone() else { return };
         let a = crate::appearance::current(cx);
-        let m = a.rows();
-        let measures = rows::Rows { top_pad: a.s(m.top_inset), group_row: a.s(m.group_row), session_row: a.s(m.session_row), group_gap: a.s(m.group_gap) };
+        let measures = crate::ui::tree_actions::row_measures(&a);
         let Some((top, group_row)) = rows::focus_row_top(&self.groups, &key, measures) else { return };
         let bounds = self.groups_ui.scroll.bounds();
         let offset = self.groups_ui.scroll.offset();
