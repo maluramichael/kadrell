@@ -125,15 +125,26 @@ pub fn keyboard_ring(t: &Theme) -> Div {
 // MARK: Schieberegler
 
 /// Schieberegler: Spur mit Füllung in Akzent und Knopf, rechts der Wert. `key` misst die Spur für die Maus.
-pub fn slider(frac: f32, value_text: &str, geometry: &Geometry, key: String, t: &Theme) -> (Div, Div) {
+pub fn slider(frac: f32, value_text: &str, geometry: (&Geometry, String), ticks: usize, t: &Theme) -> (Div, Div) {
+    let (geometry, key) = geometry;
     let frac = frac.clamp(0., 1.);
     let knob_shadow = BoxShadow { color: hsla(0., 0., 0., 0.35), offset: point(px(0.), px(1.)), blur_radius: px(2.), spread_radius: px(0.), inset: false };
     let rail = div().absolute().left(px(0.)).right(px(0.)).top(px(6.)).h(px(4.)).rounded(px(2.)).bg(t.line);
     let fill = div().absolute().left(px(0.)).top(px(6.)).h(px(4.)).w(relative(frac)).rounded(px(2.)).bg(t.accent);
     let knob = div().absolute().top(px(2.)).left(relative(frac)).ml(px(-6.)).size(px(12.)).rounded_full().bg(hsla(0., 0., 1., 1.)).border_1().border_color(hsla(0., 0., 0., 0.18)).shadow(vec![knob_shadow]);
-    let track = div().relative().flex_1().h(px(16.)).cursor_pointer().child(measure(geometry, key)).child(rail).child(fill).child(knob);
+    // Das native Mac-Control zeichnet bei Schrittweite je Schritt einen Punkt auf die Spur (bis 100 Schritte).
+    let dots = tick_fractions(ticks).into_iter().map(|f| div().absolute().left(relative(f)).ml(px(-0.5)).top(px(7.5)).size(px(1.)).rounded_full().bg(t.muted.opacity(0.55)));
+    let track = div().relative().flex_1().h(px(16.)).cursor_pointer().child(measure(geometry, key)).child(rail).children(dots).child(fill).child(knob);
     let value = div().flex_none().w(px(60.)).text_align(gpui::TextAlign::Right).text_color(t.fg).child(value_text.to_string());
     (track, value)
+}
+
+/// Stellen (0 bis 1) der Schrittpunkte auf der Spur; mehr als 100 Schritte zeichnet auch das Mac-Control nicht.
+pub fn tick_fractions(steps: usize) -> Vec<f32> {
+    if steps == 0 || steps > 100 {
+        return Vec::new();
+    }
+    (0..=steps).map(|i| i as f32 / steps as f32).collect()
 }
 
 // MARK: Popover
@@ -188,4 +199,17 @@ fn paint_icon(w: f32, h: f32, strokes: Vec<(Vec<(f32, f32)>, bool)>, color: Hsla
     .w(px(w))
     .h(px(h))
     .flex_none()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ticks_cover_the_track_in_steps() {
+        assert_eq!(tick_fractions(4), vec![0., 0.25, 0.5, 0.75, 1.]);
+        assert_eq!(tick_fractions(0), Vec::<f32>::new());
+        assert_eq!(tick_fractions(101), Vec::<f32>::new());
+        assert_eq!(tick_fractions(48).len(), 49);
+    }
 }

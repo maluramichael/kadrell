@@ -66,15 +66,23 @@ pub struct Btn {
     pub icon: Option<Icon>,
     pub msg: Msg,
     pub destructive: bool,
+    /// Hilfetext beim Überfahren (`.help(...)`).
+    pub tip: Option<String>,
 }
 
 impl Btn {
     pub fn text(label: &str, msg: Msg) -> Btn {
-        Btn { label: tx(label), icon: None, msg, destructive: false }
+        Btn { label: tx(label), icon: None, msg, destructive: false, tip: None }
     }
 
     pub fn icon(icon: Icon, msg: Msg) -> Btn {
-        Btn { label: String::new(), icon: Some(icon), msg, destructive: false }
+        Btn { label: String::new(), icon: Some(icon), msg, destructive: false, tip: None }
+    }
+
+    /// Mit Hilfetext.
+    pub fn tip(mut self, tip: String) -> Btn {
+        self.tip = Some(tip);
+        self
     }
 }
 
@@ -109,12 +117,26 @@ pub struct Row {
     /// Texte, nach denen der Filter die Zeile findet. Leer: der Filter blendet die Zeile aus, es sei denn, der
     /// Abschnitt passt als Ganzes (Hinweiszeilen, Modellzeilen).
     pub search: Vec<String>,
+    /// Hilfetext beim Überfahren des Textes der Zeile (Status der lokalen Modelle).
+    pub tip: Option<String>,
+    /// Zeigt vor dem Text einen Drehkreis (Status „prüft …“).
+    pub busy: bool,
 }
 
 impl Row {
     pub fn new(id: &str, title: &str, control: Control) -> Row {
         let title = tx(title);
-        Row { id: id.to_string(), title: title.clone(), control, search: vec![title] }
+        Row { id: id.to_string(), title: title.clone(), control, search: vec![title], tip: None, busy: false }
+    }
+
+    pub fn with_tip(mut self, tip: String) -> Row {
+        self.tip = Some(tip);
+        self
+    }
+
+    pub fn busy(mut self) -> Row {
+        self.busy = true;
+        self
     }
 
     /// Zeile ohne eigenen Suchtext.

@@ -216,6 +216,14 @@ mod tests {
         assert_eq!(hotkeys::current(&s).len(), 47);
     }
 
+    /// Tooltip der Taste „Standard“: „Zurück auf <Standardkürzel>“ (`.help("Zurück auf \(action.defaultKey.display)")`).
+    #[test]
+    fn reset_tooltip_names_the_default_shortcut() {
+        let default = HotkeyAction::FocusLeft.default_key();
+        let tip = kadrell_i18n::trd!("Zurück auf %@", format(&default, Platform::Windows));
+        assert_eq!(tip, "Zurück auf Alt+←");
+    }
+
     #[test]
     fn unknown_keys_are_rejected() {
         let alt_home = KeyInput { alt: true, ..key("home") };

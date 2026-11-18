@@ -11,6 +11,7 @@ mod dialog;
 pub mod filter;
 pub mod layout;
 pub mod model;
+pub mod paths;
 pub mod sections;
 pub mod shortcut;
 pub mod store;
@@ -54,7 +55,7 @@ fn attach_handlers(frame: Div, cx: &mut Context<SettingsDialog>) -> Div {
         .on_action(cx.listener(|this, _: &Confirm, window, cx| this.confirm(window, cx)))
         .on_action(cx.listener(|this, _: &MoveUp, window, cx| this.arrow(-1, window, cx)))
         .on_action(cx.listener(|this, _: &MoveDown, window, cx| this.arrow(1, window, cx)))
-        .on_action(cx.listener(|this, _: &NextRow, window, cx| this.move_cursor(1, window, cx)))
+        .on_action(cx.listener(|this, _: &NextRow, window, cx| this.next_row(window, cx)))
         .on_action(cx.listener(|this, _: &PrevRow, window, cx| this.move_cursor(-1, window, cx)))
         .on_action(cx.listener(|this, _: &Decrease, window, cx| this.side(-1., window, cx)))
         .on_action(cx.listener(|this, _: &Increase, window, cx| this.side(1., window, cx)))

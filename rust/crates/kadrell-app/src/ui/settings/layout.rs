@@ -1,6 +1,6 @@
 //! Rechnung hinter den Spalten der Einstellungen (`ColumnBalance` in `SettingsLayout.swift`), ohne Oberfläche:
-//! Spaltenzahl, Teilung der Abschnitte und Breite der Steuerelemente. GPUI misst keine Teilbäume vor dem Zeichnen,
-//! deshalb gehen die Höhen der Abschnitte als Schätzung aus der Zeilenzahl ein.
+//! Spaltenzahl, Teilung der Abschnitte und Breite der Steuerelemente. Die Höhe jedes Abschnitts misst der Frame davor
+//! (`measure` in `controls`), erst im ersten Frame ohne Messung gilt eine Schätzung aus der Zeilenzahl.
 
 /// Ab dieser Spaltenbreite stehen zwei Spalten nebeneinander, darunter eine.
 pub const MIN_COLUMN_WIDTH: f32 = 600.;
@@ -41,6 +41,19 @@ pub fn control_width(column: f32) -> f32 {
         return MAX_CONTROL_WIDTH;
     }
     (((column - 64.) * 0.45).round()).clamp(120., MAX_CONTROL_WIDTH)
+}
+
+/// Höhen für die Teilung: je Abschnitt die gemessene, solange noch keine vorliegt die Schätzung (Swift nimmt dann 0,
+/// was im ersten Frame kurz falsch teilt).
+pub fn heights(measured: &[Option<f32>], estimated: &[f32]) -> Vec<f32> {
+    estimated.iter().enumerate().map(|(i, e)| measured.get(i).copied().flatten().unwrap_or(*e)).collect()
+}
+
+/// Hat sich die Grundlage der Teilung (Breite, Höhen) gegenüber dem letzten Frame geändert? Dann braucht es noch einen
+/// Frame, weil die Messung dieses Frames erst im nächsten gilt. Unter einem halben Punkt gilt als gleich.
+pub fn basis_changed(old: &(f32, Vec<f32>), new: &(f32, Vec<f32>)) -> bool {
+    let apart = |a: f32, b: f32| (a - b).abs() >= 0.5;
+    apart(old.0, new.0) || old.1.len() != new.1.len() || old.1.iter().zip(&new.1).any(|(a, b)| apart(*a, *b))
 }
 
 /// Geschätzte Höhe eines Abschnitts: Überschrift plus Zeilen mit Fuge (zweizeilige Beschriftungen zählen nicht).
@@ -107,6 +120,26 @@ mod tests {
     fn settings_use_two_columns_when_wide() {
         assert_eq!(left_count(&[100.; 4], count(1400.)), 2);
         assert_eq!(left_count(&[100.; 4], count(900.)), 4, "eine Spalte: alle Abschnitte untereinander");
+    }
+
+    #[test]
+    fn measured_heights_win_over_estimates() {
+        assert_eq!(heights(&[Some(120.), None, Some(80.)], &[100., 50., 60.]), vec![120., 50., 80.]);
+        assert_eq!(heights(&[], &[100., 50.]), vec![100., 50.]);
+        // Mehrzeilige Beschriftungen machen einen Abschnitt höher als geschätzt: die Messung verschiebt die Teilung.
+        assert_eq!(split(&heights(&[None, None, None], &[100., 100., 100.]), 0.), 2);
+        assert_eq!(split(&heights(&[Some(100.), Some(100.), Some(300.)], &[100., 100., 100.]), 0.), 2);
+        assert_eq!(split(&heights(&[Some(300.), Some(100.), Some(100.)], &[100., 100., 100.]), 0.), 1);
+    }
+
+    #[test]
+    fn a_changed_basis_asks_for_another_frame() {
+        let basis = (1000., vec![100., 200.]);
+        assert!(!basis_changed(&basis, &(1000.2, vec![100.3, 199.9])));
+        assert!(basis_changed(&basis, &(1010., vec![100., 200.])));
+        assert!(basis_changed(&basis, &(1000., vec![100., 210.])));
+        assert!(basis_changed(&basis, &(1000., vec![100.])));
+        assert!(basis_changed(&(0., vec![]), &basis));
     }
 
     #[test]
