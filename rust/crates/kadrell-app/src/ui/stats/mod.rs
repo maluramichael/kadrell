@@ -310,21 +310,18 @@ impl Render for StatsView {
             .children(self.snapshot.clone().map(|s| self.limits_section(&s, window, cx)))
             .children(self.snapshot.clone().map(|s| self.prompts_section(&s, window, cx)))
             .child(self.counters_section(lang, one_row, cx));
+        // Fläche füllt das Fenster (`Placement.fullWindow`), Inhalt oben, Fußzeile direkt darunter, Rest bleibt leer.
+        let content = div().flex().flex_col().min_h_0().max_h_full().child(self.header(cx)).child(h_seam(&t)).child(body).child(h_seam(&t)).child(self.footer(cx));
         let dialog = dialog_frame(&t)
+            .size_full()
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
             .text_color(t.fg)
-            .child(self.header(cx))
-            .child(h_seam(&t))
-            .child(body)
-            .child(h_seam(&t))
-            .child(self.footer(cx));
+            .child(content);
         let travel = super::overlay::area().slide_travel();
         let reduce = crate::appearance::breathing::reduce_motion();
-        // Die Fläche schmiegt sich an den Inhalt (Fußzeile direkt darunter, wie in Swift); `slide` füllt nur den Rahmen.
-        let hug = div().flex().flex_col().size_full().child(dialog.max_h_full());
-        backdrop_full(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(slide(hug, "stats-slide", travel, reduce))
+        backdrop_full(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(slide(dialog, "stats-slide", travel, reduce))
     }
 }
 
