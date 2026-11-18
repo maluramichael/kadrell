@@ -1,138 +1,156 @@
 //! Menüstruktur nach `buildMenu()` der Mac-App (Kadrell, Datei, Bearbeiten, Ansicht, Session, Fenster).
 //! macOS setzt daraus die System-Menüleiste, Windows zeichnet sie selbst (`ui::menubar`), denn GPUI zeigt dort
 //! kein App-Menü. Nicht belegte Einträge stehen ausgegraut da, damit die Struktur der Mac-App sichtbar bleibt.
+//! Beschriftungen und Kürzel entstehen beim Bauen in der eingestellten Sprache; nach einem Sprachwechsel baut
+//! `Shell::sync_language` die Menüs neu (`menus()` ist billig).
 
 use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
+use kadrell_i18n::trd;
 
 use crate::Shell;
+use crate::lang::{de, shortcut, shortcut_mac_only};
 
 actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, QuickStart, SearchHistory, CloseWindow]);
 
 pub enum Entry {
     Separator,
-    Item { label: &'static str, shortcut: &'static str, action: Option<Box<dyn Action>> },
+    /// `key` ist der deutsche Quelltext (stabil, die Palette sucht Einträge darüber), `label` der Text in der
+    /// eingestellten Sprache.
+    Item { key: &'static str, label: String, shortcut: String, action: Option<Box<dyn Action>> },
 }
 
 pub struct MenuDef {
-    pub name: &'static str,
+    /// Deutscher Quelltext des Namens.
+    pub key: &'static str,
+    pub name: String,
     pub entries: Vec<Entry>,
 }
 
-/// Kürzel-Beschriftung: erster Wert Mac, zweiter Windows.
-const fn keys(mac: &'static str, win: &'static str) -> &'static str {
-    if cfg!(target_os = "macos") { mac } else { win }
+fn menu(key: &'static str, entries: Vec<Entry>) -> MenuDef {
+    MenuDef { key, name: trd!(key), entries }
 }
 
-fn item(label: &'static str, shortcut: &'static str, action: impl Action) -> Entry {
-    Entry::Item { label, shortcut, action: Some(Box::new(action)) }
+fn item(key: &'static str, shortcut: String, action: impl Action) -> Entry {
+    Entry::Item { key, label: trd!(key), shortcut, action: Some(Box::new(action)) }
 }
 
-fn off(label: &'static str, shortcut: &'static str) -> Entry {
-    Entry::Item { label, shortcut, action: None }
+fn off(key: &'static str, shortcut: String) -> Entry {
+    Entry::Item { key, label: trd!(key), shortcut, action: None }
+}
+
+/// Eintrag mit eigener Beschriftung je Betriebssystem (Finder/Explorer, Dock/Minimieren).
+fn item_os(mac: &'static str, win: &'static str, shortcut: String, action: impl Action) -> Entry {
+    item(if cfg!(target_os = "macos") { mac } else { win }, shortcut, action)
+}
+
+fn none() -> String {
+    String::new()
 }
 
 fn app_menu() -> MenuDef {
+    // „Kadrell“ ist der Name der App und bleibt, wie er ist.
     MenuDef {
-        name: "Kadrell",
+        key: "Kadrell",
+        name: "Kadrell".to_string(),
         entries: vec![
-            off("Über Kadrell", ""),
-            off("Was ist neu", ""),
-            off("Statistik", ""),
-            off("Extensions …", ""),
+            off(de!("Über Kadrell"), none()),
+            off(de!("Was ist neu"), none()),
+            off(de!("Statistik"), none()),
+            off(de!("Extensions …"), none()),
             Entry::Separator,
-            item("Einstellungen …", keys("⌘,", "Strg+,"), OpenSettings),
+            item(de!("Einstellungen …"), shortcut("⌘,"), OpenSettings),
             Entry::Separator,
-            item("Kadrell beenden", keys("⌘Q", "Strg+Q"), Quit),
+            item(de!("Kadrell beenden"), shortcut("⌘Q"), Quit),
         ],
     }
 }
 
 fn file_menu() -> MenuDef {
-    MenuDef {
-        name: "Datei",
-        entries: vec![
-            item("Neue Session", keys("⌘N", "Strg+N"), NewSession),
-            item("Neue Session im selben Ordner", keys("⌘↩", "Strg+Enter"), NewSessionHere),
-            item("Schnellstart: Idee rein, Session raus", keys("⇧⌘I", "Strg+Umschalt+I"), QuickStart),
-            item("Neues Terminal ohne Claude", keys("⌘T", "Strg+T"), NewTerminal),
-            off("Remote verbinden …", keys("⇧⌘N", "Strg+Umschalt+N")),
-            off("Neue Gruppe …", keys("⌥⌘N", "Strg+Alt+N")),
+    menu(
+        de!("Datei"),
+        vec![
+            item(de!("Neue Session"), shortcut("⌘N"), NewSession),
+            item(de!("Neue Session im selben Ordner"), shortcut("⌘↩"), NewSessionHere),
+            item(de!("Schnellstart: Idee rein, Session raus"), shortcut("⇧⌘I"), QuickStart),
+            item(de!("Neues Terminal ohne Claude"), shortcut("⌘T"), NewTerminal),
+            off(de!("Remote verbinden …"), shortcut("⇧⌘N")),
+            off(de!("Neue Gruppe …"), shortcut("⌥⌘N")),
             Entry::Separator,
-            off("Neues Fenster", keys("⇧⌘T", "Strg+Umschalt+T")),
-            item("Fenster schließen", keys("⇧⌘W", "Strg+Umschalt+W"), CloseWindow),
+            off(de!("Neues Fenster"), shortcut("⇧⌘T")),
+            item(de!("Fenster schließen"), shortcut("⇧⌘W"), CloseWindow),
             Entry::Separator,
-            item("Session schließen", keys("⌘W", ""), CloseSession),
+            item(de!("Session schließen"), shortcut_mac_only("⌘W"), CloseSession),
         ],
-    }
+    )
 }
 
 fn edit_menu() -> MenuDef {
-    MenuDef {
-        name: "Bearbeiten",
-        entries: vec![
-            off("Ausschneiden", keys("⌘X", "Strg+X")),
-            off("Kopieren", keys("⌘C", "Strg+C")),
-            off("Einsetzen", keys("⌘V", "Strg+V")),
-            off("Ganze Gruppen auswählen", keys("⌘A", "Strg+A")),
-            off("Alle Sessions auswählen", keys("⇧⌘A", "Strg+Umschalt+A")),
+    menu(
+        de!("Bearbeiten"),
+        vec![
+            off(de!("Ausschneiden"), shortcut("⌘X")),
+            off(de!("Kopieren"), shortcut("⌘C")),
+            off(de!("Einsetzen"), shortcut("⌘V")),
+            off(de!("Ganze Gruppen auswählen"), shortcut("⌘A")),
+            off(de!("Alle Sessions auswählen"), shortcut("⇧⌘A")),
             Entry::Separator,
-            off("Im Terminal suchen …", keys("⌘F", "Strg+F")),
-            item("In allen Terminals suchen …", keys("⇧⌘F", "Strg+Umschalt+F"), FindAll),
-            item("Alle Claude-Sessions durchsuchen, auch beendete", keys("⇧⌘H", "Strg+Umschalt+H"), SearchHistory),
+            off(de!("Im Terminal suchen …"), shortcut("⌘F")),
+            item(de!("In allen Terminals suchen …"), shortcut("⇧⌘F"), FindAll),
+            item(de!("Alle Claude-Sessions durchsuchen, auch beendete"), shortcut("⇧⌘H"), SearchHistory),
         ],
-    }
+    )
 }
 
 fn view_menu() -> MenuDef {
-    MenuDef {
-        name: "Ansicht",
-        entries: vec![
-            off("Auto-Modus ein/aus", ""),
-            off("Baum ein/aus", keys("⌘B", "Strg+B")),
-            off("Alle Gruppen auf-/zuklappen", keys("⇧⌘B", "Strg+Umschalt+B")),
+    menu(
+        de!("Ansicht"),
+        vec![
+            off(de!("Auto-Modus ein/aus"), none()),
+            off(de!("Baum ein/aus"), shortcut("⌘B")),
+            off(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B")),
             Entry::Separator,
-            off("Terminal-Schrift größer", keys("⌘+", "Strg++")),
-            off("Terminal-Schrift kleiner", keys("⌘-", "Strg+-")),
-            off("Terminal-Schrift Standardgröße", keys("⌘0", "Strg+0")),
+            off(de!("Terminal-Schrift größer"), shortcut("⌘+")),
+            off(de!("Terminal-Schrift kleiner"), shortcut("⌘-")),
+            off(de!("Terminal-Schrift Standardgröße"), shortcut("⌘0")),
             Entry::Separator,
-            item("Kachel zoomen", keys("⌘⇧↩", "Strg+Umschalt+Enter"), ZoomTile),
-            item("Nächste Session", "Alt+N", NextSession),
-            item("Vorherige Session", "Alt+P", PrevSession),
-            item("Farbschema wechseln", "Alt+T", ToggleTheme),
+            item(de!("Kachel zoomen"), shortcut("⌘⇧↩"), ZoomTile),
+            item(de!("Nächste Session"), shortcut("⌥N"), NextSession),
+            item(de!("Vorherige Session"), shortcut("⌥P"), PrevSession),
+            item(de!("Farbschema wechseln"), shortcut("⌥T"), ToggleTheme),
             Entry::Separator,
-            item("Suche", keys("⌘P", "Strg+P"), OpenPalette),
+            item(de!("Suche"), shortcut("⌘P"), OpenPalette),
         ],
-    }
+    )
 }
 
 fn session_menu() -> MenuDef {
-    MenuDef {
-        name: "Session",
-        entries: vec![
-            item("Fortsetzen", "", ResumeSession),
-            item("Stoppen", "", StopSession),
-            item("Umbenennen", "F2", RenameSession),
-            item("Gruppe umbenennen", "", RenameGroup),
-            item("Entfernen …", "", CloseSession),
+    menu(
+        de!("Session"),
+        vec![
+            item(de!("Fortsetzen"), none(), ResumeSession),
+            item(de!("Stoppen"), none(), StopSession),
+            item(de!("Umbenennen"), "F2".to_string(), RenameSession),
+            item(de!("Gruppe umbenennen"), none(), RenameGroup),
+            item(de!("Entfernen …"), none(), CloseSession),
             Entry::Separator,
-            off("Nur diese zeigen", ""),
-            off("Aus Ansicht nehmen", ""),
-            off("Verschieben nach", ""),
+            off(de!("Nur diese zeigen"), none()),
+            off(de!("Aus Ansicht nehmen"), none()),
+            off(de!("Verschieben nach"), none()),
             Entry::Separator,
-            off("Pfad kopieren", ""),
-            off(keys("Im Finder zeigen", "Im Explorer zeigen"), ""),
+            off(de!("Pfad kopieren"), none()),
+            off(if cfg!(target_os = "macos") { de!("Im Finder zeigen") } else { de!("Im Explorer zeigen") }, none()),
         ],
-    }
+    )
 }
 
 fn window_menu() -> MenuDef {
-    MenuDef {
-        name: "Fenster",
-        entries: vec![
-            item(keys("Im Dock ablegen", "Minimieren"), keys("⌘M", ""), Minimize),
-            item("Zoomen", "", Zoom),
+    menu(
+        de!("Fenster"),
+        vec![
+            item_os(de!("Im Dock ablegen"), de!("Minimieren"), shortcut_mac_only("⌘M"), Minimize),
+            item(de!("Zoomen"), none(), Zoom),
         ],
-    }
+    )
 }
 
 pub fn menus() -> Vec<MenuDef> {
@@ -191,7 +209,7 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
 }
 
 #[cfg(target_os = "macos")]
-fn set_native_menus(cx: &mut App) {
+pub(crate) fn set_native_menus(cx: &mut App) {
     use gpui::{Menu, MenuItem};
     let convert = |e: Entry| match e {
         Entry::Separator => MenuItem::separator(),
@@ -200,9 +218,9 @@ fn set_native_menus(cx: &mut App) {
         }
         Entry::Item { label, action: None, .. } => MenuItem::action(label, gpui::NoAction).disabled(true),
     };
-    cx.set_menus(menus().into_iter().map(|m| Menu::new(m.name).items(m.entries.into_iter().map(convert))));
+    cx.set_menus(menus().into_iter().map(|m| Menu::new(m.name).items(m.entries.into_iter().map(convert))).collect::<Vec<_>>());
 }
 
 /// Windows kennt in GPUI kein App-Menü, `ui::menubar` zeichnet es.
 #[cfg(not(target_os = "macos"))]
-fn set_native_menus(_cx: &mut App) {}
+pub(crate) fn set_native_menus(_cx: &mut App) {}

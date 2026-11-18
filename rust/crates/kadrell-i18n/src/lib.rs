@@ -17,6 +17,7 @@
 //! mit den deutschen Quelltexten starten (`t_de`, `trd!`) und später auf Ids (`t`, `tr!`) wechseln.
 
 mod catalog;
+mod extra;
 mod system;
 
 use fluent_bundle::concurrent::FluentBundle;
@@ -30,6 +31,9 @@ pub use system::system_language;
 
 const DE_FTL: &str = include_str!("../locales/de/kadrell.ftl");
 const EN_FTL: &str = include_str!("../locales/en/kadrell.ftl");
+/// Texte, die es nur in der Rust-App gibt (kein Eintrag in den xcstrings). Wird nach `kadrell.ftl` geladen.
+const DE_EXTRA_FTL: &str = include_str!("../locales/de/extra.ftl");
+const EN_EXTRA_FTL: &str = include_str!("../locales/en/extra.ftl");
 
 /// Eine übersetzte Sprache.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -170,12 +174,21 @@ fn build_bundle(lang: Lang, source: &'static str) -> Bundle {
     let id = lang.code().parse().expect("gültiger Sprachcode");
     let mut bundle = FluentBundle::new_concurrent(vec![id]);
     bundle.set_use_isolating(false); // keine Unicode-Isolierzeichen um Variablen
-    let resource = match FluentResource::try_new(source.to_string()) {
-        Ok(r) => r,
-        Err((r, _)) => r, // fehlerhafte Einträge fehlen, der Rest bleibt nutzbar (Tests melden den Fehler)
-    };
-    let _ = bundle.add_resource(resource);
+    for text in [source, extra_source(lang)] {
+        let resource = match FluentResource::try_new(text.to_string()) {
+            Ok(r) => r,
+            Err((r, _)) => r, // fehlerhafte Einträge fehlen, der Rest bleibt nutzbar (Tests melden den Fehler)
+        };
+        let _ = bundle.add_resource(resource); // doppelte Ids: der erste Eintrag gilt, Tests melden es
+    }
     bundle
+}
+
+fn extra_source(lang: Lang) -> &'static str {
+    match lang {
+        Lang::De => DE_EXTRA_FTL,
+        Lang::En => EN_EXTRA_FTL,
+    }
 }
 
 /// Übersetzer. Thread-sicher; `set_language` wirkt sofort für alle folgenden Aufrufe.
@@ -248,8 +261,11 @@ impl I18n {
 
     /// Text mit benannten Variablen (`arg1`, `arg2`, ...).
     pub fn t_args(&self, id: &str, args: &[(&str, Arg)]) -> String {
+        self.t_args_in(self.lang(), id, args)
+    }
+
+    fn t_args_in(&self, lang: Lang, id: &str, args: &[(&str, Arg)]) -> String {
         let fluent_args = build_args(args);
-        let lang = self.lang();
         if let Some(text) = self.format(lang, id, &fluent_args) {
             return text;
         }
@@ -269,13 +285,19 @@ impl I18n {
 
     /// Wie `t_de`, die Werte belegen der Reihe nach `arg1`, `arg2`, ...
     pub fn t_de_args(&self, source: &str, args: &[Arg]) -> String {
+        self.t_de_in(self.lang(), source, args)
+    }
+
+    /// Wie `t_de_args`, aber in einer bestimmten Sprache statt der eingestellten (Crates, die ihre Sprache
+    /// als Parameter bekommen, und deterministische Tests).
+    pub fn t_de_in(&self, lang: Lang, source: &str, args: &[Arg]) -> String {
         let Some(id) = id_for_de(source) else {
             self.report_missing(Lang::De, source);
             return source.to_string();
         };
         let named: Vec<(String, &Arg)> = args.iter().enumerate().map(|(i, a)| (format!("arg{}", i + 1), a)).collect();
         let args: Vec<(&str, Arg)> = named.iter().map(|(n, a)| (n.as_str(), (*a).clone())).collect();
-        self.t_args(id, &args)
+        self.t_args_in(lang, id, &args)
     }
 
     /// Ob die Id in beiden Sprachen vorhanden ist (für Tests und Werkzeuge).
@@ -308,9 +330,22 @@ fn build_args<'a>(args: &'a [(&'a str, Arg<'a>)]) -> FluentArgs<'a> {
     out
 }
 
-/// Nachrichten-Id zum deutschen Quelltext.
+/// Nachrichten-Id zum deutschen Quelltext (erst die xcstrings, dann die Zusatztexte der Rust-App).
 pub fn id_for_de(source: &str) -> Option<&'static str> {
-    catalog::KEYS.binary_search_by(|(k, _)| (*k).cmp(source)).ok().map(|i| catalog::KEYS[i].1)
+    let find = |keys: &'static [(&'static str, &'static str)]| {
+        keys.binary_search_by(|(k, _)| (*k).cmp(source)).ok().map(|i| keys[i].1)
+    };
+    find(catalog::KEYS).or_else(|| find(extra::KEYS))
+}
+
+/// Zusatztexte der Rust-App (deutscher Quelltext, Id), sortiert nach Quelltext. Nicht in den xcstrings.
+pub fn extra_catalog() -> &'static [(&'static str, &'static str)] {
+    extra::KEYS
+}
+
+/// Die `.ftl`-Quelle der Zusatztexte einer Sprache (für Tests und Werkzeuge).
+pub fn extra_ftl_source(lang: Lang) -> &'static str {
+    extra_source(lang)
 }
 
 /// Alle (deutscher Quelltext, Id) in der Reihenfolge der Quelle.
@@ -327,9 +362,12 @@ pub fn ftl_source(lang: Lang) -> &'static str {
 }
 
 /// Gemeinsame Instanz der App, beim ersten Zugriff mit der Systemsprache.
+///
+/// Mit dem Feature `pin-german` (nur für Tests anderer Crates) startet sie auf Deutsch, damit Tests, die deutsche
+/// Texte prüfen, nicht von der Sprache des Rechners abhängen.
 pub fn global() -> &'static I18n {
     static GLOBAL: OnceLock<I18n> = OnceLock::new();
-    GLOBAL.get_or_init(|| I18n::new(Language::System))
+    GLOBAL.get_or_init(|| I18n::new(if cfg!(feature = "pin-german") { Language::De } else { Language::System }))
 }
 
 /// `tr!("id")` oder `tr!("id", arg1 = x, arg2 = "text")` über die gemeinsame Instanz.
@@ -352,3 +390,5 @@ macro_rules! trd {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod extra_tests;

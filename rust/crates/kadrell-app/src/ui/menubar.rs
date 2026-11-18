@@ -55,9 +55,15 @@ impl MenuBar {
         MenuBar { menus: menus(), open: None, active: None, focus: cx.focus_handle(), restore: None, alt_clean: false }
     }
 
+    /// Baut die Menüs neu, nach einem Sprachwechsel.
+    pub fn reload(&mut self, cx: &mut Context<Self>) {
+        self.menus = menus();
+        cx.notify();
+    }
+
     /// Öffnet ein Menü nach Namen, für Screenshots ohne Eingabe (`KADRELL_DEV_MENU=Datei`).
     pub fn open_named(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(i) = self.menus.iter().position(|m| m.name == name) {
+        if let Some(i) = self.menus.iter().position(|m| m.name == name || m.key == name) {
             self.open(i, window, cx);
         }
     }
@@ -155,7 +161,7 @@ impl MenuBar {
     fn title(&self, i: usize, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = theme(cx);
         let open = self.open == Some(i);
-        let name = self.menus[i].name;
+        let name = self.menus[i].name.clone();
         div()
             .id(("menu-title", i))
             .flex()
@@ -163,7 +169,7 @@ impl MenuBar {
             .items_center()
             .justify_center()
             .h_full()
-            .w(px(title_width(name)))
+            .w(px(title_width(&name)))
             .text_color(t.fg)
             .when(open, |d| d.bg(t.surface))
             .hover(move |s| s.bg(t.surface))
@@ -178,7 +184,7 @@ impl MenuBar {
 
     fn row(&self, j: usize, entry: &Entry, cx: &mut Context<Self>) -> gpui::AnyElement {
         let t = theme(cx);
-        let Entry::Item { label, shortcut, action } = entry else {
+        let Entry::Item { label, shortcut, action, .. } = entry else {
             return div().h(px(1.)).mx(px(8.)).my(px(4.)).bg(t.line).into_any_element();
         };
         let enabled = action.is_some();
@@ -194,8 +200,8 @@ impl MenuBar {
             .px(px(12.))
             .text_color(ink)
             .when(on, |d| d.bg(t.accent))
-            .child(*label)
-            .child(div().text_color(if on { ink } else { t.muted }).child(*shortcut))
+            .child(label.clone())
+            .child(div().text_color(if on { ink } else { t.muted }).child(shortcut.clone()))
             .when(enabled, |row| {
                 row.on_mouse_down(MouseButton::Left, cx.listener(move |this, _, window, cx| this.activate(j, window, cx)))
                     .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
@@ -210,7 +216,7 @@ impl MenuBar {
 
     fn dropdown(&self, i: usize, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let t = theme(cx);
-        let x = BAR_LEFT + self.menus[..i].iter().map(|m| title_width(m.name)).sum::<f32>();
+        let x = BAR_LEFT + self.menus[..i].iter().map(|m| title_width(&m.name)).sum::<f32>();
         let menu = &self.menus[i];
         let rows: Vec<_> = menu.entries.iter().enumerate().map(|(j, e)| self.row(j, e, cx)).collect();
         let panel = div()

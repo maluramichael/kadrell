@@ -2623,6 +2623,7 @@ name = "kadrell-accounts"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "kadrell-i18n",
  "log",
  "serde",
  "serde_json",
@@ -2717,6 +2718,7 @@ dependencies = [
  "async-channel",
  "gpui-pre",
  "gpui-pre-platform",
+ "kadrell-i18n",
  "libc",
 ]
 
@@ -2725,6 +2727,7 @@ name = "kadrell-tray"
 version = "0.1.0"
 dependencies = [
  "block2 0.6.2",
+ "kadrell-i18n",
  "log",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",

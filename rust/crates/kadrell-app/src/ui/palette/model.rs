@@ -1,10 +1,11 @@
 //! Logik der Suche (⌘P / Strg+P) ohne Oberfläche: Modus aus dem Präfix, Trefferlisten für Sessions und Gruppen,
 //! Kommandos, Text in allen Terminals und Verlauf. Port der Listenbildung aus `PaletteWindow.swift`.
 
+use kadrell_i18n::trd;
+use crate::lang::{de, shortcut};
 use std::ops::Range;
 
 use gpui::Action;
-use kadrell_i18n::trd;
 
 use crate::menus;
 use crate::ui::folders::fuzzy;
@@ -115,16 +116,16 @@ pub enum Run {
 
 pub struct Command {
     pub title: String,
-    pub shortcut: &'static str,
+    pub shortcut: String,
     pub run: Run,
 }
 
 fn layout_title(mode: LayoutMode) -> &'static str {
     match mode {
-        LayoutMode::Grid => "Grid",
-        LayoutMode::Main => "Haupt + Spalte",
-        LayoutMode::Spiral => "Spirale",
-        LayoutMode::Stack => "Stack",
+        LayoutMode::Grid => de!("Grid"),
+        LayoutMode::Main => de!("Haupt + Spalte"),
+        LayoutMode::Spiral => de!("Spirale"),
+        LayoutMode::Stack => de!("Stack"),
     }
 }
 
@@ -132,46 +133,46 @@ fn layout_title(mode: LayoutMode) -> &'static str {
 /// (`menus.rs`). Was ein Kommando schon übernommen hat, fehlt in `rest`.
 struct MenuPool(Vec<Option<MenuEntry>>);
 
-/// Beschriftung, Kürzel und Aktion eines Menüeintrags.
-type MenuEntry = (&'static str, &'static str, Option<Box<dyn Action>>);
+/// Schlüssel (deutscher Quelltext), Beschriftung, Kürzel und Aktion eines Menüeintrags.
+type MenuEntry = (&'static str, String, String, Option<Box<dyn Action>>);
 
 impl MenuPool {
     fn new() -> Self {
         let mut all = Vec::new();
         for def in menus::menus() {
             for e in def.entries {
-                if let menus::Entry::Item { label, shortcut, action } = e {
-                    all.push(Some((label, shortcut, action)));
+                if let menus::Entry::Item { key, label, shortcut, action } = e {
+                    all.push(Some((key, label, shortcut, action)));
                 }
             }
         }
         MenuPool(all)
     }
 
-    /// Entnimmt den Eintrag mit dieser Beschriftung.
-    fn take(&mut self, label: &str) -> Option<(&'static str, Option<Box<dyn Action>>)> {
-        let slot = self.0.iter_mut().find(|s| s.as_ref().is_some_and(|e| e.0 == label))?;
-        slot.take().map(|(_, shortcut, action)| (shortcut, action))
+    /// Entnimmt den Eintrag mit diesem Schlüssel (deutscher Quelltext der Beschriftung, sprachunabhängig).
+    fn take(&mut self, key: &str) -> Option<(String, Option<Box<dyn Action>>)> {
+        let slot = self.0.iter_mut().find(|s| s.as_ref().is_some_and(|e| e.0 == key))?;
+        slot.take().map(|(_, _, shortcut, action)| (shortcut, action))
     }
 
     fn rest(self) -> Vec<Command> {
-        let item = |(label, shortcut, action): (&'static str, &'static str, Option<Box<dyn Action>>)| Command {
-            title: label.to_string(),
+        let item = |(_, label, shortcut, action): MenuEntry| Command {
+            title: label,
             shortcut,
             run: action.map_or(Run::Unwired, Run::Menu),
         };
-        self.0.into_iter().flatten().filter(|e| e.0 != "Suche").map(item).collect()
+        self.0.into_iter().flatten().filter(|e| e.0 != de!("Suche")).map(item).collect()
     }
 }
 
 /// Kommando, das ein Menüeintrag trägt (Kürzel und Aktion von dort); fehlt der Eintrag, ist es nicht verdrahtet.
-fn via_menu(pool: &mut MenuPool, title: &str, menu_label: &str) -> Command {
-    let (shortcut, action) = pool.take(menu_label).unwrap_or(("", None));
-    Command { title: title.to_string(), shortcut, run: action.map_or(Run::Unwired, Run::Menu) }
+fn via_menu(pool: &mut MenuPool, title: String, menu_key: &str) -> Command {
+    let (shortcut, action) = pool.take(menu_key).unwrap_or((String::new(), None));
+    Command { title, shortcut, run: action.map_or(Run::Unwired, Run::Menu) }
 }
 
-fn plain(title: &str, run: Run) -> Command {
-    Command { title: title.to_string(), shortcut: "", run }
+fn plain(title: String, run: Run) -> Command {
+    Command { title, shortcut: String::new(), run }
 }
 
 fn focused_group(snap: &Snapshot) -> Option<usize> {
@@ -182,38 +183,33 @@ fn focused_group(snap: &Snapshot) -> Option<usize> {
 pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
     let mut pool = MenuPool::new();
     let mut list: Vec<Command> =
-        LayoutMode::ALL.iter().map(|m| plain(&format!("Layout: {}", layout_title(*m)), Run::Layout(*m))).collect();
-    list.push(Command { title: "Nächstes Layout".into(), shortcut: key_label("⌘L", "Strg+L"), run: Run::Menu(Box::new(menus::NextLayout)) });
-    list.push(plain("Trennlinien zurücksetzen (gleich verteilt)", Run::Unwired));
-    list.push(via_menu(&mut pool, "Zoom ein/aus (fokussierte)", "Kachel zoomen"));
-    list.push(via_menu(&mut pool, "Neue Session", "Neue Session"));
-    list.push(via_menu(&mut pool, "Schnellstart: Idee rein, Session raus", "Schnellstart: Idee rein, Session raus"));
-    list.push(via_menu(&mut pool, "Alle Claude-Sessions durchsuchen, auch beendete", "Alle Claude-Sessions durchsuchen, auch beendete"));
-    list.push(via_menu(&mut pool, "Neues Terminal ohne Claude", "Neues Terminal ohne Claude"));
-    list.push(via_menu(&mut pool, "Remote verbinden (ssh → tmux)", "Remote verbinden …"));
-    list.push(via_menu(&mut pool, "Neue Gruppe (leer)", "Neue Gruppe …"));
-    list.push(via_menu(&mut pool, "Session stoppen (fokussierte)", "Stoppen"));
-    list.push(via_menu(&mut pool, "Session fortsetzen (fokussierte)", "Fortsetzen"));
-    list.push(via_menu(&mut pool, "Session umbenennen (fokussierte)", "Umbenennen"));
-    list.push(via_menu(&mut pool, "Session schließen (fokussierte)", "Session schließen"));
-    list.push(via_menu(&mut pool, "Gruppe bearbeiten (der fokussierten Session)", "Gruppe umbenennen"));
-    list.push(via_menu(&mut pool, "Statistik", "Statistik"));
-    list.push(via_menu(&mut pool, "Extensions", "Extensions …"));
-    list.push(plain("Reload", Run::Unwired));
-    list.push(plain("Neu starten", Run::Unwired));
-    list.push(plain("Konto hinzufügen (aktuell angemeldetes)", Run::Unwired));
-    list.extend(snap.groups.iter().map(|g| plain(&format!("Alle Sessions von {}", g.name), Run::Group(g.index))));
+        LayoutMode::ALL.iter().map(|m| plain(trd!("Layout: %@", trd!(layout_title(*m))), Run::Layout(*m))).collect();
+    list.push(Command { title: trd!("Nächstes Layout"), shortcut: shortcut("⌘L"), run: Run::Menu(Box::new(menus::NextLayout)) });
+    list.push(plain(trd!("Trennlinien zurücksetzen (gleich verteilt)"), Run::Unwired));
+    list.push(via_menu(&mut pool, trd!("Zoom ein/aus (fokussierte)"), de!("Kachel zoomen")));
+    list.push(via_menu(&mut pool, trd!("Neue Session"), de!("Neue Session")));
+    list.push(via_menu(&mut pool, trd!("Schnellstart: Idee rein, Session raus"), de!("Schnellstart: Idee rein, Session raus")));
+    list.push(via_menu(&mut pool, trd!("Alle Claude-Sessions durchsuchen, auch beendete"), de!("Alle Claude-Sessions durchsuchen, auch beendete")));
+    list.push(via_menu(&mut pool, trd!("Neues Terminal ohne Claude"), de!("Neues Terminal ohne Claude")));
+    list.push(via_menu(&mut pool, trd!("Remote verbinden (ssh → tmux)"), de!("Remote verbinden …")));
+    list.push(via_menu(&mut pool, trd!("Neue Gruppe (leer)"), de!("Neue Gruppe …")));
+    list.push(via_menu(&mut pool, trd!("Session stoppen (fokussierte)"), de!("Stoppen")));
+    list.push(via_menu(&mut pool, trd!("Session fortsetzen (fokussierte)"), de!("Fortsetzen")));
+    list.push(via_menu(&mut pool, trd!("Session umbenennen (fokussierte)"), de!("Umbenennen")));
+    list.push(via_menu(&mut pool, trd!("Session schließen (fokussierte)"), de!("Session schließen")));
+    list.push(via_menu(&mut pool, trd!("Gruppe bearbeiten (der fokussierten Session)"), de!("Gruppe umbenennen")));
+    list.push(via_menu(&mut pool, trd!("Statistik"), de!("Statistik")));
+    list.push(via_menu(&mut pool, trd!("Extensions"), de!("Extensions …")));
+    list.push(plain(trd!("Reload"), Run::Unwired));
+    list.push(plain(trd!("Neu starten"), Run::Unwired));
+    list.push(plain(trd!("Konto hinzufügen (aktuell angemeldetes)"), Run::Unwired));
+    list.extend(snap.groups.iter().map(|g| plain(trd!("Alle Sessions von %@", &g.name), Run::Group(g.index))));
     if let Some(own) = focused_group(snap) {
         let others = snap.groups.iter().filter(|g| g.index != own);
-        list.extend(others.map(|g| plain(&format!("Fokussierte Session verschieben nach: {}", g.name), Run::MoveFocused(g.index))));
+        list.extend(others.map(|g| plain(trd!("Fokussierte Session verschieben nach: %@", &g.name), Run::MoveFocused(g.index))));
     }
     list.extend(pool.rest());
     list
-}
-
-/// Kürzel-Beschriftung: erster Wert Mac, zweiter Windows.
-const fn key_label(mac: &'static str, win: &'static str) -> &'static str {
-    if cfg!(target_os = "macos") { mac } else { win }
 }
 
 // --- Trefferzeilen ---
@@ -320,8 +316,8 @@ pub fn command_items(commands: &[Command], term: &str) -> Vec<Item> {
     let shown = commands.iter().enumerate().filter(|(_, c)| term.is_empty() || fuzzy(term, &c.title));
     shown
         .map(|(i, c)| {
-            let mut it = Item::new(c.title.clone(), "Kommando", Target::Command(i));
-            it.right = (!c.shortcut.is_empty()).then(|| c.shortcut.to_string());
+            let mut it = Item::new(c.title.clone(), trd!("Kommando"), Target::Command(i));
+            it.right = (!c.shortcut.is_empty()).then(|| c.shortcut.clone());
             it.dim = matches!(c.run, Run::Unwired);
             it
         })
@@ -337,7 +333,7 @@ pub struct SessionHits {
 }
 
 fn text_head(g: &GroupRow, s: &SessionRow, count: usize) -> Item {
-    let mut it = Item::new(s.title.clone(), format!("{count} Treffer · {}", s.short), Target::Session(s.id));
+    let mut it = Item::new(s.title.clone(), format!("{} · {}", trd!("%lld Treffer", count), s.short), Target::Session(s.id));
     it.status = Some(s.status);
     it.right = Some(g.name.clone());
     it
@@ -372,16 +368,22 @@ pub fn text_items(snap: &Snapshot, hits: &[SessionHits], query: &str) -> Vec<Ite
 
 // --- Verlauf ---
 
-/// „vor 3 Std.“ wie `RelativeDateTimeFormatter` (kurz, deutsch).
+/// „vor 3 Std.“ wie `RelativeDateTimeFormatter` (kurz), in der eingestellten Sprache.
 pub fn relative_de(secs_ago: u64) -> String {
-    const UNITS: [(u64, &str); 6] =
-        [(31_536_000, "J."), (2_592_000, "Mon."), (604_800, "Wo."), (86_400, "Tg."), (3_600, "Std."), (60, "Min.")];
-    for (size, unit) in UNITS {
+    const UNITS: [(u64, &str); 6] = [
+        (31_536_000, de!("vor %lld J.")),
+        (2_592_000, de!("vor %lld Mon.")),
+        (604_800, de!("vor %lld Wo.")),
+        (86_400, de!("vor %lld Tg.")),
+        (3_600, de!("vor %lld Std.")),
+        (60, de!("vor %lld Min.")),
+    ];
+    for (size, text) in UNITS {
         if secs_ago >= size {
-            return format!("vor {} {unit}", secs_ago / size);
+            return trd!(text, secs_ago / size);
         }
     }
-    "gerade eben".to_string()
+    trd!("gerade eben")
 }
 
 pub fn history_item(hit: &HistoryHit, now_secs: u64, live: Option<(Id, Status)>) -> Item {

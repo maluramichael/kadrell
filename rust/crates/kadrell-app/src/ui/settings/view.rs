@@ -8,6 +8,7 @@ use gpui::{
     div, point, prelude::*, px,
 };
 
+use kadrell_i18n::trd;
 use super::controls::{self, key_cap, key_content, keyboard_ring, measure, section_heading, select_face, subtitle, table, value_face, wide_row};
 use super::dialog::SettingsDialog;
 use super::model::{Block, Btn, Control, Row, Tone};
@@ -118,12 +119,12 @@ impl SettingsDialog {
         let recording = self.recording == Some(action);
         let default = action.default_key();
         let (text, color) = match (&key, recording) {
-            (_, true) => ("Tasten drücken …".to_string(), t.accent_text),
+            (_, true) => (trd!("Tasten drücken …"), t.accent_text),
             (Some(k), false) => (shortcut::format(k, shortcut::current()), t.fg),
             (None, false) => ("–".to_string(), t.fg),
         };
         let reset = (key.as_ref() != Some(&default) && !recording).then(|| {
-            let cap = key_cap(div().child("Standard"), false, t).id(id("reset", &row.id));
+            let cap = key_cap(div().child(trd!("Standard")), false, t).id(id("reset", &row.id));
             cap.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.reset_hotkey(action, cx)))
         });
         let face = div()
@@ -205,7 +206,7 @@ impl SettingsDialog {
     // MARK: Kopf, Filter, Liste
 
     fn header(t: &Theme) -> Div {
-        let label = div().text_size(px(11.)).text_color(t.muted).child("EINSTELLUNGEN");
+        let label = div().text_size(px(11.)).text_color(t.muted).child(trd!("EINSTELLUNGEN"));
         let version = div().text_size(px(11.)).text_color(t.muted).child(format!("Kadrell v{VERSION}"));
         div().flex().flex_none().items_center().justify_between().px(px(16.)).pt(px(12.)).child(label).child(version)
     }
@@ -216,7 +217,7 @@ impl SettingsDialog {
         }
         let slash = div().flex_none().font_weight(gpui::FontWeight::BOLD).text_color(t.accent_text).child("/");
         let count = self.filter.is_active().then(|| {
-            let text = if hits == 0 { "Keine Treffer".to_string() } else { format!("{hits} Treffer") };
+            let text = if hits == 0 { trd!("Keine Treffer") } else { trd!("%lld Treffer", hits) };
             div().flex_none().text_color(t.muted).child(text)
         });
         let bar = div().flex().flex_none().items_center().gap(px(8.)).px(px(16.)).pt(px(10.)).text_size(px(12.));
@@ -261,8 +262,8 @@ impl Render for SettingsDialog {
             .on_scroll(cx.listener(|this, _, _, cx| this.close_popover(cx)))
             .child(body)
             .child(div().h(px(12.)));
-        let hint = if self.filter.open { "⏎ zum ersten Treffer · Esc beendet die Suche" } else { "Änderungen gelten sofort · / sucht · Esc schließt" };
-        let foot = dialog_foot(hint, "Fertig ⏎", &t, cx.listener(|this, _, _, cx| {
+        let hint = if self.filter.open { trd!("⏎ zum ersten Treffer · Esc beendet die Suche") } else { trd!("Änderungen gelten sofort · / sucht · Esc schließt") };
+        let foot = dialog_foot(hint, format!("{} ⏎", trd!("Fertig")), &t, cx.listener(|this, _, _, cx| {
             this.stop_recording();
             cx.emit(super::dialog::SettingsEvent::Close);
         }));

@@ -12,10 +12,31 @@ pub enum Lang {
 }
 
 impl Lang {
-    fn pick(self, de: &'static str, en: &'static str) -> &'static str {
-        match self {
-            Lang::De => de,
-            Lang::En => en,
+    /// Die eingestellte Sprache der App (`kadrell-i18n`).
+    pub fn current() -> Lang {
+        Lang::from(kadrell_i18n::global().lang())
+    }
+
+    /// Text zum deutschen Quelltext (Schlüssel der xcstrings) in dieser Sprache, Werte der Reihe nach.
+    fn tr(self, source: &str, args: &[kadrell_i18n::Arg]) -> String {
+        kadrell_i18n::global().t_de_in(kadrell_i18n::Lang::from(self), source, args)
+    }
+}
+
+impl From<kadrell_i18n::Lang> for Lang {
+    fn from(lang: kadrell_i18n::Lang) -> Lang {
+        match lang {
+            kadrell_i18n::Lang::De => Lang::De,
+            kadrell_i18n::Lang::En => Lang::En,
+        }
+    }
+}
+
+impl From<Lang> for kadrell_i18n::Lang {
+    fn from(lang: Lang) -> kadrell_i18n::Lang {
+        match lang {
+            Lang::De => kadrell_i18n::Lang::De,
+            Lang::En => kadrell_i18n::Lang::En,
         }
     }
 }
@@ -46,10 +67,7 @@ pub fn title(waiting: usize, done: usize, lang: Lang) -> String {
     if waiting == 0 && done == 0 {
         return String::new();
     }
-    match lang {
-        Lang::De => format!("  {waiting} warten · {done} neu"),
-        Lang::En => format!("  {waiting} waiting · {done} new"),
-    }
+    lang.tr("  %lld warten · %lld neu", &[waiting.into(), done.into()])
 }
 
 /// Text je nach Modus: nur `Full` zeigt den Kurztext, `Icon` und `Hidden` bleiben leer.
@@ -67,7 +85,7 @@ pub fn tooltip(s: &StatusSummary) -> String {
         out.push_str(t);
     }
     if s.working > 0 {
-        out.push_str(&format!(" · {} {}", s.working, s.lang.pick("arbeiten", "working")));
+        out.push_str(&format!(" · {} {}", s.working, s.lang.tr("arbeiten", &[])));
     }
     out
 }
@@ -140,7 +158,7 @@ pub fn build_menu(waiting: &[MenuSession], done: &[MenuSession], lang: Lang) -> 
     let mut items = Vec::new();
     let entry = |id: String, label: String, icon, enabled| TrayItem::Entry { id, label, icon, enabled };
     if waiting.is_empty() && done.is_empty() {
-        let label = lang.pick("Keine wartenden Sessions", "No waiting sessions").to_string();
+        let label = lang.tr("Keine wartenden Sessions", &[]);
         items.push(entry(String::new(), label, ItemIcon::None, false));
     } else {
         let row = |s: &MenuSession, icon| {
@@ -149,11 +167,11 @@ pub fn build_menu(waiting: &[MenuSession], done: &[MenuSession], lang: Lang) -> 
         items.extend(waiting.iter().map(|s| row(s, ItemIcon::Waiting)));
         items.extend(done.iter().map(|s| row(s, ItemIcon::Done)));
         items.push(TrayItem::Separator);
-        let next = lang.pick("Nächste wartende Session", "Next waiting session").to_string();
+        let next = lang.tr("Nächste wartende Session", &[]);
         items.push(entry(ID_NEXT_WAITING.into(), next, ItemIcon::None, !waiting.is_empty()));
     }
     items.push(TrayItem::Separator);
-    items.push(entry(ID_OPEN.into(), lang.pick("Kadrell öffnen", "Open Kadrell").into(), ItemIcon::None, true));
+    items.push(entry(ID_OPEN.into(), lang.tr("Kadrell öffnen", &[]), ItemIcon::None, true));
     items
 }
 
@@ -192,10 +210,10 @@ pub fn notification(
     waiting: bool,
     lang: Lang,
 ) -> Notification {
-    let fallback = if waiting { lang.pick("wartet auf dich", "is waiting for you") } else { lang.pick("ist fertig", "is done") };
+    let fallback = if waiting { lang.tr("wartet auf dich", &[]) } else { lang.tr("ist fertig", &[]) };
     Notification {
         title: format!("{group} › {title}"),
-        body: message.filter(|m| !m.is_empty()).unwrap_or(fallback).to_string(),
+        body: message.filter(|m| !m.is_empty()).map(str::to_string).unwrap_or(fallback),
         session_key: session_key.to_string(),
         group: group.to_string(),
     }

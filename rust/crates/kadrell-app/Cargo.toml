@@ -28,3 +28,7 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_Wi
 # Ohne `font-kit` nimmt GPUI auf dem Mac das NoopTextSystem: kein einziger Text.
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-pre-platform = { version = "=0.3.13", features = ["font-kit"] }
+
+[dev-dependencies]
+# Tests prüfen deutsche Texte: die gemeinsame Sprache startet auf Deutsch, nicht in der Systemsprache.
+kadrell-i18n = { path = "../kadrell-i18n", features = ["pin-german"] }

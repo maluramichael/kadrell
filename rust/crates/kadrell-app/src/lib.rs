@@ -3,6 +3,9 @@
 #![allow(dead_code)] // Theme: nicht alle Felder werden schon benutzt.
 
 mod ext;
+mod lang;
+#[cfg(test)]
+mod catalog_test;
 mod menus;
 mod state;
 mod theme;
@@ -70,6 +73,8 @@ pub struct Shell {
     ext: ExtensionManager,
     /// Tray-Icon, Benachrichtigungen, Badge und das Verstecken des Fensters (`tray_wire`).
     tray: tray_wire::TrayWire,
+    /// Stand der Sprache, für die Menüs und die Ansicht zuletzt gebaut wurden (`lang::sync_language`).
+    language_generation: u64,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -121,6 +126,7 @@ impl Shell {
             down: false,
             ext,
             tray: tray_wire::TrayWire::new(),
+            language_generation: kadrell_i18n::global().generation(),
         };
         shell.rebuild();
         shell.apply_dev_view();
@@ -396,6 +402,7 @@ impl Focusable for Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.sync_language(cx);
         let t = ui::theme(cx);
         let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, cx);
         let ctl = self.layout_ctl(cx);
@@ -502,6 +509,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         }
     };
     let title_profile = state.profile.clone();
+    lang::apply_at_start(&state.settings);
     application().run(move |cx: &mut App| {
         kadrell_term::fonts::load(cx);
         ui::text_input::bind_keys(cx);

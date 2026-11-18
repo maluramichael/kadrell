@@ -2,6 +2,7 @@
 //! `AppState` gebaut. Die Oberfläche kennt nur diese Felder; Schlüssel (`key`, `id`) bleiben stabil, die Positionen
 //! (Gruppe, Session) gelten nur bis zur nächsten Änderung.
 
+use kadrell_i18n::trd;
 use std::collections::HashMap;
 
 use gpui::{Entity, Hsla};
@@ -128,7 +129,7 @@ fn flat_view(state: &AppState, groups: &[CoreGroup], by_key: &HashMap<String, Co
     let order = state.settings.sidebar_flat_order();
     let rows = SidebarFlat::rows(groups, by_key, state.sort(), &order);
     let sessions: Vec<Session> = rows.iter().map(|r| session_view(r.session, state, panes, now)).collect();
-    vec![Group { id: String::new(), name: "Sessions".into(), color: 0x6c7086, path: String::new(), cwd: String::new(), favorite: false, collapsed: false, sessions }]
+    vec![Group { id: String::new(), name: trd!("Sessions"), color: 0x6c7086, path: String::new(), cwd: String::new(), favorite: false, collapsed: false, sessions }]
 }
 
 /// Alle Sessions in Anzeigereihenfolge als (Gruppe, Session).
