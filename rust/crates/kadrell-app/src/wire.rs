@@ -156,7 +156,7 @@ impl Shell {
         let exited_key = key.clone();
         cx.subscribe_in(&pane, window, move |shell, _, ev: &TerminalEvent, window, cx| match ev {
             TerminalEvent::Exited => shell.on_exited(&exited_key, window, cx),
-            TerminalEvent::Link(link) => shell.on_link(&exited_key, link),
+            TerminalEvent::Link(link) => shell.on_link(&exited_key, link, window, cx),
         })
         .detach();
         self.panes.insert(key.clone(), pane);

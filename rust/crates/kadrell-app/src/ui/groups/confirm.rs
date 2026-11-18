@@ -3,8 +3,8 @@
 //! Rückfragen (Session schließen, Gruppe schließen, Session stoppen) aus `AppDelegate.swift`.
 
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
-    StatefulInteractiveElement, Styled, Window, actions, div, px,
+    App, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render,
+    StatefulInteractiveElement, Styled, Window, div, px,
 };
 
 use kadrell_core::Session;
@@ -13,18 +13,16 @@ use kadrell_i18n::trd;
 
 use crate::lang::shortcut;
 use crate::theme::Theme;
-use crate::ui::instrument::{KeyRole, key_button_with};
+use crate::ui::dialog_keys;
+use crate::ui::instrument::{KeyRole, key_focusable};
 use crate::ui::overlay::{backdrop, dialog_frame, overlay_width};
 use crate::ui::theme;
 
-actions!(kadrell_confirm, [Accept, AcceptForce, Dismiss]);
-
 const CONTEXT: &str = "KadrellConfirm";
 
+/// Enter, Strg/⌘+Enter, Esc und Tab laufen über die gemeinsame Dialogtastatur (`dialog_keys`).
 pub fn bind_keys(cx: &mut App) {
-    let c = Some(CONTEXT);
-    let force = if cfg!(target_os = "macos") { "cmd-enter" } else { "ctrl-enter" };
-    cx.bind_keys([KeyBinding::new("enter", Accept, c), KeyBinding::new(force, AcceptForce, c), KeyBinding::new("escape", Dismiss, c)]);
+    dialog_keys::bind_keys(cx);
 }
 
 /// Was nach dem Bestätigen passiert.
@@ -116,11 +114,11 @@ impl Confirm {
         Self { spec, dont_ask: false, focus }
     }
 
-    fn accept(&mut self, cx: &mut Context<Self>) {
+    fn accept(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         cx.emit(ConfirmEvent::Accept(self.spec.action.clone()));
     }
 
-    fn cancel(&mut self, cx: &mut Context<Self>) {
+    fn cancel(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if self.dont_ask {
             // Abbrechen stellt zurück: wer abbricht, will weiter gefragt werden.
             if let Some(ask) = self.spec.ask {
@@ -158,39 +156,45 @@ fn checkbox(on: bool, t: &Theme) -> gpui::Div {
 }
 
 impl Confirm {
-    fn ask_row(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+    /// Häkchen „Nicht mehr fragen“: ein Tab-Stopp, Leertaste und Enter schalten um.
+    fn ask_row(&self, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let color = if self.dont_ask { t.fg } else { t.muted };
-        div()
+        let row = div()
             .id("confirm-dont-ask")
+            .relative()
             .flex()
             .items_center()
             .gap(px(6.))
             .cursor_pointer()
             .text_size(px(12.))
             .text_color(color)
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_dont_ask(cx)))
             .tooltip(crate::ui::tooltip::text(shortcut(&trd!("Wieder einschalten: Einstellungen (⌘,) › Rückfragen"))))
             .child(checkbox(self.dont_ask, t))
-            .child(trd!("Nicht mehr fragen"))
+            .child(trd!("Nicht mehr fragen"));
+        let toggle = cx.listener(|this, _, _, cx| this.toggle_dont_ask(cx));
+        let (row, ring) = dialog_keys::control(row, "confirm-dont-ask", window, cx, std::rc::Rc::new(toggle));
+        if ring { row.child(crate::ui::instrument::focus_ring(t)) } else { row }
     }
 
-    fn buttons(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
+    fn buttons(&self, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
         let s = crate::ui::overlay::scale();
         let mut row = div().flex().items_center().gap(px(8. * s)).p(px(16. * s));
         if self.spec.ask.is_some() {
-            row = row.child(self.ask_row(t, cx));
+            row = row.child(self.ask_row(t, window, cx));
         }
         row = row.child(div().flex_1());
         if !self.spec.info_only {
-            row = row.child(key_button_with("confirm-cancel", trd!("Abbrechen"), KeyRole::Neutral, false, t, cx.listener(|this, _, _, cx| this.cancel(cx))));
+            let cancel = cx.listener(|this, _, w, cx| this.cancel(w, cx));
+            row = row.child(key_focusable("confirm-cancel", trd!("Abbrechen"), KeyRole::Neutral, false, t, window, cx, cancel));
         }
         let label = if self.spec.destructive { destructive_label(&self.spec.button) } else { self.spec.button.clone() };
-        row.child(key_button_with("confirm-ok", label, confirm_role(self.spec.destructive), false, t, cx.listener(|this, _, _, cx| this.accept(cx))))
+        let accept = cx.listener(|this, _, w, cx| this.accept(w, cx));
+        row.child(key_focusable("confirm-ok", label, confirm_role(self.spec.destructive), false, t, window, cx, accept))
     }
 }
 
 impl Render for Confirm {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let mut body = div().flex().flex_col().px(px(16.)).pt(px(16.)).child(
             div().text_size(px(14.)).font_weight(gpui::FontWeight::BOLD).text_color(t.fg).child(self.spec.title.clone()),
@@ -198,21 +202,10 @@ impl Render for Confirm {
         if !self.spec.info.is_empty() {
             body = body.child(div().pt(px(8.)).text_size(px(12.)).text_color(t.muted).child(self.spec.info.clone()));
         }
-        let destructive = self.spec.destructive;
-        let dialog = overlay_width(dialog_frame(&t), 520.)
-            .key_context(CONTEXT)
-            .track_focus(&self.focus)
-            .text_color(t.fg)
-            .on_action(cx.listener(move |this, _: &Accept, _, cx| {
-                if !destructive {
-                    this.accept(cx);
-                }
-            }))
-            .on_action(cx.listener(|this, _: &AcceptForce, _, cx| this.accept(cx)))
-            .on_action(cx.listener(|this, _: &Dismiss, _, cx| this.cancel(cx)))
-            .child(body)
-            .child(self.buttons(&t, cx));
-        backdrop(cx.listener(|this, _, _, cx| this.cancel(cx))).child(dialog)
+        let plain_return = !self.spec.destructive;
+        let dialog = overlay_width(dialog_frame(&t), 520.).key_context(dialog_keys::context(CONTEXT)).track_focus(&self.focus).text_color(t.fg);
+        let dialog = dialog_keys::keys(dialog, plain_return, cx, Self::accept, Self::cancel).child(body).child(self.buttons(&t, window, cx));
+        dialog_keys::nav(backdrop(cx.listener(|this, _, w, cx| this.cancel(w, cx)))).child(dialog)
     }
 }
 

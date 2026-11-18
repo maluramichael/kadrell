@@ -206,7 +206,7 @@ impl Shell {
     fn start_resumed(&mut self, session_id: &str, cwd: &str, window: &mut Window, cx: &mut Context<Self>) {
         let request = NewRequest { cwd: cwd.replace('\\', "/"), show: true, resume: Some(session_id.to_string()), ..NewRequest::default() };
         if let Err(e) = self.state.new_session(request) {
-            self.state.error = Some(e.to_string());
+            self.report(&e.to_string(), window, cx);
         }
         self.sync(window, cx);
     }

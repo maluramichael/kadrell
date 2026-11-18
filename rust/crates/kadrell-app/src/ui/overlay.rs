@@ -180,9 +180,10 @@ pub fn overlay_width(d: Div, width: f32) -> Div {
     d.w(px(area().dialog_width(width)))
 }
 
-/// Dialoghöhe: höchstens `height` (skaliert), samt Schatten nie mehr als die Fläche minus Rand.
+/// Höhe nach Inhalt, höchstens `height` (skaliert) und samt Schatten nie mehr als die Fläche minus Rand: ein Dialog ist so
+/// hoch wie sein Inhalt (`preferredContentSize`), nicht so hoch wie seine Obergrenze.
 pub fn overlay_height(d: Div, height: f32) -> Div {
-    d.h(px(area().dialog_height(height)))
+    d.max_h(px(area().dialog_height(height)))
 }
 
 fn dim() -> Hsla {
@@ -265,7 +266,6 @@ pub fn dialog_frame(t: &Theme) -> Div {
         .relative()
         .flex()
         .flex_col()
-        .overflow_hidden()
         .max_h(px((a.max_height() - SHADOW_DEPTH * a.scale).max(0.)))
         .rounded(px(radius))
         .bg(raised(t))
@@ -305,7 +305,7 @@ pub fn dialog_foot(
     button: impl Into<SharedString>,
     t: &Theme,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
+) -> Div {
     dialog_foot_with(hint, button, KeyRole::Primary, t, on_click)
 }
 
@@ -316,11 +316,27 @@ pub fn dialog_foot_with(
     role: KeyRole,
     t: &Theme,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
+) -> Div {
+    let label = foot_label(&button.into());
+    foot_bar(hint, instrument::key_button_with("dialog-primary", label, role, false, t, on_click), t)
+}
+
+/// Wie `dialog_foot_with`, mit Tastaturfokus: die Haupttaste ist ein Tab-Stopp mit Ring (`kbdFocusRing`).
+pub fn dialog_foot_in(
+    hint: impl Into<SharedString>,
+    button: impl Into<SharedString>,
+    role: KeyRole,
+    t: &Theme,
+    window: &mut Window,
+    cx: &mut App,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Div {
+    let label = foot_label(&button.into());
+    foot_bar(hint, instrument::key_focusable("dialog-primary", label, role, false, t, window, cx, on_click), t)
+}
+
+fn foot_bar(hint: impl Into<SharedString>, key: impl IntoElement, t: &Theme) -> Div {
     let s = scale();
-    let button: SharedString = button.into();
-    let label = foot_label(&button);
-    let key = instrument::key_button_with("dialog-primary", label, role, false, t, on_click);
     div()
         .flex()
         .flex_col()

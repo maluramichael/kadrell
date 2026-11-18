@@ -358,14 +358,14 @@ impl Shell {
     // MARK: Links im Terminal
 
     /// Strg+Klick (Mac ⌘-Klick) auf Text in der Kachel von `key`.
-    pub(crate) fn on_link(&mut self, key: &str, link: &str) {
+    pub(crate) fn on_link(&mut self, key: &str, link: &str, window: &mut Window, cx: &mut Context<Self>) {
         let cwd = self.state.session(key).map(|s| s.cwd.clone()).unwrap_or_default();
         let home = self.state.home();
         let editor = self.state.settings.editor_command();
         if let Some(opening) = open::plan(link, &open::base_for(&cwd, &home), &home, &editor)
             && let Err(e) = open::run(&opening)
         {
-            eprintln!("kadrell: {e}");
+            self.report(&e, window, cx);
         }
     }
 

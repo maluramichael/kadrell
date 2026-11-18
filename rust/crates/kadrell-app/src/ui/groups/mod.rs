@@ -260,19 +260,22 @@ impl Shell {
     }
 
     /// Ordner im eingestellten Editor öffnen (Menü, ⌥E).
-    pub fn open_editor_in(&mut self, cwd: &str) {
+    /// Ohne Editor-Befehl oder Ordner piept es, ein Startfehler kommt als Meldung (`openEditor(in:)`).
+    pub fn open_editor_in(&mut self, cwd: &str, window: &mut Window, cx: &mut Context<Self>) {
         let command = self.state.settings.editor_command();
+        if command.trim().is_empty() || cwd.is_empty() {
+            crate::ui::overlay_queue::beep();
+            return;
+        }
         if let Err(e) = rows::spawn_editor(&command, cwd) {
-            eprintln!("kadrell: Editor nicht gestartet: {e}");
+            self.report(&e.to_string(), window, cx);
         }
     }
 
     /// ⌥E: Ordner der Fokus-Session im Editor.
-    pub fn open_editor_focused(&mut self) {
-        let cwd = self.state.focused.as_deref().and_then(|k| self.state.session(k)).map(|s| s.cwd.clone());
-        if let Some(cwd) = cwd {
-            self.open_editor_in(&cwd);
-        }
+    pub fn open_editor_focused(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let cwd = self.state.focused.as_deref().and_then(|k| self.state.session(k)).map(|s| s.cwd.clone()).unwrap_or_default();
+        self.open_editor_in(&cwd, window, cx);
     }
 
     // MARK: Ordner aus dem Explorer
@@ -346,7 +349,7 @@ impl Shell {
             Cmd::NewSessionIn(id) => self.new_session_in_group(&id),
             Cmd::NewTerminalIn(id) => self.new_terminal_in_group(&id),
             Cmd::ShowGroup(id) => self.show_group_sessions(&id),
-            Cmd::OpenEditor(path) => self.open_editor_in(&path),
+            Cmd::OpenEditor(path) => self.open_editor_in(&path, window, cx),
             Cmd::CloseGroup(id) => {
                 self.request_close_group(&id, false, window, cx);
                 return None;

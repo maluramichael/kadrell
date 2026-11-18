@@ -140,7 +140,7 @@ impl TextInput {
 
     pub fn new(placeholder: &str, cx: &mut Context<Self>) -> Self {
         Self {
-            focus: cx.focus_handle(),
+            focus: cx.focus_handle().tab_stop(true),
             content: "".into(),
             placeholder: placeholder.to_string().into(),
             selected: 0..0,
