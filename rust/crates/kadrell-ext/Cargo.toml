@@ -1,0 +1,40 @@
+[package]
+name = "kadrell-ext"
+description = "Lua-Extensions für Kadrell: Host-Prozess, Protokoll, Supervisor, Manifest, GitHub-Katalog"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kadrell_ext"
+
+[[bin]]
+name = "kadrell-ext-host"
+path = "src/bin/kadrell-ext-host.rs"
+
+# Nur für Tests: verhält sich wie ein kaputter Helper oder ein einfaches Werkzeug für kadrell.exec.
+[[bin]]
+name = "kadrell-ext-fake"
+path = "src/bin/kadrell-ext-fake.rs"
+
+[dependencies]
+mlua = { version = "0.12", features = ["lua55", "vendored"] }
+serde_json = "1"
+sysinfo = "0.40"
+notify = "8"
+ureq = "3"
+flate2 = "1"
+tar = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_System_Console",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
