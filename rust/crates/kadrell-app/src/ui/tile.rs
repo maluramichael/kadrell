@@ -59,20 +59,22 @@ impl Geometry {
     }
 }
 
-/// Breite von `text` in Pixeln, Zeichen für Zeichen aus der Systemschrift. Nur knapp über der gesetzten Breite (3 % und
-/// ein Pixel, damit ein Titel nicht um den letzten Buchstaben gekürzt wird): die frühere Zugabe von 10 % ließ in schmalen
-/// Kacheln die Gruppe weg, die Swift noch zeigt.
+/// Breite von `text` in Punkten, Zeichen für Zeichen aus der Oberflächenschrift (wie `NSAttributedString.size()` ohne
+/// Unterschneidung), auf ein ganzes Gerätepixel aufgerundet: GPUI rundet feste Breiten auf Gerätepixel, ein kleineres Maß kürzte den Titel mit
+/// einer Auslassung. Die frühere Zugabe von 3 % und einem Pixel machte die Lücke zum Branch 2 pt zu groß.
 pub fn text_width(cx: &App, text: &str, size: f32, bold: bool) -> f32 {
     if text.is_empty() {
         return 0.;
     }
-    let system = cx.text_system();
-    let mut f = font(".SystemUIFont");
+    let mut f = font(crate::theme::FONT);
     if bold {
         f.weight = FontWeight::BOLD;
     }
+    let system = cx.text_system();
     let id = system.resolve_font(&f);
-    text.chars().map(|c| system.layout_width(id, px(size), c).as_f32()).sum::<f32>() * 1.03 + 1.
+    let sum: f32 = text.chars().map(|c| system.layout_width(id, px(size), c).as_f32()).sum();
+    let d = super::overlay::hairline();
+    (sum / d - 1e-3).ceil() * d
 }
 
 /// Statuspunkt: arbeitende Sessions atmen statt zu stehen.
@@ -230,7 +232,7 @@ fn header(c: &Cell, t: &Theme, a: &Appearance, cx: &App) -> Div {
     let mut row = div().relative().flex_none().w_full().h(px(tile_look::header_height(a.scale))).bg(a.panel_fill(t.surface));
     row = row.child(div().absolute().bottom_0().left_0().right_0().child(h_seam(t)));
     row = row.child(div().absolute().left(px(a.s(9.))).top(px(a.s(9.))).child(dot(s, t, a)));
-    row = row.child(text_at(a, 24., 4., Some(layout.title_w)).text_size(px(a.s(11.5))).font_weight(FontWeight::BOLD).text_color(t.fg).child(s.title.clone()));
+    row = row.child(text_at(a, 24., 5., Some(layout.title_w)).text_size(px(a.s(11.5))).font_weight(FontWeight::BOLD).text_color(t.fg).child(s.title.clone()));
     if let (Some(x), Some(branch)) = (layout.branch_x, &s.branch) {
         row = row.child(text_at(a, x, 5., None).text_size(px(a.s(10.5))).text_color(t.muted).child(branch.clone()));
     }
