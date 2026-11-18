@@ -99,7 +99,8 @@ pub enum StripMode {
     /// Swift-Verhalten: nur die sitzungsbezogenen Marker (`SESSION_MARKERS`), Einstellungen wie
     /// `CLAUDE_CODE_MAX_OUTPUT_TOKENS` bleiben. Dazu `AI_AGENT` und ein von Claude Code gesetztes `NO_COLOR`.
     Markers,
-    /// Regel des GPUI-Spikes (`inherited_env_to_strip`): alles `CLAUDE_CODE_*` fliegt raus.
+    /// Regel des GPUI-Spikes (`inherited_env_to_strip`): alles `CLAUDE_CODE_*` fliegt raus, zusätzlich zu den
+    /// Markern von `Markers` (nie weniger als Swift).
     Broad,
 }
 
@@ -128,10 +129,7 @@ pub fn env_names_to_strip(names: &[String], mode: StripMode) -> Vec<String> {
         .iter()
         .filter(|n| {
             let u = upper(n);
-            let marker = match mode {
-                StripMode::Markers => SESSION_MARKERS.contains(&u.as_str()),
-                StripMode::Broad => u == "CLAUDECODE" || u.starts_with("CLAUDE_CODE_"),
-            };
+            let marker = SESSION_MARKERS.contains(&u.as_str()) || (mode == StripMode::Broad && u.starts_with("CLAUDE_CODE_"));
             marker || u == "AI_AGENT" || (in_claude_session && u == "NO_COLOR")
         })
         .cloned()
@@ -494,7 +492,7 @@ mod tests {
         assert_eq!(kept.keys().map(String::as_str).collect::<Vec<_>>(), ["CLAUDE_CODE_MAX_OUTPUT_TOKENS", "COLORTERM", "LANG", "PATH", "TERM"]);
         let broad = ClaudeCli::new("claude", env, StripMode::Broad).environment;
         assert!(!broad.contains_key("CLAUDE_CODE_MAX_OUTPUT_TOKENS"));
-        assert!(broad.contains_key("CLAUDE_PID"));
+        assert!(!broad.contains_key("CLAUDE_PID"), "Broad entfernt nie weniger als Markers");
     }
 
     /// Wie im Spike: ein NO_COLOR des Nutzers (keine Claude-Session) bleibt, in einer Claude-Session fliegt es raus.

@@ -805,4 +805,64 @@ mod tests {
         assert_eq!(r.sessions[0].first_prompt.as_deref(), Some("Bitte den Build reparieren"));
         assert_eq!(r.sessions[0].title(), "Bitte den Build reparieren");
     }
+
+    /// Hat ein Poll Änderungen überholt (Session hinzugefügt oder entfernt, umbenannt, Hook gemeldet), gelten dessen
+    /// Live-Werte nur für das, was noch da ist: neue Sessions bleiben, entfernte kommen nicht zurück, `custom_name` bleibt.
+    #[test]
+    fn apply_live_keeps_changes_made_while_polling() {
+        let at_start = vec![session("s1", "/p", "s1", "Eins"), session("s3", "/p", "s3", "Drei")];
+        let mut polled = at_start.clone();
+        polled[0].pid = Some(7);
+        polled[0].raw_status = Some("busy".into());
+        polled[0].name = "Vom Poll".into();
+        polled[1].pid = Some(8);
+        // Währenddessen: s2 kommt dazu, s3 geht, s1 bekommt einen eigenen Namen.
+        let mut current = vec![session("s1", "/p", "s1", "Eins"), session("s2", "/p", "s2", "Zwei")];
+        current[0].custom_name = Some("Meins".into());
+        let merged = apply_live(&polled, &current, &HashSet::new());
+        assert_eq!(merged.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["s1", "s2"]);
+        assert_eq!((merged[0].pid, merged[0].status(), merged[0].name.as_str()), (Some(7), Status::Running, "Vom Poll"));
+        assert_eq!(merged[0].custom_name.as_deref(), Some("Meins"));
+        assert_eq!(merged[1], current[1], "neu hinzugekommen: unverändert");
+
+        // Gemeldete Sessions behalten, was `report` zwischenzeitlich gesetzt hat.
+        let mut hooked = current.clone();
+        hooked[0].raw_status = Some("waiting".into());
+        let kept = apply_live(&polled, &hooked, &HashSet::from(["s1".to_string()]));
+        assert_eq!(kept[0].status(), Status::Waiting);
+        assert_eq!(kept[0].name, "Eins");
+        assert_eq!(kept[0].pid, Some(7), "die pid kommt immer vom Poll");
+    }
+
+    /// Verdrahtung: was `background_shells` findet, steht nach dem Poll an der Session.
+    #[test]
+    fn poll_marks_session_with_running_shell() {
+        let dir = TempDir::new("shells");
+        let pid = std::process::id();
+        let mut r = SessionRegistry::new(vec![session("s1", &dir.path(), "s1", "")], vec![]);
+        let running = std::cell::Cell::new(true);
+        let poll = |r: &mut SessionRegistry| {
+            let mut env = FsPollEnv::new(&dir.path(), pids(&[(pid, "s1")]), &NoRunner);
+            let on = running.get();
+            env.running_shells = Box::new(move |p: &[u32]| if on { p.iter().copied().collect() } else { HashSet::new() });
+            r.poll_now(&env)
+        };
+        poll(&mut r);
+        assert!(r.sessions[0].has_running_shell);
+        running.set(false);
+        poll(&mut r);
+        assert!(!r.sessions[0].has_running_shell);
+    }
+
+    #[test]
+    fn shell_tiles_follow_the_cd_of_their_shell() {
+        let dir = TempDir::new("shellcwd");
+        let mut shell = session("shell-1", "/alt", "", "");
+        shell.kind = SessionKind::Shell;
+        let mut r = SessionRegistry::new(vec![shell], vec![]);
+        let mut env = FsPollEnv::new(&dir.path(), pids(&[(42, "shell-1")]), &NoRunner);
+        env.shell_cwd = Box::new(|pid| (pid == 42).then(|| "/neu".to_string()));
+        r.poll_now(&env);
+        assert_eq!(r.sessions[0].cwd, "/neu");
+    }
 }
