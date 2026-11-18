@@ -490,6 +490,7 @@ impl Focusable for Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_language(cx);
+        appearance::window_color::ensure_native(window);
         ui::overlay::sync_area(window, cx);
         let t = ui::theme(cx);
         if self.window_dark != Some(t.dark) {

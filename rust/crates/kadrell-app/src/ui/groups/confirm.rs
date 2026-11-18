@@ -7,7 +7,7 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window, div, px,
 };
 
-use kadrell_core::Session;
+use kadrell_core::{Session, SessionStatus};
 use kadrell_core::settings::Ask;
 use kadrell_i18n::trd;
 
@@ -31,6 +31,8 @@ pub enum ConfirmAction {
     CloseSession(String),
     CloseGroup(String),
     StopSession(String),
+    /// Kadrell beenden, während Sessions laufen (`confirmShutdown`).
+    Quit,
 }
 
 /// Inhalt einer Rückfrage.
@@ -89,6 +91,40 @@ pub fn stop_session_spec(s: &Session) -> ConfirmSpec {
         info_only: false,
         ask: Some(Ask::StopSession),
         action: ConfirmAction::StopSession(s.id.clone()),
+    }
+}
+
+/// Eine laufende Session für die Rückfrage beim Beenden: Titel und Status.
+pub struct RunningSession {
+    pub title: String,
+    pub status: SessionStatus,
+}
+
+/// „Kadrell beenden?“ (`confirmShutdown`): Titel nennt die arbeitenden Sessions, die Liste alle laufenden mit Status.
+pub fn quit_spec(running: &[RunningSession]) -> ConfirmSpec {
+    let busy = running.iter().filter(|r| matches!(r.status, SessionStatus::Running | SessionStatus::Waiting)).count();
+    let title = if busy == 0 { trd!("Kadrell beenden?") } else { trd!("Kadrell beenden? %lld Session(s) arbeiten gerade!", busy) };
+    let list: Vec<String> = running.iter().map(|r| format!("· {}{}", r.title, status_suffix(r.status))).collect();
+    let head = trd!(
+        "%lld Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.",
+        running.len()
+    );
+    ConfirmSpec {
+        title,
+        info: format!("{head}\n\n{}", list.join("\n")),
+        button: trd!("Beenden"),
+        destructive: true,
+        info_only: false,
+        ask: Some(Ask::Quit),
+        action: ConfirmAction::Quit,
+    }
+}
+
+fn status_suffix(status: SessionStatus) -> String {
+    match status {
+        SessionStatus::Running => trd!("  ARBEITET"),
+        SessionStatus::Waiting => trd!("  WARTET AUF ANTWORT"),
+        _ => String::new(),
     }
 }
 
@@ -250,6 +286,21 @@ mod tests {
         assert_eq!((g.destructive, g.ask), (true, Some(Ask::CloseGroup)));
         let s = stop_session_spec(&session("a", None));
         assert_eq!((s.destructive, s.ask, s.button.as_str()), (false, Some(Ask::StopSession), "Stoppen"));
+    }
+
+    #[test]
+    fn quit_spec_counts_busy_sessions_and_lists_all() {
+        let running = vec![
+            RunningSession { title: "Theme".into(), status: SessionStatus::Running },
+            RunningSession { title: "Doku".into(), status: SessionStatus::Waiting },
+            RunningSession { title: "Ruhig".into(), status: SessionStatus::Idle },
+        ];
+        let q = quit_spec(&running);
+        assert_eq!(q.title, "Kadrell beenden? 2 Session(s) arbeiten gerade!");
+        assert!(q.info.starts_with("3 Claude-Prozess(e) werden sauber beendet."), "{}", q.info);
+        assert!(q.info.ends_with("\n\n· Theme  ARBEITET\n· Doku  WARTET AUF ANTWORT\n· Ruhig"), "{}", q.info);
+        assert_eq!((q.destructive, q.ask, q.action, q.button.as_str()), (true, Some(Ask::Quit), ConfirmAction::Quit, "Beenden"));
+        assert_eq!(quit_spec(&running[2..]).title, "Kadrell beenden?");
     }
 
     #[test]

@@ -168,9 +168,14 @@ fn path_text(group: &Group, a: &Appearance) -> String {
     tree_rules::fit_path(&group.path, avail, |s| s.chars().count() as f32 * 10.5 * MONO_ADVANCE)
 }
 
+/// So weit ragt die Pfadzeile in die Kopfzeile (Swift: `head.maxY - 4`).
+const PATH_OVERLAP: f32 = 4.;
+
 fn group_path(group: &Group, t: &Theme, a: &Appearance) -> impl IntoElement + use<> {
+    // Swift: Pfad ab `head.maxY - 4`, die Kopfzeile ist `sessionRow` hoch; hier endet sie 1 pt früher (Zeileneinzug), also 3 pt hoch.
     div()
         .ml(px(a.s(metrics::GROUP_PATH_X - metrics::ROW_INSET.0)))
+        .mt(px(a.s(-(PATH_OVERLAP - metrics::ROW_INSET.1))))
         .h(px(a.s(14.)))
         .overflow_hidden()
         .whitespace_nowrap()
@@ -281,8 +286,10 @@ fn group_header(h: HeadRow, group: &Group, ctx: &SidebarCtx, a: &Appearance, cx:
     }
     let group_id = group.id.clone();
     let row = droppable(draggable(row, drag, ctx.view), None, group_id, ctx.view, cx);
-    // Kompakt trennt eine Fuge die Gruppen, nur die erste hat keine.
-    div().flex().flex_col().flex_none().children((!m.path && !first).then(|| h_seam(&t))).child(row)
+    // Kompakt trennt eine Fuge die Gruppen, nur die erste hat keine. Sie liegt über dem Zeilenkopf und macht die Zeile
+    // nicht höher (`Instrument.hSeam(y: r.minY)`), sonst rutschen alle Zeilen darunter und die Zeilenrechnung stimmt nicht mehr.
+    let seam = (!m.path && !first).then(|| div().absolute().top_0().left_0().right_0().child(h_seam(&t)));
+    div().relative().flex().flex_col().flex_none().children(seam).child(row)
 }
 
 // MARK: Sessionzeile
@@ -552,7 +559,8 @@ fn group_block(place: Place, group: &Group, sel: &Selection, ctx: &SidebarCtx, a
                 g,
                 s,
                 selected: sel.contains((g, s)),
-                focused: sel.focus == (g, s),
+                // Ohne gezeigte Session hat keine Zeile den Fokus (Swift: `focusedKey == nil`).
+                focused: !sel.items.is_empty() && sel.focus == (g, s),
                 order: head_order + 1 + s,
                 grouped,
                 keys: ctx.keys,

@@ -131,6 +131,7 @@ impl Shell {
                     self.request_close_session(&key, false, window, cx);
                 }
             }
+            Ok("quit") => self.request_quit(window, cx),
             Ok("menu-session") => self.dev_menu(false, cx),
             Ok("menu-group") => self.dev_menu(true, cx),
             _ => {}
@@ -197,6 +198,7 @@ impl Shell {
             ConfirmAction::StopSession(key) => {
                 self.state.stop_tile(key);
             }
+            ConfirmAction::Quit => return cx.quit(),
         }
         self.sync(window, cx);
     }
@@ -225,6 +227,26 @@ impl Shell {
         let Some(session) = self.state.session(key) else { return };
         let spec = confirm::stop_session_spec(session);
         self.confirm_or_run(spec, false, window, cx);
+    }
+
+    /// Kadrell beenden (⌘Q, Menü, Tray): laufen Sessions, erst nachfragen (`applicationShouldTerminate`).
+    pub fn request_quit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let running = self.running_sessions();
+        if running.is_empty() {
+            return cx.quit();
+        }
+        if self.groups_ui.confirm.is_some() {
+            return;
+        }
+        self.show_main_window(window, cx);
+        self.confirm_or_run(confirm::quit_spec(&running), false, window, cx);
+    }
+
+    /// Sessions mit laufendem Prozess in Baumreihenfolge.
+    fn running_sessions(&self) -> Vec<confirm::RunningSession> {
+        let keys = self.state.store.groups.ordered_keys();
+        let running = keys.iter().filter(|k| self.state.run(k) == Run::Running);
+        running.filter_map(|k| self.state.session(k)).map(|s| confirm::RunningSession { title: s.title(), status: s.status() }).collect()
     }
 
     // MARK: Aktionen der Menüs

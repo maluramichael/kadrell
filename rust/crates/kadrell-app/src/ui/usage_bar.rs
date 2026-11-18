@@ -256,7 +256,7 @@ fn usage_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
 
 /// Taste der rechten Seite: feuert beim Drücken, Trefferfläche über die ganze Höhe, Tooltip „Label: Wert“.
 fn key_part(id: &'static str, label: String, fill: Option<Hsla>, region: Region, press: &Press, b: &BarCtl, t: &Theme) -> Part {
-    let width = text_width(&label, 10.) + 18. + KEY_GAP;
+    let width = text_width(&label, 10.) + 16. + KEY_GAP;
     let mut pill = Pill::new(id, label);
     match fill {
         Some(f) => pill = pill.fill(f),
@@ -269,7 +269,7 @@ fn key_part(id: &'static str, label: String, fill: Option<Hsla>, region: Region,
 /// Die Update-Taste hat ihren eigenen Klick (`misc::update`), sie feuert beim Loslassen.
 fn update_part(u: &UpdatePill) -> Part {
     let label = trd!("%@ verfügbar", u.version.as_str());
-    let width = text_width(&label, 10.) + 18. + KEY_GAP;
+    let width = text_width(&label, 10.) + 16. + KEY_GAP;
     let h = u.on_click.clone();
     let pill = Pill::new("update", label).tooltip_text(Region::new(trd!("Update verfügbar"), Some(u.version.clone())).tooltip()).on_click(move |e, w, c| h(e, w, c));
     Part { width, el: pill.into_any_element() }
@@ -406,7 +406,7 @@ fn display_part(b: &BarCtl, plan: &BarPlan, clock: &str, t: &Theme) -> Part {
         .rounded(px(5.))
         .bg(screen_face(t))
         .text_size(px(10.5))
-        .child(div().absolute().top_0().left_0().right_0().h(px(super::overlay::hairline())).bg(hsla(0., 0., 1., 0.06)))
+        .child(div().absolute().top_0().left_0().right_0().h(px(super::overlay::seam())).bg(hsla(0., 0., 1., 0.06)))
         .child(div().size(px(7.)).flex_none().rounded_full().bg(lamp).mr(px(6.)))
         .child(label)
         .child(div().flex_1().min_w(px(if text_w > 0. { 8. } else { 0. })))
