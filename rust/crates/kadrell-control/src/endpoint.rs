@@ -15,6 +15,28 @@ pub fn endpoint_path(dir: &Path) -> PathBuf {
     dir.join(ENDPOINT_FILE)
 }
 
+/// Größe von `sun_path` in Bytes (104 auf macOS, 108 auf Linux); auf Windows gibt es keine Grenze.
+#[cfg(unix)]
+fn socket_path_capacity() -> usize {
+    // SAFETY: `sockaddr_un` ist eine reine Datenstruktur, alles null ist ein gültiger Wert.
+    let addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+    addr.sun_path.len()
+}
+
+/// Unix-Sockets nehmen nur Pfade unter `sun_path` Bytes (mit abschließender Null): längere Pfade (sehr lange
+/// Benutzernamen) scheitern mit klarer Meldung statt mit einem Verbindungsfehler.
+pub fn check_socket_path(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        if path.as_os_str().as_bytes().len() >= socket_path_capacity() {
+            return Err(format!("Socket-Pfad zu lang: {}", path.display()));
+        }
+    }
+    let _ = path;
+    Ok(())
+}
+
 /// Standardpfad für die CLI ohne `KADRELL_SOCKET`: Standardprofil oder benanntes Profil. `None` beim Wegwerfprofil
 /// `tmp`: dessen Ordner trägt die pid der Instanz im Namen, ohne `KADRELL_SOCKET` ist es nicht auffindbar.
 pub fn default_endpoint_path(paths: &Paths, profile: Option<&str>) -> Option<PathBuf> {
@@ -61,6 +83,14 @@ mod tests {
         assert_eq!(default_endpoint_path(&paths, None), Some(Path::new("/h/support").join(file)));
         assert_eq!(default_endpoint_path(&paths, Some("work")), Some(Path::new("/h/support").join("profiles").join("work").join(file)));
         assert_eq!(default_endpoint_path(&paths, Some("tmp")), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn long_socket_paths_are_rejected_with_the_path() {
+        assert!(check_socket_path(Path::new("/tmp/kadrell.sock")).is_ok());
+        let long = format!("/tmp/{}/kadrell.sock", "x".repeat(120));
+        assert_eq!(check_socket_path(Path::new(&long)), Err(format!("Socket-Pfad zu lang: {long}")));
     }
 
     #[test]

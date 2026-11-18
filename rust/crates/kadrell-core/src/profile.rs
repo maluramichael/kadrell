@@ -189,6 +189,11 @@ pub fn sweep_stale(paths: &Paths, own_pid: u32, is_alive: PidAlive) {
     }
 }
 
+/// pid aus der pid-Datei im Profilordner `dir` (von der Instanz beim Start geschrieben, beim Beenden entfernt).
+pub fn recorded_pid(dir: &Path) -> Option<u32> {
+    std::fs::read_to_string(dir.join(PID_FILE)).ok()?.trim().parse::<u32>().ok().filter(|p| *p > 0)
+}
+
 // MARK: Beenden-Marker
 
 fn quit_marker(dir: &Path) -> PathBuf {

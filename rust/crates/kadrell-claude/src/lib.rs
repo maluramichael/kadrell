@@ -38,6 +38,7 @@ pub mod pi;
 pub mod quick_start;
 pub mod registry;
 pub mod report_fallback;
+mod runner;
 pub mod session_title;
 pub mod ssh_config;
 pub mod text;
