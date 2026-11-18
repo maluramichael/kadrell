@@ -71,7 +71,11 @@ fn shortcut_line(key: String, text: String, t: &Theme) -> impl IntoElement + use
 }
 
 fn onboarding(c: Card, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let button = key_button(c.button, t).id("empty-new").on_click(cx.listener(|this, _, window, cx| this.new_session_action(window, cx)));
+    let button = key_button(c.button, t).id("empty-new").on_click(cx.listener(|this, _, window, cx| {
+        // Der Klick gilt der Taste, nicht zusätzlich der leeren Fläche dahinter.
+        cx.stop_propagation();
+        this.new_session_action(window, cx);
+    }));
     let lines = c.shortcuts.into_iter().map(|(k, text)| shortcut_line(k, text, t));
     let hint = |text: String, id: &'static str| div().id(id).text_size(px(11.)).text_color(t.muted.opacity(0.7)).child(text);
     div()
@@ -98,11 +102,17 @@ fn selection(help_key: Option<&str>, t: &Theme) -> impl IntoElement + use<> {
 /// Die leere Arbeitsfläche, mittig. `shell` liefert Sessions, Belegung der Hilfe und Sessions anderswo.
 pub fn view(shell: &Shell, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let help_key = shell.help_shortcut();
-    let body = match reason(shell.state.store.sessions.sessions.len()) {
+    let reason = reason(shell.state.store.sessions.sessions.len());
+    let body = match reason {
         Reason::NoSessions => onboarding(card(help_key, shell.misc.other_interactive), t, cx).into_any_element(),
         Reason::Hint => selection(help_key.as_deref(), t).into_any_element(),
     };
-    div().absolute().size_full().flex().items_center().justify_center().text_color(t.muted).child(body)
+    let area = div().id("empty-area").absolute().size_full().flex().items_center().justify_center().text_color(t.muted).child(body);
+    // Ohne Sessions startet ein Klick irgendwo auf die leere Fläche eine neue (`onEmptyClick`).
+    match reason {
+        Reason::NoSessions => area.on_click(cx.listener(|this, _, window, cx| this.new_session_action(window, cx))).into_any_element(),
+        Reason::Hint => area.into_any_element(),
+    }
 }
 
 #[cfg(test)]

@@ -36,6 +36,8 @@ pub mod tree_actions;
 pub mod tree_anim;
 pub mod tree_icons;
 pub mod tree_rules;
+#[cfg(test)]
+mod tree_tests;
 pub mod tree_toolbar;
 
 /// Aktuelles Farbschema aus dem Global.

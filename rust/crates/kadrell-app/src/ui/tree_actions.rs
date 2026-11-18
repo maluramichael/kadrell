@@ -35,6 +35,11 @@ pub fn row_measures(a: &Appearance) -> Rows {
 }
 
 impl Shell {
+    /// Nur für Screenshots: `KADRELL_DEV_TREE_FOCUS=1` gibt dem Baum die Tastatur (Tastaturring an der Fokus-Zeile).
+    pub(crate) fn apply_dev_tree_focus(&mut self) {
+        self.ws.tree_focus = std::env::var_os("KADRELL_DEV_TREE_FOCUS").is_some();
+    }
+
     /// Ist irgendeine Gruppe offen, gehen alle zu, sonst alle auf (`SidebarView.toggleAllGroups`).
     pub(crate) fn toggle_all_groups(&mut self, cx: &mut Context<Self>) {
         let ids: Vec<String> = self.state.store.groups.groups.iter().map(|g| g.id.clone()).collect();

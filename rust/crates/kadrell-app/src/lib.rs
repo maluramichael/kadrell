@@ -183,6 +183,7 @@ impl Shell {
         shell.rebuild();
         shell.apply_dev_view();
         shell.apply_dev_preview();
+        shell.apply_dev_tree_focus();
         shell.state.ready = true;
         shell.sync(window, cx);
         shell.start_clock(cx);
@@ -292,13 +293,7 @@ impl Shell {
     /// Klick im Baum: nur diese Session, Strg/Cmd nimmt sie dazu oder weg, Shift markiert den Bereich.
     fn click_session(&mut self, g: usize, s: usize, m: gpui::Modifiers, window: &mut Window, cx: &mut Context<Self>) {
         let flat = flat_index(&self.groups);
-        if m.shift {
-            self.selection.range((g, s), &flat);
-        } else if m.secondary(cx) {
-            self.selection.toggle((g, s), &flat);
-        } else {
-            self.selection = Selection::single((g, s));
-        }
+        self.selection = ui::tree_rules::click_selection(&self.selection, (g, s), m.shift, m.secondary(cx), &flat);
         self.state.zoom = false;
         self.apply_selection(window, cx);
     }

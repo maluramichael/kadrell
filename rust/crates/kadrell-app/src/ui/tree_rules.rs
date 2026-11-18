@@ -5,6 +5,7 @@
 
 use gpui::Hsla;
 
+use super::layout::{Id, Selection};
 use super::model::Status;
 use crate::theme::Theme;
 
@@ -188,6 +189,23 @@ pub fn fits(width: f32, advance: f32) -> usize {
 
 /// Zeichenbreite von JetBrains Mono im Verhältnis zur Schriftgröße.
 pub const MONO_ADVANCE: f32 = 0.6;
+
+// MARK: Klick auf eine Session
+
+/// Auswahl nach einem Klick auf die Session `id` (`mouseUp` des Baums): Umschalt markiert den Bereich seit dem letzten
+/// Klick, Cmd/Strg nimmt sie dazu oder weg, ein gewöhnlicher Klick zeigt nur diese, auch wenn sie schon ausgewählt war
+/// (seit 1.56.3 isoliert er sie, statt sie aus der Auswahl zu nehmen).
+pub fn click_selection(sel: &Selection, id: Id, shift: bool, secondary: bool, flat: &[Id]) -> Selection {
+    let mut next = sel.clone();
+    if shift {
+        next.range(id, flat);
+    } else if secondary {
+        next.toggle(id, flat);
+    } else {
+        next = Selection::single(id);
+    }
+    next
+}
 
 // MARK: Alle Gruppen ein- und ausklappen
 
