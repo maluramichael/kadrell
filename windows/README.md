@@ -13,6 +13,11 @@ target\release\kadrell.exe         # Fenster im aktuellen Terminal öffnen (Stan
 kadrell ls --json                  # von überall: an die laufende Instanz, startet sie sonst in einem wt-Fenster
 ```
 
+Installieren: `target\release\kadrell.exe` nach `%USERPROFILE%\.local\bin\kadrell.exe` kopieren (liegt im PATH,
+start-my-day sucht dort). Zum Aktualisieren erst `kadrell kill-server`, solange Kadrell läuft, ist die Datei gesperrt.
+start-my-day auf Beast braucht im Standardprofil `settings.json` mit `"allowBypass": true` und
+`"mode": "bypassPermissions"` (siehe unten).
+
 Aufbau (`src/`):
 
 - `command.rs`: Befehle parsen, Hilfetext, Tastennamen für `send -k`. Gleiche Flags und Meldungen wie
