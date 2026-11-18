@@ -9,7 +9,8 @@ use std::path::Path;
 use gpui::{Context, PathPromptOptions, Window};
 use kadrell_i18n::trd;
 
-use super::overlay_queue::{beep, warn_if_replaced};
+use super::overlay_queue::warn_if_replaced;
+use kadrell_tray::beep;
 
 /// Endungen, die als Bild gelten (`UTType.image`, soweit sie auf dem Rechner vorkommen).
 const IMAGE_EXTENSIONS: [&str; 13] = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "heic", "heif", "ico", "icns", "svg"];

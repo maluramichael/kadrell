@@ -264,7 +264,7 @@ impl Shell {
     pub fn open_editor_in(&mut self, cwd: &str, window: &mut Window, cx: &mut Context<Self>) {
         let command = self.state.settings.editor_command();
         if command.trim().is_empty() || cwd.is_empty() {
-            crate::ui::overlay_queue::beep();
+            kadrell_tray::beep();
             return;
         }
         if let Err(e) = rows::spawn_editor(&command, cwd) {
