@@ -2505,6 +2505,7 @@ version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
  "async-channel",
+ "chrono",
  "gpui-pre",
  "gpui-pre-platform",
 ]
