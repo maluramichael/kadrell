@@ -38,7 +38,9 @@ impl Timers {
         // Obergrenze, damit `Instant + Dauer` nicht überläuft.
         let wait = Duration::try_from_secs_f64(after.clamp(0.0, 3.0e8)).unwrap_or_default();
         let (heap, cv) = &*self.state;
-        heap.lock().unwrap_or_else(|e| e.into_inner()).push(Reverse((Instant::now() + wait, id)));
+        heap.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(Reverse((Instant::now() + wait, id)));
         cv.notify_one();
     }
 
@@ -56,7 +58,10 @@ impl Timers {
                     }
                 }
                 Some((due, _)) => {
-                    guard = cv.wait_timeout(guard, due - Instant::now()).unwrap_or_else(|e| e.into_inner()).0;
+                    guard = cv
+                        .wait_timeout(guard, due - Instant::now())
+                        .unwrap_or_else(|e| e.into_inner())
+                        .0;
                 }
             }
         }
@@ -72,17 +77,28 @@ pub struct Router {
 
 impl Router {
     pub fn new(out: File, tx: Sender<String>) -> Arc<Router> {
-        Arc::new(Router { out: Mutex::new(out), timers: Timers::new(tx.clone()), tx, cpu: Mutex::new(CpuProbe::default()) })
+        Arc::new(Router {
+            out: Mutex::new(out),
+            timers: Timers::new(tx.clone()),
+            tx,
+            cpu: Mutex::new(CpuProbe::default()),
+        })
     }
 
     /// Eine Zeile von Lua. Ohne `id` oder mit anderem `t` geht sie unverändert an Kadrell.
     pub fn route(self: &Arc<Self>, line: &str) {
-        let Ok(msg) = serde_json::from_str::<Value>(line) else { return self.write_line(line) };
-        let Some(id) = msg.get("id").and_then(as_int) else { return self.write_line(line) };
+        let Ok(msg) = serde_json::from_str::<Value>(line) else {
+            return self.write_line(line);
+        };
+        let Some(id) = msg.get("id").and_then(as_int) else {
+            return self.write_line(line);
+        };
         match msg.get("t").and_then(Value::as_str) {
             Some("exec") => self.exec(id, &msg),
             Some("http") => self.http(id, &msg),
-            Some("timer") => self.timers.schedule(id, msg.get("after").and_then(Value::as_f64).unwrap_or(0.0)),
+            Some("timer") => self
+                .timers
+                .schedule(id, msg.get("after").and_then(Value::as_f64).unwrap_or(0.0)),
             Some("system") => self.system(id, &msg),
             _ => self.write_line(line),
         }
@@ -114,7 +130,11 @@ impl Router {
         let argv: Vec<String> = msg
             .get("argv")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
         let cwd = msg.get("cwd").and_then(Value::as_str).map(String::from);
         let timeout = msg.get("timeout").and_then(Value::as_f64).unwrap_or(30.0);
@@ -122,23 +142,43 @@ impl Router {
     }
 
     fn http(self: &Arc<Self>, id: i64, msg: &Value) {
-        let url = msg.get("url").and_then(Value::as_str).unwrap_or("").to_string();
+        let url = msg
+            .get("url")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         let lower = url.to_ascii_lowercase();
         // Nur http/https: file:// und andere Schemata würden lokale Dateien oder Dienste erreichbar machen (SSRF).
         if !(lower.starts_with("http://") || lower.starts_with("https://")) {
             return self.deliver(id, http_failure("URL muss http oder https sein"));
         }
         let request = HttpRequest {
-            method: msg.get("method").and_then(Value::as_str).unwrap_or("GET").to_string(),
+            method: msg
+                .get("method")
+                .and_then(Value::as_str)
+                .unwrap_or("GET")
+                .to_string(),
             url,
             headers: msg
                 .get("headers")
                 .and_then(Value::as_object)
-                .map(|h| h.iter().filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string()))).collect())
+                .map(|h| {
+                    h.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
+                        .collect()
+                })
                 .unwrap_or_default(),
-            body: msg.get("body").and_then(Value::as_str).map(|b| b.as_bytes().to_vec()),
-            timeout: Duration::try_from_secs_f64(msg.get("timeout").and_then(Value::as_f64).unwrap_or(30.0).clamp(0.001, 86_400.0))
-                .unwrap_or(Duration::from_secs(30)),
+            body: msg
+                .get("body")
+                .and_then(Value::as_str)
+                .map(|b| b.as_bytes().to_vec()),
+            timeout: Duration::try_from_secs_f64(
+                msg.get("timeout")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(30.0)
+                    .clamp(0.001, 86_400.0),
+            )
+            .unwrap_or(Duration::from_secs(30)),
             max_body: 64 << 20,
         };
         self.spawn(move |r| match UreqClient.send(request) {
@@ -150,8 +190,17 @@ impl Router {
     /// `kadrell.system`: nur lesend, gemessen wird nur auf Anfrage, immer auf einem Arbeitsthread (ein langsames
     /// Netzlaufwerk oder die 250 ms der ersten CPU-Messung sollen Lua nicht aufhalten).
     fn system(self: &Arc<Self>, id: i64, msg: &Value) {
-        let op = msg.get("op").and_then(Value::as_str).unwrap_or("").to_string();
-        let path = msg.get("path").and_then(Value::as_str).filter(|p| !p.is_empty()).unwrap_or("/").to_string();
+        let op = msg
+            .get("op")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let path = msg
+            .get("path")
+            .and_then(Value::as_str)
+            .filter(|p| !p.is_empty())
+            .unwrap_or("/")
+            .to_string();
         self.spawn(move |r| r.deliver(id, system_fields(r, &op, &path)));
     }
 }
@@ -186,11 +235,19 @@ fn error_fields(text: &str) -> Map<String, Value> {
 fn system_fields(router: &Router, op: &str, path: &str) -> Map<String, Value> {
     match op {
         "cpu" => {
-            let sample = router.cpu.lock().unwrap_or_else(|e| e.into_inner()).sample();
-            sample.map_or_else(|| error_fields("cpu load not available"), |c| system::cpu_fields(&c))
+            let sample = router
+                .cpu
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .sample();
+            sample.map_or_else(
+                || error_fields("cpu load not available"),
+                |c| system::cpu_fields(&c),
+            )
         }
         "mem" => system::mem().unwrap_or_else(|| error_fields("memory stats not available")),
-        "disk" => system::disk(path).unwrap_or_else(|| error_fields(&format!("volume not readable: {path}"))),
+        "disk" => system::disk(path)
+            .unwrap_or_else(|| error_fields(&format!("volume not readable: {path}"))),
         _ => error_fields("unknown system op"),
     }
 }

@@ -69,7 +69,9 @@ fn tool(args: &[String]) -> i32 {
             args.get(1).and_then(|n| n.parse().ok()).unwrap_or(0)
         }
         Some("sleep") => {
-            std::thread::sleep(Duration::from_secs_f64(args.get(1).and_then(|n| n.parse().ok()).unwrap_or(1.0)));
+            std::thread::sleep(Duration::from_secs_f64(
+                args.get(1).and_then(|n| n.parse().ok()).unwrap_or(1.0),
+            ));
             0
         }
         _ => 2,

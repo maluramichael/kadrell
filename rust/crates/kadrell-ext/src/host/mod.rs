@@ -30,7 +30,10 @@ pub fn run_host(_dir: &Path) -> ExitCode {
     sys::die_with_children();
     let (tx, rx) = mpsc::channel::<String>();
     let router = router::Router::new(out, tx.clone());
-    let spawned = std::thread::Builder::new().name("lua".into()).stack_size(LUA_STACK).spawn(move || lua::run(router, rx));
+    let spawned = std::thread::Builder::new()
+        .name("lua".into())
+        .stack_size(LUA_STACK)
+        .spawn(move || lua::run(router, rx));
     if let Err(e) = spawned {
         return fail(&format!("Lua-Thread startet nicht: {e}"));
     }

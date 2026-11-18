@@ -27,7 +27,11 @@ fn hello_ready_ping_pong() {
 #[test]
 fn locale_is_available_at_load() {
     let (p, _r) = HostPipe::start("kadrell.log('loc:' .. kadrell.locale)");
-    assert_eq!(p.text(3.0).as_deref(), Some("loc:de"), "hello liefert locale=de");
+    assert_eq!(
+        p.text(3.0).as_deref(),
+        Some("loc:de"),
+        "hello liefert locale=de"
+    );
 }
 
 #[test]
@@ -55,7 +59,9 @@ fn load_error_is_reported_then_exit() {
 
 #[test]
 fn blocked_functions_are_gone() {
-    let (p, _r) = HostPipe::start("kadrell.log(tostring(os.execute)..tostring(io.popen)..tostring(package.loadlib)..tostring(os.exit))");
+    let (p, _r) = HostPipe::start(
+        "kadrell.log(tostring(os.execute)..tostring(io.popen)..tostring(package.loadlib)..tostring(os.exit))",
+    );
     assert_eq!(p.text(3.0).as_deref(), Some("nilnilnilnil"));
 }
 
@@ -67,7 +73,9 @@ fn c_module_searchers_are_gone() {
 
 #[test]
 fn json_roundtrip() {
-    let (p, _r) = HostPipe::start(r#"kadrell.log(kadrell.json.encode(kadrell.json.decode('{"a":[1,2],"b":"ü"}')))"#);
+    let (p, _r) = HostPipe::start(
+        r#"kadrell.log(kadrell.json.encode(kadrell.json.decode('{"a":[1,2],"b":"ü"}')))"#,
+    );
     let text = p.text(3.0).unwrap_or_default();
     assert!(text.contains(r#""a":[1,2]"#), "{text}");
     assert!(text.contains('ü'), "{text}");
@@ -77,7 +85,8 @@ fn json_roundtrip() {
 /// Ebenen weitergereicht, init.lua lädt nicht, der Helper endet regulär mit Status 1.
 #[test]
 fn deep_recursion_is_a_lua_error() {
-    let (mut p, _r) = HostPipe::start("local function f() local ok, err = pcall(f); error(err, 0) end\nf()");
+    let (mut p, _r) =
+        HostPipe::start("local function f() local ok, err = pcall(f); error(err, 0) end\nf()");
     let log = p.next(3.0);
     assert_eq!(s(&log, "level").as_deref(), Some("error"));
     let text = s(&log, "text").unwrap_or_default();
@@ -112,20 +121,27 @@ fn stdin_eof_ends_helper() {
 /// Kadrell schließt nur stdin (etwa beim Absturz der App). Ein laufendes kadrell.exec stirbt mit dem Helper.
 #[test]
 fn stdin_eof_kills_exec_children() {
-    let (mut p, _r) =
-        HostPipe::start_ready(&format!(r#"kadrell.on("app.ready", function() kadrell.exec({{"{}", "sleep", "77"}}) end)"#, fake_lua()));
+    let (mut p, _r) = HostPipe::start_ready(&format!(
+        r#"kadrell.on("app.ready", function() kadrell.exec({{"{}", "sleep", "77"}}) end)"#,
+        fake_lua()
+    ));
     assert!(wait_until(3.0, || !children_of(p.pid()).is_empty()));
     let child = children_of(p.pid())[0];
     p.close_stdin();
     assert!(p.wait_for_exit(2.0).is_some());
-    assert!(wait_until(3.0, || !alive(child)), "sleep 77 ({child}) lebt nach EOF weiter");
+    assert!(
+        wait_until(3.0, || !alive(child)),
+        "sleep 77 ({child}) lebt nach EOF weiter"
+    );
 }
 
 /// Der Helper selbst wird hart beendet (Kill von außen): das Job Object nimmt die Kinder mit.
 #[test]
 fn killing_the_helper_kills_exec_children() {
-    let (mut p, _r) =
-        HostPipe::start_ready(&format!(r#"kadrell.on("app.ready", function() kadrell.exec({{"{}", "sleep", "77"}}) end)"#, fake_lua()));
+    let (mut p, _r) = HostPipe::start_ready(&format!(
+        r#"kadrell.on("app.ready", function() kadrell.exec({{"{}", "sleep", "77"}}) end)"#,
+        fake_lua()
+    ));
     assert!(wait_until(3.0, || !children_of(p.pid()).is_empty()));
     let child = children_of(p.pid())[0];
     p.child.kill().unwrap();
@@ -133,7 +149,10 @@ fn killing_the_helper_kills_exec_children() {
     // Unter Unix bleiben Kinder nach SIGKILL des Helpers übrig (die App tötet dort die Prozessgruppe), unter Windows
     // sorgt das Job Object dafür.
     if cfg!(windows) {
-        assert!(wait_until(3.0, || !alive(child)), "sleep 77 ({child}) lebt nach dem Kill weiter");
+        assert!(
+            wait_until(3.0, || !alive(child)),
+            "sleep 77 ({child}) lebt nach dem Kill weiter"
+        );
     }
 }
 
@@ -151,7 +170,9 @@ fn exec_inside_handler() {
 
 #[test]
 fn exec_missing_binary() {
-    let (p, _r) = HostPipe::start_ready(r#"kadrell.on("app.ready", function() kadrell.log(kadrell.exec({"/nope/nicht-da"}).status) end)"#);
+    let (p, _r) = HostPipe::start_ready(
+        r#"kadrell.on("app.ready", function() kadrell.log(kadrell.exec({"/nope/nicht-da"}).status) end)"#,
+    );
     assert_eq!(p.text(3.0).as_deref(), Some("127"));
     p.assert_alive(9);
 }
@@ -220,14 +241,19 @@ fn call_outside_handler_fails() {
     let log = p.next(3.0);
     assert_eq!(s(&log, "level").as_deref(), Some("error"));
     let text = s(&log, "text").unwrap_or_default();
-    assert!(text.contains("kadrell.exec: only allowed inside handlers (kadrell.on, every, after)"), "{text}");
+    assert!(
+        text.contains("kadrell.exec: only allowed inside handlers (kadrell.on, every, after)"),
+        "{text}"
+    );
     let status = p.wait_for_exit(3.0).expect("Prozessende");
     assert!(!status.success());
 }
 
 #[test]
 fn timer_fires() {
-    let (p, _r) = HostPipe::start_ready(r#"kadrell.on("app.ready", function() kadrell.after(0.1, function() kadrell.log("t") end) end)"#);
+    let (p, _r) = HostPipe::start_ready(
+        r#"kadrell.on("app.ready", function() kadrell.after(0.1, function() kadrell.log("t") end) end)"#,
+    );
     assert_eq!(p.text(1.0).as_deref(), Some("t"));
 }
 
@@ -270,7 +296,9 @@ fn run_roundtrip() {
 /// Zahlen im argv gehen als Strings raus, sonst verwürfe Kadrell die Zeile und die Coroutine wartete ewig.
 #[test]
 fn run_converts_arguments_to_strings() {
-    let (p, _r) = HostPipe::start_ready(r#"kadrell.on("app.ready", function() kadrell.run("select", "-t", 1) end)"#);
+    let (p, _r) = HostPipe::start_ready(
+        r#"kadrell.on("app.ready", function() kadrell.run("select", "-t", 1) end)"#,
+    );
     assert_eq!(p.next(3.0).unwrap()["argv"], json!(["select", "-t", "1"]));
 }
 
@@ -301,7 +329,9 @@ fn sessions_parses_ls_json() {
 
 #[test]
 fn http_roundtrip() {
-    let server = OneShotHttpServer::new("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nX-A: b\r\nConnection: close\r\n\r\nhi");
+    let server = OneShotHttpServer::new(
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nX-A: b\r\nConnection: close\r\n\r\nhi",
+    );
     let (p, _r) = HostPipe::start_ready(&format!(
         r#"kadrell.on("app.ready", function()
             local r = kadrell.http{{url = "http://127.0.0.1:{}/x", method = "POST", body = "q", headers = {{["X-T"] = "1"}}}}
@@ -318,7 +348,9 @@ fn http_roundtrip() {
 /// Eine Zahl als Header-Wert darf die übrigen Header nicht mitnehmen.
 #[test]
 fn http_numeric_header_keeps_others() {
-    let server = OneShotHttpServer::new("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nhi");
+    let server = OneShotHttpServer::new(
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nhi",
+    );
     let (p, _r) = HostPipe::start_ready(&format!(
         r#"kadrell.on("app.ready", function()
             local r = kadrell.http{{url = "http://127.0.0.1:{}/x", method = "POST", body = "hello world!",
@@ -341,7 +373,10 @@ fn http_rejects_other_schemes() {
             kadrell.log(r.status .. ":" .. tostring(r.error))
         end)"#,
     );
-    assert_eq!(p.text(3.0).as_deref(), Some("0:URL muss http oder https sein"));
+    assert_eq!(
+        p.text(3.0).as_deref(),
+        Some("0:URL muss http oder https sein")
+    );
 }
 
 #[test]
@@ -355,8 +390,10 @@ fn storage_survives_restart() {
     assert_eq!(first.text(3.0).as_deref(), Some("ok"));
     first.close_stdin();
     assert!(first.wait_for_exit(2.0).is_some());
-    let (second, _r2) =
-        HostPipe::start_in(r#"kadrell.on("app.ready", function() kadrell.log(kadrell.storage.get("k").a) end)"#, storage.path());
+    let (second, _r2) = HostPipe::start_in(
+        r#"kadrell.on("app.ready", function() kadrell.log(kadrell.storage.get("k").a) end)"#,
+        storage.path(),
+    );
     second.expect_ready();
     assert_eq!(second.text(3.0).as_deref(), Some("1"));
 }
@@ -424,7 +461,9 @@ fn palette_is_forwarded_and_select_delivered() {
 /// kadrell.secret.get fragt den Host und gibt bei Status 0 den Wert zurück.
 #[test]
 fn secret_get_returns_value() {
-    let (p, _r) = HostPipe::start_ready(r#"kadrell.on("app.ready", function() kadrell.log("got:" .. tostring(kadrell.secret.get("tok"))) end)"#);
+    let (p, _r) = HostPipe::start_ready(
+        r#"kadrell.on("app.ready", function() kadrell.log("got:" .. tostring(kadrell.secret.get("tok"))) end)"#,
+    );
     let req = p.next(3.0).unwrap();
     assert_eq!(req["t"], "secret");
     assert_eq!(req["op"], "get");
@@ -437,7 +476,9 @@ fn secret_get_returns_value() {
 /// Fehlt der Eintrag (Status 1), gibt get nil zurück.
 #[test]
 fn secret_get_missing_returns_nil() {
-    let (p, _r) = HostPipe::start_ready(r#"kadrell.on("app.ready", function() kadrell.log("got:" .. tostring(kadrell.secret.get("none"))) end)"#);
+    let (p, _r) = HostPipe::start_ready(
+        r#"kadrell.on("app.ready", function() kadrell.log("got:" .. tostring(kadrell.secret.get("none"))) end)"#,
+    );
     let req = p.next(3.0).unwrap();
     p.send(json!({"t": "result", "id": req["id"], "status": 1, "stdout": "", "stderr": ""}));
     assert_eq!(p.text(3.0).as_deref(), Some("got:nil"));
@@ -451,7 +492,12 @@ fn io_write_goes_to_stderr_not_protocol() {
         r#"kadrell.on("app.ready", function() io.write("junk-zeile\n"); io.stdout:write("noch-eine\n"); kadrell.log("danach") end)"#,
     );
     assert_eq!(p.text(3.0).as_deref(), Some("danach"));
-    assert!(wait_until(3.0, || p.stderr_text().contains("junk-zeile") && p.stderr_text().contains("noch-eine")), "{}", p.stderr_text());
+    assert!(
+        wait_until(3.0, || p.stderr_text().contains("junk-zeile")
+            && p.stderr_text().contains("noch-eine")),
+        "{}",
+        p.stderr_text()
+    );
     p.assert_alive(9);
 }
 
@@ -466,7 +512,10 @@ fn memory_limit_is_a_lua_error() {
     );
     let log = p.next(10.0);
     assert_eq!(s(&log, "level").as_deref(), Some("error"));
-    assert!(s(&log, "text").unwrap_or_default().contains("memory"), "{log:?}");
+    assert!(
+        s(&log, "text").unwrap_or_default().contains("memory"),
+        "{log:?}"
+    );
     p.assert_alive(9);
 }
 
@@ -480,7 +529,11 @@ fn require_loads_lua_modules_from_the_extension_dir_only() {
         local ok, err = pcall(require, "gibt.es.nicht"); kadrell.log(tostring(ok))"#,
         None,
     );
-    std::fs::write(dir.join("helper.lua"), "return { greet = function() return 'hallo' end }").unwrap();
+    std::fs::write(
+        dir.join("helper.lua"),
+        "return { greet = function() return 'hallo' end }",
+    )
+    .unwrap();
     let p = HostPipe::new(&dir);
     p.send(json!({"t": "hello", "api": 1, "name": "hello", "dir": dir.to_string_lossy(), "storageDir": root.path().to_string_lossy(),
         "config": {}, "locale": "de", "sessions": []}));

@@ -68,7 +68,9 @@ impl HttpClient for UreqClient {
             .timeout_global(Some(request.timeout))
             .build()
             .into();
-        let mut builder = ureq::http::Request::builder().method(request.method.as_str()).uri(request.url.as_str());
+        let mut builder = ureq::http::Request::builder()
+            .method(request.method.as_str())
+            .uri(request.url.as_str());
         for (k, v) in &request.headers {
             builder = builder.header(k.as_str(), v.as_str());
         }
@@ -85,23 +87,43 @@ fn other(e: impl std::fmt::Display) -> HttpError {
     HttpError::Other(e.to_string())
 }
 
-fn read_response(response: ureq::http::Response<ureq::Body>, max_body: u64) -> Result<HttpResponse, HttpError> {
+fn read_response(
+    response: ureq::http::Response<ureq::Body>,
+    max_body: u64,
+) -> Result<HttpResponse, HttpError> {
     let status = response.status().as_u16();
     let headers: Vec<(String, String)> = response
         .headers()
         .iter()
-        .map(|(k, v)| (k.as_str().to_string(), String::from_utf8_lossy(v.as_bytes()).into_owned()))
+        .map(|(k, v)| {
+            (
+                k.as_str().to_string(),
+                String::from_utf8_lossy(v.as_bytes()).into_owned(),
+            )
+        })
         .collect();
-    let declared = headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("content-length")).and_then(|(_, v)| v.parse::<u64>().ok());
+    let declared = headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+        .and_then(|(_, v)| v.parse::<u64>().ok());
     if declared.is_some_and(|n| n > max_body) {
         return Err(HttpError::TooLarge);
     }
     let mut response = response;
-    let body = response.body_mut().with_config().limit(max_body).read_to_vec().map_err(|e| match e {
-        ureq::Error::BodyExceedsLimit(_) => HttpError::TooLarge,
-        other_err => other(other_err),
-    })?;
-    Ok(HttpResponse { status, headers, body })
+    let body = response
+        .body_mut()
+        .with_config()
+        .limit(max_body)
+        .read_to_vec()
+        .map_err(|e| match e {
+            ureq::Error::BodyExceedsLimit(_) => HttpError::TooLarge,
+            other_err => other(other_err),
+        })?;
+    Ok(HttpResponse {
+        status,
+        headers,
+        body,
+    })
 }
 
 /// `x-foo-bar` wird zu `X-Foo-Bar`, so wie Server ihre Header meist schreiben und Extensions sie erwarten.
@@ -110,7 +132,9 @@ pub fn title_case_header(name: &str) -> String {
         .map(|part| {
             let mut chars = part.chars();
             match chars.next() {
-                Some(first) => first.to_ascii_uppercase().to_string() + &chars.as_str().to_ascii_lowercase(),
+                Some(first) => {
+                    first.to_ascii_uppercase().to_string() + &chars.as_str().to_ascii_lowercase()
+                }
                 None => String::new(),
             }
         })

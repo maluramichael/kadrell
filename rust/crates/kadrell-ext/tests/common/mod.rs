@@ -9,8 +9,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use sysinfo::{Pid, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
+#[allow(unused_imports)]
 pub use kadrell_ext::testutil::{TempDir, make_extension, wait_until};
 
 pub const HOST_EXE: &str = env!("CARGO_BIN_EXE_kadrell-ext-host");
@@ -23,9 +24,13 @@ pub fn fake_lua() -> String {
 
 /// Umgebung für Helfer: die eigene, mit dem Ordner der Fake-Binärdatei vorn im PATH.
 pub fn helper_env() -> Vec<(String, String)> {
-    let dir = Path::new(FAKE_EXE).parent().map(PathBuf::from).unwrap_or_default();
+    let dir = Path::new(FAKE_EXE)
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_default();
     let path = std::env::var_os("PATH").unwrap_or_default();
-    let joined = std::env::join_paths(std::iter::once(dir).chain(std::env::split_paths(&path))).unwrap_or_default();
+    let joined = std::env::join_paths(std::iter::once(dir).chain(std::env::split_paths(&path)))
+        .unwrap_or_default();
     vec![("PATH".to_string(), joined.to_string_lossy().into_owned())]
 }
 
@@ -40,7 +45,11 @@ pub struct HostPipe {
 impl HostPipe {
     pub fn new(dir: &Path) -> HostPipe {
         let mut cmd = Command::new(HOST_EXE);
-        cmd.arg("ext-host").arg(dir).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.arg("ext-host")
+            .arg(dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
         for (k, v) in helper_env() {
             cmd.env(k, v);
         }
@@ -65,7 +74,12 @@ impl HostPipe {
             }
         });
         let stdin = child.stdin.take();
-        HostPipe { child, stdin, rx, stderr }
+        HostPipe {
+            child,
+            stdin,
+            rx,
+            stderr,
+        }
     }
 
     /// Startet die Extension mit `init_lua` und schickt `hello`.
@@ -90,7 +104,12 @@ impl HostPipe {
     }
 
     pub fn expect_ready(&self) {
-        assert_eq!(self.next(3.0).and_then(|m| m["t"].as_str().map(String::from)).as_deref(), Some("ready"));
+        assert_eq!(
+            self.next(3.0)
+                .and_then(|m| m["t"].as_str().map(String::from))
+                .as_deref(),
+            Some("ready")
+        );
         self.send(json!({"t": "event", "name": "app.ready", "data": {}}));
     }
 
@@ -120,7 +139,8 @@ impl HostPipe {
     }
 
     pub fn text(&self, timeout: f64) -> Option<String> {
-        self.next(timeout).and_then(|m| m["text"].as_str().map(String::from))
+        self.next(timeout)
+            .and_then(|m| m["text"].as_str().map(String::from))
     }
 
     pub fn close_stdin(&mut self) {
@@ -171,6 +191,28 @@ pub fn children_of(pid: u32) -> Vec<u32> {
         .collect()
 }
 
+/// Laufende Helfer (`ext-host <dir>…`) für Extensions unter `dir`, gezählt über die Prozessliste.
+pub fn helpers_in(dir: &Path) -> usize {
+    let mut sys = System::new().expect("sysinfo");
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::everything(),
+    );
+    let needle = dir.to_string_lossy().to_string();
+    sys.processes()
+        .values()
+        .filter(|p| {
+            let cmd: Vec<String> = p
+                .cmd()
+                .iter()
+                .map(|c| c.to_string_lossy().into_owned())
+                .collect();
+            cmd.iter().any(|c| c == "ext-host") && cmd.iter().any(|c| c.starts_with(&needle))
+        })
+        .count()
+}
+
 /// Lebt der Prozess noch?
 pub fn alive(pid: u32) -> bool {
     let mut sys = System::new().expect("sysinfo");
@@ -192,7 +234,9 @@ impl OneShotHttpServer {
         let sink = Arc::clone(&received);
         std::thread::spawn(move || {
             use std::io::Read;
-            let Ok((mut conn, _)) = listener.accept() else { return };
+            let Ok((mut conn, _)) = listener.accept() else {
+                return;
+            };
             let mut buf = vec![0u8; 8192];
             // Kopfzeilen und, falls vorhanden, den kurzen Text lesen.
             let mut got = Vec::new();

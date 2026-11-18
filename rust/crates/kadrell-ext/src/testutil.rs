@@ -12,8 +12,14 @@ pub struct TempDir(PathBuf);
 impl TempDir {
     pub fn new(label: &str) -> TempDir {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!("kadrell-ext-{label}-{}-{n}-{nanos}", std::process::id()));
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!(
+            "kadrell-ext-{label}-{}-{n}-{nanos}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).expect("temp dir");
         TempDir(dir)
     }
@@ -30,10 +36,16 @@ impl Drop for TempDir {
 }
 
 /// Legt `<root>/<name>/{kadrell.json,init.lua}` an und gibt den Ordner der Extension zurück.
-pub fn make_extension(root: &Path, name: &str, init_lua: &str, manifest: Option<serde_json::Value>) -> PathBuf {
+pub fn make_extension(
+    root: &Path,
+    name: &str,
+    init_lua: &str,
+    manifest: Option<serde_json::Value>,
+) -> PathBuf {
     let dir = root.join(name);
     std::fs::create_dir_all(&dir).expect("extension dir");
-    let manifest = manifest.unwrap_or_else(|| serde_json::json!({"name": name, "version": "0.1.0", "apiVersion": 1}));
+    let manifest = manifest
+        .unwrap_or_else(|| serde_json::json!({"name": name, "version": "0.1.0", "apiVersion": 1}));
     std::fs::write(dir.join("kadrell.json"), manifest.to_string()).expect("manifest");
     std::fs::write(dir.join("init.lua"), init_lua).expect("init.lua");
     dir

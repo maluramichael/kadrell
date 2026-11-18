@@ -43,7 +43,10 @@ mod tests {
     #[test]
     fn int_accepts_integral_floats_only() {
         assert_eq!(as_int(&json!(3)), Some(3));
-        assert_eq!(as_int(&serde_json::from_str::<Value>("3.0").unwrap()), Some(3));
+        assert_eq!(
+            as_int(&serde_json::from_str::<Value>("3.0").unwrap()),
+            Some(3)
+        );
         assert_eq!(as_int(&json!(3.5)), None);
         assert_eq!(as_int(&json!(1e16)), None);
         assert_eq!(as_int(&json!("3")), None);

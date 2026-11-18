@@ -43,7 +43,9 @@ impl KillGroup {
         #[cfg(unix)]
         {
             let _ = kill_on_close;
-            Some(KillGroup { pgid: i32::try_from(child.id()).ok()? })
+            Some(KillGroup {
+                pgid: i32::try_from(child.id()).ok()?,
+            })
         }
         #[cfg(not(any(windows, unix)))]
         {
@@ -91,19 +93,29 @@ static EXEC_GROUPS: std::sync::Mutex<Vec<i32>> = std::sync::Mutex::new(Vec::new(
 /// Merkt eine Prozessgruppe eines `kadrell.exec`-Kindes, damit das Ende des Helfers sie mitnimmt.
 pub fn track_exec(_group: &KillGroup) {
     #[cfg(unix)]
-    EXEC_GROUPS.lock().unwrap_or_else(|e| e.into_inner()).push(_group.pgid);
+    EXEC_GROUPS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(_group.pgid);
 }
 
 pub fn untrack_exec(_group: &KillGroup) {
     #[cfg(unix)]
-    EXEC_GROUPS.lock().unwrap_or_else(|e| e.into_inner()).retain(|g| *g != _group.pgid);
+    EXEC_GROUPS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .retain(|g| *g != _group.pgid);
 }
 
 /// Beendet alle noch laufenden `kadrell.exec`-Kinder; vor jedem Ende des Helfers aufzurufen. Unter Windows erledigt das
 /// Job Object das beim Prozessende von selbst.
 pub fn kill_exec_children() {
     #[cfg(unix)]
-    for g in EXEC_GROUPS.lock().unwrap_or_else(|e| e.into_inner()).drain(..) {
+    for g in EXEC_GROUPS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .drain(..)
+    {
         // SAFETY: Gruppen-ids stammen von unseren eigenen Kindern.
         unsafe {
             libc::killpg(g, libc::SIGKILL);
@@ -152,11 +164,16 @@ mod win {
     use std::os::windows::io::{AsRawHandle, FromRawHandle};
     use std::process::Child;
 
-    use windows_sys::Win32::Foundation::{CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle};
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE,
+    };
+    use windows_sys::Win32::System::Console::{
+        GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle,
+    };
     use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JobObjectExtendedLimitInformation,
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, SetInformationJobObject, TerminateJobObject,
+        AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, TerminateJobObject,
     };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
 

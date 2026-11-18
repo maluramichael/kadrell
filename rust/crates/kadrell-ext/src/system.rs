@@ -29,14 +29,22 @@ impl CpuProbe {
         }
         let system = self.system.as_mut()?;
         system.refresh_cpu_usage();
-        let cores: Vec<f64> = system.cpus().iter().map(|c| f64::from(c.usage() / 100.0).clamp(0.0, 1.0)).collect();
+        let cores: Vec<f64> = system
+            .cpus()
+            .iter()
+            .map(|c| f64::from(c.usage() / 100.0).clamp(0.0, 1.0))
+            .collect();
         (!cores.is_empty()).then_some(cores)
     }
 }
 
 /// Ergebnis für Lua: `cores` je Kern, `total` als Mittel über alle.
 pub fn cpu_fields(cores: &[f64]) -> Map<String, Value> {
-    let total = if cores.is_empty() { 0.0 } else { cores.iter().sum::<f64>() / cores.len() as f64 };
+    let total = if cores.is_empty() {
+        0.0
+    } else {
+        cores.iter().sum::<f64>() / cores.len() as f64
+    };
     let mut m = Map::new();
     m.insert("cores".into(), json!(cores));
     m.insert("total".into(), json!(total));
@@ -141,8 +149,14 @@ mod tests {
     #[test]
     fn real_mem() {
         let mem = mem().expect("mem");
-        let (total, used) = (mem["total"].as_f64().unwrap(), mem["used"].as_f64().unwrap());
-        let (free, fraction) = (mem["free"].as_f64().unwrap(), mem["fraction"].as_f64().unwrap());
+        let (total, used) = (
+            mem["total"].as_f64().unwrap(),
+            mem["used"].as_f64().unwrap(),
+        );
+        let (free, fraction) = (
+            mem["free"].as_f64().unwrap(),
+            mem["fraction"].as_f64().unwrap(),
+        );
         assert!(total > 0.0);
         assert!(used <= total);
         assert!((used - (total - free)).abs() <= 1.0);

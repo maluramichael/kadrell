@@ -44,9 +44,16 @@ impl FooterItem {
         if let Some(title) = &self.title {
             return title.clone();
         }
-        let parts: Vec<&str> =
-            [self.label.as_deref(), self.text.as_deref()].into_iter().flatten().filter(|s| !s.is_empty()).collect();
-        if parts.is_empty() { self.id.clone() } else { parts.join(" ") }
+        let parts: Vec<&str> = [self.label.as_deref(), self.text.as_deref()]
+            .into_iter()
+            .flatten()
+            .filter(|s| !s.is_empty())
+            .collect();
+        if parts.is_empty() {
+            self.id.clone()
+        } else {
+            parts.join(" ")
+        }
     }
 }
 
@@ -60,7 +67,10 @@ pub struct FooterResult {
 /// auf 0...1 begrenzt, Anzahl und Längen gedeckelt.
 pub fn footer(v: Option<&Value>) -> FooterResult {
     let mut warnings = Vec::new();
-    let raw = v.and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    let raw = v
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     if raw.len() > MAX_FOOTER_ITEMS {
         let n = MAX_FOOTER_ITEMS.to_string();
         warnings.push(tr_args(
@@ -72,7 +82,9 @@ pub fn footer(v: Option<&Value>) -> FooterResult {
     let mut seen = HashSet::new();
     let mut items = Vec::new();
     for entry in raw.iter().take(MAX_FOOTER_ITEMS) {
-        let Some(item) = footer_item(entry, &mut warnings) else { continue };
+        let Some(item) = footer_item(entry, &mut warnings) else {
+            continue;
+        };
         if !seen.insert(item.id.clone()) {
             warnings.push(tr_args(
                 "Statusleiste: id „{0}“ doppelt, übersprungen",
@@ -91,14 +103,24 @@ fn opt_text(v: &Value, key: &str, limit: usize) -> Option<String> {
 }
 
 fn footer_item(v: &Value, warnings: &mut Vec<String>) -> Option<FooterItem> {
-    let id = v.get("id").and_then(Value::as_str).filter(|s| !s.is_empty());
+    let id = v
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
     let Some(id) = id else {
-        warnings.push(tr("Statusleiste: Eintrag ohne „id“ übersprungen", "Status bar: skipped entry without “id”"));
+        warnings.push(tr(
+            "Statusleiste: Eintrag ohne „id“ übersprungen",
+            "Status bar: skipped entry without “id”",
+        ));
         return None;
     };
     let item = FooterItem {
         id: clip(id, MAX_TEXT),
-        align: if v.get("align").and_then(Value::as_str) == Some("right") { Align::Right } else { Align::Left },
+        align: if v.get("align").and_then(Value::as_str) == Some("right") {
+            Align::Right
+        } else {
+            Align::Left
+        },
         label: opt_text(v, "label", MAX_STATUS),
         text: opt_text(v, "text", MAX_STATUS),
         color: footer_color(v.get("color"), warnings),
@@ -153,7 +175,10 @@ mod tests {
             {"id": "c", "text": "x", "color": "pink"},
         ]);
         let r = footer(Some(&v));
-        assert_eq!(r.items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["cpu", "c"]);
+        assert_eq!(
+            r.items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            ["cpu", "c"]
+        );
         assert_eq!(r.items[0].bars, vec![0.2, 1.0, 0.0]);
         assert_eq!(r.items[0].gauge, Some(1.0));
         assert_eq!(r.items[0].align, Align::Right);
@@ -162,7 +187,9 @@ mod tests {
 
     #[test]
     fn footer_caps_entry_count() {
-        let items: Vec<Value> = (0..20).map(|i| json!({"id": format!("i{i}"), "text": "x"})).collect();
+        let items: Vec<Value> = (0..20)
+            .map(|i| json!({"id": format!("i{i}"), "text": "x"}))
+            .collect();
         let r = footer(Some(&Value::Array(items)));
         assert_eq!(r.items.len(), 16);
         assert_eq!(r.warnings.len(), 1);
@@ -170,10 +197,30 @@ mod tests {
 
     #[test]
     fn spoken_falls_back_to_label_text_then_id() {
-        let item = FooterItem { id: "i".into(), label: Some("CPU".into()), text: Some("5%".into()), ..Default::default() };
+        let item = FooterItem {
+            id: "i".into(),
+            label: Some("CPU".into()),
+            text: Some("5%".into()),
+            ..Default::default()
+        };
         assert_eq!(item.spoken(), "CPU 5%");
-        assert_eq!(FooterItem { id: "i".into(), ..Default::default() }.spoken(), "i");
-        assert_eq!(FooterItem { id: "i".into(), title: Some("T".into()), ..item }.spoken(), "T");
+        assert_eq!(
+            FooterItem {
+                id: "i".into(),
+                ..Default::default()
+            }
+            .spoken(),
+            "i"
+        );
+        assert_eq!(
+            FooterItem {
+                id: "i".into(),
+                title: Some("T".into()),
+                ..item
+            }
+            .spoken(),
+            "T"
+        );
     }
 
     #[test]

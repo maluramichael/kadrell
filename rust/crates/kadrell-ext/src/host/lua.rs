@@ -75,8 +75,14 @@ fn install_natives(lua: &Lua, router: &Arc<Router>) -> mlua::Result<()> {
         })?,
     )?;
     let os: mlua::Table = g.get("os")?;
-    os.set("exit", lua.create_function(|_, args: Variadic<Value>| -> mlua::Result<()> { exit(args.first()) })?)?;
-    os.set("rename", lua.create_function(|lua, (from, to): (String, String)| rename(lua, &from, &to))?)?;
+    os.set(
+        "exit",
+        lua.create_function(|_, args: Variadic<Value>| -> mlua::Result<()> { exit(args.first()) })?,
+    )?;
+    os.set(
+        "rename",
+        lua.create_function(|lua, (from, to): (String, String)| rename(lua, &from, &to))?,
+    )?;
     Ok(())
 }
 
@@ -111,12 +117,14 @@ fn run_prelude(lua: &Lua) -> mlua::Result<()> {
     let g = lua.globals();
     let original: Function = g.get("dofile")?;
     let shim_original = original.clone();
-    let shim = lua.create_function(move |lua, path: Option<String>| -> mlua::Result<MultiValue> {
-        match path.as_deref() {
-            Some(JSON_PATH) => lua.load(JSON_LUA).set_name("@kadrell/json.lua").call(()),
-            _ => shim_original.call(path),
-        }
-    })?;
+    let shim = lua.create_function(
+        move |lua, path: Option<String>| -> mlua::Result<MultiValue> {
+            match path.as_deref() {
+                Some(JSON_PATH) => lua.load(JSON_LUA).set_name("@kadrell/json.lua").call(()),
+                _ => shim_original.call(path),
+            }
+        },
+    )?;
     g.set("dofile", shim)?;
     let result = lua.load(PRELUDE).set_name(PRELUDE_NAME).exec();
     g.set("dofile", original)?;

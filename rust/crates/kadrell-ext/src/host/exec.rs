@@ -29,7 +29,10 @@ pub fn run(argv: &[String], cwd: Option<&str>, timeout: f64) -> Map<String, Valu
         return fields(127, b"", b"no such file");
     };
     let mut cmd = Command::new(first);
-    cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.args(&argv[1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }

@@ -81,14 +81,22 @@ fn parse_setting(v: &Value) -> Option<Setting> {
         default: v.get("default").filter(|d| !d.is_null()).cloned(),
         options: match v.get("options") {
             None | Some(Value::Null) => None,
-            Some(o) => Some(o.as_array()?.iter().map(parse_option).collect::<Option<Vec<_>>>()?),
+            Some(o) => Some(
+                o.as_array()?
+                    .iter()
+                    .map(parse_option)
+                    .collect::<Option<Vec<_>>>()?,
+            ),
         },
     })
 }
 
 fn parse_option(v: &Value) -> Option<SettingOption> {
     if let Some(plain) = v.as_str() {
-        return Some(SettingOption { value: plain.to_string(), label: plain.to_string() });
+        return Some(SettingOption {
+            value: plain.to_string(),
+            label: plain.to_string(),
+        });
     }
     let value = v.get("value")?.as_str()?.to_string();
     let label = match v.get("label") {
@@ -110,14 +118,22 @@ pub struct FoundExtension {
 /// Home-Verzeichnis des Nutzers (`HOME`, unter Windows `USERPROFILE`).
 pub fn home_dir() -> PathBuf {
     let var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-    std::env::var_os(var).or_else(|| std::env::var_os("HOME")).map(PathBuf::from).unwrap_or_default()
+    std::env::var_os(var)
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_default()
 }
 
 /// `~/.config/kadrell/extensions`, ersetzt durch `--extensions-dir <ordner>` oder `KADRELL_EXTENSIONS_DIR`.
 pub fn default_dir() -> PathBuf {
     let args: Vec<String> = std::env::args().collect();
     let env: HashMap<String, String> = std::env::vars().collect();
-    custom_dir(&args, &env).unwrap_or_else(|| home_dir().join(".config").join("kadrell").join("extensions"))
+    custom_dir(&args, &env).unwrap_or_else(|| {
+        home_dir()
+            .join(".config")
+            .join("kadrell")
+            .join("extensions")
+    })
 }
 
 /// Das Argument geht vor der Umgebung; leer heißt: kein eigener Ordner. `~` wird aufgelöst.
@@ -161,7 +177,9 @@ fn standardized(path: &Path) -> PathBuf {
 
 /// Alle Ordner unter `dir` ohne versteckte, nach Name sortiert, jeder mit Manifest und Befund.
 pub fn scan(dir: &Path) -> Vec<FoundExtension> {
-    let Ok(read) = std::fs::read_dir(dir) else { return Vec::new() };
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
     let mut names: Vec<String> = read
         .filter_map(|e| e.ok())
         .filter_map(|e| e.file_name().into_string().ok())
@@ -178,14 +196,24 @@ pub fn scan(dir: &Path) -> Vec<FoundExtension> {
 }
 
 fn inspect(name: String, path: PathBuf) -> FoundExtension {
-    let manifest = std::fs::read(path.join("kadrell.json")).ok().and_then(|d| ExtensionManifest::parse(&d));
+    let manifest = std::fs::read(path.join("kadrell.json"))
+        .ok()
+        .and_then(|d| ExtensionManifest::parse(&d));
     let problem = problem(&name, &path, manifest.as_ref());
-    FoundExtension { name, dir: path, manifest, problem }
+    FoundExtension {
+        name,
+        dir: path,
+        manifest,
+        problem,
+    }
 }
 
 fn problem(name: &str, path: &Path, manifest: Option<&ExtensionManifest>) -> Option<String> {
     let Some(manifest) = manifest else {
-        return Some(tr("kadrell.json fehlt oder ist kaputt", "kadrell.json is missing or broken"));
+        return Some(tr(
+            "kadrell.json fehlt oder ist kaputt",
+            "kadrell.json is missing or broken",
+        ));
     };
     if manifest.name != name {
         return Some(tr_args(
@@ -214,7 +242,10 @@ fn untrusted_file(path: &Path) -> Option<String> {
     let mut all = vec![path.to_path_buf(), path.join("kadrell.json")];
     all.extend(lua_files(path));
     let bad = all.into_iter().find(|p| !trusted(p))?;
-    let file = bad.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let file = bad
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     Some(tr_args(
         "{0} gehört nicht dir oder ist für andere beschreibbar",
         "{0} is not owned by you or is writable by others",
@@ -229,7 +260,9 @@ pub fn trusted(path: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
     // SAFETY: getuid hat keine Vorbedingungen und kann nicht fehlschlagen.
     let uid = unsafe { libc::getuid() };
-    std::fs::metadata(path).map(|m| m.uid() == uid && m.mode() & 0o022 == 0).unwrap_or(false)
+    std::fs::metadata(path)
+        .map(|m| m.uid() == uid && m.mode() & 0o022 == 0)
+        .unwrap_or(false)
 }
 
 #[cfg(not(unix))]
@@ -246,7 +279,9 @@ pub fn lua_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn collect_lua(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(read) = std::fs::read_dir(dir) else { return };
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in read.flatten() {
         if entry.file_name().to_string_lossy().starts_with('.') {
             continue;
@@ -285,7 +320,11 @@ mod tests {
         make(root.path(), "noInit", None, 1, false);
         let found = scan(root.path());
         let names: Vec<_> = found.iter().map(|f| f.name.as_str()).collect();
-        assert_eq!(names, ["apiTooHigh", "nameMismatch", "noInit", "ok"], "nach Name sortiert");
+        assert_eq!(
+            names,
+            ["apiTooHigh", "nameMismatch", "noInit", "ok"],
+            "nach Name sortiert"
+        );
         for ext in &found {
             if ext.name == "ok" {
                 assert!(ext.problem.is_none(), "{:?}", ext.problem);
@@ -331,12 +370,24 @@ mod tests {
         let m = ExtensionManifest::parse(json.as_bytes()).unwrap();
         assert_eq!(
             m.settings,
-            vec![Setting { key: "k".into(), kind: "bool".into(), label: "L".into(), default: Some(Value::Bool(true)), options: None }]
+            vec![Setting {
+                key: "k".into(),
+                kind: "bool".into(),
+                label: "L".into(),
+                default: Some(Value::Bool(true)),
+                options: None
+            }]
         );
         assert_eq!(m.description, "");
         assert_eq!(m.permissions, ["exec"]);
-        assert!(ExtensionManifest::parse(br#"{"apiVersion":1}"#).is_none(), "name ist Pflicht");
-        assert!(ExtensionManifest::parse(br#"{"name":"x"}"#).is_none(), "apiVersion ist Pflicht");
+        assert!(
+            ExtensionManifest::parse(br#"{"apiVersion":1}"#).is_none(),
+            "name ist Pflicht"
+        );
+        assert!(
+            ExtensionManifest::parse(br#"{"name":"x"}"#).is_none(),
+            "apiVersion ist Pflicht"
+        );
     }
 
     #[test]
@@ -348,8 +399,14 @@ mod tests {
         assert_eq!(
             m.settings[0].options,
             Some(vec![
-                SettingOption { value: "compact".into(), label: "Kompakt".into() },
-                SettingOption { value: "detailed".into(), label: "detailed".into() },
+                SettingOption {
+                    value: "compact".into(),
+                    label: "Kompakt".into()
+                },
+                SettingOption {
+                    value: "detailed".into(),
+                    label: "detailed".into()
+                },
             ])
         );
         assert_eq!(m.settings[1].default, Some(serde_json::json!(5)));
@@ -360,19 +417,37 @@ mod tests {
     fn custom_extensions_dir() {
         let none: HashMap<String, String> = HashMap::new();
         let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-        assert_eq!(custom_dir(&s(&["Kadrell", "--profile", "tmp"]), &none), None);
-        let abs = if cfg!(windows) { "C:/tmp/ext/" } else { "/tmp/ext/" };
-        let want = if cfg!(windows) { PathBuf::from("C:\\tmp\\ext") } else { PathBuf::from("/tmp/ext") };
-        assert_eq!(custom_dir(&s(&["Kadrell", "--extensions-dir", abs]), &none), Some(want));
+        assert_eq!(
+            custom_dir(&s(&["Kadrell", "--profile", "tmp"]), &none),
+            None
+        );
+        let abs = if cfg!(windows) {
+            "C:/tmp/ext/"
+        } else {
+            "/tmp/ext/"
+        };
+        let want = if cfg!(windows) {
+            PathBuf::from("C:\\tmp\\ext")
+        } else {
+            PathBuf::from("/tmp/ext")
+        };
+        assert_eq!(
+            custom_dir(&s(&["Kadrell", "--extensions-dir", abs]), &none),
+            Some(want)
+        );
         let env: HashMap<_, _> = [("KADRELL_EXTENSIONS_DIR".to_string(), "~/x".to_string())].into();
-        assert_eq!(custom_dir(&[], &env), Some(standardized(&home_dir().join("x"))));
+        assert_eq!(
+            custom_dir(&[], &env),
+            Some(standardized(&home_dir().join("x")))
+        );
         let both: HashMap<_, _> = [("KADRELL_EXTENSIONS_DIR".to_string(), "/b".to_string())].into();
         assert_eq!(
             custom_dir(&s(&["--extensions-dir", "/a"]), &both),
             Some(standardized(Path::new("/a"))),
             "das Argument geht vor"
         );
-        let blank: HashMap<_, _> = [("KADRELL_EXTENSIONS_DIR".to_string(), "  ".to_string())].into();
+        let blank: HashMap<_, _> =
+            [("KADRELL_EXTENSIONS_DIR".to_string(), "  ".to_string())].into();
         assert_eq!(custom_dir(&[], &blank), None);
     }
 
@@ -399,7 +474,10 @@ mod tests {
         for f in ["a.lua", "sub/b.lua", ".git/c.lua", "d.txt"] {
             std::fs::write(root.path().join(f), "").unwrap();
         }
-        let names: Vec<_> = lua_files(root.path()).iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        let names: Vec<_> = lua_files(root.path())
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
         assert_eq!(names, ["a.lua", "b.lua"]);
     }
 }

@@ -45,7 +45,11 @@ pub enum Dock {
 impl Dock {
     /// Unbekanntes oder fehlendes `dock` ergibt rechts, wie bisher. Noch nicht platzierte Docks ebenfalls.
     pub fn placed(raw: Option<&str>) -> Dock {
-        if raw == Some("left") { Dock::Left } else { Dock::Right }
+        if raw == Some("left") {
+            Dock::Left
+        } else {
+            Dock::Right
+        }
     }
 }
 
@@ -57,10 +61,22 @@ pub struct PanelAction {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PanelNode {
-    Section { title: String, collapsed: bool, children: Vec<PanelNode> },
-    Item { text: String, detail: Option<String>, color: Option<ThemeColor>, actions: Vec<PanelAction> },
+    Section {
+        title: String,
+        collapsed: bool,
+        children: Vec<PanelNode>,
+    },
+    Item {
+        text: String,
+        detail: Option<String>,
+        color: Option<ThemeColor>,
+        actions: Vec<PanelAction>,
+    },
     Text(String, Option<ThemeColor>),
-    Button { label: String, action: String },
+    Button {
+        label: String,
+        action: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -101,7 +117,10 @@ pub fn tree(v: &Value) -> TreeResult {
     }
     let mut builder = Builder::default();
     let nodes = builder.nodes(v.get("children"));
-    let title = clip(v.get("title").and_then(Value::as_str).unwrap_or(""), MAX_TEXT);
+    let title = clip(
+        v.get("title").and_then(Value::as_str).unwrap_or(""),
+        MAX_TEXT,
+    );
     Ok((PanelTree { title, nodes }, builder.summary()))
 }
 
@@ -109,16 +128,29 @@ pub fn status(v: &Value) -> Option<StatusItem> {
     let text = v.get("text")?.as_str()?;
     Some(StatusItem {
         text: clip(text, MAX_STATUS),
-        color: v.get("color").and_then(Value::as_str).and_then(ThemeColor::parse),
-        action: v.get("action").and_then(Value::as_str).map(|s| clip(s, MAX_TEXT)),
+        color: v
+            .get("color")
+            .and_then(Value::as_str)
+            .and_then(ThemeColor::parse),
+        action: v
+            .get("action")
+            .and_then(Value::as_str)
+            .map(|s| clip(s, MAX_TEXT)),
     })
 }
 
 /// Palette-Einträge für ⌘N. `null` oder Nicht-Array heißt leer; Einträge ohne `id`/`title` werden übersprungen, die
 /// Anzahl gedeckelt wie der Panel-Baum.
 pub fn palette(v: Option<&Value>) -> Vec<PaletteItem> {
-    let items = v.and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
-    items.iter().take(MAX_NODES).filter_map(palette_item).collect()
+    let items = v
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    items
+        .iter()
+        .take(MAX_NODES)
+        .filter_map(palette_item)
+        .collect()
 }
 
 fn palette_item(item: &Value) -> Option<PaletteItem> {
@@ -127,18 +159,31 @@ fn palette_item(item: &Value) -> Option<PaletteItem> {
     Some(PaletteItem {
         id: clip(id, MAX_TEXT),
         title: clip(title, MAX_TEXT),
-        detail: item.get("detail").and_then(Value::as_str).map(|s| clip(s, MAX_TEXT)),
-        group: item.get("group").and_then(Value::as_str).map(|s| clip(s, MAX_STATUS)),
+        detail: item
+            .get("detail")
+            .and_then(Value::as_str)
+            .map(|s| clip(s, MAX_TEXT)),
+        group: item
+            .get("group")
+            .and_then(Value::as_str)
+            .map(|s| clip(s, MAX_STATUS)),
     })
 }
 
 /// Zählt Rohknoten vor dem Prüfen, damit ein Flut-Panel gar nicht erst gebaut wird. Jedes Array-Element zählt, auch
 /// Nicht-Knoten und Aktionen.
 fn node_count(children: Option<&Value>) -> usize {
-    let Some(items) = children.and_then(Value::as_array) else { return 0 };
+    let Some(items) = children.and_then(Value::as_array) else {
+        return 0;
+    };
     items
         .iter()
-        .map(|n| 1 + node_count(n.get("children")) + n.get("actions").and_then(Value::as_array).map_or(0, Vec::len))
+        .map(|n| {
+            1 + node_count(n.get("children"))
+                + n.get("actions")
+                    .and_then(Value::as_array)
+                    .map_or(0, Vec::len)
+        })
         .sum()
 }
 
@@ -172,7 +217,11 @@ impl Builder {
         let mut out = self.warnings.clone();
         if self.dropped > 0 {
             let n = self.dropped.to_string();
-            out.push(tr_args("… und {0} weitere Warnungen", "… and {0} more warnings", &[&n]));
+            out.push(tr_args(
+                "… und {0} weitere Warnungen",
+                "… and {0} more warnings",
+                &[&n],
+            ));
         }
         out
     }
@@ -187,14 +236,23 @@ impl Builder {
 
     /// Eine leere Lua-Tabelle kommt als `[]`, ein Nicht-Array (`{}`, Zahl, …) heißt: keine Kinder.
     fn nodes(&mut self, v: Option<&Value>) -> Vec<PanelNode> {
-        let items = v.and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+        let items = v
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
         items.iter().filter_map(|n| self.node(n)).collect()
     }
 
     fn node(&mut self, v: &Value) -> Option<PanelNode> {
-        let kind = v.as_object().and_then(|_| v.get("type")).and_then(Value::as_str);
+        let kind = v
+            .as_object()
+            .and_then(|_| v.get("type"))
+            .and_then(Value::as_str);
         let Some(kind) = kind else {
-            self.warn(tr("Knoten ohne Typ übersprungen", "Skipped a node without a type"));
+            self.warn(tr(
+                "Knoten ohne Typ übersprungen",
+                "Skipped a node without a type",
+            ));
             return None;
         };
         match kind {
@@ -215,7 +273,10 @@ impl Builder {
 
     fn section(&mut self, v: &Value) -> PanelNode {
         PanelNode::Section {
-            title: clip(v.get("title").and_then(Value::as_str).unwrap_or(""), MAX_TEXT),
+            title: clip(
+                v.get("title").and_then(Value::as_str).unwrap_or(""),
+                MAX_TEXT,
+            ),
             collapsed: v.get("collapsed").and_then(Value::as_bool).unwrap_or(false),
             children: self.nodes(v.get("children")),
         }
@@ -225,7 +286,10 @@ impl Builder {
         let text = self.required(v, "item", "text")?;
         Some(PanelNode::Item {
             text,
-            detail: v.get("detail").and_then(Value::as_str).map(|s| clip(s, MAX_TEXT)),
+            detail: v
+                .get("detail")
+                .and_then(Value::as_str)
+                .map(|s| clip(s, MAX_TEXT)),
             color: self.color(v.get("color")),
             actions: self.actions(v.get("actions")),
         })
@@ -243,14 +307,26 @@ impl Builder {
     }
 
     fn actions(&mut self, v: Option<&Value>) -> Vec<PanelAction> {
-        let items = v.and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+        let items = v
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
         let mut out = Vec::new();
         for a in items {
-            match (a.get("id").and_then(Value::as_str), a.get("label").and_then(Value::as_str)) {
+            match (
+                a.get("id").and_then(Value::as_str),
+                a.get("label").and_then(Value::as_str),
+            ) {
                 (Some(id), Some(label)) => {
-                    out.push(PanelAction { id: clip(id, MAX_TEXT), label: clip(label, MAX_TEXT) });
+                    out.push(PanelAction {
+                        id: clip(id, MAX_TEXT),
+                        label: clip(label, MAX_TEXT),
+                    });
                 }
-                _ => self.warn(tr("Aktion ohne id oder label übersprungen", "Skipped an action without id or label")),
+                _ => self.warn(tr(
+                    "Aktion ohne id oder label übersprungen",
+                    "Skipped an action without id or label",
+                )),
             }
         }
         out
@@ -296,11 +372,19 @@ mod tests {
         assert_eq!(items.len(), 2, "Einträge ohne id oder title übersprungen");
         assert_eq!(
             items[0],
-            PaletteItem { id: "gh:a/web".into(), title: "a/web".into(), detail: Some("GitHub".into()), group: Some("GitHub".into()) }
+            PaletteItem {
+                id: "gh:a/web".into(),
+                title: "a/web".into(),
+                detail: Some("GitHub".into()),
+                group: Some("GitHub".into())
+            }
         );
         assert_eq!(items[1].id.chars().count(), 500, "id auf MAX_TEXT gekürzt");
         assert!(palette(None).is_empty());
-        assert!(palette(Some(&json!({}))).is_empty(), "Nicht-Array heißt leer");
+        assert!(
+            palette(Some(&json!({}))).is_empty(),
+            "Nicht-Array heißt leer"
+        );
     }
 
     #[test]
@@ -321,12 +405,18 @@ mod tests {
                     text: "a".repeat(500),
                     detail: None,
                     color: None,
-                    actions: vec![PanelAction { id: "a".into(), label: "A".into() }]
+                    actions: vec![PanelAction {
+                        id: "a".into(),
+                        label: "A".into()
+                    }]
                 },
                 PanelNode::Section {
                     title: "S".into(),
                     collapsed: true,
-                    children: vec![PanelNode::Button { label: "B".into(), action: "go".into() }]
+                    children: vec![PanelNode::Button {
+                        label: "B".into(),
+                        action: "go".into()
+                    }]
                 },
                 PanelNode::Text("t".into(), Some(ThemeColor::Muted)),
             ]
@@ -347,11 +437,24 @@ mod tests {
         assert_eq!(
             t.nodes,
             vec![
-                PanelNode::Section { title: String::new(), collapsed: false, children: vec![] },
-                PanelNode::Item { text: "a".into(), detail: None, color: None, actions: vec![] },
+                PanelNode::Section {
+                    title: String::new(),
+                    collapsed: false,
+                    children: vec![]
+                },
+                PanelNode::Item {
+                    text: "a".into(),
+                    detail: None,
+                    color: None,
+                    actions: vec![]
+                },
             ]
         );
-        assert_eq!(w2.len(), 7, "fünf Nicht-Knoten, item ohne text, Aktion ohne label");
+        assert_eq!(
+            w2.len(),
+            7,
+            "fünf Nicht-Knoten, item ohne text, Aktion ohne label"
+        );
         let (none, _) = tree_of("[]");
         assert!(none.nodes.is_empty());
     }
@@ -360,7 +463,11 @@ mod tests {
     fn panel_too_large() {
         let items = vec![json!({"type": "item", "text": "x"}); 2001];
         let v = json!({"title": "T", "children": items});
-        assert_eq!(tree(&v).unwrap_err(), PanelError::TooLarge(2001), "2001 Knoten müssen abgelehnt werden");
+        assert_eq!(
+            tree(&v).unwrap_err(),
+            PanelError::TooLarge(2001),
+            "2001 Knoten müssen abgelehnt werden"
+        );
     }
 
     /// Jedes Array-Element zählt zur Grenze, auch Nicht-Knoten und Aktionen.
@@ -370,7 +477,11 @@ mod tests {
         assert_eq!(tree(&v).unwrap_err(), PanelError::TooLarge(500_000));
         let actions = vec![json!({"id": "a", "label": "A"}); 2000];
         let w = json!({"children": [{"type": "item", "text": "x", "actions": actions}]});
-        assert_eq!(tree(&w).unwrap_err(), PanelError::TooLarge(2001), "2000 Aktionen zählen mit");
+        assert_eq!(
+            tree(&w).unwrap_err(),
+            PanelError::TooLarge(2001),
+            "2000 Aktionen zählen mit"
+        );
     }
 
     /// Höchstens 20 Warnungen je Baum, dazu eine Sammelzeile.
@@ -379,7 +490,14 @@ mod tests {
         let v = json!({"children": vec![json!({"type": "video"}); 100]});
         let (_, warnings) = tree(&v).unwrap();
         assert_eq!(warnings.len(), 21);
-        assert_eq!(warnings.last().unwrap(), &tr_args("… und {0} weitere Warnungen", "… and {0} more warnings", &["80"]));
+        assert_eq!(
+            warnings.last().unwrap(),
+            &tr_args(
+                "… und {0} weitere Warnungen",
+                "… and {0} more warnings",
+                &["80"]
+            )
+        );
     }
 
     #[test]
@@ -391,7 +509,12 @@ mod tests {
         assert_eq!(s.action.as_deref(), Some("a"));
         assert!(status(&json!([])).is_none());
         assert!(status(&json!({"color": "nope"})).is_none());
-        assert_eq!(status(&json!({"text": "a", "color": "nope"})).unwrap().color, None);
+        assert_eq!(
+            status(&json!({"text": "a", "color": "nope"}))
+                .unwrap()
+                .color,
+            None
+        );
     }
 
     #[test]
