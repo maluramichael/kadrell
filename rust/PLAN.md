@@ -86,6 +86,12 @@ Fortschritt und Abweichungen trägt die Planungs-Session hier unten ein.
 - Welle 2: Suche (⌘P) und Einstellungen-Dialog gemergt (704 Tests, a6c69e7). Laufen: Verdrahtung mit echten Sessions
   (`rw-wire`), `kadrell-i18n` (Fluent aus Localizable.xcstrings), `kadrell-tray` (Tray, Benachrichtigungen, Badge).
   Mac-Session: `.app`-Bündel, danach Unix-Teile von control/accounts/claude.
+- Welle 2 fertig (f20afab, 880 Tests): echte Sessions + Steuerkanal + CLI, Einstellungen, Suche, Verlauf,
+  Schnellstart, Sprachen live, Tray/Fenster, Nutzung/Konten/Statistik, Extensions-Oberfläche, Mac: Bündel,
+  Unix-Steuerkanal, Signale, Schlüsselbund. Eigene Kennung `de.malura.kadrell.rust`.
+- Welle 3 läuft: A Arbeitsfläche (Zoom, Sync, Vorschau, Frei/Scrollen/Reihe, Kürzel aus Settings), B Gruppen
+  (Dialoge, Kontextmenüs, Drag), C lokale Modelle (`kadrell-models`), Pi, Remote, D Fenster/Darstellung,
+  E Hilfe/About/Übernahme/Worktrees/Links, F wackelnde Tests. Mac-Session: ganze App als Bündel prüfen.
 - Feinschliff-Liste: Einstellungstexte zeigen „⌘N“ auch unter Windows; unterste Listenzeile im Dialog „Neue Session“
   angeschnitten; Fensterfokus beim Start auf dem Mac; Layout-Menüeinträge auf dem Mac ausgegraut; Buchstabenabstand
   der Gruppennamen; Blur hinter Dialogen; Konten/lokale Modelle im Einstellungen-Dialog noch Mock.
