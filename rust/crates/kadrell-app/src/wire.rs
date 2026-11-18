@@ -100,7 +100,7 @@ impl Shell {
     pub(crate) fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reconcile(window, cx);
         self.rebuild();
-        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() {
+        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && !self.usage.overlay_open() {
             let focus = self.selected.and_then(|(g, s)| self.groups[g].sessions[s].pane.as_ref().map(|p| p.read(cx).focus.clone()));
             if let Some(focus) = focus {
                 focus.focus(window, cx);
@@ -192,8 +192,9 @@ impl Shell {
         cx.spawn_in(window, async move |this, cx| {
             loop {
                 let Ok(job) = this.update(cx, |shell, _| shell.state.poll_job()) else { break };
-                let change = cx.background_executor().spawn(async move { job.run() }).await;
+                let (change, messages) = cx.background_executor().spawn(async move { job.run_counted() }).await;
                 let wait = this.update_in(cx, |shell, window, cx| {
+                    shell.state.count_stat(kadrell_core::stats::StatKey::Messages, messages as i64);
                     shell.state.apply_registry(change);
                     shell.sync(window, cx);
                     shell.state.poll_interval()

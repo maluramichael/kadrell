@@ -12,6 +12,7 @@ kadrell-claude = { path = "../kadrell-claude" }
 kadrell-control = { path = "../kadrell-control" }
 kadrell-accounts = { path = "../kadrell-accounts" }
 kadrell-ext = { path = "../kadrell-ext" }
+kadrell-i18n = { path = "../kadrell-i18n" }
 gpui-pre = "=0.3.13"
 gpui-pre-platform = "=0.3.13"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

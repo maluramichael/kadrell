@@ -25,6 +25,8 @@ pub enum Cmd {
     CopyPath(String),
     ToggleFavorite(String),
     CloseGroup(String),
+    /// Konto-Menü der Leiste (Wechseln, Auto-Wechsel, Hinzufügen, Verwalten).
+    Account(crate::usage::AccountCmd),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -120,6 +122,7 @@ impl Shell {
             Cmd::CopyPath(path) => cx.write_to_clipboard(ClipboardItem::new_string(path)),
             Cmd::ToggleFavorite(id) => self.state.store.groups.toggle_favorite(&id),
             Cmd::CloseGroup(id) => self.state.close_group(&id),
+            Cmd::Account(cmd) => return self.run_account_cmd(cmd, window, cx),
         }
         self.sync(window, cx);
     }

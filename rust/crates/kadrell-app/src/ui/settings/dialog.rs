@@ -11,7 +11,7 @@ use gpui::{
 use kadrell_core::Settings;
 use kadrell_core::hotkeys::{self, Hotkey, HotkeyAction};
 
-use super::backend::{Backend, MockBackend};
+use super::backend::Backend;
 use super::controls::Geometry;
 use super::filter::Filter;
 use super::model::{Block, Btn, Control, Msg, Row, Setter};
@@ -85,7 +85,7 @@ impl SettingsDialog {
         });
         let this = Self {
             focus: cx.focus_handle(),
-            backend: Box::new(MockBackend::new()),
+            backend: super::backend::default_backend(cx),
             filter: Filter::default(),
             filter_input,
             inputs: HashMap::new(),
@@ -170,7 +170,7 @@ impl SettingsDialog {
         match &btn.msg {
             Msg::SwitchAccount(id) => self.backend.switch_account(id),
             Msg::RemoveAccount(id) => self.backend.remove_account(id),
-            Msg::AddAccount => {}
+            Msg::AddAccount => self.backend.add_account(),
             Msg::Reload(p) => self.backend.reload(*p),
             Msg::DeleteModel(id) => self.delete_model(id),
             Msg::Browse { row, files } => self.browse(row, *files, window, cx),
