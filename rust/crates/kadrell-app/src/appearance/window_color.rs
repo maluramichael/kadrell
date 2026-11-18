@@ -13,12 +13,25 @@ use gpui::Window;
 /// Nimmt dem Layer des Fensters einmal den Farbraum (idempotent, kostet pro Aufruf einen Vergleich).
 #[cfg(target_os = "macos")]
 pub fn ensure_native(window: &Window) {
-    use objc2::msg_send;
     use objc2::runtime::AnyObject;
+    use objc2::{Encode, Encoding, RefEncode, msg_send};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use std::cell::RefCell;
     use std::collections::HashSet;
-    use std::ffi::c_void;
+
+    /// `CGColorSpaceRef` mit der Kodierung, die `setColorspace:` erwartet (objc2 prüft sie in Debug-Builds).
+    #[repr(C)]
+    struct CGColorSpace {
+        _opaque: [u8; 0],
+    }
+    // SAFETY: Kodierung wie in CoreGraphics (`^{CGColorSpace=}`), nur als Zeiger verwendet.
+    unsafe impl Encode for CGColorSpace {
+        const ENCODING: Encoding = Encoding::Struct("CGColorSpace", &[]);
+    }
+    // SAFETY: wie oben.
+    unsafe impl RefEncode for CGColorSpace {
+        const ENCODING_REF: Encoding = Encoding::Pointer(&<Self as Encode>::ENCODING);
+    }
 
     thread_local! {
         /// Schon umgestellte Ansichten (Adressen), damit nicht jeder Frame den Layer anfasst.
@@ -39,7 +52,7 @@ pub fn ensure_native(window: &Window) {
         if layer.is_null() {
             return;
         }
-        let none: *const c_void = std::ptr::null();
+        let none: *const CGColorSpace = std::ptr::null();
         let _: () = msg_send![layer, setColorspace: none];
     }
     DONE.with(|d| d.borrow_mut().insert(view));
