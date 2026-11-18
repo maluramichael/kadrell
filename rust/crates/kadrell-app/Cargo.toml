@@ -32,3 +32,7 @@ gpui-pre-platform = { version = "=0.3.13", features = ["font-kit"] }
 [dev-dependencies]
 # Tests prüfen deutsche Texte: die gemeinsame Sprache startet auf Deutsch, nicht in der Systemsprache.
 kadrell-i18n = { path = "../kadrell-i18n", features = ["pin-german"] }
+
+# SIGTERM/SIGINT/SIGHUP fangen (Version wie in kadrell-control und rust/Cargo.lock).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"

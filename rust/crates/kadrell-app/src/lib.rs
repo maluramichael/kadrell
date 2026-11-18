@@ -7,6 +7,7 @@ mod lang;
 #[cfg(test)]
 mod catalog_test;
 mod menus;
+mod signals;
 mod state;
 mod theme;
 mod tray_wire;
@@ -513,6 +514,8 @@ fn open_state(profile_name: Option<&str>) -> Result<Option<Opened>, String> {
 /// Startet die App (Profil, Steuerkanal, Fenster, Event-Schleife) und kehrt beim Schließen des Fensters zurück.
 /// Gibt den Exit-Code zurück.
 pub fn run(profile_name: Option<String>) -> i32 {
+    // Vor Profil und Fenster: ein SIGTERM während des Starts wartet, statt die App ohne Aufräumen zu beenden.
+    let signals = signals::install_quit_signals();
     let (state, jobs, server, ext) = match open_state(profile_name.as_deref()) {
         Ok(Some(parts)) => parts,
         Ok(None) => return 0,
@@ -554,6 +557,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         })
         .detach();
         cx.on_window_closed(|cx, _| cx.quit()).detach();
+        signals::quit_on(cx, signals);
         cx.activate(true);
     });
     0

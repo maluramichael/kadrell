@@ -407,7 +407,8 @@ fn stop_of_idle_helper_uses_shutdown() {
     );
 }
 
-/// Ein Helper, der `shutdown` ignoriert, wird nach 2 s hart beendet.
+/// Ein Helper, der `shutdown` ignoriert, wird unter Windows nach 2 s hart beendet, unter Unix schon nach 1 s per SIGTERM
+/// (der Fake ignoriert nur `shutdown`, nicht das Signal).
 #[test]
 fn stop_escalates_to_kill() {
     let l = launch(&fake_config("idle"), "");
@@ -415,8 +416,9 @@ fn stop_escalates_to_kill() {
     let begin = Instant::now();
     l.p.stop();
     assert!(wait_until(5.0, || !l.log.exits().is_empty()));
+    let earliest = if cfg!(unix) { 900 } else { 1500 };
     assert!(
-        begin.elapsed() > Duration::from_millis(1500),
+        begin.elapsed() > Duration::from_millis(earliest),
         "{:?}",
         begin.elapsed()
     );

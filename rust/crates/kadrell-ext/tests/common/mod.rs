@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 #[allow(unused_imports)]
 pub use kadrell_ext::testutil::{TempDir, make_extension, wait_until};
@@ -197,7 +197,9 @@ pub fn helpers_in(dir: &Path) -> usize {
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
         true,
-        ProcessRefreshKind::everything(),
+        // Nur die Kommandozeile: `everything()` braucht auf dem Mac mit ~1000 Prozessen 0,36 s je Aufruf, die Tests
+        // pollen das alle 20 ms und verlieren damit ihre Zeitfenster.
+        ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
     );
     let needle = dir.to_string_lossy().to_string();
     sys.processes()

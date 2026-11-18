@@ -2648,6 +2648,7 @@ dependencies = [
  "kadrell-i18n",
  "kadrell-term",
  "kadrell-tray",
+ "libc",
  "raw-window-handle",
  "serde_json",
  "windows-sys 0.61.2",

@@ -1,7 +1,10 @@
 //! Meldet Änderungen unter einem Ordner, gebündelt nach `latency`. Der Ordner darf fehlen und später entstehen, und er darf
 //! verschwinden und wieder auftauchen: nach jeder Meldung wird der Beobachter neu aufgesetzt, und eine langsame
-//! Existenzprüfung fängt Fälle ab, in denen das System nichts meldet.
+//! Prüfung (Existenz und Inhaltsabdruck des Ordners) fängt Fälle ab, in denen das System nichts meldet. Das kommt vor:
+//! FSEvents auf dem Mac liefert Änderungen eines gerade erst angelegten Ordners mitunter gar nicht.
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +15,9 @@ use std::time::{Duration, Instant};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 const POLL: Duration = Duration::from_millis(500);
+/// Obergrenze für den Abdruck: ein Extensions-Katalog ist klein, ein versehentlich riesiger Ordner soll den Beobachter
+/// nicht ausbremsen.
+const FINGERPRINT_LIMIT: usize = 5000;
 
 pub struct FolderWatcher {
     stop: Arc<AtomicBool>,
@@ -27,11 +33,15 @@ impl FolderWatcher {
     ) -> FolderWatcher {
         // Vor dem Thread festhalten: ein Ordner, der gleich danach verschwindet, soll als Änderung gelten.
         let existed = readable(&path);
+        // Ebenso der Inhaltsabdruck: Der Beobachter wird erst im Thread aufgesetzt (bei vielen parallelen Watchern
+        // dauert das auf dem Mac bis zu 0,3 s). Eine Änderung in dieser Zeit liegt sonst schon vor dem Abdruck und
+        // wird weder von diesem noch vom System (meldet erst ab dem Aufsetzen) bemerkt.
+        let print = fingerprint(&path);
         let stop = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&stop);
         let thread = std::thread::Builder::new()
             .name("ext-watcher".into())
-            .spawn(move || run(&path, existed, latency, &flag, &*on_change))
+            .spawn(move || run(&path, existed, print, latency, &flag, &*on_change))
             .ok();
         FolderWatcher { stop, thread }
     }
@@ -57,6 +67,32 @@ fn readable(path: &Path) -> bool {
     std::fs::read_dir(path).is_ok()
 }
 
+/// Abdruck des Ordnerinhalts: Pfade, Größen und Änderungszeiten, rekursiv, höchstens `FINGERPRINT_LIMIT` Einträge.
+/// Gleicher Inhalt gibt denselben Wert, jede Änderung, Umbenennung, Neuanlage oder Löschung einen anderen.
+fn fingerprint(path: &Path) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    let mut stack = vec![path.to_path_buf()];
+    let mut seen = 0usize;
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let mut entries: Vec<_> = entries.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            seen += 1;
+            if seen > FINGERPRINT_LIMIT {
+                return hasher.finish();
+            }
+            let meta = entry.metadata().ok();
+            entry.file_name().hash(&mut hasher);
+            meta.as_ref().map(|m| (m.len(), m.modified().ok())).hash(&mut hasher);
+            if meta.is_some_and(|m| m.is_dir()) {
+                stack.push(entry.path());
+            }
+        }
+    }
+    hasher.finish()
+}
+
 fn install(path: &Path, tx: &Sender<()>) -> Option<RecommendedWatcher> {
     if !readable(path) {
         return None;
@@ -73,6 +109,7 @@ fn install(path: &Path, tx: &Sender<()>) -> Option<RecommendedWatcher> {
 fn run(
     path: &Path,
     existed: bool,
+    mut print: u64,
     latency: Duration,
     stop: &AtomicBool,
     on_change: &(dyn Fn() + Send + Sync),
@@ -102,12 +139,18 @@ fn run(
             existed = exists;
             fire_at.get_or_insert(Instant::now() + latency);
         }
+        let now_print = fingerprint(path);
+        if now_print != print {
+            print = now_print;
+            fire_at.get_or_insert(Instant::now() + latency);
+        }
         if fire_at.is_some_and(|t| Instant::now() >= t) {
             fire_at = None;
             // Neu aufsetzen: ein Beobachter auf einen damals fehlenden oder inzwischen ersetzten Ordner sieht nichts.
             drop(watcher.take());
             watcher = install(path, &tx);
             while rx.try_recv().is_ok() {}
+            print = fingerprint(path);
             if !stop.load(Ordering::SeqCst) {
                 on_change();
             }
@@ -130,6 +173,24 @@ mod tests {
                 c.fetch_add(1, Ordering::SeqCst);
             }),
         )
+    }
+
+    #[test]
+    fn fingerprint_changes_with_content_rename_and_delete() {
+        let root = TempDir::new("fp");
+        let dir = root.path().join("catalog");
+        std::fs::create_dir_all(dir.join("a")).unwrap();
+        std::fs::write(dir.join("a/init.lua"), "x").unwrap();
+        let base = fingerprint(&dir);
+        assert_eq!(base, fingerprint(&dir), "gleicher Inhalt, gleicher Abdruck");
+        std::fs::write(dir.join("a/init.lua"), "xy").unwrap();
+        let changed = fingerprint(&dir);
+        assert_ne!(base, changed, "Inhalt (Größe) geändert");
+        std::fs::rename(dir.join("a"), dir.join("b")).unwrap();
+        let renamed = fingerprint(&dir);
+        assert_ne!(changed, renamed, "umbenannt");
+        std::fs::remove_dir_all(dir.join("b")).unwrap();
+        assert_ne!(renamed, fingerprint(&dir), "gelöscht");
     }
 
     #[test]
