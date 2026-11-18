@@ -125,7 +125,10 @@ fn layout_title(mode: LayoutMode) -> &'static str {
 
 /// Menüeinträge, aus denen sich die Kommandos bedienen: Beschriftung, Kürzel und Aktion bleiben an einer Stelle
 /// (`menus.rs`). Was ein Kommando schon übernommen hat, fehlt in `rest`.
-struct MenuPool(Vec<Option<(&'static str, &'static str, Option<Box<dyn Action>>)>>);
+struct MenuPool(Vec<Option<MenuEntry>>);
+
+/// Beschriftung, Kürzel und Aktion eines Menüeintrags.
+type MenuEntry = (&'static str, &'static str, Option<Box<dyn Action>>);
 
 impl MenuPool {
     fn new() -> Self {
