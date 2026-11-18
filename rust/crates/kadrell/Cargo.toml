@@ -1,0 +1,10 @@
+[package]
+name = "kadrell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+kadrell-term = { path = "../kadrell-term" }
+kadrell-app = { path = "../kadrell-app" }
