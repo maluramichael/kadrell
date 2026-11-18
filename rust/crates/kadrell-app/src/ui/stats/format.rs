@@ -5,10 +5,12 @@ use chrono::{DateTime, Datelike, Duration, Local, TimeZone, Timelike, Weekday};
 use kadrell_accounts::{Cal, StatsRange};
 use kadrell_accounts::Lang;
 
-const WEEKDAYS_DE: [&str; 7] = ["Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So."];
+const WEEKDAYS_DE: [&str; 7] = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const WEEKDAYS_EN: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS_DE: [&str; 12] = ["Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez."];
-const MONTHS_EN: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_LONG_DE: [&str; 12] = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+const MONTHS_LONG_EN: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTHS_EN:[&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /// Erster Wochentag: Deutsch Montag, sonst Sonntag.
 pub fn first_weekday(lang: Lang) -> Weekday {
@@ -72,8 +74,18 @@ pub fn bar_time(ts: f64, range: StatsRange, lang: Lang) -> String {
     }
 }
 
-/// „12. Januar 2027“ für den Zählbeginn und „12. Jan. 2027“ für den Rekord.
+/// „12. Januar 2027“ für den Zählbeginn (`.month(.wide)`, wie Swift in `StatsView.since`).
 pub fn long_date(ts: f64, lang: Lang) -> String {
+    let Some(d) = local(ts) else { return String::new() };
+    let i = d.month0() as usize;
+    match lang {
+        Lang::De => format!("{}. {} {}", d.day(), MONTHS_LONG_DE[i], d.year()),
+        Lang::En => format!("{} {}, {}", MONTHS_LONG_EN[i], d.day(), d.year()),
+    }
+}
+
+/// „12. Jan. 2027“ für den Rekord (`.month(.abbreviated)`).
+pub fn short_date(ts: f64, lang: Lang) -> String {
     let Some(d) = local(ts) else { return String::new() };
     match lang {
         Lang::De => format!("{}. {} {}", d.day(), month(&d, lang), d.year()),
@@ -194,9 +206,11 @@ mod tests {
     #[test]
     fn dates_follow_the_language() {
         let ts = Local.with_ymd_and_hms(2027, 1, 14, 14, 30, 0).unwrap().timestamp() as f64;
-        assert_eq!(date_time(ts, Lang::De, true), "Do. 14. Jan. 14:30");
+        assert_eq!(date_time(ts, Lang::De, true), "Do 14. Jan. 14:30");
         assert_eq!(date_time(ts, Lang::En, true), "Thu Jan 14, 14:30");
-        assert_eq!(long_date(ts, Lang::De), "14. Jan. 2027");
+        assert_eq!(long_date(ts, Lang::De), "14. Januar 2027");
+        assert_eq!(long_date(ts, Lang::En), "January 14, 2027");
+        assert_eq!(short_date(ts, Lang::De), "14. Jan. 2027");
         assert_eq!(first_weekday(Lang::De), Weekday::Mon);
     }
 }

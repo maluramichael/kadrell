@@ -59,17 +59,20 @@ impl Geometry {
     }
 }
 
-/// Breite von `text` in Pixeln, Zeichen für Zeichen aus der Systemschrift (reicht, um zu entscheiden, was nebeneinander passt).
+/// Breite von `text` in Pixeln, Zeichen für Zeichen aus der Systemschrift. Nur knapp über der gesetzten Breite (3 % und
+/// ein Pixel, damit ein Titel nicht um den letzten Buchstaben gekürzt wird): die frühere Zugabe von 10 % ließ in schmalen
+/// Kacheln die Gruppe weg, die Swift noch zeigt.
 pub fn text_width(cx: &App, text: &str, size: f32, bold: bool) -> f32 {
+    if text.is_empty() {
+        return 0.;
+    }
     let system = cx.text_system();
     let mut f = font(".SystemUIFont");
     if bold {
         f.weight = FontWeight::BOLD;
     }
     let id = system.resolve_font(&f);
-    // Etwas Luft: die Summe der Zeichenbreiten ohne Kerning liegt knapp unter der gesetzten Breite, ein Titel würde sonst
-    // um den letzten Buchstaben gekürzt.
-    text.chars().map(|c| system.layout_width(id, px(size), c).as_f32()).sum::<f32>() * 1.1 + 1.
+    text.chars().map(|c| system.layout_width(id, px(size), c).as_f32()).sum::<f32>() * 1.03 + 1.
 }
 
 /// Statuspunkt: arbeitende Sessions atmen statt zu stehen.
@@ -227,18 +230,18 @@ fn header(c: &Cell, t: &Theme, a: &Appearance, cx: &App) -> Div {
     let mut row = div().relative().flex_none().w_full().h(px(tile_look::header_height(a.scale))).bg(a.panel_fill(t.surface));
     row = row.child(div().absolute().bottom_0().left_0().right_0().child(h_seam(t)));
     row = row.child(div().absolute().left(px(a.s(9.))).top(px(a.s(9.))).child(dot(s, t, a)));
-    row = row.child(text_at(a, 24., 5., Some(layout.title_w)).text_size(px(a.s(11.5))).font_weight(FontWeight::BOLD).text_color(t.fg).child(s.title.clone()));
+    row = row.child(text_at(a, 24., 4., Some(layout.title_w)).text_size(px(a.s(11.5))).font_weight(FontWeight::BOLD).text_color(t.fg).child(s.title.clone()));
     if let (Some(x), Some(branch)) = (layout.branch_x, &s.branch) {
-        row = row.child(text_at(a, x, 6., None).text_size(px(a.s(10.5))).text_color(t.muted).child(branch.clone()));
+        row = row.child(text_at(a, x, 5., None).text_size(px(a.s(10.5))).text_color(t.muted).child(branch.clone()));
     }
     if let Some((accent, label_x, label_w)) = layout.group {
         row = row.child(div().absolute().left(px(a.s(accent - 3.))).top(px(a.s(10.))).size(px(a.s(6.))).rounded(px(a.s(1.5))).bg(t.group(c.group.color)));
-        row = row.child(text_at(a, label_x, 6., Some(label_w)).text_size(px(a.s(10.5))).font_weight(FontWeight::BOLD).text_color(t.sub).child(kerned(&group_label(&c.group.name), a.s(10.5), a.s(LABEL_KERN), true, t.sub)));
+        row = row.child(text_at(a, label_x, 5., Some(label_w)).text_size(px(a.s(10.5))).font_weight(FontWeight::BOLD).text_color(t.sub).child(kerned(&group_label(&c.group.name), a.s(10.5), a.s(LABEL_KERN), true, t.sub)));
     }
     if let Some(x) = layout.zoom_x {
         row = row.child(div().absolute().left(px(a.s(x))).top(px(a.s(5.))).child(zoom_badge(t, a)));
     }
-    row = row.child(text_at(a, layout.meta_x, 6., None).text_size(px(a.s(10.5))).text_color(t.muted).child(s.age.clone()));
+    row = row.child(text_at(a, layout.meta_x, 5., None).text_size(px(a.s(10.5))).text_color(t.muted).child(s.age.clone()));
     row.children(icons(c, width, t, a))
 }
 
