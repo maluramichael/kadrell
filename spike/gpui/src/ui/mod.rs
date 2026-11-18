@@ -8,6 +8,7 @@ use crate::theme::Theme;
 pub mod bar;
 pub mod chrome;
 pub mod footer;
+pub mod icons;
 pub mod model;
 pub mod pill;
 pub mod sidebar;

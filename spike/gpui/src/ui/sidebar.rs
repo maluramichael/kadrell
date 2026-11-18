@@ -3,17 +3,20 @@
 
 use gpui::{
     Context, Div, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Stateful,
-    StatefulInteractiveElement, Styled, div, px, rgb,
+    StatefulInteractiveElement, Styled, div, px,
 };
 
 use super::chrome::v_seam;
-use super::model::{Group, Session};
+use super::icons;
+use super::model::{Group, Session, Status};
 use super::theme;
 use crate::Shell;
 use crate::theme::Theme;
 
-const SIDEBAR_WIDTH: f32 = 280.;
-const GROUP_ROW: f32 = 38.;
+const SIDEBAR_WIDTH: f32 = 260.;
+/// Mac-App zeigt im Baum standardmäßig keinen Pfad unter dem Gruppennamen (mac-ist-3.png); `true` zeigt ihn wie im klassischen Baum.
+const SHOW_GROUP_PATH: bool = false;
+const GROUP_ROW: f32 = if SHOW_GROUP_PATH { 38. } else { 24. };
 const SESSION_ROW: f32 = 24.;
 /// Rand der Zeilenfläche: 6 px seitlich, 1 px oben und unten (`rowInset` der Mac-App).
 const ROW_INSET_X: f32 = 6.;
@@ -43,14 +46,7 @@ fn outline(el: Div, color: Hsla) -> Div {
 }
 
 fn chevron(collapsed: bool, t: &Theme) -> impl IntoElement + use<> {
-    div()
-        .w(px(16.))
-        .flex_none()
-        .text_size(px(9.))
-        .text_color(t.muted)
-        .flex()
-        .justify_center()
-        .child(if collapsed { "▸" } else { "▾" })
+    icons::chevron(!collapsed, t.muted)
 }
 
 fn group_label(group: &Group, t: &Theme) -> impl IntoElement + use<> {
@@ -68,9 +64,9 @@ fn group_head(group: &Group, t: &Theme) -> impl IntoElement + use<> {
     div()
         .flex()
         .items_center()
-        .h(px(GROUP_ROW - 2. * ROW_INSET_Y - 14.))
+        .h(px(if SHOW_GROUP_PATH { GROUP_ROW - 2. * ROW_INSET_Y - 14. } else { GROUP_ROW - 2. * ROW_INSET_Y }))
         .child(chevron(group.collapsed, t))
-        .child(div().ml(px(4.)).mr(px(5.)).size(px(6.)).flex_none().rounded(px(1.5)).bg(rgb(group.color)))
+        .child(div().ml(px(4.)).mr(px(5.)).size(px(6.)).flex_none().rounded(px(1.5)).bg(t.group(group.color)))
         .child(group_label(group, t))
 }
 
@@ -93,21 +89,22 @@ fn group_header(
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let t = theme(cx);
-    let bar = holds_selection.then(|| rgb(group.color).into());
+    let bar = holds_selection.then(|| t.group(group.color));
     let face = div()
         .size_full()
         .rounded(px(6.))
         .flex()
         .flex_col()
         .hover(move |s| s.bg(t.bg))
-        .child(group_head(group, &t))
-        .child(group_path(group, &t));
+        .child(group_head(group, &t));
+    let face = if SHOW_GROUP_PATH { face.child(group_path(group, &t)) } else { face };
     row_frame(("group", g), GROUP_ROW, bar)
         .on_click(cx.listener(move |this, _, _, cx| this.toggle_group(g, cx)))
         .child(face)
 }
 
-fn new_badge(t: &Theme) -> impl IntoElement + use<> {
+fn new_badge(status: Status, t: &Theme) -> impl IntoElement + use<> {
+    let face = if status == Status::Waiting { t.waiting } else { t.running };
     div()
         .flex()
         .flex_none()
@@ -115,8 +112,8 @@ fn new_badge(t: &Theme) -> impl IntoElement + use<> {
         .h(px(16.))
         .px(px(5.))
         .rounded(px(3.))
-        .bg(t.running)
-        .text_color(t.pill_text())
+        .bg(face)
+        .text_color(t.pill_text_on(face))
         .text_size(px(10.))
         .font_weight(FontWeight::BOLD)
         .child("neu")
@@ -132,12 +129,12 @@ fn session_face(session: &Session, selected: bool, t: &Theme) -> Div {
         .flex()
         .items_center()
         .gap(px(6.))
-        .pl(px(6.))
-        .pr(px(4.))
+        .pl(px(4.5))
+        .pr(px(2.5))
         .child(div().size(px(8.)).flex_none().rounded_full().bg(session.status.color(t)))
         .child(title);
     if session.is_new {
-        face = face.child(new_badge(t));
+        face = face.child(new_badge(session.status, t));
     }
     face.child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age))
 }
@@ -158,7 +155,7 @@ fn session_row(
         face = face.bg(t.bg);
     }
     face = outline(face, edge);
-    let bar = selected.then(|| rgb(group.color).into());
+    let bar = selected.then(|| t.group(group.color));
     row_frame(("session", g * 100 + s), SESSION_ROW, bar)
         .on_click(cx.listener(move |this, _, window, cx| this.select(g, s, window, cx)))
         .child(face)

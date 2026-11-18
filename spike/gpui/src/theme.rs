@@ -70,10 +70,43 @@ impl Theme {
         )
     }
 
+    /// Gruppenfarbe wie `Theme.group` der Mac-App: auf hellem Grund 0,6 Anteil Farbe, 0,4 Schwarz.
+    pub fn group(&self, c: u32) -> Hsla {
+        if self.dark {
+            return hex(c);
+        }
+        let ch = |shift: u32| (((c >> shift) & 0xff) as f32 * 0.6).round() as u32;
+        hex((ch(16) << 16) | (ch(8) << 8) | ch(0))
+    }
+
+    /// Schrift auf einer Fläche wie `Theme.pillText(on:)`: `bg`, sonst Weiß, sonst Schwarz (Kontrast mindestens 4,5).
+    pub fn pill_text_on(&self, face: Hsla) -> Hsla {
+        let white = hex(0xffffff);
+        if contrast(self.bg, face) >= 4.5 {
+            self.bg
+        } else if contrast(white, face) >= 4.5 {
+            white
+        } else {
+            hex(0)
+        }
+    }
+
     /// Lesbare Schrift auf einer Akzentfläche (Marke „neu“, aktive Pille).
     pub fn pill_text(&self) -> Hsla {
         if self.dark { self.bg } else { hex(0xffffff) }
     }
+}
+
+fn luminance(c: Hsla) -> f32 {
+    let r = c.to_rgb();
+    let lin = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+    0.2126 * lin(r.r) + 0.7152 * lin(r.g) + 0.0722 * lin(r.b)
+}
+
+/// WCAG-Kontrastverhältnis zweier Farben.
+fn contrast(a: Hsla, b: Hsla) -> f32 {
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
 }
 
 /// Terminal-Schrift: auf dem Mac die der App, unter Windows die mitgelieferte.

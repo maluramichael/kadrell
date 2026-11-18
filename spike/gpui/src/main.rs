@@ -80,7 +80,20 @@ impl Shell {
         }
         let l = &session.launch;
         let (program, args, cwd) = (l.program, l.args, l.cwd());
-        session.pane = Some(cx.new(|cx| TerminalPane::new(program, args, cwd, cx)));
+        session.pane = Some(cx.new(|cx| TerminalPane::new(program, args, cwd.clone(), cx)));
+        self.load_branch(g, s, cwd, cx);
+    }
+
+    /// Liest den Git-Zweig einmal im Hintergrund und trägt ihn in die Session ein.
+    fn load_branch(&self, g: usize, s: usize, cwd: std::path::PathBuf, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let branch = cx.background_executor().spawn(async move { ui::model::git_branch(&cwd) }).await;
+            let _ = this.update(cx, |shell, cx| {
+                shell.groups[g].sessions[s].branch = branch;
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     fn select(&mut self, g: usize, s: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -153,7 +166,7 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = ui::theme(cx);
         let (g, s) = self.selected;
-        let tile = ui::tile::tile(&self.groups[g], &self.groups[g].sessions[s], window, cx);
+        let tile = ui::tile::tile(&self.groups[g], &self.groups[g].sessions[s], ui::tile::TileStyle::for_count(1), window, cx);
         let sidebar = ui::sidebar::sidebar(&self.groups, self.selected, cx);
         div()
             .flex()
@@ -171,7 +184,7 @@ impl Render for Shell {
                     .flex_1()
                     .min_h_0()
                     .child(sidebar)
-                    .child(div().flex_1().min_w_0().p(px(8.)).child(tile)),
+                    .child(ui::tile::tile_area(tile, ui::tile::TileStyle::for_count(1))),
             )
             .child(ui::footer::footer(cx))
     }

@@ -1,7 +1,7 @@
 //! Pille wie die Tastenkappen der Mac-App: Kante in `key_edge`, Kappe darin, unten 2 px Dicke, Radius 5.
 
 use gpui::{
-    App, ClickEvent, ElementId, FontWeight, Hsla, IntoElement, RenderOnce, SharedString, Window, div, prelude::*,
+    AnyElement, App, ClickEvent, ElementId, FontWeight, Hsla, IntoElement, RenderOnce, SharedString, Window, div, prelude::*,
     px,
 };
 
@@ -25,12 +25,14 @@ pub struct Pill {
     label: SharedString,
     kind: PillKind,
     dot: Option<Hsla>,
+    icon: Option<AnyElement>,
+    min_w: Option<f32>,
     on_click: Option<ClickFn>,
 }
 
 impl Pill {
     pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
-        Self { id: id.into(), label: label.into(), kind: PillKind::Normal, dot: None, on_click: None }
+        Self { id: id.into(), label: label.into(), kind: PillKind::Normal, dot: None, icon: None, min_w: None, on_click: None }
     }
 
     pub fn kind(mut self, kind: PillKind) -> Self {
@@ -40,6 +42,18 @@ impl Pill {
 
     pub fn dot(mut self, color: Hsla) -> Self {
         self.dot = Some(color);
+        self
+    }
+
+    /// Gezeichnetes Symbol statt Text (Pfadsymbole aus `icons`).
+    pub fn icon(mut self, icon: impl IntoElement) -> Self {
+        self.icon = Some(icon.into_any_element());
+        self
+    }
+
+    /// Mindestbreite der Kappe in px (die Umschalttaste der Leiste ist 26 breit).
+    pub fn min_width(mut self, w: f32) -> Self {
+        self.min_w = Some(w);
         self
     }
 
@@ -56,8 +70,8 @@ impl RenderOnce for Pill {
             return display(self, screen_face(&t)).into_any_element();
         }
         let (face, ink) = match self.kind {
-            PillKind::Active => (t.accent, t.pill_text()),
-            PillKind::Green => (t.idle, t.pill_text()),
+            PillKind::Active => (t.sub, t.pill_text_on(t.sub)),
+            PillKind::Green => (t.idle, t.pill_text_on(t.idle)),
             _ => (t.surface, t.fg),
         };
         key(self, face, ink, cx).into_any_element()
@@ -89,9 +103,9 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
     let mut outer = div()
         .id(pill.id)
         .flex_none()
-        .pt(px(1.))
+        .pt(px(if pill.kind == PillKind::Active { 2. } else { 1. }))
         .px(px(1.))
-        .pb(px(3.))
+        .pb(px(if pill.kind == PillKind::Active { 2. } else { 3. }))
         .rounded(px(5.))
         .bg(key_edge(&t))
         .cursor_pointer()
@@ -99,7 +113,14 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
     if let Some(f) = pill.on_click {
         outer = outer.on_click(move |e, w, c| f(e, w, c));
     }
-    outer.child(cap.child(pill.label))
+    if let Some(w) = pill.min_w {
+        cap = cap.min_w(px(w - 2.)).justify_center();
+    }
+    cap = match pill.icon {
+        Some(icon) => cap.child(icon),
+        None => cap.child(pill.label),
+    };
+    outer.child(cap)
 }
 
 /// Display: dunkle Fläche mit heller Schrift, in allen Schemata gleich.
