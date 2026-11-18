@@ -2,9 +2,9 @@
 //! (`Icons.statusDot`), Favoritenherz 12 x 12, Typ-Symbole Server, Computer und Pi (`Icons.server/computer/pi`).
 //! Alle Maße kommen in Punkten schon mit der UI-Größe multipliziert.
 
-use gpui::{Bounds, BorderStyle, FontWeight, Hsla, IntoElement, ParentElement, PathBuilder, Pixels, Styled, canvas, div, fill, point, px, quad, size};
+use gpui::{BorderStyle, Bounds, Hsla, IntoElement, Pixels, Styled, canvas, fill, point, px, quad, size};
 
-use super::groups::tool_icons::heart_points;
+use super::groups::tool_icons;
 use super::tree_rules::{self, DotShape, RING_INSET, RING_WIDTH};
 
 fn rect_at(b: Bounds<Pixels>, (x, y, w, h): tree_rules::Frac) -> Bounds<Pixels> {
@@ -50,23 +50,8 @@ pub fn status_dot(shape: DotShape, color: Hsla, mark: Hsla, diameter: f32, scale
 
 /// Gefülltes Herz der Größe `size` (Favorit in der Kopfzeile, 12 x 12) in Gruppenfarbe.
 pub fn heart_filled(color: Hsla, size: f32) -> impl IntoElement {
-    canvas(
-        |_, _, _| (),
-        move |b, (), window, _| {
-            let k = size / 16.;
-            let pts: Vec<_> = heart_points().into_iter().map(|(x, y)| point(b.origin.x + px(x * k), b.origin.y + px(y * k))).collect();
-            let mut path = PathBuilder::fill();
-            path.add_polygon(&pts, true);
-            if let Ok(path) = path.build() {
-                window.paint_path(path, color);
-            }
-        },
-    )
-    .size(px(size))
-    .flex_none()
+    tool_icons::heart_at(size, color, true)
 }
-
-type Pt = (f32, f32);
 
 /// Typ der Session für das Symbol hinter dem Punkt.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,75 +72,12 @@ pub fn type_icon(remote: bool, shell: bool, pi: bool) -> Option<TypeIcon> {
     }
 }
 
-fn stroke(path: &mut PathBuilder, pts: &[Pt], k: f32, origin: gpui::Point<Pixels>, closed: bool) {
-    let pts: Vec<_> = pts.iter().map(|(x, y)| point(origin.x + px(x * k), origin.y + px(y * k))).collect();
-    path.add_polygon(&pts, closed);
-}
-
-fn box_pts(x: f32, y: f32, w: f32, h: f32) -> [Pt; 4] {
-    [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
-}
-
-fn paint_stroked(window: &mut gpui::Window, b: Bounds<Pixels>, k: f32, color: Hsla, shapes: &[(&[Pt], bool)]) {
-    let mut path = PathBuilder::stroke(px(1.3 * k));
-    for (pts, closed) in shapes {
-        stroke(&mut path, pts, k, b.origin, *closed);
-    }
-    if let Ok(path) = path.build() {
-        window.paint_path(path, color);
-    }
-}
-
-fn paint_leds(window: &mut gpui::Window, b: Bounds<Pixels>, k: f32, color: Hsla) {
-    for y in [3.5, 10.5] {
-        let mut path = PathBuilder::fill();
-        stroke(&mut path, &box_pts(10.5, y, 2., 2.), k, b.origin, true);
-        if let Ok(path) = path.build() {
-            window.paint_path(path, color);
-        }
-    }
-}
-
-/// Server-Rack: zwei Einschübe mit Status-LED (`Icons.server`), `size` x `size` Punkte.
-fn server(color: Hsla, size: f32) -> impl IntoElement {
-    canvas(
-        |_, _, _| (),
-        move |b, (), window, _| {
-            let k = size / 16.;
-            let (top, bottom) = (box_pts(2., 2., 12., 5.), box_pts(2., 9., 12., 5.));
-            paint_stroked(window, b, k, color, &[(&top, true), (&bottom, true)]);
-            paint_leds(window, b, k, color);
-        },
-    )
-    .size(px(size))
-    .flex_none()
-}
-
-/// Bildschirm mit Fuß (`Icons.computer`).
-fn computer(color: Hsla, size: f32) -> impl IntoElement {
-    canvas(
-        |_, _, _| (),
-        move |b, (), window, _| {
-            let k = size / 16.;
-            let screen = box_pts(1.5, 2., 13., 9.);
-            paint_stroked(window, b, k, color, &[(&screen, true), (&[(8., 11.), (8., 14.)], false), (&[(4.5, 14.), (11.5, 14.)], false)]);
-        },
-    )
-    .size(px(size))
-    .flex_none()
-}
-
-/// π in der Schrift der Zeile (`Icons.pi`: Größe 1,15 mal Höhe, halbfett, mittig).
-fn pi(color: Hsla, size: f32) -> impl IntoElement {
-    div().flex().flex_none().items_center().justify_center().size(px(size)).text_size(px(size * 1.15)).font_weight(FontWeight::SEMIBOLD).text_color(color).child("π")
-}
-
 /// Das Typ-Symbol, 12 x 12 Punkte mit UI-Größe.
 pub fn type_icon_element(kind: TypeIcon, color: Hsla, size: f32) -> gpui::AnyElement {
     match kind {
-        TypeIcon::Server => server(color, size).into_any_element(),
-        TypeIcon::Computer => computer(color, size).into_any_element(),
-        TypeIcon::Pi => pi(color, size).into_any_element(),
+        TypeIcon::Server => tool_icons::server_at(size, color).into_any_element(),
+        TypeIcon::Computer => tool_icons::computer_at(size, color).into_any_element(),
+        TypeIcon::Pi => tool_icons::pi_at(size, color).into_any_element(),
     }
 }
 
@@ -170,13 +92,5 @@ mod tests {
         assert_eq!(type_icon(false, true, true), Some(TypeIcon::Computer));
         assert_eq!(type_icon(false, false, true), Some(TypeIcon::Pi));
         assert_eq!(type_icon(false, false, false), None);
-    }
-
-    #[test]
-    fn led_boxes_lie_inside_the_server_rack() {
-        for y in [3.5f32, 10.5] {
-            let pts = box_pts(10.5, y, 2., 2.);
-            assert!(pts.iter().all(|(x, y)| (2. ..=14.).contains(x) && (2. ..=14.).contains(y)));
-        }
     }
 }

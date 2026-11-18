@@ -112,6 +112,12 @@ pub fn play(level: SoundLevel, sound: Sound) {
     }
 }
 
+/// Warnton für eine Eingabe, die nichts bewirkt (`NSSound.beep()`/`NSBeep`, Windows `MessageBeep(MB_OK)`). Folgt dem
+/// Alarmton des Systems, nicht der Einstellung „Klänge“.
+pub fn beep() {
+    platform::beep();
+}
+
 /// "Bewegung reduzieren" der Bedienungshilfen (Windows: Animationen aus, macOS: `accessibilityDisplayShouldReduceMotion`).
 pub fn reduce_motion() -> bool {
     platform::reduce_motion()

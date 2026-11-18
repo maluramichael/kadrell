@@ -14,9 +14,10 @@ use gpui::{
 use super::chrome::{h_seam, seam_dark, seam_light};
 use super::groups::drag::DragTile;
 use super::groups::rows::DragGhost;
+use super::instrument::{LABEL_KERN, kerned, kerned_width};
 use super::model::{Group, Session};
 use super::tile_body::{self, Body};
-use super::tile_icons;
+use super::groups::tool_icons;
 use super::tile_look::{self, Edge, HeaderIn, Icon, Run};
 use super::layout::Rect;
 use super::theme;
@@ -176,11 +177,11 @@ fn icons(c: &Cell, width: f32, t: &Theme, a: &Appearance) -> Vec<AnyElement> {
                 Icon::Zoom => kadrell_i18n::trd!("Zoomen"),
             };
             let glyph = match icon {
-                Icon::Close => tile_icons::x(t.sub, a.scale).into_any_element(),
-                Icon::Rename => tile_icons::pen(t.sub, a.scale).into_any_element(),
-                Icon::Deselect => tile_icons::circle(t.sub, a.scale).into_any_element(),
-                Icon::Zoom if c.marks.zoomed => tile_icons::minus(t.sub, a.scale).into_any_element(),
-                Icon::Zoom => tile_icons::square(t.sub, a.scale).into_any_element(),
+                Icon::Close => tool_icons::x_at(16. * a.scale, t.sub).into_any_element(),
+                Icon::Rename => tool_icons::pen_at(16. * a.scale, t.sub).into_any_element(),
+                Icon::Deselect => tool_icons::circle_at(16. * a.scale, t.sub).into_any_element(),
+                Icon::Zoom if c.marks.zoomed => tool_icons::minus_at(16. * a.scale, t.sub).into_any_element(),
+                Icon::Zoom => tool_icons::square_at(16. * a.scale, t.sub).into_any_element(),
             };
             let mut el = div()
                 .id(SharedString::from(format!("tile-{key}-{icon:?}")))
@@ -216,7 +217,7 @@ fn header_in(c: &Cell, width: f32, cx: &App) -> HeaderIn {
         width,
         title: measure(&s.title, 11.5, true),
         branch: s.branch.as_deref().map_or(0., |b| measure(b, 10.5, false)),
-        label: if c.group.name.is_empty() { 0. } else { measure(&group_label(&c.group.name), 10.5, true) },
+        label: if c.group.name.is_empty() { 0. } else { kerned_width(measure(&group_label(&c.group.name), 10.5, true), &c.group.name, LABEL_KERN) },
         meta: measure(&s.age, 10.5, false),
         hovered: c.geo.hovered,
         zoomed: c.marks.zoomed,
@@ -237,7 +238,7 @@ fn header(c: &Cell, t: &Theme, a: &Appearance, cx: &App) -> Div {
     }
     if let Some((accent, label_x, label_w)) = layout.group {
         row = row.child(div().absolute().left(px(a.s(accent - 3.))).top(px(a.s(10.))).size(px(a.s(6.))).rounded(px(a.s(1.5))).bg(t.group(c.group.color)));
-        row = row.child(text_at(a, label_x, 6., Some(label_w)).text_size(px(a.s(10.5))).font_weight(FontWeight::BOLD).text_color(t.sub).child(group_label(&c.group.name)));
+        row = row.child(text_at(a, label_x, 6., Some(label_w)).text_size(px(a.s(10.5))).font_weight(FontWeight::BOLD).text_color(t.sub).child(kerned(&group_label(&c.group.name), a.s(10.5), a.s(LABEL_KERN), true, t.sub)));
     }
     if let Some(x) = layout.zoom_x {
         row = row.child(div().absolute().left(px(a.s(x))).top(px(a.s(5.))).child(zoom_badge(t, a)));
@@ -247,7 +248,7 @@ fn header(c: &Cell, t: &Theme, a: &Appearance, cx: &App) -> Div {
 }
 
 /// Körper: Terminal mit 2 px Abstand zum Rahmen (links, rechts, unten, ohne Kopfzeile auch oben), sonst die Zustandsanzeige.
-fn body_area(c: &Cell, kind: tile_look::BodyKind, t: &Theme, a: &Appearance) -> Div {
+fn body_area(c: &Cell, kind: tile_look::BodyKind, t: &Theme, a: &Appearance, cx: &App) -> Div {
     let ground = a.panel_fill(t.bg);
     if kind == tile_look::BodyKind::Terminal {
         let top = if c.geo.header_hidden { 2. } else { 0. };
@@ -260,7 +261,8 @@ fn body_area(c: &Cell, kind: tile_look::BodyKind, t: &Theme, a: &Appearance) -> 
         };
     }
     let header = if c.geo.header_hidden { 0. } else { tile_look::header_height(a.scale) };
-    let body = Body { kind, lines: &c.session.look.lines, short_cwd: &c.session.look.short_cwd, height: Some(c.geo.height - header) };
+    let plain = |s: &str| text_width(cx, s, 11., false);
+    let body = Body { kind, lines: &c.session.look.lines, short_cwd: &c.session.look.short_cwd, height: Some(c.geo.height - header), fit: Some((c.geo.width / a.scale, &plain)) };
     div().flex_1().min_h_0().overflow_hidden().child(tile_body::view(&body, t, a))
 }
 
@@ -308,7 +310,7 @@ pub fn cell(c: &Cell, cx: &App) -> AnyElement {
         );
     }
     if c.body {
-        col = col.child(body_area(c, kind, &t, &a));
+        col = col.child(body_area(c, kind, &t, &a, cx));
     }
     col = col.child(inner_rim(c, &t, &a)).child(border_layer(c, &t));
     let spoken = a11y::spoken(c.session.status, c.session.ended, false);

@@ -118,6 +118,13 @@ pub fn play(sound: Sound) {
     }
 }
 
+pub fn beep() {
+    // SAFETY: MessageBeep hat keine Vorbedingungen; `MB_OK` ist der Standardton des Systems.
+    unsafe {
+        let _ = MessageBeep(MB_OK);
+    }
+}
+
 pub fn reduce_motion() -> bool {
     let mut animations = BOOL(1);
     // SAFETY: `animations` ist ein gültiger BOOL-Zeiger für SPI_GETCLIENTAREAANIMATION.

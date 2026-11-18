@@ -2,7 +2,6 @@
 //! anlegen“ und die Wirkung von ⏎ stehen im Modell (`model`), hier die Oberfläche und die Anbindung an `Shell` (Öffnen,
 //! Schließen, Session anlegen, Extension-Einträge, Einstellungen).
 
-mod feedback;
 mod model;
 
 use kadrell_claude::folder_index::{self as fi, FolderIndex};
@@ -155,7 +154,7 @@ impl NewSession {
     fn apply(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
         match outcome {
             Outcome::Nothing => {}
-            Outcome::Beep => feedback::beep(),
+            Outcome::Beep => kadrell_tray::beep(),
             Outcome::Start { group, path } => cx.emit(NewSessionEvent::Start { group, path }),
             Outcome::Extension { name, id } => cx.emit(NewSessionEvent::Extension { name, id }),
         }

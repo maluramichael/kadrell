@@ -8,7 +8,6 @@
 //! letzten Frage gehört. Ohne Modell gilt immer die Namenssuche. „Starten mit“ (Claude oder Pi) kommt danach von selbst:
 //! `start_quick` geht durch `start_new_session`, das bei nutzbarem Pi die Auswahl zeigt.
 
-mod beep;
 mod model;
 mod row;
 mod spinner;
@@ -24,7 +23,7 @@ use kadrell_claude::quick_start::{self, Cancelled, GroupInfo, ModelRequest, Phas
 use kadrell_core::Session;
 use kadrell_models::{Feature, LocalModels};
 
-use self::beep::beep;
+use kadrell_tray::beep;
 use self::model::{Confirmed, Inputs};
 use self::row::{Row, row};
 use super::chrome::h_seam;
@@ -285,7 +284,7 @@ impl QuickStart {
     }
 
     fn prompt_block(&self, t: &Theme) -> gpui::Div {
-        let mut head = div().flex().items_center().gap(px(8.)).child(div().text_size(px(11.)).text_color(t.muted).child(model::first_prompt_label()));
+        let mut head = div().flex().items_center().gap(px(8.)).child(crate::ui::instrument::kerned(&model::first_prompt_label(), 11., crate::ui::instrument::LABEL_KERN, false, t.muted));
         if self.flow.cleaned.is_some() {
             head = head.child(div().text_size(px(10.5)).text_color(t.accent_text).child(model::cleaned_label(self.flow.use_cleaned)));
         }

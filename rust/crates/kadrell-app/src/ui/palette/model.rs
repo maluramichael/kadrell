@@ -140,7 +140,6 @@ pub enum AccountRun {
 
 pub struct Command {
     pub title: String,
-    pub shortcut: String,
     pub run: Run,
 }
 
@@ -156,7 +155,7 @@ fn layout_title(mode: LayoutMode) -> &'static str {
     }
 }
 
-/// Menüeinträge, aus denen sich die Kommandos bedienen: Beschriftung, Kürzel und Aktion bleiben an einer Stelle
+/// Menüeinträge, aus denen sich die Kommandos bedienen: Beschriftung und Aktion bleiben an einer Stelle
 /// (`menus.rs`). Was ein Kommando schon übernommen hat, fehlt in `rest`.
 struct MenuPool(Vec<Option<MenuEntry>>);
 
@@ -177,21 +176,21 @@ impl MenuPool {
     }
 
     /// Entnimmt den Eintrag mit diesem Schlüssel (deutscher Quelltext der Beschriftung, sprachunabhängig).
-    fn take(&mut self, key: &str) -> Option<(String, Option<Box<dyn Action>>)> {
+    fn take(&mut self, key: &str) -> Option<Option<Box<dyn Action>>> {
         let slot = self.0.iter_mut().find(|s| s.as_ref().is_some_and(|e| e.0 == key))?;
-        slot.take().map(|(_, _, shortcut, action)| (shortcut, action))
+        slot.take().map(|(_, _, _, action)| action)
     }
 
 }
 
 /// Kommando, das ein Menüeintrag trägt (Kürzel und Aktion von dort); fehlt der Eintrag, ist es nicht verdrahtet.
 fn via_menu(pool: &mut MenuPool, title: String, menu_key: &str) -> Command {
-    let (shortcut, action) = pool.take(menu_key).unwrap_or((String::new(), None));
-    Command { title, shortcut, run: action.map_or(Run::Unwired, Run::Menu) }
+    let action = pool.take(menu_key).flatten();
+    Command { title, run: action.map_or(Run::Unwired, Run::Menu) }
 }
 
 fn plain(title: String, run: Run) -> Command {
-    Command { title, shortcut: String::new(), run }
+    Command { title, run }
 }
 
 fn focused_group(snap: &Snapshot) -> Option<usize> {
@@ -353,7 +352,6 @@ pub fn command_items(commands: &[Command], term: &str) -> Vec<Item> {
     shown
         .map(|(i, c)| {
             let mut it = Item::new(c.title.clone(), trd!("Kommando"), Target::Command(i));
-            it.right = (!c.shortcut.is_empty()).then(|| c.shortcut.clone());
             it.dim = matches!(c.run, Run::Unwired);
             it
         })
@@ -536,13 +534,13 @@ mod tests {
     }
 
     #[test]
-    fn commands_filter_fuzzy_and_keep_shortcuts() {
+    fn commands_filter_fuzzy_and_show_no_shortcut() {
         let cmds = build_commands(&snap());
         let items = command_items(&cmds, "neue gruppe");
         assert!(labels(&items).contains(&"Neue Gruppe (leer)"));
         let new = command_items(&cmds, "neue session");
         assert_eq!(new[0].label, "Neue Session");
-        assert!(new[0].right.as_deref().is_some_and(|s| s.contains('N')));
+        assert!(new[0].right.is_none(), "Swift zeigt rechts kein Kürzel");
         assert!(!new[0].dim);
         let all = command_items(&cmds, "");
         assert_eq!(all.len(), cmds.len());

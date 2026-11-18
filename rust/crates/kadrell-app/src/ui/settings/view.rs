@@ -226,7 +226,7 @@ impl SettingsDialog {
     // MARK: Kopf, Filter, Liste
 
     fn header(t: &Theme) -> Div {
-        let label = div().text_size(px(11.)).text_color(t.muted).child(trd!("EINSTELLUNGEN"));
+        let label = crate::ui::instrument::kerned(&trd!("EINSTELLUNGEN"), 11., crate::ui::instrument::LABEL_KERN, false, t.muted);
         let version = div().text_size(px(11.)).text_color(t.muted).child(format!("Kadrell v{VERSION}"));
         div().flex().flex_none().items_center().justify_between().px(px(16.)).pt(px(12.)).child(label).child(version)
     }

@@ -256,7 +256,7 @@ fn line_face(line: &Line, hot: Hot, x: f32, t: &Theme) -> Div {
             .pl(px(x - 6.))
             .gap(px(4.))
             .child(div().flex_none().child(icons::chevron(*open, t.muted)))
-            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.accent_text).child(title.to_uppercase())),
+            .child(div().min_w_0().overflow_hidden().child(crate::ui::instrument::kerned(&title.to_uppercase(), 11., crate::ui::instrument::LABEL_KERN, true, t.accent_text))),
         LineKind::Item { text, detail, color, .. } => item_face(base, text, detail.as_deref(), *color, &hot, t),
         LineKind::Text { text, color } => base
             .text_size(px(11.))

@@ -10,8 +10,9 @@ use super::groups::drag::DragTile;
 use super::groups::rows::DragGhost;
 use super::model::{Group, Session};
 use super::theme;
+use super::instrument::{LABEL_KERN, kerned, kerned_width};
 use super::tile::{IconClick, dot, group_label, text_width};
-use super::tile_icons;
+use super::groups::tool_icons;
 use super::tile_look::{self, Icon};
 use crate::appearance::{Appearance, a11y};
 use crate::theme::Theme;
@@ -118,8 +119,8 @@ fn rim(c: &RowCell, t: &Theme) -> Vec<Div> {
 
 fn icon_button(icon: Icon, x: f32, c: &RowCell, t: &Theme, a: &Appearance) -> AnyElement {
     let (label, glyph) = match icon {
-        Icon::Close => (kadrell_i18n::trd!("Schließen"), tile_icons::x(t.sub, a.scale).into_any_element()),
-        _ => (kadrell_i18n::trd!("Umbenennen"), tile_icons::pen(t.sub, a.scale).into_any_element()),
+        Icon::Close => (kadrell_i18n::trd!("Schließen"), tool_icons::x_at(16. * a.scale, t.sub).into_any_element()),
+        _ => (kadrell_i18n::trd!("Umbenennen"), tool_icons::pen_at(16. * a.scale, t.sub).into_any_element()),
     };
     // Trefferfläche wie in der Mac-App: Schließen die rechten 30 pt, Umbenennen die 20 davor, über die ganze Zeilenhöhe.
     let (zone_w, pad) = if icon == Icon::Close { (30., 10.) } else { (20., 0.) };
@@ -154,9 +155,10 @@ pub fn row(c: &RowCell, cx: &App) -> AnyElement {
     let s = c.session;
     let width = c.width / a.scale;
     let w = |text: &str, bold: bool| text_width(cx, text, 10.5, bold);
-    let label = (!c.group.name.is_empty()).then(|| fit_label(&c.group.name, width / 3., &|l| w(l, true)));
+    let wide = |l: &str| kerned_width(w(l, true), l, LABEL_KERN);
+    let label = (!c.group.name.is_empty()).then(|| fit_label(&c.group.name, width / 3., &wide));
     let age = w(&s.age, false);
-    let probe = RowIn { width, age, label: label.as_deref().map_or(0., |l| w(l, true)), hovered: c.hovered, show_path: false, path: 0. };
+    let probe = RowIn { width, age, label: label.as_deref().map_or(0., wide), hovered: c.hovered, show_path: false, path: 0. };
     // Der Pfad bekommt höchstens die Hälfte dessen, was links neben Gruppe und Alter übrig ist.
     let rx = row_layout(probe).group.map_or(row_layout(probe).age_x, |g| g.1 - 11.);
     let path = c.show_path.then(|| tile_look::fit_path(&s.look.short_cwd, &|p| w(p, false) <= ((rx - 16. - 28.) / 2.).max(0.)));
@@ -205,7 +207,7 @@ pub fn row(c: &RowCell, cx: &App) -> AnyElement {
     el = el.child(small(layout.age_x, s.age.clone(), t.muted, false, None));
     if let (Some((accent, x)), Some(label)) = (layout.group, label) {
         el = el.child(div().absolute().left(px(a.s(accent - 3.))).top(px((c.height - a.s(6.)) / 2.)).size(px(a.s(6.))).rounded(px(a.s(1.5))).bg(t.group(c.group.color)));
-        el = el.child(small(x, label, t.sub, true, None));
+        el = el.child(small(x, String::new(), t.sub, true, None).child(kerned(&label, a.s(10.5), a.s(LABEL_KERN), true, t.sub)));
     }
     if let (Some((x, pw)), Some(path)) = (layout.path, path) {
         el = el.child(small(x, path, t.muted, false, Some(pw)));

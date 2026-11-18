@@ -18,7 +18,7 @@ use kadrell_ext::supervisor::ExtensionState;
 use kadrell_i18n::trd;
 use serde_json::Value;
 
-use super::beep::beep;
+use kadrell_tray::beep;
 use super::dialog_model::{Coalescer, DialogModel, Publish, panel_key, run_install, run_search, should_commit};
 use super::spinner::spinner;
 use super::status_color;
@@ -316,7 +316,7 @@ impl ExtensionsDialog {
             .px(px(16.))
             .pt(px(12.))
             .text_size(px(11.))
-            .child(div().flex_none().text_color(t.muted).child("EXTENSIONS"))
+            .child(crate::ui::instrument::kerned("EXTENSIONS", 11., crate::ui::instrument::LABEL_KERN, false, t.muted))
             .child(div().flex_1())
             .child(folder)
             .child(docs)
@@ -452,7 +452,7 @@ impl ExtensionsDialog {
             .px(px(16.))
             .pt(px(12.))
             .pb(px(8.))
-            .child(div().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.accent_text).child(ext.name.to_uppercase()))
+            .child(crate::ui::instrument::kerned(&ext.name.to_uppercase(), 11., crate::ui::instrument::LABEL_KERN, true, t.accent_text))
             .child(div().flex_1())
             .child(reload)
             .child(folder)
@@ -569,7 +569,7 @@ impl ExtensionsDialog {
             .flex()
             .items_center()
             .gap(px(10.))
-            .child(div().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.accent_text).child("ENTDECKEN"))
+            .child(crate::ui::instrument::kerned("ENTDECKEN", 11., crate::ui::instrument::LABEL_KERN, true, t.accent_text))
             .child(div().flex_1())
             .children(self.model.searching.then(|| spinner(t.muted)));
         let search = self.small_button("search", trd!("Suchen"), t).on_click(cx.listener(|this, _, _, cx| this.search(cx)));

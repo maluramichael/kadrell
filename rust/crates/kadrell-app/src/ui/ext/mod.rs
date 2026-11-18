@@ -15,7 +15,6 @@ use kadrell_ext::panel::ThemeColor;
 
 use crate::theme::Theme;
 
-pub mod beep;
 pub mod dialog;
 pub mod dialog_model;
 pub mod footer_bar;

@@ -9,6 +9,7 @@ use gpui::{
 };
 use kadrell_i18n::trd;
 
+use super::instrument;
 use super::tile_icons;
 use super::tile_look::{self, BodyKind, LINE_FONT, LINE_HEIGHT, LineTone};
 use crate::appearance::Appearance;
@@ -30,27 +31,54 @@ pub struct Body<'a> {
     pub short_cwd: &'a str,
     /// Höhe der Fläche in Pixeln, wenn bekannt: bestimmt, wie viele Zeilen passen und ob eine Beschriftung Platz hat.
     pub height: Option<f32>,
+    /// Breite der Fläche (unskaliert) und Textmaß (unskaliert, ohne Sperrung): damit kürzt die Beschriftung am Ende
+    /// mit „…“, statt links und rechts aus der Kachel zu laufen. Ohne beides wird nur abgeschnitten.
+    pub fit: Option<(f32, Measure<'a>)>,
 }
+
+/// Textmaß (unskaliert, ohne Sperrung).
+pub type Measure<'a> = &'a dyn Fn(&str) -> f32;
+
+/// Sperrung der Zustandszeile (`.kern: 0.5` in `CellView.drawLabel`).
+const STATE_KERN: f32 = 0.5;
+/// Rand links und rechts der Zustandszeile.
+const STATE_MARGIN: f32 = 6.;
 
 fn fill(color: Hsla) -> Div {
     div().absolute().size_full().bg(color)
 }
 
-/// Beschriftung unten, mittig, gedämpft oder in Farbe (`drawLabel`): 11 pt, 6 Rand links und rechts, 10 vom unteren Rand.
-fn label(text: String, color: Hsla, a: &Appearance) -> Div {
+/// Kürzt `text` am Ende mit „…“ auf höchstens `max` Breite (`lineBreakMode = .byTruncatingTail`).
+pub fn fit_tail(text: &str, max: f32, width_of: &dyn Fn(&str) -> f32) -> String {
+    if width_of(text) <= max {
+        return text.to_string();
+    }
+    let mut chars: Vec<char> = text.chars().collect();
+    while chars.pop().is_some() {
+        let shown = format!("{}…", chars.iter().collect::<String>());
+        if width_of(&shown) <= max {
+            return shown;
+        }
+    }
+    String::new()
+}
+
+/// Beschriftung unten, mittig, gedämpft oder in Farbe (`drawLabel`): 11 pt, Sperrung 0,5, 6 Rand links und rechts, 10 vom
+/// unteren Rand, zu lang: am Ende gekürzt.
+fn label(text: String, color: Hsla, b: &Body, a: &Appearance) -> Div {
+    let shown = match b.fit {
+        Some((width, plain)) => fit_tail(&text, width - 2. * STATE_MARGIN, &|s| instrument::kerned_width(plain(s), s, STATE_KERN)),
+        None => text,
+    };
     div()
         .absolute()
-        .left(px(a.s(6.)))
-        .right(px(a.s(6.)))
+        .left(px(a.s(STATE_MARGIN)))
+        .right(px(a.s(STATE_MARGIN)))
         .bottom(px(a.s(10.)))
         .flex()
         .justify_center()
         .overflow_hidden()
-        .whitespace_nowrap()
-        .text_ellipsis()
-        .text_size(px(a.s(11.)))
-        .text_color(color)
-        .child(text)
+        .child(div().min_w_0().overflow_hidden().child(instrument::kerned(&shown, a.s(11.), a.s(STATE_KERN), false, color)))
 }
 
 fn line_color(tone: LineTone, t: &Theme) -> Hsla {
@@ -119,7 +147,7 @@ fn spinner(t: &Theme, a: &Appearance) -> AnyElement {
 pub fn view(b: &Body, t: &Theme, a: &Appearance) -> Div {
     let base = div().relative().size_full().overflow_hidden().bg(a.panel_fill(t.bg));
     let roomy = b.height.is_none_or(|h| h > a.s(24.));
-    let text = |s: String, c: Hsla| roomy.then(|| label(s, c, a));
+    let text = |s: String, c: Hsla| roomy.then(|| label(s, c, b, a));
     match b.kind {
         BodyKind::MissingFolder => base.child(fill(shade(0.72))).children(text(trd!("ORDNER FEHLT · %@", b.short_cwd), t.error)),
         BodyKind::StartFailed(code) => {
@@ -133,5 +161,32 @@ pub fn view(b: &Body, t: &Theme, a: &Appearance) -> Div {
         BodyKind::Elsewhere => base.children(text(trd!("IN ANDEREM FENSTER · KLICK HOLT HIERHER"), t.muted)),
         BodyKind::Lines => base.child(lines_view(b.lines, b.height, t, a)),
         BodyKind::Terminal => base,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ten(s: &str) -> f32 {
+        s.chars().count() as f32 * 10.
+    }
+
+    #[test]
+    fn a_short_label_stays_whole() {
+        assert_eq!(fit_tail("ORDNER FEHLT", 200., &ten), "ORDNER FEHLT");
+    }
+
+    #[test]
+    fn a_long_label_is_cut_at_the_end_with_an_ellipsis() {
+        assert_eq!(fit_tail("ORDNER FEHLT · ~/a/b", 100., &ten), "ORDNER FE…");
+        assert_eq!(fit_tail("ABC", 5., &ten), "");
+    }
+
+    #[test]
+    fn the_kerning_counts_into_the_width() {
+        let width = |s: &str| instrument::kerned_width(ten(s), s, 0.5);
+        let out = fit_tail("ABCDEFGHIJ", 50., &width);
+        assert!(width(&out) <= 50. && out.ends_with('…'), "{out}");
     }
 }
