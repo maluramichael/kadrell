@@ -134,23 +134,6 @@ impl Focusable for Shell {
     }
 }
 
-fn footer(cx: &App) -> impl IntoElement + use<> {
-    let t = ui::theme(cx);
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_end()
-        .h(px(24.))
-        .px(px(10.))
-        .bg(t.panel)
-        .border_t_1()
-        .border_color(t.line)
-        .text_size(px(10.))
-        .text_color(t.muted)
-        .child("GPUI 0.3.13 · alacritty_terminal 0.26 · ⌥T Theme")
-}
-
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = ui::theme(cx);
@@ -166,7 +149,7 @@ impl Render for Shell {
             .font_family(theme::FONT)
             .text_size(px(12.))
             .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.on_key(ev, window, cx)))
-            .child(ui::bar::bar(&self.clock, cx))
+            .child(ui::bar::bar(&self.clock, window, cx))
             .child(
                 div()
                     .flex()
@@ -175,20 +158,36 @@ impl Render for Shell {
                     .child(sidebar)
                     .child(div().flex_1().min_w_0().p(px(8.)).child(tile)),
             )
-            .child(footer(cx))
+            .child(ui::footer::footer(cx))
+    }
+}
+
+/// Eigene Titelleiste: Die Leiste der App ist die Titelleiste (Windows: eigene Knöpfe, macOS: Ampel eingerückt;
+/// der macOS-Zweig ist hier nicht getestet).
+fn titlebar_options() -> gpui::TitlebarOptions {
+    gpui::TitlebarOptions {
+        title: Some("Kadrell (GPUI-Spike)".into()),
+        appears_transparent: true,
+        traffic_light_position: Some(gpui::point(px(12.), px(9.))),
+    }
+}
+
+/// Startschema; `KADRELL_SPIKE_THEME=latte` startet hell.
+fn start_theme() -> Theme {
+    match std::env::var("KADRELL_SPIKE_THEME").as_deref() {
+        Ok("latte") => Theme::latte(),
+        _ => Theme::mocha(),
     }
 }
 
 fn main() {
     application().run(|cx: &mut App| {
-        cx.set_global(ThemeGlobal(Theme::mocha()));
+        cx.set_global(ThemeGlobal(start_theme()));
         let bounds = Bounds::centered(None, size(px(1400.), px(900.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(gpui::TitlebarOptions {
-                title: Some("Kadrell (GPUI-Spike)".into()),
-                ..Default::default()
-            }),
+            titlebar: Some(titlebar_options()),
+            window_min_size: Some(size(px(640.), px(400.))),
             ..Default::default()
         };
         cx.open_window(options, |window, cx| cx.new(|cx| Shell::new(window, cx))).unwrap();

@@ -1,9 +1,21 @@
-//! Rechte Kachel: Kopfzeile und Terminal der gewählten Session.
+//! Rechte Kachel: Kopfzeile (Status, Titel, Zweig, Gruppe, Alter) und Terminal der gewählten Session.
 
-use gpui::{App, IntoElement, ParentElement, Styled, Window, div, px, rgb};
+use gpui::{App, FontWeight, IntoElement, ParentElement, Styled, Window, div, px, rgb};
 
+use super::chrome::h_seam;
 use super::model::{Group, Session};
 use super::theme;
+use crate::theme::Theme;
+
+fn group_tag(group: &Group, t: &Theme) -> impl IntoElement + use<> {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(px(5.))
+        .child(div().size(px(6.)).rounded(px(1.5)).bg(rgb(group.color)))
+        .child(div().text_size(px(10.5)).font_weight(FontWeight::BOLD).text_color(t.sub).child(group.name.to_uppercase()))
+}
 
 fn header(group: &Group, session: &Session, cx: &App) -> impl IntoElement + use<> {
     let t = theme(cx);
@@ -11,13 +23,22 @@ fn header(group: &Group, session: &Session, cx: &App) -> impl IntoElement + use<
         .flex()
         .flex_none()
         .items_center()
-        .gap(px(7.))
+        .gap(px(8.))
         .h(px(26.))
-        .px(px(10.))
-        .child(div().size(px(8.)).rounded_full().bg(session.status.color(&t)))
-        .child(div().font_weight(gpui::FontWeight::BOLD).text_color(rgb(group.color)).child(group.name))
-        .child(div().flex_1().text_color(t.accent).child(session.title))
-        .child(div().text_color(t.muted).child(session.age))
+        .px(px(9.))
+        .child(div().size(px(8.)).flex_none().rounded_full().bg(session.status.color(&t)))
+        .child(
+            div()
+                .flex_none()
+                .text_size(px(11.5))
+                .font_weight(FontWeight::BOLD)
+                .text_color(t.fg)
+                .child(session.title),
+        )
+        .child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.branch))
+        .child(group_tag(group, &t))
+        .child(div().flex_1())
+        .child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age))
 }
 
 pub fn tile(group: &Group, session: &Session, window: &Window, cx: &App) -> impl IntoElement + use<> {
@@ -38,5 +59,6 @@ pub fn tile(group: &Group, session: &Session, window: &Window, cx: &App) -> impl
         .bg(t.surface)
         .overflow_hidden()
         .child(header(group, session, cx))
+        .child(h_seam(&t))
         .child(body)
 }

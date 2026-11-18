@@ -52,6 +52,7 @@ pub struct Session {
     pub status: Status,
     pub is_new: bool,
     pub age: &'static str,
+    pub branch: &'static str,
     pub launch: Launch,
     pub pane: Option<Entity<TerminalPane>>,
 }
@@ -59,6 +60,7 @@ pub struct Session {
 pub struct Group {
     pub name: &'static str,
     pub color: u32,
+    pub path: &'static str,
     pub collapsed: bool,
     pub sessions: Vec<Session>,
 }
@@ -75,7 +77,7 @@ const SHELL: Command = ("pwsh.exe", &[]);
 
 fn session(title: &'static str, status: Status, age: &'static str, cmd: Command) -> Session {
     let launch = Launch { program: cmd.0, args: cmd.1, in_spike: false };
-    Session { title, status, is_new: false, age, launch, pane: None }
+    Session { title, status, is_new: false, age, branch: "spike-chrome", launch, pane: None }
 }
 
 fn in_spike(mut s: Session) -> Session {
@@ -93,6 +95,7 @@ pub fn mock_groups() -> Vec<Group> {
         Group {
             name: "kadrell",
             color: 0x89b4fa,
+            path: "~/development/projects/kadrell",
             collapsed: false,
             sessions: vec![
                 marked_new(session("claude", Status::Running, "3h", CLAUDE)),
@@ -102,6 +105,7 @@ pub fn mock_groups() -> Vec<Group> {
         Group {
             name: "spike",
             color: 0xa6e3a1,
+            path: "~/development/projects/kadrell/spike/gpui",
             collapsed: false,
             sessions: vec![
                 in_spike(session("claude-zwei", Status::Waiting, "3h", CLAUDE)),
