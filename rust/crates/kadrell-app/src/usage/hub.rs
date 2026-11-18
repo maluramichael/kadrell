@@ -97,6 +97,8 @@ pub struct Persist {
 pub struct Step {
     pub notices: Vec<Notice>,
     pub persist: Option<Persist>,
+    /// Der Kontowechsel bei Limit hat gewechselt (Klang `.toggle`, auch ohne Meldung).
+    pub auto_switched: bool,
 }
 
 #[derive(Default)]
@@ -292,8 +294,12 @@ impl Hub {
             match event {
                 AccountEvent::Changed => changed = true,
                 AccountEvent::ActiveChanged => switched = true,
-                AccountEvent::AutoSwitched(account) if cfg.notice => step.notices.push(Notice::AutoSwitched(account.title(cfg.lang))),
-                AccountEvent::AutoSwitched(_) => {}
+                AccountEvent::AutoSwitched(account) => {
+                    step.auto_switched = true;
+                    if cfg.notice {
+                        step.notices.push(Notice::AutoSwitched(account.title(cfg.lang)));
+                    }
+                }
                 AccountEvent::UsageStored(id, cached) => lock(&self.history).append(UsageSample::from_cached(&id, &cached)),
             }
         }

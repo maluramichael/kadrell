@@ -5,6 +5,8 @@
 pub mod agents;
 pub mod attention;
 mod folders;
+pub mod cli_check;
+pub mod feedback;
 mod handler;
 mod poll;
 pub mod stats;
@@ -93,6 +95,12 @@ pub struct AppState {
     focus_fired: Vec<String>,
     /// Statuswechsel seit dem letzten Abruf: der Baum lässt den Punkt aufblitzen (`take_transitions`).
     pending_transitions: kadrell_claude::attention::Transitions,
+    /// claude läuft, ist aber älter als getestet: nicht blockierend, nur die Leiste warnt (`cli_check`).
+    pub version_warning: Option<String>,
+    /// Letzte Ansage („<Titel> wartet“), als Beschreibung am Status-Display der Leiste (`tray_wire::feedback`).
+    pub announcement: Option<String>,
+    /// Klänge für Öffnen, Schließen und Umschalten, die die Oberfläche noch spielen muss (`feedback`).
+    pending_sounds: Vec<kadrell_tray::Sound>,
 }
 
 impl AppState {
@@ -145,6 +153,9 @@ impl AppState {
             pending_effects: Vec::new(),
             focus_fired: Vec::new(),
             pending_transitions: Default::default(),
+            version_warning: None,
+            announcement: None,
+            pending_sounds: Vec::new(),
         };
         state.restore_view();
         state
@@ -281,6 +292,7 @@ impl AppState {
             self.record_folder_use(&session.cwd);
         }
         self.count_opened(session.is_shell());
+        self.queue_sound(kadrell_tray::Sound::Open);
         if let Some(prompt) = prompt {
             self.prompts.insert(key.clone(), prompt);
         }
@@ -327,6 +339,7 @@ impl AppState {
             self.prompts.remove(key);
         }
         self.wanted.retain(|k| !ids.contains(k));
+        self.queue_sound(kadrell_tray::Sound::Close);
         self.store.remove_sessions(&ids, now_secs());
         self.registry.lock().unwrap_or_else(PoisonError::into_inner).remove(&ids, now_ms());
         self.store.assign();
@@ -525,3 +538,5 @@ fn agent_status(s: SessionStatus) -> kadrell_claude::agent::Status {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod bar_tests;

@@ -355,8 +355,14 @@ fn two_running(dir: &Dir, window_active: bool) -> (AppState, String, String) {
     (state, a, b)
 }
 
+fn quiet(effects: &[Effect], sounds: SoundLevel, notifications: NotificationLevel) -> Vec<Action> {
+    plan(effects, sounds, notifications).into_iter().filter(|a| !matches!(a, Action::ShowTip(_) | Action::Announce { .. })).collect()
+}
+
 fn actions(state: &mut AppState) -> Vec<Action> {
-    plan(&state.take_effects(), SoundLevel::All, NotificationLevel::All)
+    // Tipp und Ansage gelten unabhängig vom Hinsehen: hier geht es um Klang, Benachrichtigung und Hüpfen.
+    let all = plan(&state.take_effects(), SoundLevel::All, NotificationLevel::All);
+    all.into_iter().filter(|a| !matches!(a, Action::ShowTip(_) | Action::Announce { .. })).collect()
 }
 
 #[test]
@@ -398,9 +404,9 @@ fn finished_session_follows_the_notification_setting_and_clears_when_seen() {
     let (mut state, _a, b) = two_running(&dir, true);
     report_status(&mut state, &b, "idle");
     let effects = state.take_effects();
-    assert_eq!(plan(&effects, SoundLevel::All, NotificationLevel::All), [Action::Play(Sound::Done), Action::Notify { key: b.clone(), waiting: false }]);
-    assert_eq!(plan(&effects, SoundLevel::Important, NotificationLevel::Waiting), [Action::Play(Sound::Done)], "fertig meldet nur „wartet und fertig“");
-    assert_eq!(plan(&effects, SoundLevel::Off, NotificationLevel::Off), []);
+    assert_eq!(quiet(&effects, SoundLevel::All, NotificationLevel::All), [Action::Play(Sound::Done), Action::Notify { key: b.clone(), waiting: false }]);
+    assert_eq!(quiet(&effects, SoundLevel::Important, NotificationLevel::Waiting), [Action::Play(Sound::Done)], "fertig meldet nur „wartet und fertig“");
+    assert_eq!(quiet(&effects, SoundLevel::Off, NotificationLevel::Off), []);
     let v = view::build(&state, Lang::En, 0.0);
     assert_eq!((v.summary.done, v.badge), (1, 1), "fertig und ungesehen: „neu“ und Badge");
     state.show_only(&b);

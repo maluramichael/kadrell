@@ -1,23 +1,49 @@
-//! Leere Arbeitsfläche (Swift: `drawEmptyOnboarding` und der `.hint`-Zweig in `WorkspaceView`). Ohne jede Session führt
-//! eine Karte zur ersten: Titel, Haupttaste, die Kernkürzel in der Schreibweise des Systems, ein Hinweis auf Claude-
-//! Sessions in anderen Terminals und wie man sie übernimmt. Gibt es Sessions, aber keine ist sichtbar, steht nur ein
-//! kurzer Hinweis da.
+//! Leere Arbeitsfläche (Swift: `WorkspaceView.draw` mit `emptyReason`, `drawEmptyOnboarding`, `drawEmptyButtons`).
+//! Fünf Fälle in dieser Rangfolge: Fehler (claude fehlt oder `claude agents` scheitert: Meldung und „Erneut prüfen“),
+//! Laden (vor dem ersten Poll), Einstieg ohne jede Session (Titel, Haupttaste, Kürzel, auf dem ersten Start
+//! Sprachtasten), Hinweis bei Sessions ohne Auswahl und im Auto-Modus der Hinweis „Gerade wartet keine Session“.
 
-use gpui::{Context, FontWeight, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled, div, px};
+use gpui::{
+    Context, FontWeight, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Styled, div, px, relative,
+};
+use kadrell_core::settings::Language;
 use kadrell_i18n::trd;
 
 use super::{adopt, os_text};
 use crate::Shell;
 use crate::theme::Theme;
-use crate::ui::overlay::key_button;
+use crate::ui::chrome::key_edge;
 
 /// Warum die Fläche leer ist.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reason {
+    /// Binary fehlt oder `claude agents` schlägt fehl; `missing_binary` bietet zusätzlich den Installationsbefehl an.
+    Error { message: String, missing_binary: bool },
+    /// Vor dem ersten Poll.
+    Loading,
     /// Es gibt keine Session: Einstieg.
     NoSessions,
-    /// Es gibt Sessions, aber keine ist ausgewählt.
-    Hint,
+    /// Es gibt Sessions, aber keine ist sichtbar; `auto_idle` im Auto-Modus mit nicht leerem Pool.
+    Hint { auto_idle: bool },
+}
+
+/// Was die Shell über die Fläche weiß.
+pub struct Facts {
+    pub error: Option<String>,
+    pub missing_binary: bool,
+    pub polled: bool,
+    pub session_count: usize,
+    pub auto_idle: bool,
+}
+
+pub fn reason(f: &Facts) -> Reason {
+    if let Some(message) = &f.error {
+        return Reason::Error { message: message.clone(), missing_binary: f.missing_binary };
+    }
+    if !f.polled {
+        return Reason::Loading;
+    }
+    if f.session_count == 0 { Reason::NoSessions } else { Reason::Hint { auto_idle: f.auto_idle } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,12 +54,6 @@ pub struct Card {
     pub shortcuts: Vec<(String, String)>,
     /// Sessions in anderen Terminals.
     pub elsewhere: Option<String>,
-    /// Wie man sie übernimmt (tmux-Import), nur wenn es welche gibt.
-    pub import: Option<String>,
-}
-
-pub fn reason(session_count: usize) -> Reason {
-    if session_count == 0 { Reason::NoSessions } else { Reason::Hint }
 }
 
 /// Die Karte für den Einstieg. `help_key` ist die beschriftete Belegung von „Hilfe“ (`None`: keine, dann fehlt die Zeile).
@@ -47,8 +67,7 @@ pub fn card(help_key: Option<String>, other_interactive: usize) -> Card {
         shortcuts.push((key, trd!("alle Kürzel")));
     }
     let elsewhere = adopt::other_terminals_hint(other_interactive);
-    let import = elsewhere.as_ref().map(|_| trd!("Import: tools/tmux-dump.py dump (siehe README)"));
-    Card { title: trd!("Erste Session starten"), button: os_text(&trd!("Neue Session starten  ⌘N")), shortcuts, elsewhere, import }
+    Card { title: trd!("Erste Session starten"), button: os_text(&trd!("Neue Session starten  ⌘N")), shortcuts, elsewhere }
 }
 
 /// Zweite Zeile, wenn Sessions da sind, aber keine gezeigt wird.
@@ -59,59 +78,153 @@ pub fn selection_hint(help_key: Option<&str>) -> String {
     }
 }
 
+/// Die zwei Zeilen des Hinweises: im Auto-Modus „Gerade wartet keine Session“, sonst die Auswahl.
+pub fn hint_lines(auto_idle: bool, help_key: Option<&str>) -> (String, String) {
+    if auto_idle {
+        (trd!("Gerade wartet keine Session"), trd!("Auto-Modus: Kacheln erscheinen, sobald Claude etwas von dir will"))
+    } else {
+        (trd!("Session im Baum wählen"), selection_hint(help_key))
+    }
+}
+
+/// Flagge und Name der Sprachtasten des ersten Starts („🇩🇪  Deutsch“).
+pub fn language_choices() -> [(Language, String); 2] {
+    [(Language::De, "🇩🇪  Deutsch".to_string()), (Language::En, "🇬🇧  English".to_string())]
+}
+
+/// Was eine Taste des Leerzustands tut.
+#[derive(Clone)]
+pub enum Press {
+    NewSession,
+    Recheck,
+    CopyInstall,
+    OpenDocs,
+    Language(Language),
+}
+
+/// Die Tasten der Fehlerfläche: „Erneut prüfen“ (Haupttaste), bei fehlendem Binary dazu Installationsbefehl und Doku.
+pub fn error_buttons(missing_binary: bool) -> Vec<(String, bool, Press)> {
+    let mut buttons = vec![(trd!("Erneut prüfen"), true, Press::Recheck)];
+    if missing_binary {
+        buttons.push((trd!("Installationsbefehl kopieren"), false, Press::CopyInstall));
+        buttons.push((trd!("Doku öffnen"), false, Press::OpenDocs));
+    }
+    buttons
+}
+
+// MARK: Zeichnen
+
+const BUTTON_HEIGHT: f32 = 32.;
+const BUTTON_GAP: f32 = 8.;
+
+/// Taste des Leerzustands: 32 hoch, Breite Beschriftung plus 32, Beschriftung 11,5 fett; die Haupttaste in Akzent,
+/// die anderen neutral (`KeyRole`). Die Aktion feuert beim Drücken wie in Swift.
+fn button(i: usize, label: String, primary: bool, press: Press, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let (face, ink): (Hsla, Hsla) = if primary { (t.accent, t.pill_text_on(t.accent)) } else { (t.surface, t.key_label()) };
+    let cap = div()
+        .flex()
+        .items_center()
+        .justify_center()
+        .h_full()
+        .px(px(16.))
+        .rounded(px(4.))
+        .bg(face)
+        .text_color(ink)
+        .text_size(px(11.5))
+        .font_weight(FontWeight::BOLD)
+        .whitespace_nowrap()
+        .child(label);
+    div()
+        .id(("empty-button", i))
+        .flex_none()
+        .h(px(BUTTON_HEIGHT))
+        .pb(px(2.))
+        .rounded(px(5.))
+        .bg(key_edge(t))
+        .cursor_pointer()
+        .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, window, cx| {
+            cx.stop_propagation();
+            this.press_empty(&press, window, cx);
+        }))
+        .child(cap)
+}
+
+fn button_row(buttons: Vec<(String, bool, Press)>, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let items = buttons.into_iter().enumerate().map(|(i, (label, primary, press))| button(i, label, primary, press, t, cx));
+    div().flex().items_center().gap(px(BUTTON_GAP)).children(items)
+}
+
 fn shortcut_line(key: String, text: String, t: &Theme) -> impl IntoElement + use<> {
     div()
         .flex()
-        .gap(px(8.))
+        .gap(px(6.))
         .h(px(20.))
         .items_center()
         .text_size(px(11.))
         .child(div().font_weight(FontWeight::BOLD).text_color(t.fg).child(key))
-        .child(div().text_color(t.muted).child(text))
+        .child(div().text_color(t.muted.opacity(0.75)).child(text))
 }
 
-fn onboarding(c: Card, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let button = key_button(c.button, t).id("empty-new").on_click(cx.listener(|this, _, window, cx| {
-        // Der Klick gilt der Taste, nicht zusätzlich der leeren Fläche dahinter.
-        cx.stop_propagation();
-        this.new_session_action(window, cx);
-    }));
+fn onboarding(c: Card, chosen: bool, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let main = vec![(c.button, true, Press::NewSession)];
     let lines = c.shortcuts.into_iter().map(|(k, text)| shortcut_line(k, text, t));
-    let hint = |text: String, id: &'static str| div().id(id).text_size(px(11.)).text_color(t.muted.opacity(0.7)).child(text);
+    let hint = |text: String| div().text_size(px(11.)).text_color(t.muted.opacity(0.55)).child(text);
+    let languages = (!chosen).then(|| language_choices().map(|(l, title)| (title, false, Press::Language(l))).to_vec());
     div()
         .flex()
         .flex_col()
         .items_center()
+        .children(languages.map(|buttons| div().mb(px(24.)).child(button_row(buttons, t, cx))))
         .child(div().text_size(px(13.)).font_weight(FontWeight::BOLD).text_color(t.fg).child(c.title))
-        .child(div().mt(px(16.)).child(button))
+        .child(div().mt(px(16.)).child(button_row(main, t, cx)))
         .child(div().mt(px(28.)).flex().flex_col().items_center().children(lines))
-        .children(c.elsewhere.map(|text| div().mt(px(32.)).child(hint(text, "empty-elsewhere"))))
-        .children(c.import.map(|text| div().mt(px(4.)).child(hint(text, "empty-import"))))
+        .children(c.elsewhere.map(|text| div().mt(px(12.)).child(hint(text))))
 }
 
-fn selection(help_key: Option<&str>, t: &Theme) -> impl IntoElement + use<> {
+/// Zwei Zeilen unter dem Mittelpunkt wie `drawCentered`: die erste 16 über der Mitte, die zweite 4 darunter.
+fn two_lines(first: impl IntoElement, second: Option<impl IntoElement>) -> gpui::Div {
     div()
+        .absolute()
+        .w_full()
+        .top(relative(0.5))
+        .mt(px(-16.))
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(8.))
-        .child(div().text_size(px(12.)).text_color(t.muted).child(trd!("Session im Baum wählen")))
-        .child(div().text_size(px(11.)).text_color(t.muted.opacity(0.7)).child(selection_hint(help_key)))
+        .gap(px(4.))
+        .child(first)
+        .children(second)
 }
 
-/// Die leere Arbeitsfläche, mittig. `shell` liefert Sessions, Belegung der Hilfe und Sessions anderswo.
+fn error_view(message: String, missing_binary: bool, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let title = div().text_size(px(12.)).text_color(t.error).child(trd!("Sessions können nicht geladen werden"));
+    let detail = div().text_size(px(11.)).text_color(t.error.opacity(0.7)).child(message);
+    two_lines(title, Some(detail)).child(div().mt(px(8.)).child(button_row(error_buttons(missing_binary), t, cx)))
+}
+
+fn loading_view(t: &Theme) -> impl IntoElement + use<> {
+    two_lines(div().text_size(px(12.)).text_color(t.muted).child(trd!("Lade Sessions …")), None::<gpui::Div>)
+}
+
+fn hint_view(auto_idle: bool, help_key: Option<&str>, t: &Theme) -> impl IntoElement + use<> {
+    let (a, b) = hint_lines(auto_idle, help_key);
+    let first = div().text_size(px(12.)).text_color(t.muted).child(a);
+    two_lines(first, Some(div().text_size(px(11.)).text_color(t.muted.opacity(0.7)).child(b)))
+}
+
+/// Die leere Arbeitsfläche. Ohne jede Session startet ein Klick auf die freie Fläche eine neue Session (`onEmptyClick`).
 pub fn view(shell: &Shell, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let help_key = shell.help_shortcut();
-    let reason = reason(shell.state.store.sessions.sessions.len());
-    let body = match reason {
-        Reason::NoSessions => onboarding(card(help_key, shell.misc.other_interactive), t, cx).into_any_element(),
-        Reason::Hint => selection(help_key.as_deref(), t).into_any_element(),
-    };
-    let area = div().id("empty-area").absolute().size_full().flex().items_center().justify_center().text_color(t.muted).child(body);
-    // Ohne Sessions startet ein Klick irgendwo auf die leere Fläche eine neue (`onEmptyClick`).
+    let reason = reason(&shell.empty_facts());
+    let area = div().id("empty-area").absolute().size_full().flex().items_center().justify_center().text_color(t.muted);
     match reason {
-        Reason::NoSessions => area.on_click(cx.listener(|this, _, window, cx| this.new_session_action(window, cx))).into_any_element(),
-        Reason::Hint => area.into_any_element(),
+        Reason::Error { message, missing_binary } => area.child(error_view(message, missing_binary, t, cx)).into_any_element(),
+        Reason::Loading => area.child(loading_view(t)).into_any_element(),
+        Reason::NoSessions => {
+            let body = onboarding(card(help_key, shell.misc.other_interactive), shell.language_chosen(), t, cx);
+            area.on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.new_session_action(window, cx))).child(body).into_any_element()
+        }
+        Reason::Hint { auto_idle } => area.child(hint_view(auto_idle, help_key.as_deref(), t)).into_any_element(),
     }
 }
 
@@ -119,10 +232,28 @@ pub fn view(shell: &Shell, t: &Theme, cx: &mut Context<Shell>) -> impl IntoEleme
 mod tests {
     use super::*;
 
+    fn facts() -> Facts {
+        Facts { error: None, missing_binary: false, polled: true, session_count: 0, auto_idle: false }
+    }
+
     #[test]
-    fn no_sessions_means_onboarding() {
-        assert_eq!(reason(0), Reason::NoSessions);
-        assert_eq!(reason(3), Reason::Hint);
+    fn the_empty_reason_ranks_error_then_loading_then_sessions() {
+        assert_eq!(reason(&facts()), Reason::NoSessions);
+        assert_eq!(reason(&Facts { session_count: 3, ..facts() }), Reason::Hint { auto_idle: false });
+        assert_eq!(reason(&Facts { session_count: 3, auto_idle: true, ..facts() }), Reason::Hint { auto_idle: true });
+        assert_eq!(reason(&Facts { polled: false, ..facts() }), Reason::Loading);
+        let failing = Facts { error: Some("x".into()), polled: false, missing_binary: true, ..facts() };
+        assert_eq!(reason(&failing), Reason::Error { message: "x".into(), missing_binary: true });
+    }
+
+    #[test]
+    fn the_error_offers_recheck_and_for_a_missing_binary_install_and_docs() {
+        let plain: Vec<String> = error_buttons(false).into_iter().map(|b| b.0).collect();
+        assert_eq!(plain, ["Erneut prüfen"]);
+        let missing = error_buttons(true);
+        let labels: Vec<&str> = missing.iter().map(|b| b.0.as_str()).collect();
+        assert_eq!(labels, ["Erneut prüfen", "Installationsbefehl kopieren", "Doku öffnen"]);
+        assert_eq!(missing.iter().map(|b| b.1).collect::<Vec<_>>(), [true, false, false], "nur die erste ist die Haupttaste");
     }
 
     #[test]
@@ -145,17 +276,30 @@ mod tests {
     }
 
     #[test]
-    fn sessions_elsewhere_add_the_hint_and_the_import_tip() {
+    fn sessions_elsewhere_add_the_hint() {
         assert_eq!(card(None, 0).elsewhere, None);
-        assert_eq!(card(None, 0).import, None);
         let c = card(None, 2);
         assert_eq!(c.elsewhere.as_deref(), Some("2 Claude-Sessions laufen interaktiv in anderen Terminals"));
-        assert!(c.import.unwrap().contains("tmux-dump.py"));
     }
 
     #[test]
     fn the_selection_hint_names_the_help_key_only_when_there_is_one() {
         assert!(selection_hint(Some("Alt+F1")).ends_with("Alt+F1 Hilfe"));
         assert!(!selection_hint(None).contains("Hilfe"));
+    }
+
+    #[test]
+    fn auto_mode_with_a_pool_says_nothing_is_waiting() {
+        let (a, b) = hint_lines(true, None);
+        assert_eq!(a, "Gerade wartet keine Session");
+        assert!(b.starts_with("Auto-Modus: Kacheln erscheinen"));
+        assert_eq!(hint_lines(false, None).0, "Session im Baum wählen");
+    }
+
+    #[test]
+    fn the_language_buttons_show_flag_and_native_name() {
+        let [(de, de_title), (en, en_title)] = language_choices();
+        assert_eq!((de, en), (Language::De, Language::En));
+        assert_eq!((de_title.as_str(), en_title.as_str()), ("🇩🇪  Deutsch", "🇬🇧  English"));
     }
 }

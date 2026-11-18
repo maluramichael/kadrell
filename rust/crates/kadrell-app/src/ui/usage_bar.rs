@@ -9,14 +9,15 @@ use std::rc::Rc;
 
 use chrono::Local;
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
-    Styled, Window, div, px,
+    AnyElement, App, ClickEvent, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Rgba, Role,
+    StatefulInteractiveElement, Styled, Window, div, hsla, px,
 };
 use kadrell_i18n::trd;
 
 use super::bar::ExtStatus;
+use super::bar_keys::{Flash, Press, Region, press_key};
 use super::chrome::{screen_face, screen_ink, screen_muted, v_seam};
-use super::pill::Pill;
+use super::pill::{Pill, PillKind};
 use super::tooltip;
 use crate::theme::Theme;
 use crate::usage::hub::View;
@@ -46,9 +47,20 @@ pub struct BarCtl {
     /// Breite des Fensters und geschätzte Breite der linken Tasten.
     pub width: f32,
     pub left: f32,
-    pub on_account: Handler,
-    pub on_detach: Handler,
-    pub on_waiting: Handler,
+    pub on_account: Press,
+    pub on_detach: Press,
+    pub on_waiting: Press,
+    /// Einmaliger Tipp (zweite Session, Bedeutung von Gelb): Modul „Tipp  ×“, ein Klick räumt ihn weg.
+    pub tip: Option<String>,
+    pub on_tip: Handler,
+    /// claude ist älter als getestet: Modul „claude alt · claude update“, ein Klick kopiert den Befehl.
+    pub version_warning: Option<String>,
+    pub on_version: Handler,
+    /// Letzte Ansage („<Titel> wartet“) für Bildschirmleser, als Beschreibung am Display.
+    pub announcement: Option<String>,
+    /// Gedrückte Taste (80 ms eingesunken) und wie man sie meldet.
+    pub pressed: Option<&'static str>,
+    pub flash: Flash,
     /// Statuseinträge der Extensions, links neben den Nutzungswerten (der erste ganz links).
     pub ext: Vec<ExtStatus>,
     /// Neuere Version bereit (`misc::update`): dezente Taste „<Version> verfügbar“.
@@ -149,11 +161,36 @@ pub fn relative(secs: f64, lang: kadrell_accounts::Lang) -> String {
     }
 }
 
-/// Flaches Modul mit Fuge rechts: Text in Teilen (Kürzel gedämpft, Wert farbig).
-fn module(id: impl Into<ElementId>, spans: Vec<(String, Hsla)>, tip: Option<String>, click: Option<&Handler>, t: &Theme) -> Part {
-    let inner: f32 = spans.iter().map(|(s, _)| text_width(s, 11.5)).sum::<f32>() + 5. * spans.len().saturating_sub(1) as f32;
-    let row = div().flex().items_center().h_full().px(px(10.)).gap(px(5.)).text_size(px(11.5)).whitespace_nowrap();
-    let row = spans.into_iter().fold(row, |r, (s, c)| r.child(div().text_color(c).child(s)));
+/// Ein Teil eines Moduls: Stücke in einer Farbe ohne Abstand dazwischen („25%/“ gedämpft, „32%“ farbig).
+type Group = Vec<(String, Hsla)>;
+
+/// Schrift eines flachen Moduls.
+#[derive(Clone, Copy)]
+struct Face {
+    size: f32,
+    bold: bool,
+}
+
+const USAGE_FACE: Face = Face { size: 11.5, bold: false };
+
+fn group_width(g: &Group, size: f32) -> f32 {
+    g.iter().map(|(s, _)| text_width(s, size)).sum()
+}
+
+fn group_el(g: Group) -> impl IntoElement {
+    g.into_iter().fold(div().flex().flex_none(), |row, (s, c)| row.child(div().text_color(c).child(s)))
+}
+
+/// Flaches Modul mit Fuge rechts: Teile (Kürzel gedämpft, Wert farbig), 5 px Abstand dazwischen.
+fn module(id: impl Into<ElementId>, groups: Vec<Group>, tip: Option<String>, click: Option<&Handler>, t: &Theme) -> Part {
+    module_with(id, groups, USAGE_FACE, tip, click, t)
+}
+
+fn module_with(id: impl Into<ElementId>, groups: Vec<Group>, face: Face, tip: Option<String>, click: Option<&Handler>, t: &Theme) -> Part {
+    let inner: f32 = groups.iter().map(|g| group_width(g, face.size)).sum::<f32>() + 5. * groups.len().saturating_sub(1) as f32;
+    let row = div().flex().items_center().h_full().px(px(10.)).gap(px(5.)).text_size(px(face.size)).whitespace_nowrap();
+    let row = if face.bold { row.font_weight(FontWeight::BOLD) } else { row };
+    let row = groups.into_iter().fold(row, |r, g| r.child(group_el(g)));
     let mut el = div().id(id).flex().flex_none().items_center().h_full().child(row).child(v_seam(t));
     if let Some(tip) = tip {
         el = el.tooltip(tooltip::text(tip));
@@ -163,6 +200,22 @@ fn module(id: impl Into<ElementId>, spans: Vec<(String, Hsla)>, tip: Option<Stri
         el = el.cursor_pointer().on_click(move |e, w, c| h(e, w, c));
     }
     Part { width: SEAM + 20. + inner, el: el.into_any_element() }
+}
+
+/// Links der Tasten: Tipp, dann die Versionswarnung (`noticeModuleParts`).
+fn notice_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
+    let mut parts = Vec::new();
+    if let Some(tip) = b.tip.as_ref().filter(|_| plan.tip) {
+        let text = vec![vec![(format!("{tip}  ×"), t.waiting)]];
+        let region = Region::new(trd!("Tipp"), Some(tip.clone()));
+        parts.push(module_with("tip", text, Face { size: 10.5, bold: false }, Some(region.tooltip()), Some(&b.on_tip), t));
+    }
+    if let Some(warning) = b.version_warning.as_ref().filter(|_| plan.version) {
+        let text = vec![vec![(trd!("claude alt · claude update"), t.waiting)]];
+        let region = Region::new(trd!("Ältere claude-Version"), Some(warning.clone()));
+        parts.push(module_with("claude-version", text, Face { size: 10.5, bold: true }, Some(region.tooltip()), Some(&b.on_version), t));
+    }
+    parts
 }
 
 fn usage_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
@@ -177,63 +230,132 @@ fn usage_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
                 Some(v) if !stale => tone_color(logic::usage_tone(v, row.plan), t),
                 _ => t.muted,
             };
-            let mut spans = vec![(row.key.name().to_string(), t.muted)];
-            if prefix.is_empty() {
-                spans.push((value, color));
-            } else {
-                spans.push((format!("{prefix}{value}"), color));
+            // Der Plan-Stand vor dem Wert („25%/“) bleibt gedämpft, nur der Wert trägt die Ampelfarbe.
+            let mut shown = Vec::new();
+            if !prefix.is_empty() {
+                shown.push((prefix, t.muted));
             }
+            shown.push((value, color));
             let id = ids[match row.key { UsageKey::Fable => 0, UsageKey::Weekly => 1, UsageKey::Session => 2 }];
-            module(id, spans, Some(usage_tip(&row, b)), None, t)
+            module(id, vec![vec![(row.key.name().to_string(), t.muted)], shown], Some(usage_tip(&row, b)), None, t)
         })
         .collect()
 }
 
 // MARK: Tasten
 
-fn key_part(id: &'static str, label: String, fill: Option<Hsla>, tip: String, handler: &Handler) -> Part {
+/// Taste der rechten Seite: feuert beim Drücken, Trefferfläche über die ganze Höhe, Tooltip „Label: Wert“.
+fn key_part(id: &'static str, label: String, fill: Option<Hsla>, region: Region, press: &Press, b: &BarCtl, t: &Theme) -> Part {
     let width = text_width(&label, 10.) + 18. + KEY_GAP;
-    let h = handler.clone();
-    let mut pill = Pill::new(id, label).tooltip_text(tip).on_click(move |e, w, c| h(e, w, c));
-    if let Some(f) = fill {
-        pill = pill.fill(f);
+    let mut pill = Pill::new(id, label);
+    match fill {
+        Some(f) => pill = pill.fill(f),
+        None if b.pressed == Some(id) => pill = pill.kind(PillKind::Active).fill(t.surface),
+        None => {}
     }
+    Part { width, el: press_key(id, id, &region, pill, press, &b.flash).into_any_element() }
+}
+
+/// Die Update-Taste hat ihren eigenen Klick (`misc::update`), sie feuert beim Loslassen.
+fn update_part(u: &UpdatePill) -> Part {
+    let label = trd!("%@ verfügbar", u.version.as_str());
+    let width = text_width(&label, 10.) + 18. + KEY_GAP;
+    let h = u.on_click.clone();
+    let pill = Pill::new("update", label).tooltip_text(Region::new(trd!("Update verfügbar"), Some(u.version.clone())).tooltip()).on_click(move |e, w, c| h(e, w, c));
     Part { width, el: pill.into_any_element() }
 }
 
+fn waiting_region(b: &BarCtl) -> Region {
+    Region::new(trd!("Wartende Sessions"), Some(b.waiting.to_string()))
+}
+
+fn detach_region(b: &BarCtl) -> Region {
+    Region::new(trd!("Fertige Sessions trennen"), Some(b.detachable.to_string()))
+}
+
+/// Titel des aktiven Kontos, ohne Konto die Aufforderung.
+fn account_title(b: &BarCtl) -> String {
+    b.view.active_title().unwrap_or_else(|| trd!("Konto wählen"))
+}
+
+fn account_region(b: &BarCtl) -> Region {
+    Region::new(trd!("Aktives Konto"), Some(account_title(b)))
+}
+
 /// Konto-Taste: aktiver Account, bei Platzmangel nur die ersten zehn Zeichen. Ohne Konten keine Taste.
-fn account_part(b: &BarCtl, short: bool) -> Option<Part> {
+fn account_part(b: &BarCtl, short: bool, t: &Theme) -> Option<Part> {
     if b.view.menu.is_empty() {
         return None;
     }
-    let title = b.view.active_title().unwrap_or_else(|| trd!("Konto wählen"));
+    let title = account_title(b);
     let limit = if short { 10 } else { 26 };
-    let shown = if title.chars().count() > limit { format!("{}…", title.chars().take(limit - 1).collect::<String>()) } else { title.clone() };
-    let tip = format!("{}: {title}", trd!("Aktives Konto"));
-    Some(key_part("account", shown, None, tip, &b.on_account))
+    let shown = if title.chars().count() > limit { format!("{}…", title.chars().take(limit - 1).collect::<String>()) } else { title };
+    Some(key_part("account", shown, None, account_region(b), &b.on_account, b, t))
 }
 
-/// Von rechts: „N warten“, „N trennen“ und das Konto, jeweils nur wenn es etwas zu tun gibt.
+/// Von rechts: „N warten“, „N trennen“, Update und Konto, jeweils nur wenn es etwas zu tun gibt.
 fn key_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
     let mut parts = Vec::new();
     if b.waiting > 0 {
-        let tip = format!("{}: {}", trd!("Wartende Sessions"), b.waiting);
-        parts.push(key_part("waiting", trd!("%lld warten", b.waiting), Some(t.waiting), tip, &b.on_waiting));
+        parts.push(key_part("waiting", trd!("%lld warten", b.waiting), Some(t.waiting), waiting_region(b), &b.on_waiting, b, t));
     }
     if b.detachable > 0 {
-        let tip = format!("{}: {}", trd!("Fertige Sessions trennen"), b.detachable);
-        parts.push(key_part("detach", trd!("%lld trennen", b.detachable), Some(t.idle), tip, &b.on_detach));
+        parts.push(key_part("detach", trd!("%lld trennen", b.detachable), Some(t.idle), detach_region(b), &b.on_detach, b, t));
     }
-    if let Some(u) = &b.update {
-        parts.push(key_part("update", trd!("%@ verfügbar", u.version.as_str()), None, trd!("Update verfügbar"), &u.on_click));
+    if let Some(u) = b.update.as_ref().filter(|_| plan.update) {
+        parts.push(update_part(u));
     }
     if plan.account {
-        parts.extend(account_part(b, plan.short_account));
+        parts.extend(account_part(b, plan.short_account, t));
     }
     parts
 }
 
+/// Trefferflächen der rechten Seite in der Reihenfolge des Zeichnens (von rechts), am Ende das Display „Status“.
+pub fn right_regions(b: &BarCtl, plan: &BarPlan) -> Vec<Region> {
+    let mut regions = Vec::new();
+    if b.waiting > 0 {
+        regions.push(waiting_region(b));
+    }
+    if b.detachable > 0 {
+        regions.push(detach_region(b));
+    }
+    if let Some(u) = b.update.as_ref().filter(|_| plan.update) {
+        regions.push(Region::new(trd!("Update verfügbar"), Some(u.version.clone())));
+    }
+    if plan.account && !b.view.menu.is_empty() {
+        regions.push(account_region(b));
+    }
+    regions.push(Region::new(trd!("Status"), Some(spoken_status(b, plan))));
+    regions
+}
+
 // MARK: Display
+
+fn luminance(c: Hsla) -> f32 {
+    let c: Rgba = c.into();
+    let lin = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+    0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+}
+
+fn contrast(a: Hsla, b: Hsla) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// Fehlerrot, so weit Richtung Weiß gemischt, dass es auf dem schwarzen Display lesbar ist (mindestens 4,5:1),
+/// wie `StatusBarView.screenError`.
+pub fn screen_error(t: &Theme) -> Hsla {
+    let (face, error): (Hsla, Rgba) = (screen_face(t), t.error.into());
+    let mixed = |k: f32| -> Hsla { Rgba { r: error.r + (1. - error.r) * k, g: error.g + (1. - error.g) * k, b: error.b + (1. - error.b) * k, a: 1. }.into() };
+    (0..=20).map(|i| mixed(i as f32 * 0.05)).find(|c| contrast(*c, face) >= 4.5).unwrap_or_else(|| hsla(0., 0., 1., 1.))
+}
+
+/// Was Tooltip und Bildschirmleser vom Display bekommen: die Langform bzw. die Fehlermeldung, dazu die Nutzungswerte,
+/// die aus Platzmangel fehlen.
+fn spoken_status(b: &BarCtl, plan: &BarPlan) -> String {
+    format!("{}{}", b.error.clone().unwrap_or_else(|| logic::status_spoken(&b.counts)), dropped_usage(b, plan))
+}
 
 fn lamp_color(lamp: Lamp, t: &Theme) -> Hsla {
     match lamp {
@@ -255,25 +377,32 @@ fn display_part(b: &BarCtl, plan: &BarPlan, clock: &str, t: &Theme) -> Part {
     let text_w = (text_width(&text, 10.5) - plan.shrink).max(0.);
     let time_w = text_width(clock, 10.5);
     let w = 10. + 7. + 6. + text_w + if text_w > 0. { 8. } else { 0. } + time_w + 10.;
-    let ink = if b.error.is_some() { t.error_text } else { screen_ink() };
-    let spoken = format!("{}{}", b.error.clone().unwrap_or_else(|| logic::status_spoken(&b.counts)), dropped_usage(b, plan));
+    let ink = if b.error.is_some() { screen_error(t) } else { screen_ink() };
+    let lamp = if b.error.is_some() { t.error } else { lamp_color(logic::lamp(&b.counts), t) };
+    let spoken = spoken_status(b, plan);
     let label = div().flex_none().w(px(text_w)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(ink).font_weight(FontWeight::BOLD).child(text);
-    let el = div()
+    let mut el = div()
         .id("status-display")
+        .role(Role::Status)
+        .aria_label(trd!("Status"))
+        .relative()
         .flex()
         .flex_none()
         .items_center()
+        .overflow_hidden()
         .h(px(20.))
         .w(px(w))
         .px(px(10.))
         .rounded(px(5.))
         .bg(screen_face(t))
         .text_size(px(10.5))
-        .child(div().size(px(7.)).flex_none().rounded_full().bg(lamp_color(logic::lamp(&b.counts), t)).mr(px(6.)))
+        .child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(hsla(0., 0., 1., 0.06)))
+        .child(div().size(px(7.)).flex_none().rounded_full().bg(lamp).mr(px(6.)))
         .child(label)
         .child(div().flex_1().min_w(px(if text_w > 0. { 8. } else { 0. })))
         .child(div().flex_none().text_color(screen_muted()).child(clock.to_string()))
-        .tooltip(tooltip::text(spoken));
+        .tooltip(tooltip::text(spoken.clone()));
+    el = el.aria_description(b.announcement.clone().map_or(spoken.clone(), |a| format!("{spoken}. {a}")));
     Part { width: w + EDGE, el: el.into_any_element() }
 }
 
@@ -292,6 +421,7 @@ fn parts(b: &BarCtl, plan: &BarPlan, clock: &str, t: &Theme) -> Vec<Part> {
     if !had_keys {
         parts.pop();
     }
+    parts.extend(notice_parts(b, plan, t));
     parts.extend(usage_parts(b, plan, t));
     parts.extend(ext_parts(b, plan, t));
     parts
@@ -307,7 +437,7 @@ fn ext_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
         .rev()
         .map(|(i, e)| {
             let tip = format!("{}: {}", e.name, e.text);
-            module(("ext-status", i), vec![(e.text.clone(), e.dot.unwrap_or(t.fg))], Some(tip), e.click.as_ref(), t)
+            module(("ext-status", i), vec![vec![(e.text.clone(), e.dot.unwrap_or(t.fg))]], Some(tip), e.click.as_ref(), t)
         })
         .collect()
 }
@@ -334,8 +464,91 @@ pub fn right_side(clock: &str, b: &BarCtl, t: &Theme) -> impl IntoElement + use<
 
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// Eine Leiste ohne Konten, Nutzung und Meldungen, 1400 breit; Tests setzen, was sie brauchen.
+    pub(crate) fn test_ctl() -> BarCtl {
+        let press: Press = Rc::new(|_, _, _| {});
+        let click: Handler = Rc::new(|_, _, _| {});
+        BarCtl {
+            view: View::default(),
+            now: 0.,
+            shown: UsageShown { session: true, weekly: true, fable: true },
+            counts: StatusCounts::default(),
+            detachable: 0,
+            waiting: 0,
+            error: None,
+            lang: kadrell_accounts::Lang::De,
+            width: 1400.,
+            left: 0.,
+            on_account: press.clone(),
+            on_detach: press.clone(),
+            on_waiting: press,
+            tip: None,
+            on_tip: click.clone(),
+            version_warning: None,
+            on_version: click,
+            announcement: None,
+            pressed: None,
+            flash: Rc::new(|_, _| {}),
+            ext: Vec::new(),
+            update: None,
+        }
+    }
+
+    fn labels(b: &BarCtl) -> Vec<String> {
+        right_regions(b, &BarPlan::new(0)).into_iter().map(|r| r.label).collect()
+    }
+
+    /// Swift: `testDetachIdlePill`: die grüne Pille gibt es nur bei trennbaren fertigen Sessions, ihr Wert ist die Zahl.
+    #[test]
+    fn the_detach_pill_exists_only_with_detachable_sessions() {
+        let b = BarCtl { counts: StatusCounts { running: 2, waiting: 1, idle: 3, error: 0, detached: 4 }, ..test_ctl() };
+        assert!(!labels(&b).contains(&"Fertige Sessions trennen".to_string()), "ohne trennbare Sessions keine Pille");
+        let b = BarCtl { detachable: 3, ..b };
+        let regions = right_regions(&b, &BarPlan::new(0));
+        let pill = regions.iter().find(|r| r.label == "Fertige Sessions trennen").expect("Pille");
+        assert_eq!(pill.value.as_deref(), Some("3"));
+        assert_eq!(pill.tooltip(), "Fertige Sessions trennen: 3");
+    }
+
+    /// Swift: `testStatusDisplayReadsLongFormOrError`: das Display liest die Langform, bei Fehler diese Meldung.
+    #[test]
+    fn the_display_reads_the_long_form_or_the_error() {
+        let counts = StatusCounts { running: 2, waiting: 1, idle: 0, error: 0, detached: 0 };
+        let b = BarCtl { counts, ..test_ctl() };
+        let status = |b: &BarCtl| right_regions(b, &BarPlan::new(0)).pop().expect("Status");
+        assert_eq!(status(&b).label, "Status");
+        assert!(status(&b).value.as_deref().is_some_and(|v| v.starts_with(&logic::status_spoken(&counts))));
+        let failing = BarCtl { error: Some("x".into()), ..b };
+        assert!(status(&failing).value.as_deref().is_some_and(|v| v.starts_with('x')));
+    }
+
+    #[test]
+    fn a_waiting_count_adds_the_waiting_pill_before_the_status() {
+        let b = BarCtl { waiting: 2, ..test_ctl() };
+        assert_eq!(labels(&b), ["Wartende Sessions", "Status"]);
+        assert_eq!(right_regions(&b, &BarPlan::new(0))[0].value.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn the_error_red_stays_readable_on_the_black_display() {
+        for t in [Theme::mocha(), Theme::latte()] {
+            assert!(contrast(screen_error(&t), screen_face(&t)) >= 4.5, "dark={}", t.dark);
+        }
+    }
+
+    #[test]
+    fn the_tip_and_the_old_version_warning_are_modules_next_to_the_usage() {
+        let t = Theme::mocha();
+        let none = notice_parts(&test_ctl(), &BarPlan::new(0), &t);
+        assert!(none.is_empty());
+        let b = BarCtl { tip: Some("Hinweis".into()), version_warning: Some("alt".into()), ..test_ctl() };
+        assert_eq!(notice_parts(&b, &BarPlan::new(0), &t).len(), 2);
+        let tight = BarPlan { tip: false, version: false, ..BarPlan::new(0) };
+        assert!(notice_parts(&b, &tight, &t).is_empty(), "bei Platzmangel fallen sie weg");
+    }
 
     #[test]
     fn relative_time_is_abbreviated() {

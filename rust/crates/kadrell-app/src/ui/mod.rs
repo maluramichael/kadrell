@@ -6,6 +6,7 @@ use crate::ThemeGlobal;
 use crate::theme::Theme;
 
 pub mod bar;
+pub mod bar_keys;
 pub mod chrome;
 pub mod context_menu;
 pub mod ext;

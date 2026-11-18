@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use gpui::{AppContext, ClickEvent, Context, Entity, KeyDownEvent, Pixels, Point, Window};
+use gpui::{AppContext, ClickEvent, Context, Entity, KeyDownEvent, MouseDownEvent, Pixels, Point, Window};
 use kadrell_accounts::AccountSettings;
 use kadrell_claude::history::{SessionHistory, cache_path};
 use kadrell_core::SessionStatus;
@@ -48,6 +48,8 @@ pub struct UsageUi {
     pub(crate) notice: Option<Entity<NoticeDialog>>,
     notice_kind: Option<NoticeKind>,
     pending: VecDeque<Notice>,
+    /// Die zuletzt gedrückte Taste der Leiste, 80 ms lang eingesunken (`bar_wire::flash_bar`).
+    pub(crate) pressed: Option<&'static str>,
 }
 
 impl UsageUi {
@@ -59,7 +61,7 @@ impl UsageUi {
             let accounts = state_from(state.settings.accounts_index().as_deref(), state.settings.active_account_id());
             Hub::system(accounts, state.profile.dir.join("usage-history.jsonl"), &config(state), now)
         };
-        UsageUi { hub: Arc::new(hub), history: Arc::new(Mutex::new(SessionHistory::default())), stats: None, notice: None, notice_kind: None, pending: VecDeque::new() }
+        UsageUi { hub: Arc::new(hub), history: Arc::new(Mutex::new(SessionHistory::default())), stats: None, notice: None, notice_kind: None, pending: VecDeque::new(), pressed: None }
     }
 
     /// Ein Fenster der Konten oder Statistik ist offen: das Terminal dahinter bekommt keine Tasten.
@@ -107,6 +109,9 @@ impl Shell {
         if let Some(p) = step.persist {
             self.state.save_accounts(&p);
         }
+        if step.auto_switched {
+            self.play_sound(kadrell_tray::Sound::Toggle);
+        }
         self.usage.pending.extend(step.notices);
         self.show_next_notice(window, cx);
         cx.notify();
@@ -125,13 +130,20 @@ impl Shell {
             counts,
             detachable: self.detachable_keys().len(),
             waiting: counts.waiting,
-            error: self.state.error.clone(),
+            error: self.state.shown_error(),
             lang: lang(),
             width: window.viewport_size().width.as_f32(),
             left: 0.,
-            on_account: Rc::new(cx.listener(|this, ev: &ClickEvent, _, cx| this.open_account_menu(ev.position(), cx))),
-            on_detach: Rc::new(cx.listener(|this, _, window, cx| this.detach_idle(window, cx))),
-            on_waiting: Rc::new(cx.listener(|this, _, window, cx| this.show_next_waiting(window, cx))),
+            on_account: Rc::new(cx.listener(|this, ev: &MouseDownEvent, _, cx| this.open_account_menu(ev.position, cx))),
+            on_detach: Rc::new(cx.listener(|this, _: &MouseDownEvent, window, cx| this.detach_idle_pill(window, cx))),
+            on_waiting: Rc::new(cx.listener(|this, _: &MouseDownEvent, window, cx| this.select_waiting(window, cx))),
+            tip: self.state.tip_text(),
+            on_tip: Rc::new(cx.listener(|this, _: &ClickEvent, _, cx| this.dismiss_tip(cx))),
+            version_warning: self.state.version_warning.clone(),
+            on_version: Rc::new(cx.listener(|this, _: &ClickEvent, _, cx| this.copy_update_command(cx))),
+            announcement: self.state.announcement.clone(),
+            pressed: self.usage.pressed,
+            flash: self.flash_fn(cx),
             ext: Vec::new(),
             update: None,
         }
@@ -158,29 +170,9 @@ impl Shell {
             .sessions
             .sessions
             .iter()
-            .filter(|s| !s.is_shell() && self.state.display_status(&s.id) == Some(SessionStatus::Idle))
+            .filter(|s| !s.is_shell() && !s.is_remote() && self.state.display_status(&s.id) == Some(SessionStatus::Idle))
             .map(|s| s.id.clone())
             .collect()
-    }
-
-    /// Klick auf „N trennen“: alle fertigen Sessions trennen (spart Speicher und CPU).
-    fn detach_idle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        for key in self.detachable_keys() {
-            self.state.stop_tile(&key);
-        }
-        self.sync(window, cx);
-    }
-
-    /// Klick auf „N warten“: springt zur nächsten wartenden Session, reihum nach der fokussierten.
-    fn show_next_waiting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let order = self.state.ordered_keys();
-        let waiting: Vec<&String> = order.iter().filter(|k| self.state.display_status(k) == Some(SessionStatus::Waiting)).collect();
-        let at = self.state.focused.as_ref().and_then(|f| order.iter().position(|k| k == f)).unwrap_or(usize::MAX);
-        let next = waiting.iter().find(|k| order.iter().position(|o| o == **k).is_some_and(|p| at == usize::MAX || p > at)).or(waiting.first());
-        if let Some(key) = next.map(|k| (*k).clone()) {
-            self.state.show_only(&key);
-            self.sync(window, cx);
-        }
     }
 
     // MARK: Konto-Menü
