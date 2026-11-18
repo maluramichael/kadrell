@@ -19,6 +19,7 @@ gpui-pre-platform = "=0.3.13"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 async-channel = "2.5"
 serde_json = "1.0.144" # gpui-pre verlangt ^1.0.144, exakter Pin kollidiert
+sysinfo = "0.40" # Prozessliste für laufende Bash-Kommandos (statt `ps`, das es unter Windows nicht gibt)
 
 # Fenster verstecken und zeigen (tray_wire/window.rs): HWND aus GPUI, ShowWindow.
 [target.'cfg(windows)'.dependencies]

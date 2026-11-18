@@ -1,8 +1,6 @@
 //! Kacheln der Arbeitsfläche: reine Layout-Mathematik (Port von `app/Kadrell/Workspace/Tiling.swift`),
 //! Auswahlmodell (wie `WorkspaceView`) und die Ansicht, die die Kacheln absolut platziert.
 
-use kadrell_i18n::trd;
-use crate::lang::tx;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -492,18 +490,6 @@ fn tiles(shell: &Shell, frames: &[Rect], cx: &mut Context<Shell>) -> Vec<AnyElem
     out
 }
 
-/// Leere Arbeitsfläche: noch keine Session.
-fn empty_hint(t: &crate::theme::Theme) -> impl IntoElement + use<> {
-    div()
-        .absolute()
-        .size_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(t.muted)
-        .child(tx(&trd!("Noch keine Session. ⌘N startet eine neue, ⌘P sucht.")))
-}
-
 fn on_move(this: &mut Shell, ev: &MouseMoveEvent, cx: &mut Context<Shell>) {
     if this.layout.dragging.is_none() {
         return;
@@ -524,6 +510,7 @@ pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::D
     let active = shell.selected.and_then(|sel| shell.visible().iter().position(|id| *id == sel)).unwrap_or(0);
     let (frames, dividers) = shell.layout.plan(visible_n, active);
     shell.layout.frames = frames.clone();
+    let empty = (visible_n == 0).then(|| crate::misc::empty::view(shell, &t, cx));
     let mut area = div()
         .id("workspace")
         .relative()
@@ -534,7 +521,7 @@ pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::D
         .bg(t.bg)
         .child(measure(shell.layout.measured.clone(), cx.entity_id()))
         .children(tiles(shell, &frames, cx))
-        .children((visible_n == 0).then(|| empty_hint(&t)));
+        .children(empty);
     for (i, d) in dividers.iter().enumerate() {
         area = area.child(grip(d, i, cx));
     }

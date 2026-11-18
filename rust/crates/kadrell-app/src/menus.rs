@@ -9,6 +9,7 @@ use kadrell_i18n::trd;
 
 use crate::Shell;
 use crate::lang::{de, shortcut, shortcut_mac_only, shortcut_os};
+use crate::misc::{OpenAbout, OpenWhatsNew};
 use crate::ui::ext::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar};
 
 actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow]);
@@ -54,8 +55,8 @@ fn app_menu() -> MenuDef {
         key: "Kadrell",
         name: "Kadrell".to_string(),
         entries: vec![
-            off(de!("Über Kadrell"), none()),
-            off(de!("Was ist neu"), none()),
+            item(de!("Über Kadrell"), Shell::about_shortcut(), OpenAbout),
+            item(de!("Was ist neu"), none(), OpenWhatsNew),
             item(de!("Statistik"), shortcut("⌥F3"), OpenStats),
             item(de!("Extensions …"), shortcut_os("⌥F4", "⇧⌘E"), OpenExtensions),
             Entry::Separator,

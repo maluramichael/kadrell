@@ -3,6 +3,7 @@
 
 mod boxdraw;
 pub mod fonts;
+pub mod links;
 mod terminal;
 mod textsearch;
 mod theme;

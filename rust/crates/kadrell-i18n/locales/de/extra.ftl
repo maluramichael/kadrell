@@ -19,6 +19,8 @@ x-herz-setzen-bleibt-auch-leer-39d6 = Herz setzen (bleibt auch leer)
 
 x-im-explorer-zeigen-21e3 = Im Explorer zeigen
 
+x-import-tmux-dump-readme-5c1e = Import: tools/tmux-dump.py dump (siehe README)
+
 x-kachel-zoomen-1673 = Kachel zoomen
 
 x-kein-ordner-gefunden-o-waehlt-im-eb27 = Kein Ordner gefunden. ⌘O wählt im { $arg1 }.

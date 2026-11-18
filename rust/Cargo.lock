@@ -2651,6 +2651,7 @@ dependencies = [
  "libc",
  "raw-window-handle",
  "serde_json",
+ "sysinfo 0.40.4",
  "windows-sys 0.61.2",
 ]
 
