@@ -339,6 +339,8 @@ impl Shell {
     fn run_group_cmd(&mut self, cmd: Cmd, window: &mut Window, cx: &mut Context<Self>) -> Option<Cmd> {
         match cmd {
             Cmd::ToggleFavorite(id) => self.state.store.groups.toggle_favorite(&id),
+            // Host-Gruppe: das „+“ öffnet die Auswahl der tmux-Sessions des Hosts (`pickRemoteSession`).
+            Cmd::NewSessionIn(id) | Cmd::NewTerminalIn(id) if self.pick_remote_session(&id, window, cx) => return None,
             Cmd::NewSessionIn(id) => self.new_session_in_group(&id),
             Cmd::NewTerminalIn(id) => self.new_terminal_in_group(&id),
             Cmd::ShowGroup(id) => self.show_group_sessions(&id),
