@@ -1,9 +1,8 @@
 //! Windows: Tray-Icon über `Shell_NotifyIconW` auf einem eigenen Thread mit verstecktem Fenster und Nachrichtenschleife.
 //! Der Aufrufer-Thread stellt Befehle in eine Warteschlange und weckt den Thread mit `PostMessageW`.
 //!
-//! Bewusst ohne `SetForegroundWindow` (Projektregel): Das Kontextmenü ist ein `TrackPopupMenu` ohne vorherigen
-//! Vordergrund-Wechsel. Windows schließt es dann nicht bei einem Klick daneben, nur bei Auswahl oder Esc. Wer das
-//! ändern will, ruft in `show_menu` vor `TrackPopupMenu` `SetForegroundWindow(hwnd)` auf (Standard-Idiom).
+//! Kontextmenü nach dem dokumentierten Win32-Idiom: `SetForegroundWindow` auf das versteckte Fenster vor
+//! `TrackPopupMenu`, danach `WM_NULL`, sonst schließt Windows das Menü bei einem Klick daneben nicht.
 
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Sender};
@@ -25,7 +24,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CW_USEDEFAULT, CreateIcon, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyMenu,
     DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetCursorPos, GetMessageW, GetWindowLongPtrW, HICON, MB_ICONASTERISK,
     MB_OK, MESSAGEBOX_STYLE, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG, PostMessageW, PostQuitMessage,
-    RegisterClassW, RegisterWindowMessageW, SPI_GETCLIENTAREAANIMATION, SetWindowLongPtrW, SystemParametersInfoW,
+    RegisterClassW, RegisterWindowMessageW, SPI_GETCLIENTAREAANIMATION, SetForegroundWindow, SetWindowLongPtrW,
+    SystemParametersInfoW, WM_NULL,
     TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WINDOW_EX_STYLE, WM_APP, WM_CONTEXTMENU, WM_DESTROY,
     WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPED,
 };
@@ -416,8 +416,10 @@ impl Inner {
             }
             let mut pt = POINT::default();
             let _ = GetCursorPos(&mut pt);
-            // Ohne SetForegroundWindow (siehe Moduldoku): TPM_RETURNCMD liefert die Wahl direkt.
+            // Win32-Idiom für Tray-Menüs (siehe Moduldoku); TPM_RETURNCMD liefert die Wahl direkt.
+            let _ = SetForegroundWindow(self.hwnd);
             let cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, Some(0), self.hwnd, None);
+            let _ = PostMessageW(Some(self.hwnd), WM_NULL, WPARAM(0), LPARAM(0));
             let _ = DestroyMenu(menu);
             let chosen = (cmd.0 as usize).checked_sub(MENU_BASE).and_then(|i| self.menu.get(i));
             if let Some(TrayItem::Entry { id, .. }) = chosen {
