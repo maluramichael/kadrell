@@ -343,6 +343,27 @@ mod tests {
         assert_eq!(fake.requests()[0].url, "https://ollama.com/search?q=qwen%203%26x");
     }
 
+    /// Gegen die echte Webseite (Netz nötig): `cargo test -p kadrell-models -- --ignored live`. Nur lesen, nichts laden.
+    #[test]
+    #[ignore = "braucht Netz"]
+    fn live_search_reads_the_real_page() {
+        let hits = search(&crate::http::UreqHttp, "qwen").unwrap();
+        assert!(hits.iter().any(|h| h.name.starts_with("qwen")), "{hits:?}");
+        assert!(hits.iter().any(|h| !h.summary.is_empty()), "Beschreibung fehlt: {hits:?}");
+        assert!(hits.iter().any(|h| !h.tags.is_empty()), "Größen-Tags fehlen: {hits:?}");
+    }
+
+    /// Nur wenn Ollama lokal läuft: Modelle und Version lesen (kein Laden, kein Löschen).
+    #[test]
+    #[ignore = "braucht laufendes Ollama"]
+    fn live_lists_models_if_ollama_runs() {
+        let c = OllamaClient { base: crate::DEFAULT_OLLAMA_URL.into(), http: &crate::http::UreqHttp };
+        if let Ok(version) = c.version() {
+            assert!(!version.is_empty());
+            c.models().unwrap();
+        }
+    }
+
     #[test]
     fn size_pattern() {
         for ok in ["0.6b", "4b", "270m", "8x7b", "1.5b"] {

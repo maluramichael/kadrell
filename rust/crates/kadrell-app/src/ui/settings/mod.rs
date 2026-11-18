@@ -94,6 +94,7 @@ impl SettingsDialog {
             self.open_filter(window, cx);
             self.filter_input.update(cx, |i, cx| i.set_text(&text, window, cx));
         }
+        self.dev_models(&var("SEARCH"), &var("PULL"));
         self.cursor = var("CURSOR");
         if let Some(action) = var("RECORD").and_then(|n| kadrell_core::hotkeys::HotkeyAction::from_raw(&n)) {
             self.start_recording(action, cx);
@@ -101,6 +102,17 @@ impl SettingsDialog {
         let (scroll, open) = (var("SCROLL").and_then(|v| v.parse::<f32>().ok()), var("OPEN"));
         if scroll.is_some() || open.is_some() {
             self.dev_later(scroll, open, window, cx);
+        }
+    }
+
+    /// `KADRELL_DEV_SETTINGS_SEARCH` sucht auf ollama.com, `KADRELL_DEV_SETTINGS_PULL` lädt ein Modell (nur Screenshots; zeigt
+    /// auf den eingestellten Ollama-Dienst, also nie mit einem echten Dienst und einem Modell, das nicht geladen werden soll).
+    fn dev_models(&mut self, search: &Option<String>, pull: &Option<String>) {
+        if let Some(q) = search {
+            self.backend.search(q);
+        }
+        if let Some(name) = pull {
+            self.backend.pull(name);
         }
     }
 

@@ -156,9 +156,11 @@ impl SettingsDialog {
 
     fn model_row(&self, row: &Row, detail: &str, buttons: &[Btn], t: &Theme, cx: &mut Context<Self>) -> Div {
         let name = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.fg).child(row.title.clone());
-        let detail = div().flex_none().text_color(t.muted).child(detail.to_string());
+        // Lange Beschreibungen (Suchtreffer) kürzen, der Name behält mindestens Platz für den Anfang.
+        let detail = div().min_w_0().max_w(px(300.)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.muted).child(detail.to_string());
+        let name = name.min_w(px(90.)).max_w(px(320.));
         let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(&row.id, i, b, t, cx)).collect();
-        wide_row(div().child(name).child(detail).children(keys))
+        wide_row(div().child(name).child(div().flex_1().min_w_0().flex().justify_end().child(detail)).children(keys))
     }
 
     /// Download: Name, Fortschritt (oder Fehler) und Taste in einer Zeile, darunter der Balken.
