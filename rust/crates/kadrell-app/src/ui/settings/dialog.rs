@@ -595,14 +595,12 @@ fn sync_theme(cx: &mut App) {
     if !settings.contains("colorTheme") {
         return;
     }
-    let wanted = settings.color_theme();
-    if cx.global::<ThemeGlobal>().0.id == wanted {
+    let theme = Theme::named(&settings.color_theme());
+    if cx.global::<ThemeGlobal>().0.id == theme.id {
         return;
     }
-    if let Some(theme) = Theme::by_id(&wanted) {
-        crate::set_theme(cx, theme);
-        cx.refresh_windows();
-    }
+    crate::set_theme(cx, theme);
+    cx.refresh_windows();
 }
 
 /// Aktuelle Belegung einer Aktion.

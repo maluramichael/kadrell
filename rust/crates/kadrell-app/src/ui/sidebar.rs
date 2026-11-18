@@ -97,7 +97,7 @@ fn waiting(group: &Group) -> usize {
 /// „2 ⏳“ links vom Favoriten, nur wenn etwas wartet.
 fn waiting_badge(group: &Group, t: &Theme, a: &Appearance) -> Option<Div> {
     let n = waiting(group);
-    (n > 0).then(|| div().flex_none().ml(px(a.s(6.))).text_size(px(a.s(10.5))).font_weight(FontWeight::BOLD).text_color(t.waiting).child(format!("{n} ⏳")))
+    (n > 0).then(|| div().flex_none().ml(px(a.s(8.))).text_size(px(a.s(10.5))).font_weight(FontWeight::BOLD).text_color(t.waiting_text).child(format!("{n} ⏳")))
 }
 
 /// Favoritenherz ganz rechts in der Kopfzeile.
@@ -142,7 +142,7 @@ fn group_path(group: &Group, t: &Theme, a: &Appearance) -> impl IntoElement + us
 
 /// Eine Taste der Leiste: Klick löst aus, ohne die Zeile darunter zu wählen.
 fn tool_button(id: (&'static str, usize), icon: AnyElement, t: &Theme, a: &Appearance, on_click: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static) -> Stateful<Div> {
-    let hot = t.bg;
+    let hot = t.hover_on_raised();
     div()
         .id(id)
         .flex()

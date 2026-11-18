@@ -508,12 +508,13 @@ fn titlebar_options(profile: &Profile) -> gpui::TitlebarOptions {
     }
 }
 
-/// Startschema; `KADRELL_DEV_THEME=latte` startet hell.
-fn start_theme() -> Theme {
-    match std::env::var("KADRELL_DEV_THEME").as_deref() {
-        Ok("latte") => Theme::latte(),
-        _ => Theme::mocha(),
-    }
+/// Startschema aus den Einstellungen (`colorTheme`, Standard Instrument Dark, Unbekanntes wird Mocha);
+/// `KADRELL_DEV_THEME=<id>` (z. B. `latte`) überstimmt sie.
+fn start_theme(settings: &kadrell_core::Settings) -> Theme {
+    std::env::var("KADRELL_DEV_THEME")
+        .ok()
+        .and_then(|id| Theme::by_id(&id))
+        .unwrap_or_else(|| Theme::named(&settings.color_theme()))
 }
 
 /// Lebt der Prozess noch? Über den Prozessbaum des Systems (`parent` ist `None` für fehlende Prozesse).
@@ -542,6 +543,7 @@ fn open_state(profile_name: Option<&str>) -> Result<Option<Opened>, String> {
     let endpoint = endpoint_path(&profile.dir);
     let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "kadrell".into());
     let home = paths.home.to_string_lossy().replace('\\', "/");
+    theme::pin_at_start(&profile);
     let env = LaunchEnv::from_process(&profile.settings().claude_binary(), exe, endpoint.to_string_lossy().into_owned(), home);
     let state = AppState::new(Parts { paths, profile, lock, env, endpoint: endpoint.clone() });
     let (tx, rx) = async_channel::unbounded();
@@ -591,7 +593,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::notice::bind_keys(cx);
         misc::bind_keys(cx, &title_profile.settings());
         appearance::apply(cx, &title_profile.settings(), true);
-        set_theme(cx, start_theme());
+        set_theme(cx, start_theme(&title_profile.settings()));
         menus::init(cx);
         let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);
         let options = WindowOptions {

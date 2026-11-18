@@ -3,6 +3,8 @@
 
 use gpui::{Hsla, Rgba, rgb};
 
+use crate::ui::model::Status;
+
 #[derive(Clone, Copy)]
 pub struct Theme {
     /// Id wie in der Mac-App und in `settings.json` (`colorTheme`).
@@ -21,7 +23,12 @@ pub struct Theme {
     pub waiting: Hsla,
     pub idle: Hsla,
     pub error: Hsla,
+    /// `waiting`, aber lesbar als Text (Warte-Badge im Baum): in hellen Schemata sonst unter 3:1 auf `panel`.
+    pub waiting_text: Hsla,
     pub accent: Hsla,
+    /// Noch laufendes Kommando aus dem Bash-Tool: ohne eigene Angabe das Blau des Schemas (`ansi[4]`), in den
+    /// Instrument-Schemata ein ruhiges Grau (`Theme.shell`).
+    pub shell: Hsla,
     /// `accent`, aber lesbar als Text auf allen Dialogflächen (`Theme.accentText`).
     pub accent_text: Hsla,
     /// `error`, aber lesbar als Text auf allen Dialogflächen (`Theme.errorText`).
@@ -97,6 +104,7 @@ struct Spec {
     colors: [u32; 12],
     ansi: [u32; 8],
     accent: Option<u32>,
+    shell: Option<u32>,
 }
 
 const SPECS: [Spec; 12] = [
@@ -107,6 +115,7 @@ const SPECS: [Spec; 12] = [
         colors: [0x11111b, 0x181825, 0x1e1e2e, 0x313244, 0xcdd6f4, 0xa6adc8, 0x6c7086, 0x45475a, 0x89b4fa, 0xf9e2af, 0xa6e3a1, 0xf38ba8],
         ansi: [0x45475a, 0xf38ba8, 0xa6e3a1, 0xf9e2af, 0x89b4fa, 0xf5c2e7, 0x94e2d5, 0xbac2de],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "latte",
@@ -115,6 +124,7 @@ const SPECS: [Spec; 12] = [
         colors: [0xeff1f5, 0xe6e9ef, 0xdce0e8, 0xccd0da, 0x4c4f69, 0x6c6f85, 0x8c8fa1, 0xacb0be, 0x1e66f5, 0xdf8e1d, 0x40a02b, 0xd20f39],
         ansi: [0x5c5f77, 0xd20f39, 0x40a02b, 0xdf8e1d, 0x1e66f5, 0xea76cb, 0x179299, 0xacb0be],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "monokai",
@@ -123,6 +133,7 @@ const SPECS: [Spec; 12] = [
         colors: [0x1e1f1c, 0x272822, 0x3e3d32, 0x49483e, 0xf8f8f2, 0xcfcfc2, 0x75715e, 0x5b5a4e, 0x66d9ef, 0xe6db74, 0xa6e22e, 0xf92672],
         ansi: [0x272822, 0xf92672, 0xa6e22e, 0xf4bf75, 0x66d9ef, 0xae81ff, 0xa1efe4, 0xf8f8f2],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "dracula",
@@ -131,6 +142,7 @@ const SPECS: [Spec; 12] = [
         colors: [0x191a21, 0x21222c, 0x282a36, 0x44475a, 0xf8f8f2, 0xc6c8d1, 0x6272a4, 0x565970, 0xbd93f9, 0xf1fa8c, 0x50fa7b, 0xff5555],
         ansi: [0x21222c, 0xff5555, 0x50fa7b, 0xf1fa8c, 0xbd93f9, 0xff79c6, 0x8be9fd, 0xf8f8f2],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "nord",
@@ -139,6 +151,7 @@ const SPECS: [Spec; 12] = [
         colors: [0x2e3440, 0x3b4252, 0x434c5e, 0x4c566a, 0xeceff4, 0xd8dee9, 0x7b88a1, 0x4c566a, 0x88c0d0, 0xebcb8b, 0xa3be8c, 0xbf616a],
         ansi: [0x3b4252, 0xbf616a, 0xa3be8c, 0xebcb8b, 0x81a1c1, 0xb48ead, 0x88c0d0, 0xe5e9f0],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "gruvbox",
@@ -147,6 +160,7 @@ const SPECS: [Spec; 12] = [
         colors: [0x1d2021, 0x282828, 0x32302f, 0x3c3836, 0xebdbb2, 0xd5c4a1, 0x928374, 0x504945, 0x83a598, 0xfabd2f, 0xb8bb26, 0xfb4934],
         ansi: [0x282828, 0xcc241d, 0x98971a, 0xd79921, 0x458588, 0xb16286, 0x689d6a, 0xa89984],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "one-dark",
@@ -155,6 +169,7 @@ const SPECS: [Spec; 12] = [
         colors: [0x21252b, 0x282c34, 0x2c313a, 0x3e4451, 0xabb2bf, 0x9da5b4, 0x5c6370, 0x4b5263, 0x61afef, 0xe5c07b, 0x98c379, 0xe06c75],
         ansi: [0x3f4451, 0xe06c75, 0x98c379, 0xe5c07b, 0x61afef, 0xc678dd, 0x56b6c2, 0xd7dae0],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "solarized-dark",
@@ -163,6 +178,7 @@ const SPECS: [Spec; 12] = [
         colors: [0x002b36, 0x00212b, 0x073642, 0x0e4552, 0x93a1a1, 0x839496, 0x586e75, 0x3b5560, 0x268bd2, 0xb58900, 0x859900, 0xdc322f],
         ansi: [0x073642, 0xdc322f, 0x859900, 0xb58900, 0x268bd2, 0xd33682, 0x2aa198, 0xeee8d5],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "solarized-light",
@@ -171,6 +187,7 @@ const SPECS: [Spec; 12] = [
         colors: [0xfdf6e3, 0xeee8d5, 0xe4ddc8, 0xd9d2bd, 0x586e75, 0x657b83, 0x93a1a1, 0xc9c2ae, 0x268bd2, 0xb58900, 0x859900, 0xdc322f],
         ansi: [0x073642, 0xdc322f, 0x859900, 0xb58900, 0x268bd2, 0xd33682, 0x2aa198, 0xeee8d5],
         accent: None,
+        shell: None,
     },
     Spec {
         id: "github-light",
@@ -179,6 +196,7 @@ const SPECS: [Spec; 12] = [
         colors: [0xffffff, 0xf6f8fa, 0xeaeef2, 0xd0d7de, 0x1f2328, 0x424a53, 0x6e7781, 0xafb8c1, 0x0969da, 0x9a6700, 0x1a7f37, 0xcf222e],
         ansi: [0x24292f, 0xcf222e, 0x116329, 0x4d2d00, 0x0550ae, 0x8250df, 0x1b7c83, 0x6e7781],
         accent: None,
+        shell: None,
     },
     // Werte aus Monsters (github.com/Saturday-Company/monsters, Apache-2.0, docs/design.md).
     Spec {
@@ -188,6 +206,7 @@ const SPECS: [Spec; 12] = [
         colors: [0x1c1c1a, 0x151514, 0x252523, 0x2e2e2b, 0xecebe5, 0xa3a19a, 0x8d8b85, 0x5c5a54, 0xecebe5, 0xff5e14, 0x4fd98a, 0xff3b2f],
         ansi: [0x252523, 0xff5a4e, 0x4fd98a, 0xf2c14e, 0x6ea8fe, 0xc792ea, 0x5fd4d0, 0xecebe5],
         accent: Some(0xff8a4c),
+        shell: Some(0xa3a19a),
     },
     Spec {
         id: "instrument-light",
@@ -196,6 +215,7 @@ const SPECS: [Spec; 12] = [
         colors: [0xf2f1ec, 0xe3e1db, 0xfbfaf7, 0xcfccc4, 0x1a1a18, 0x5c5a54, 0x6b6963, 0xb5b2a9, 0x1a1a18, 0xff4f00, 0x1f8f4e, 0xd8231a],
         ansi: [0x1a1a18, 0xb51c14, 0x16703c, 0x8a6100, 0x1f5fbf, 0x8a3fb0, 0x0f7a78, 0x5c5a54],
         accent: Some(0xa83500),
+        shell: Some(0x5c5a54),
     },
 ];
 
@@ -206,6 +226,10 @@ impl Theme {
         let c = |i: usize| comps(n[i]);
         let extreme = if s.dark { [1.; 3] } else { [0.; 3] };
         let dialog = dialog_surfaces(c(0), c(1), c(2), s.dark);
+        // Sekundärtext und Warte-Beschriftung: erst Richtung `fg`, dann Richtung Schwarz/Weiß auf 4,5:1 bringen.
+        let text_bgs = [c(1), c(2)];
+        let text = |col: Rgb| from_comps(accessible(col, &text_bgs, c(4), extreme));
+        let ansi = s.ansi.map(hex);
         Self {
             id: s.id,
             name: s.name,
@@ -214,17 +238,19 @@ impl Theme {
             surface: n[2],
             line: n[3],
             fg: n[4],
-            sub: n[5],
-            muted: n[6],
+            sub: text(c(5)),
+            muted: text(c(6)),
             detached: n[7],
             running: n[8],
             waiting: n[9],
             idle: n[10],
             error: n[11],
+            waiting_text: text(c(9)),
             accent,
+            shell: s.shell.map_or(ansi[4], hex),
             accent_text: from_comps(ensuring_contrast(comps(accent), 4.5, &dialog, extreme)),
             error_text: from_comps(ensuring_contrast(c(11), 4.5, &dialog, extreme)),
-            ansi: s.ansi.map(hex),
+            ansi,
             dark: s.dark,
         }
     }
@@ -237,6 +263,11 @@ impl Theme {
     /// Schema zu einer Id, `None` bei Unbekanntem.
     pub fn by_id(id: &str) -> Option<Theme> {
         SPECS.iter().find(|s| s.id == id).map(Theme::from_spec)
+    }
+
+    /// Schema zu einer Id, bei Unbekanntem das erste (Mocha), wie `ColorTheme.named`.
+    pub fn named(id: &str) -> Theme {
+        Self::by_id(id).unwrap_or_else(Self::mocha)
     }
 
     pub fn mocha() -> Self {
@@ -290,9 +321,31 @@ impl Theme {
         }
     }
 
-    /// Lesbare Schrift auf einer Akzentfläche (Marke „neu“, aktive Pille).
+    /// Lesbare Schrift auf einer Akzentfläche (aktive Pille, Haupttaste): `pill_text_on(accent)`.
     pub fn pill_text(&self) -> Hsla {
-        if self.dark { self.bg } else { hex(0xffffff) }
+        self.pill_text_on(self.accent)
+    }
+
+    /// Hover auf einer erhabenen Fläche (Werkzeugleiste im Baum): die Schemafläche mit dem größten
+    /// Helligkeitsabstand zu `raised` (`Instrument.hoverOnRaised`). Bei Gleichstand die erste: bg, panel, surface.
+    pub fn hover_on_raised(&self) -> Hsla {
+        let raised = luminance(self.raised());
+        [self.bg, self.panel, self.surface]
+            .into_iter()
+            .fold(self.bg, |best, c| if (luminance(c) - raised).abs() > (luminance(best) - raised).abs() { c } else { best })
+    }
+
+    /// Farbe eines Status (`Theme.statusColor`): ohne laufenden Prozess grau; „fertig“ mit laufendem Kommando aus dem
+    /// Bash-Tool in der Shell-Farbe, Wartet und Fehler behalten ihre eigene.
+    pub fn status_color(&self, status: Status, shell_running: bool) -> Hsla {
+        if shell_running && status == Status::Idle { self.shell } else { status.color(self) }
+    }
+
+    /// Farbe des atmenden Punkts (`Theme.activityColor`), `None` für einen ruhigen Statuspunkt: Claude arbeitet, oder
+    /// die Session ist fertig und im Hintergrund läuft noch ein Kommando.
+    pub fn activity_color(&self, status: Status, shell_running: bool) -> Option<Hsla> {
+        let busy = status == Status::Running || (shell_running && status == Status::Idle);
+        busy.then(|| self.status_color(status, shell_running))
     }
 
     /// Beschriftung einer neutralen Taste: `fg`, bei zu wenig Kontrast auf der Kappe Richtung Schwarz oder Weiß
@@ -301,6 +354,22 @@ impl Theme {
         let extreme = if self.dark { [1.; 3] } else { [0.; 3] };
         from_comps(ensuring_contrast(comps(self.fg), 4.5, &[comps(self.surface)], extreme))
     }
+}
+
+/// Beim Start vor dem ersten Lesen des Schemas: bestehende Profile ohne gewähltes Schema behalten Mocha, einmal pro
+/// Profil (`Settings.pinThemeForExistingProfile`, `AppDelegate` Start).
+pub fn pin_at_start(profile: &kadrell_core::Profile) {
+    let mut settings = profile.settings();
+    if settings.bool_or("themePinChecked", false) {
+        return;
+    }
+    settings.pin_theme_for_existing_profile();
+    let _ = profile.save_settings(&settings);
+}
+
+/// `color-mix(in srgb, c fraction, black)` (`NSColor.mixed(_:into: .black)`).
+pub fn mixed_into_black(c: Hsla, fraction: f32) -> Hsla {
+    from_comps(mixed(comps(c), fraction, [0.; 3]))
 }
 
 fn raised_of(bg: Rgb, panel: Rgb, surface: Rgb) -> Rgb {
@@ -362,5 +431,150 @@ mod tests {
         assert!(same(mocha.raised(), mocha.surface));
         let light = Theme::by_id("instrument-light").unwrap();
         assert!(same(light.raised(), light.surface));
+    }
+
+    fn hex_of(c: Hsla) -> String {
+        let r: Rgba = c.into();
+        format!("#{:02x}{:02x}{:02x}", (r.r * 255.).round() as u32, (r.g * 255.).round() as u32, (r.b * 255.).round() as u32)
+    }
+
+    #[test]
+    fn secondary_text_meets_aa() {
+        for t in Theme::all() {
+            for bg in [t.panel, t.surface] {
+                for (name, c) in [("sub", t.sub), ("muted", t.muted), ("waiting_text", t.waiting_text)] {
+                    assert!(contrast(c, bg) >= 4.49, "{}: {name} gegen {}", t.id, hex_of(bg));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn derived_text_colors_match_the_mac_app() {
+        let expect = [
+            ("mocha", "#a6adc8", "#80859d", "#f9e2af"),
+            ("latte", "#5f627a", "#5f627a", "#736055"),
+            ("monokai", "#cfcfc2", "#a9a699", "#e6db74"),
+            ("dracula", "#c6c8d1", "#8490b5", "#f1fa8c"),
+            ("nord", "#d8dee9", "#b4bccb", "#ebcb8b"),
+            ("gruvbox", "#d5c4a1", "#a49581", "#fabd2f"),
+            ("one-dark", "#9da5b4", "#9198a5", "#e5c07b"),
+            ("solarized-dark", "#8c9b9c", "#8c9b9c", "#9e9a6f"),
+            ("solarized-light", "#50666c", "#4e666e", "#2f62a9"),
+            ("github-light", "#424a53", "#656d76", "#926303"),
+            ("instrument-dark", "#a3a19a", "#8d8b85", "#ff5e14"),
+            ("instrument-light", "#5c5a54", "#66645f", "#b23d08"),
+        ];
+        for (id, sub, muted, waiting_text) in expect {
+            let t = Theme::by_id(id).unwrap();
+            assert_eq!((hex_of(t.sub).as_str(), hex_of(t.muted).as_str(), hex_of(t.waiting_text).as_str()), (sub, muted, waiting_text), "{id}");
+        }
+    }
+
+    #[test]
+    fn pill_text_meets_aa_on_every_status_color() {
+        for t in Theme::all() {
+            for face in [t.running, t.waiting, t.idle, t.error] {
+                assert!(contrast(t.pill_text_on(face), face) >= 4.49, "{}: {}", t.id, hex_of(face));
+            }
+        }
+    }
+
+    #[test]
+    fn activity_colors_meet_graphics_contrast() {
+        for t in Theme::all() {
+            for (name, status, shell) in [("running", Status::Running, false), ("shell", Status::Idle, true)] {
+                let c = t.activity_color(status, shell).unwrap_or_else(|| panic!("{}: {name} atmet nicht", t.id));
+                for bg in [t.panel, t.bg] {
+                    assert!(contrast(c, bg) >= 2.99, "{}: {name} {} gegen {}", t.id, hex_of(c), hex_of(bg));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn accent_defaults_to_running_except_instrument() {
+        for t in Theme::all().iter().filter(|t| !t.id.starts_with("instrument")) {
+            assert_eq!(hex_of(t.accent), hex_of(t.running), "{}", t.id);
+        }
+        assert_eq!(hex_of(Theme::by_id("instrument-dark").unwrap().accent), "#ff8a4c");
+        assert_eq!(hex_of(Theme::by_id("instrument-light").unwrap().accent), "#a83500");
+    }
+
+    #[test]
+    fn shell_defaults_to_blue_except_instrument() {
+        for t in Theme::all().iter().filter(|t| !t.id.starts_with("instrument")) {
+            assert_eq!(hex_of(t.shell), hex_of(t.ansi[4]), "{}", t.id);
+        }
+        assert_eq!(hex_of(Theme::by_id("instrument-dark").unwrap().shell), "#a3a19a");
+        assert_eq!(hex_of(Theme::by_id("instrument-light").unwrap().shell), "#5c5a54");
+    }
+
+    #[test]
+    fn raised_and_well_roles() {
+        let get = |id: &str| Theme::by_id(id).unwrap();
+        assert_eq!(hex_of(get("instrument-dark").raised()), "#252523");
+        assert_eq!(hex_of(get("instrument-light").raised()), "#fbfaf7");
+        assert_eq!(hex_of(get("github-light").raised()), "#ffffff");
+        assert_eq!(hex_of(get("mocha").raised()), "#1e1e2e");
+        assert_eq!(hex_of(get("instrument-dark").well()), "#0f0f0e");
+        assert_eq!(hex_of(get("instrument-light").well()), "#f2f1ec");
+        assert_eq!(hex_of(get("github-light").well()), "#ffffff");
+    }
+
+    #[test]
+    fn dialog_text_meets_aa() {
+        for t in Theme::all() {
+            for bg in [t.raised(), t.well(), t.bg] {
+                for (name, c) in [("fg", t.fg), ("sub", t.sub), ("muted", t.muted), ("accent_text", t.accent_text), ("error_text", t.error_text)] {
+                    assert!(contrast(c, bg) >= 4.49, "{}: {name} gegen {}", t.id, hex_of(bg));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn accent_text_keeps_compliant_values() {
+        let get = |id: &str| Theme::by_id(id).unwrap();
+        assert_eq!(hex_of(get("instrument-dark").accent_text), "#ff8a4c");
+        assert_eq!(hex_of(get("instrument-light").accent_text), "#a83500");
+        assert_eq!(hex_of(get("mocha").accent_text), hex_of(get("mocha").accent));
+        assert_ne!(hex_of(get("solarized-light").accent_text), hex_of(get("solarized-light").accent));
+    }
+
+    #[test]
+    fn status_color_follows_shell_rule() {
+        let t = Theme::mocha();
+        let same = |a: Hsla, b: Hsla| hex_of(a) == hex_of(b);
+        assert!(same(t.status_color(Status::Idle, true), t.shell));
+        assert!(same(t.status_color(Status::Idle, false), t.idle));
+        assert!(same(t.status_color(Status::Waiting, true), t.waiting));
+        assert!(same(t.status_color(Status::Error, true), t.error));
+        assert!(same(t.status_color(Status::Detached, true), t.detached));
+        assert!(t.activity_color(Status::Waiting, true).is_none());
+        assert!(t.activity_color(Status::Idle, false).is_none());
+    }
+
+    #[test]
+    fn named_falls_back_to_mocha() {
+        assert_eq!(Theme::named("nope").id, "mocha");
+        assert_eq!(Theme::named("nord").id, "nord");
+    }
+
+    #[test]
+    fn hover_on_raised_is_the_surface_farthest_from_raised() {
+        let light = Theme::by_id("github-light").unwrap();
+        // raised = bg (weiß), also die dunkelste Fläche: surface.
+        assert_eq!(hex_of(light.hover_on_raised()), hex_of(light.surface));
+        let dark = Theme::by_id("instrument-dark").unwrap();
+        assert_eq!(hex_of(dark.hover_on_raised()), hex_of(dark.panel));
+    }
+
+    #[test]
+    fn key_edge_mixes_into_black() {
+        use crate::ui::chrome::key_edge;
+        assert_eq!(hex_of(key_edge(&Theme::mocha())), "#050508");
+        let latte = Theme::latte();
+        assert_eq!(hex_of(key_edge(&latte)), hex_of(mixed_into_black(latte.line, 0.75)));
     }
 }

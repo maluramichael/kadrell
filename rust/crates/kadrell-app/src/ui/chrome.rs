@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use super::theme;
-use crate::theme::Theme;
+use crate::theme::{Theme, mixed_into_black};
 
 /// Höhe der oberen Leiste, die zugleich die Titelleiste ist.
 pub const BAR_HEIGHT: f32 = 32.;
@@ -30,14 +30,9 @@ pub fn seam_light(t: &Theme) -> Hsla {
     white(if t.dark { 0.05 } else { 0.65 })
 }
 
-/// Behält `keep` (0 bis 1) der Helligkeit einer Farbe, zieht sie also Richtung Schwarz.
-fn darkened(c: Hsla, keep: f32) -> Hsla {
-    Hsla { l: c.l * keep, ..c }
-}
-
-/// Kante und Dicke der Taste.
+/// Kante und Dicke der Taste (`Instrument.keyEdge`): dunkel `bg` zu 0,3 in Schwarz gemischt, hell `line` zu 0,75.
 pub fn key_edge(t: &Theme) -> Hsla {
-    if t.dark { darkened(t.bg, 0.7) } else { darkened(t.line, 0.55) }
+    if t.dark { mixed_into_black(t.bg, 0.3) } else { mixed_into_black(t.line, 0.75) }
 }
 
 /// Display-Grund erhabener Status-Anzeigen, in allen Schemata gleich dunkel.
