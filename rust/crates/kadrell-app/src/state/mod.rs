@@ -9,6 +9,7 @@ mod poll;
 pub mod stats;
 pub mod launch;
 pub mod mapping;
+mod dev;
 pub mod lifecycle;
 mod tiles;
 mod workspace;

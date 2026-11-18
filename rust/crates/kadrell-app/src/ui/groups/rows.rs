@@ -154,6 +154,7 @@ mod tests {
                 is_shell: false,
                 ended: false,
                 pane: None,
+                look: Default::default(),
             })
             .collect();
         Group { id: "g".into(), name: "g".into(), color: 0, path: String::new(), cwd: String::new(), favorite: false, collapsed, sessions }

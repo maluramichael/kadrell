@@ -31,6 +31,12 @@ pub mod settings;
 pub mod rename;
 pub mod sidebar;
 pub mod tile;
+pub mod tile_body;
+pub mod tile_icons;
+pub mod tile_actions;
+pub mod tile_look;
+pub mod stack_row;
+pub mod module_corner;
 pub mod tiling;
 
 /// Aktuelles Farbschema aus dem Global.

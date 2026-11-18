@@ -7,7 +7,7 @@ pub const GAP: f32 = 6.;
 pub const ROW_HEIGHT: f32 = 26.;
 /// Kleinster Anteil eines Feldes beim Ziehen.
 const MIN_RATIO: f64 = 0.05;
-const MAX_COLS: usize = 9;
+pub const MAX_COLS: usize = 12;
 /// Spaltenbreiten beim Scrollen, ⌃⌥←/→ schaltet eine Stufe weiter.
 pub const SCROLL_WIDTHS: [f64; 3] = [1. / 3., 0.5, 2. / 3.];
 /// Schlüssel der Spaltenbreiten im Layout Scrollen.
@@ -631,7 +631,8 @@ mod tests {
         assert_eq!(step_cols(0, 4, 1), 3);
         assert_eq!(step_cols(0, 4, -1), 1);
         assert_eq!(step_cols(1, 4, -1), 0);
-        assert_eq!(step_cols(9, 4, 1), 9);
+        assert_eq!(step_cols(12, 4, 1), 12, "Grid höchstens 12 Spalten wie in der Mac-App");
+        assert_eq!(step_cols(9, 4, 1), 10);
         assert_eq!(step_scroll_cols(1, -1), 1);
         assert_eq!(step_scroll_cols(2, 1), 3);
     }

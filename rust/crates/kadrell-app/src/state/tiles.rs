@@ -94,6 +94,10 @@ pub(super) struct Tile {
 }
 
 impl Tile {
+    pub(super) fn blank() -> Tile {
+        Tile::new()
+    }
+
     fn new() -> Tile {
         Tile { term: None, state: Run::NotStarted, last_rows: Vec::new(), started_at: None, exit_code: None, missing_folder: false }
     }
