@@ -1,0 +1,13 @@
+[package]
+name = "kadrell-core"
+description = "Kadrell: Modell und Speicher (Gruppen, Sessions, Einstellungen, Profile), ohne Oberfläche"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Versionen gepinnt auf Stände, die mindestens zwei Wochen alt sind (Lieferketten-Vorsicht), wie in windows/.
+[dependencies]
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "=1.0.140"
+uuid = { version = "=1.17.0", features = ["v4"] }
