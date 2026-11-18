@@ -6,9 +6,11 @@
 use std::time::Duration;
 
 use kadrell_i18n::trd;
-use gpui::{Animation, AnimationExt, AnyElement, App, Div, FontWeight, InteractiveElement, IntoElement, ParentElement, Role, StatefulInteractiveElement, Styled, div, px};
+use gpui::{Animation, AnimationExt, AnyElement, App, AppContext, Div, FontWeight, InteractiveElement, IntoElement, ParentElement, Role, SharedString, StatefulInteractiveElement, Styled, div, px};
 
 use super::chrome::h_seam;
+use super::groups::drag::DragTile;
+use super::groups::rows::DragGhost;
 use super::model::{Group, Session};
 use super::theme;
 use crate::appearance::{Appearance, a11y, breathing};
@@ -97,7 +99,12 @@ fn header(group: &Group, session: &Session, zoomed: bool, a: &Appearance, cx: &A
     if zoomed {
         row = row.child(zoom_badge(&t, a));
     }
+    let drag = DragTile { key: session.key.clone(), label: session.title.clone() };
     row.child(div().flex_none().text_size(px(a.s(10.5))).text_color(t.muted).child(session.age.clone()))
+        // Ziehen an der Titelzeile sortiert um (Ablage in `layout::placed`).
+        .id(SharedString::from(format!("tile-head-{}", session.key)))
+        .cursor_grab()
+        .on_drag(drag, |d, _, _, cx| cx.new(|_| DragGhost { label: d.label.clone() }))
 }
 
 /// Rahmenfarbe: Fokus in Akzentfarbe, sonst Linienfarbe.

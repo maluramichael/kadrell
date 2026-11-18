@@ -4,20 +4,20 @@ use super::layout::LayoutMode;
 use gpui::{Bounds, Hsla, IntoElement, PathBuilder, Pixels, Point, Styled, canvas, point, px};
 
 /// Ein Linienzug in Symbolkoordinaten (Ursprung oben links), optional geschlossen.
-struct Stroke {
-    points: Vec<(f32, f32)>,
-    closed: bool,
+pub(super) struct Stroke {
+    pub(super) points: Vec<(f32, f32)>,
+    pub(super) closed: bool,
 }
 
-fn open(points: &[(f32, f32)]) -> Stroke {
+pub(super) fn open(points: &[(f32, f32)]) -> Stroke {
     Stroke { points: points.to_vec(), closed: false }
 }
 
-fn rect(x: f32, y: f32, w: f32, h: f32) -> Stroke {
+pub(super) fn rect(x: f32, y: f32, w: f32, h: f32) -> Stroke {
     Stroke { points: vec![(x, y), (x + w, y), (x + w, y + h), (x, y + h)], closed: true }
 }
 
-fn to_screen(origin: Point<Pixels>, p: (f32, f32)) -> Point<Pixels> {
+pub(super) fn to_screen(origin: Point<Pixels>, p: (f32, f32)) -> Point<Pixels> {
     point(origin.x + px(p.0), origin.y + px(p.1))
 }
 
@@ -31,7 +31,7 @@ fn build(strokes: &[Stroke], origin: Point<Pixels>, width: f32) -> Option<gpui::
 }
 
 /// Zeichenfläche `size` x `size`, auf der die Linienzüge in `color` mit Strichstärke `width` liegen.
-fn icon(size: f32, strokes: Vec<Stroke>, color: Hsla, width: f32) -> impl IntoElement {
+pub(super) fn icon(size: f32, strokes: Vec<Stroke>, color: Hsla, width: f32) -> impl IntoElement {
     canvas(
         |_, _, _| (),
         move |bounds: Bounds<Pixels>, _, window, _| {

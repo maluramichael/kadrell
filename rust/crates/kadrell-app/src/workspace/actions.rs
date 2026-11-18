@@ -19,7 +19,7 @@ pub const AUTO_KEY: &str = "workspace.auto";
 
 pub type Handler = fn(&mut Shell, &mut Window, &mut Context<Shell>);
 
-/// Alle Aktionen, die die Arbeitsfläche selbst ausführt. Die anderen Kürzel (Dialoge, Rechte Sidebar, Palette, Editor,
+/// Alle Aktionen, die die Arbeitsfläche selbst ausführt. Die anderen Kürzel (Dialoge, Rechte Sidebar, Palette,
 /// Neustart) gehören anderen Stellen und bleiben hier ohne Eintrag. `focus1` bis `focus9` laufen über `tile_index`.
 static HANDLERS: &[(A, Handler)] = &[
     (A::FocusLeft, |s, w, c| s.move_focus(Direction::Left, w, c)),
@@ -51,6 +51,7 @@ static HANDLERS: &[(A, Handler)] = &[
     (A::RenameSession, |s, w, c| s.rename_focused(w, c)),
     (A::CycleSort, |s, _, c| s.cycle_sort(c)),
     (A::ToggleGrouping, |s, _, c| s.toggle_grouped(c)),
+    (A::OpenEditor, |s, _, _| s.open_editor_focused()),
 ];
 
 /// Der Handler einer Aktion der Arbeitsfläche, `None` für alle anderen.
@@ -74,6 +75,8 @@ impl Shell {
             || self.ext_ui.dialog.is_some()
             || self.usage.overlay_open()
             || self.misc.overlay_open()
+            || self.groups_ui.open()
+            || self.context.is_some()
     }
 
     /// Ein Tastendruck, bevor das Terminal ihn sieht: Vorschau beenden, Kürzel aus den Einstellungen, Baumtasten, Sync.
@@ -351,7 +354,7 @@ mod tests {
             A::FocusLeft, A::FocusRight, A::FocusUp, A::FocusDown, A::SwapLeft, A::SwapRight, A::SwapUp, A::SwapDown,
             A::ResizeLeft, A::ResizeRight, A::ResizeUp, A::ResizeDown, A::SplitRight, A::SplitDown, A::NextSession,
             A::PrevSession, A::LastSession, A::Zoom, A::NextLayout, A::SyncInput, A::CloseFocused, A::PreviewNext,
-            A::PreviewPrev, A::NextWaiting, A::FocusSidebar, A::FocusWorkspace,
+            A::PreviewPrev, A::NextWaiting, A::FocusSidebar, A::FocusWorkspace, A::OpenEditor,
         ] {
             assert!(handler_for(action).is_some(), "{action:?} fehlt");
         }
@@ -361,7 +364,7 @@ mod tests {
     fn other_places_keep_their_actions() {
         for action in [
             A::ShowHelp, A::ShowStats, A::ShowExtensions, A::FocusRightSidebar, A::ToggleRightSidebar, A::QuickStart,
-            A::SearchHistory, A::OpenEditor, A::Restart,
+            A::SearchHistory, A::Restart,
         ] {
             assert!(!is_workspace_action(action), "{action:?} gehört nicht der Arbeitsfläche");
         }

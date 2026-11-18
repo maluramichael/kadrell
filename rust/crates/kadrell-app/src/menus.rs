@@ -12,7 +12,7 @@ use crate::lang::{de, shortcut, shortcut_mac_only, shortcut_os};
 use crate::misc::{OpenAbout, OpenWhatsNew};
 use crate::ui::ext::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar};
 
-actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow, NewWindow]);
+actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow, NewWindow, NewGroup, ShowContextMenu]);
 
 pub enum Entry {
     Separator,
@@ -76,7 +76,7 @@ fn file_menu() -> MenuDef {
             item(de!("Schnellstart: Idee rein, Session raus"), shortcut("⇧⌘I"), QuickStart),
             item(de!("Neues Terminal ohne Claude"), shortcut("⌘T"), NewTerminal),
             off(de!("Remote verbinden …"), shortcut("⇧⌘N")),
-            off(de!("Neue Gruppe …"), shortcut("⌥⌘N")),
+            item(de!("Neue Gruppe …"), shortcut("⌥⌘N"), NewGroup),
             Entry::Separator,
             item(de!("Neues Fenster"), shortcut("⇧⌘T"), NewWindow),
             item(de!("Fenster schließen"), shortcut("⇧⌘W"), CloseWindow),
@@ -172,7 +172,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new(term_key, NewTerminal, None),
         KeyBinding::new(zoom_key, ZoomTile, None),
         KeyBinding::new("f2", RenameSession, None),
+        KeyBinding::new("shift-f10", ShowContextMenu, None),
     ]);
+    // Strg+Alt+N: neue Gruppe (⌥⌘N der Mac-App).
+    cx.bind_keys([KeyBinding::new(if cfg!(target_os = "macos") { "cmd-alt-n" } else { "ctrl-alt-n" }, NewGroup, None)]);
     let (search_key, find_all_key) = if cfg!(target_os = "macos") { ("cmd-p", "cmd-shift-f") } else { ("ctrl-p", "ctrl-shift-f") };
     cx.bind_keys([KeyBinding::new(search_key, OpenPalette, None), KeyBinding::new(find_all_key, FindAll, None)]);
     let (quick_key, history_key) = if cfg!(target_os = "macos") { ("cmd-shift-i", "cmd-shift-h") } else { ("ctrl-shift-i", "ctrl-shift-h") };
@@ -201,7 +204,9 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
         .on_action(cx.listener(|this, _: &StopSession, window, cx| this.stop_focused(window, cx)))
         .on_action(cx.listener(|this, _: &ResumeSession, window, cx| this.resume_focused(window, cx)))
         .on_action(cx.listener(|this, _: &RenameSession, window, cx| this.rename_focused(window, cx)))
-        .on_action(cx.listener(|this, _: &RenameGroup, window, cx| this.rename_focused_group(window, cx)))
+        .on_action(cx.listener(|this, _: &RenameGroup, window, cx| this.edit_focused_group(window, cx)))
+        .on_action(cx.listener(|this, _: &NewGroup, window, cx| this.open_new_group(window, cx)))
+        .on_action(cx.listener(|this, _: &ShowContextMenu, window, cx| this.show_context_menu_for_focus(window, cx)))
         .on_action(cx.listener(|this, _: &ZoomTile, _, cx| this.toggle_zoom(cx)))
         .on_action(cx.listener(|this, _: &NextSession, window, cx| this.cycle_focus(1, window, cx)))
         .on_action(cx.listener(|this, _: &PrevSession, window, cx| this.cycle_focus(-1, window, cx)))

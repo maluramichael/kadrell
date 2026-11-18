@@ -273,9 +273,15 @@ impl AppState {
 
     /// Neues Terminal ohne Claude im Ordner `cwd`.
     pub fn new_shell_session(&mut self, cwd: &str, show: bool) -> String {
+        self.new_shell_session_in(cwd, None, show)
+    }
+
+    /// Neues Terminal ohne Claude im Ordner `cwd`, ausdrücklich in `group` (Id): auch wenn zwei Gruppen denselben
+    /// Ordner haben, landet es in der gewählten.
+    pub fn new_shell_session_in(&mut self, cwd: &str, group: Option<&str>, show: bool) -> String {
         let key = Session::new_shell_id();
         let session = Session::new(&key, cwd, now_ms(), &key, "");
-        self.add_session(session, None, show, None);
+        self.add_session(session, group, show, None);
         key
     }
 
@@ -364,6 +370,11 @@ impl AppState {
     pub fn toggle_sort(&mut self, mode: SidebarSort) {
         let next = if self.sort() == mode { SidebarSort::Off } else { mode };
         self.set_sidebar("sidebar.sort", json!(next.raw()));
+    }
+
+    /// Von Hand gezogene Reihenfolge der flachen Liste (`sidebar.flatOrder`), getrennt von `groups.json`.
+    pub fn set_flat_order(&mut self, order: &[String]) {
+        self.set_sidebar("sidebar.flatOrder", json!(order));
     }
 
     pub fn toggle_grouped(&mut self) {
