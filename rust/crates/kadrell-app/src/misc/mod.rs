@@ -291,7 +291,11 @@ impl Shell {
             let plan = cx.background_executor().spawn(async move { adopt::scan(&scan_cli, &SystemRunner, &owned, default_profile) }).await;
             let _ = this.update_in(cx, |shell, window, cx| match plan {
                 Ok(plan) => shell.offer_adopt(plan, Some(cli), window, cx),
-                Err(e) => eprintln!("kadrell: agents: {e}"),
+                Err(e) => {
+                    eprintln!("kadrell: agents: {e}");
+                    shell.state.fail_registry(&e);
+                    cx.notify();
+                }
             });
         })
         .detach();

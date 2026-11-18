@@ -23,14 +23,14 @@ pub struct LaunchEnv {
 impl LaunchEnv {
     /// Aus der Umgebung des Prozesses. `override_binary` ist die Einstellung `claudeBinary` (leer: suchen).
     pub fn from_process(override_binary: &str, exe: String, socket: String, home: String) -> LaunchEnv {
-        let env = process_env();
+        let env = base_environment();
         let is_file = |p: &str| std::path::Path::new(p).is_file();
         // Windows nennt die Variable `Path`, die Suche kennt nur `PATH`: nur für die Suche ergänzen.
         let mut search = env.clone();
         if let Some(path) = env.iter().find(|(k, _)| k.eq_ignore_ascii_case("PATH")).map(|(_, v)| v.clone()) {
             search.insert("PATH".into(), path);
         }
-        let found = if override_binary.is_empty() { locate_binary(&search, &home, &is_file, &|| None) } else { Some(override_binary.to_string()) };
+        let found = if override_binary.is_empty() { locate_binary(&search, &home, &is_file, &|| login_shell_lookup(&env)) } else { Some(override_binary.to_string()) };
         let claude = found.map(|b| ClaudeCli::new(b, env.clone(), StripMode::Broad));
         let base = ClaudeCli::new(String::new(), env, StripMode::Broad);
         LaunchEnv { claude, base, exe, socket, home }
@@ -45,6 +45,32 @@ impl LaunchEnv {
     pub fn config_dir(&self) -> String {
         self.claude.as_ref().unwrap_or(&self.base).config_dir(&self.home)
     }
+}
+
+/// Umgebung des Prozesses; auf macOS mit der der Login-Shell darüber (aus dem Dock fehlen sonst die PATH-Einträge des
+/// Nutzers, `ClaudeCLI.resolve`). Blockiert dort bis zu 10 s, deshalb nicht auf dem Oberflächen-Thread wiederholen.
+#[cfg(target_os = "macos")]
+fn base_environment() -> BTreeMap<String, String> {
+    kadrell_claude::cli::login_shell_env(&kadrell_claude::cli::SystemRunner, process_env())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn base_environment() -> BTreeMap<String, String> {
+    process_env()
+}
+
+/// `command -v claude` in der Login-Shell (nur macOS), wenn weder `~/.local/bin` noch PATH `claude` kennen.
+#[cfg(target_os = "macos")]
+fn login_shell_lookup(env: &BTreeMap<String, String>) -> Option<String> {
+    use kadrell_claude::cli::{CommandRunner, SystemRunner};
+    let args = ["-lc".to_string(), "command -v claude".to_string()];
+    let out = SystemRunner.run("/bin/zsh", &args, Some(env), None, std::time::Duration::from_secs(10)).ok()?;
+    Some(out.stdout.trim().to_string()).filter(|p| !p.is_empty())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn login_shell_lookup(_env: &BTreeMap<String, String>) -> Option<String> {
+    None
 }
 
 /// Flags der Session: Modell und Effort der Session gehen den Einstellungen vor.

@@ -4,6 +4,8 @@
 
 pub mod agents;
 pub mod attention;
+pub mod cli_check;
+pub mod feedback;
 mod handler;
 mod poll;
 pub mod stats;
@@ -85,6 +87,12 @@ pub struct AppState {
     /// Wirkungen des Aufmerksamkeits-Trackers (Klang, Benachrichtigung, Hüpfen), die die Plattformschicht noch
     /// ausführen muss (`take_effects`).
     pending_effects: Vec<Effect>,
+    /// claude läuft, ist aber älter als getestet: nicht blockierend, nur die Leiste warnt (`cli_check`).
+    pub version_warning: Option<String>,
+    /// Letzte Ansage („<Titel> wartet“), als Beschreibung am Status-Display der Leiste (`tray_wire::feedback`).
+    pub announcement: Option<String>,
+    /// Klänge für Öffnen, Schließen und Umschalten, die die Oberfläche noch spielen muss (`feedback`).
+    pending_sounds: Vec<kadrell_tray::Sound>,
 }
 
 impl AppState {
@@ -134,6 +142,9 @@ impl AppState {
             window_active: true,
             error: None,
             pending_effects: Vec::new(),
+            version_warning: None,
+            announcement: None,
+            pending_sounds: Vec::new(),
         };
         state.restore_view();
         state
@@ -267,6 +278,7 @@ impl AppState {
         }
         self.registry.lock().unwrap_or_else(PoisonError::into_inner).add(mapping::record_of(&session));
         self.count_opened(session.is_shell());
+        self.queue_sound(kadrell_tray::Sound::Open);
         if let Some(prompt) = prompt {
             self.prompts.insert(key.clone(), prompt);
         }
@@ -313,6 +325,7 @@ impl AppState {
             self.prompts.remove(key);
         }
         self.wanted.retain(|k| !ids.contains(k));
+        self.queue_sound(kadrell_tray::Sound::Close);
         self.store.remove_sessions(&ids, now_secs());
         self.registry.lock().unwrap_or_else(PoisonError::into_inner).remove(&ids, now_ms());
         self.store.assign();
@@ -494,3 +507,5 @@ fn agent_status(s: SessionStatus) -> kadrell_claude::agent::Status {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod bar_tests;

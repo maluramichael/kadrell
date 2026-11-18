@@ -3,6 +3,8 @@
 #![allow(dead_code)] // Theme: nicht alle Felder werden schon benutzt.
 
 mod appearance;
+mod bar_wire;
+mod cli_wire;
 mod ext;
 mod models;
 mod remote;
@@ -24,7 +26,7 @@ mod wire;
 use std::collections::HashMap;
 
 use gpui::{
-    App, Bounds, Context, Entity, FocusHandle, Focusable, Global, IntoElement, KeyDownEvent, Render, Window, WindowBounds,
+    App, Bounds, Context, Entity, FocusHandle, Focusable, Global, IntoElement, KeyDownEvent, MouseDownEvent, Render, Window, WindowBounds,
     WindowOptions, div, prelude::*, px, size,
 };
 use gpui_platform::application;
@@ -201,6 +203,7 @@ impl Shell {
         shell.start_tray(window, cx);
         shell.open_extensions_from_env(window, cx);
         shell.start_misc(window, cx);
+        shell.start_cli_check(window, cx);
         shell
     }
 
@@ -333,22 +336,34 @@ impl Shell {
         ui::bar::LayoutCtl {
             mode: self.layout.mode,
             cols_label: self.layout.cols_label(),
-            cycle: Rc::new(cx.listener(|this, _, _, cx| this.cycle_layout(cx))),
-            dec: Rc::new(cx.listener(|this, _, _, cx| this.step_cols(-1, cx))),
-            inc: Rc::new(cx.listener(|this, _, _, cx| this.step_cols(1, cx))),
+            cols: match self.layout.mode {
+                ui::layout::LayoutMode::Grid => self.layout.cols,
+                ui::layout::LayoutMode::Scroll => self.layout.scroll_cols,
+                _ => 0,
+            },
+            pick_layout: Rc::new(cx.listener(|this, ev: &MouseDownEvent, _, cx| this.open_layout_menu(ev.position, cx))),
+            dec: Rc::new(cx.listener(|this, _: &MouseDownEvent, _, cx| this.step_cols(-1, cx))),
+            inc: Rc::new(cx.listener(|this, _: &MouseDownEvent, _, cx| this.step_cols(1, cx))),
             split: (self.layout.mode == ui::layout::LayoutMode::Custom).then(|| self.focused_split()),
-            cycle_split: Rc::new(cx.listener(|this, _, _, cx| this.cycle_split(cx))),
+            cycle_split: Rc::new(cx.listener(|this, _: &MouseDownEvent, _, cx| this.cycle_split(cx))),
             auto: self.ws.auto.on,
             sync: self.ws.sync,
             zoom: self.state.zoom && self.tiles().len() > 1,
-            toggle_auto: Rc::new(cx.listener(|this, _, window, cx| this.toggle_auto(window, cx))),
-            toggle_sync: Rc::new(cx.listener(|this, _, window, cx| this.toggle_sync(window, cx))),
-            toggle_zoom: Rc::new(cx.listener(|this, _, window, cx| this.zoom_focused(window, cx))),
+            toggle_auto: Rc::new(cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                this.play_sound(kadrell_tray::Sound::Toggle);
+                this.toggle_auto(window, cx);
+            })),
+            toggle_sync: Rc::new(cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                this.play_sound(kadrell_tray::Sound::Toggle);
+                this.toggle_sync(window, cx);
+            })),
+            toggle_zoom: Rc::new(cx.listener(|this, _: &MouseDownEvent, window, cx| this.zoom_focused(window, cx))),
             grouped: self.state.grouped(),
             sort: self.state.sort(),
-            toggle_grouped: Rc::new(cx.listener(|this, _, _, cx| this.toggle_grouped(cx))),
-            toggle_alpha: Rc::new(cx.listener(|this, _, _, cx| this.toggle_sort(SidebarSort::Alpha, cx))),
-            toggle_status: Rc::new(cx.listener(|this, _, _, cx| this.toggle_sort(SidebarSort::Status, cx))),
+            toggle_grouped: Rc::new(cx.listener(|this, _: &MouseDownEvent, _, cx| this.toggle_grouped(cx))),
+            cycle_sort: Rc::new(cx.listener(|this, _: &MouseDownEvent, _, cx| this.cycle_sort(cx))),
+            pressed: self.usage.pressed,
+            flash: self.flash_fn(cx),
             running,
             detached: self.state.store.sessions.sessions.len().saturating_sub(running),
             waiting: self.waiting_count(),
@@ -363,6 +378,7 @@ impl Shell {
     }
 
     pub(crate) fn toggle_grouped(&mut self, cx: &mut Context<Self>) {
+        self.play_sound(kadrell_tray::Sound::Toggle);
         self.state.toggle_grouped();
         self.rebuild();
         cx.notify();

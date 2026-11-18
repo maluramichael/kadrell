@@ -199,6 +199,9 @@ impl Shell {
     /// Pollt Session-Dateien und Transcripts im Hintergrund, solange die App läuft.
     pub(crate) fn start_poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
+            if crate::cli_wire::dev_loading() {
+                cx.background_executor().timer(Duration::from_secs(60)).await;
+            }
             loop {
                 let Ok(job) = this.update(cx, |shell, _| shell.state.poll_job()) else { break };
                 let (change, messages) = cx.background_executor().spawn(async move { job.run_counted() }).await;
