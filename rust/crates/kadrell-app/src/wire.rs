@@ -101,7 +101,7 @@ impl Shell {
         self.reconcile(window, cx);
         self.rebuild();
         self.refresh_auto();
-        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() && !self.misc.overlay_open() && !self.ws.keeps_focus() {
+        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && self.agent_pick.is_none() && self.remote.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() && !self.misc.overlay_open() && !self.ws.keeps_focus() {
             let focus = self.selected.and_then(|(g, s)| self.groups[g].sessions[s].pane.as_ref().map(|p| p.read(cx).focus.clone()));
             if let Some(focus) = focus {
                 focus.focus(window, cx);

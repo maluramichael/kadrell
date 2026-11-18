@@ -15,7 +15,7 @@ use kadrell_core::hotkeys::{self, Hotkey, HotkeyAction};
 use super::backend::Backend;
 use super::controls::Geometry;
 use super::filter::Filter;
-use super::model::{Block, Btn, Control, Msg, Row, Setter};
+use super::model::{Block, Btn, Control, Msg, Provider, Row, Setter};
 use super::sections::{self, Context as BuildContext};
 use super::shortcut::{self, KeyInput, Recorded};
 use super::store::{self, AppSettings};
@@ -73,6 +73,8 @@ pub struct SettingsDialog {
     /// Dropdown, das der letzte Mausdruck geschlossen hat: der folgende Klick auf dasselbe Feld öffnet es nicht neu.
     pub(super) just_closed: Option<String>,
     record_sub: Option<Subscription>,
+    /// Zählt mit jedem Tippen im Suchfeld der Modelle hoch: nur die letzte Eingabe sucht (nach kurzer Pause).
+    pub(super) search_token: u64,
     _subs: Vec<Subscription>,
 }
 
@@ -84,7 +86,7 @@ impl SettingsDialog {
             this.filter.query = input.read(cx).text().to_string();
             cx.notify();
         });
-        let this = Self {
+        let mut this = Self {
             focus: cx.focus_handle(),
             backend: super::backend::default_backend(cx),
             filter: Filter::default(),
@@ -101,10 +103,36 @@ impl SettingsDialog {
             armed: None,
             just_closed: None,
             record_sub: None,
+            search_token: 0,
             _subs: vec![filter_sub],
         };
         this.focus.focus(window, cx);
+        this.start_model_sync(cx);
         this
+    }
+
+    /// Beim Öffnen die lokalen Anbieter neu lesen und danach neu zeichnen, sobald das Backend im Hintergrund etwas
+    /// ändert (Status, Modelle, Downloads, Suche). Nichts davon läuft beim Zeichnen.
+    fn start_model_sync(&mut self, cx: &mut Context<Self>) {
+        self.backend.reload(Provider::Ollama);
+        self.backend.reload(Provider::LlamaCpp);
+        cx.spawn(async move |this, cx| {
+            let mut seen = u64::MAX;
+            loop {
+                cx.background_executor().timer(std::time::Duration::from_millis(250)).await;
+                let alive = this.update(cx, |this, cx| {
+                    let now = this.backend.generation();
+                    if now != seen {
+                        seen = now;
+                        cx.notify();
+                    }
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     // MARK: Daten
@@ -140,9 +168,34 @@ impl SettingsDialog {
     pub(super) fn input_changed(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some(input) = self.inputs.get(id).cloned() else { return };
         let text = input.read(cx).text().to_string();
+        if id == sections::SEARCH_ROW {
+            return self.search_later(text, cx);
+        }
         if let Some(Row { control: Control::Text { set: Some(set), .. }, .. }) = self.find_row(id, cx) {
             self.change(|s| set(s, text), cx);
         }
+    }
+
+    /// Modellsuche auf ollama.com, eine halbe Sekunde nach dem letzten Tastendruck.
+    fn search_later(&mut self, query: String, cx: &mut Context<Self>) {
+        self.search_token += 1;
+        let token = self.search_token;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+            this.update(cx, |this, cx| {
+                if this.search_token == token {
+                    this.backend.search(&query);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Text eines Eingabefeldes der Zeile `id`.
+    fn input_text(&self, id: &str, cx: &App) -> String {
+        self.inputs.get(id).map(|i| i.read(cx).text().trim().to_string()).unwrap_or_default()
     }
 
     /// Legt für jede Textzeile ein Eingabefeld an, einmal; danach gehört der Text dem Feld.
@@ -176,9 +229,32 @@ impl SettingsDialog {
             Msg::DeleteModel(id) => self.delete_model(id),
             Msg::Browse { row, files } => self.browse(row, *files, window, cx),
             Msg::Clear(row) => self.set_input_text(row, "", window, cx),
-            Msg::Pull(row) => self.set_input_text(row, "", window, cx),
+            Msg::Pull(row) => self.start_pull(row, window, cx),
+            Msg::PickPull(name) => self.set_input_text(sections::PULL_ROW, name, window, cx),
+            Msg::CancelPull(id) => self.backend.cancel_pull(id),
+            Msg::UseSuggested { feature, model } => self.use_suggested(feature, model, cx),
         }
         cx.notify();
+    }
+
+    /// „Laden“: der Name aus dem Feld geht an den Anbieter, das Feld wird leer.
+    fn start_pull(&mut self, row: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let name = self.input_text(row, cx);
+        if !name.is_empty() {
+            self.backend.pull(&name);
+            self.set_input_text(row, "", window, cx);
+        }
+    }
+
+    /// Empfohlenes Modell: für die Funktion wählen, Funktion einschalten, Modell laden.
+    fn use_suggested(&mut self, feature: &str, model: &str, cx: &mut Context<Self>) {
+        let (on_key, model_key) = (format!("local.feature.{feature}.enabled"), format!("local.feature.{feature}.model"));
+        let value = format!("ollama|{model}");
+        self.change(|s| {
+            s.set(&model_key, serde_json::Value::String(value));
+            s.set(&on_key, serde_json::Value::Bool(true));
+        }, cx);
+        self.backend.pull(model);
     }
 
     /// Zweistufig: der erste Druck markiert das Modell, der zweite löscht es.
@@ -403,7 +479,7 @@ impl SettingsDialog {
             Control::Select { .. } => self.open_select(&row, window, cx),
             Control::Text { .. } => self.focus_input(&row.id, window, cx),
             Control::Hotkey(action) => self.start_recording(*action, cx),
-            Control::Info { buttons, .. } | Control::Model { buttons, .. } => {
+            Control::Info { buttons, .. } | Control::Model { buttons, .. } | Control::Pull { buttons, .. } => {
                 if let Some(b) = buttons.first() {
                     self.press(&b.clone(), window, cx);
                 }

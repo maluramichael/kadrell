@@ -12,7 +12,7 @@ use crate::lang::{de, shortcut, shortcut_mac_only, shortcut_os};
 use crate::misc::{OpenAbout, OpenWhatsNew};
 use crate::ui::ext::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar};
 
-actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow, NewWindow, NewGroup, ShowContextMenu]);
+actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow, NewWindow, NewGroup, ShowContextMenu, NewRemote]);
 
 pub enum Entry {
     Separator,
@@ -75,7 +75,7 @@ fn file_menu() -> MenuDef {
             item(de!("Neue Session im selben Ordner"), shortcut("⌘↩"), NewSessionHere),
             item(de!("Schnellstart: Idee rein, Session raus"), shortcut("⇧⌘I"), QuickStart),
             item(de!("Neues Terminal ohne Claude"), shortcut("⌘T"), NewTerminal),
-            off(de!("Remote verbinden …"), shortcut("⇧⌘N")),
+            item(de!("Remote verbinden …"), shortcut("⇧⌘N"), NewRemote),
             item(de!("Neue Gruppe …"), shortcut("⌥⌘N"), NewGroup),
             Entry::Separator,
             item(de!("Neues Fenster"), shortcut("⇧⌘T"), NewWindow),
@@ -165,7 +165,8 @@ pub fn menus() -> Vec<MenuDef> {
 /// dem Terminal), hier steht nur, was als Aktion gebunden ist.
 pub fn init(cx: &mut App) {
     let new_key = if cfg!(target_os = "macos") { "cmd-n" } else { "ctrl-n" };
-    cx.bind_keys([KeyBinding::new(new_key, NewSession, None)]);
+    let remote_key = if cfg!(target_os = "macos") { "cmd-shift-n" } else { "ctrl-shift-n" };
+    cx.bind_keys([KeyBinding::new(new_key, NewSession, None), KeyBinding::new(remote_key, NewRemote, None)]);
     let (here_key, term_key, zoom_key) = if cfg!(target_os = "macos") { ("cmd-enter", "cmd-t", "cmd-shift-enter") } else { ("ctrl-enter", "ctrl-t", "ctrl-shift-enter") };
     cx.bind_keys([
         KeyBinding::new(here_key, NewSessionHere, None),
@@ -195,6 +196,7 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
     let root = crate::appearance::zoom::attach_actions(root, cx);
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
+        .on_action(cx.listener(|this, _: &NewRemote, window, cx| this.open_remote(window, cx)))
         .on_action(cx.listener(|this, _: &FindAll, window, cx| this.open_palette("/", window, cx)))
         .on_action(cx.listener(|this, _: &SearchHistory, window, cx| this.open_palette("#", window, cx)))
         .on_action(cx.listener(|this, _: &QuickStart, window, cx| this.open_quick_start(window, cx)))

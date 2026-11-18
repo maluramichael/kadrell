@@ -52,9 +52,8 @@ impl ControlHandler for AppState {
         self.paths.home.clone()
     }
 
-    /// TODO: Remote-Sessions (`--host`) sind in der Rust-App noch nicht verdrahtet.
     fn ssh_hosts(&self) -> SshHosts {
-        SshHosts::default()
+        self.ssh_host_list()
     }
 
     fn resume_blocker(&self, session_id: &str) -> Option<ResumeBlocker> {
@@ -64,9 +63,9 @@ impl ControlHandler for AppState {
         transcript::path(session_id, &self.env.config_dir()).is_none().then_some(ResumeBlocker::NoTranscript)
     }
 
-    /// TODO: Pi-Sessions sind noch nicht verdrahtet.
+    /// Pi ist installiert und unter „Pi-Sessions“ ist ein Modell (oder Pis Standard) gewählt.
     fn pi_available(&self) -> bool {
-        false
+        self.pi_model().is_some()
     }
 
     fn bracketed_paste(&self, key: &str) -> Option<bool> {
@@ -98,8 +97,12 @@ impl ControlHandler for AppState {
     }
 
     fn new_session(&mut self, request: NewRequest) -> Result<String> {
-        if request.host.is_some() || request.pi {
-            return Err(ControlError::new("Remote (--host) und Pi (--pi) sind in dieser Version noch nicht verdrahtet"));
+        if let Some(host) = &request.host {
+            return Ok(self.new_remote_session(host, request.tmux.as_deref(), request.show));
+        }
+        if request.pi {
+            let model = self.pi_model().ok_or_else(|| ControlError::new("--pi braucht pi und ein Modell unter Einstellungen › Modelle für Funktionen › Pi-Sessions"))?;
+            return Ok(self.new_pi_session(&request.cwd, request.group.as_deref(), request.show, request.prompt, &model));
         }
         let mut session = match &request.resume {
             Some(id) => Session::new(id, &request.cwd, now_ms(), id, ""),

@@ -76,6 +76,8 @@ impl Shell {
             || self.usage.overlay_open()
             || self.misc.overlay_open()
             || self.groups_ui.open()
+            || self.agent_pick.is_some()
+            || self.remote.is_some()
             || self.context.is_some()
     }
 

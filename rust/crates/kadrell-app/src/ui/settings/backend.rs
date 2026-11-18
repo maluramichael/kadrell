@@ -29,6 +29,34 @@ pub struct ModelInfo {
     pub can_remove: bool,
 }
 
+/// Ein laufender oder gescheiterter Download.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PullInfo {
+    /// `provider|name`.
+    pub id: String,
+    pub name: String,
+    /// Fortschritt als Text („25 % · 250 MB / 1 GB“) oder die Fehlermeldung.
+    pub text: String,
+    pub fraction: Option<f64>,
+    pub failed: bool,
+}
+
+/// Treffer der Modellsuche auf ollama.com.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HitInfo {
+    pub name: String,
+    pub summary: String,
+    pub tags: Vec<String>,
+}
+
+/// Stand der Suche: Treffer, ob gerade gesucht wird, Fehler oder „nichts gefunden“.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchInfo {
+    pub hits: Vec<HitInfo>,
+    pub searching: bool,
+    pub error: Option<String>,
+}
+
 pub trait Backend {
     fn accounts(&self) -> Vec<AccountInfo>;
     fn active_account(&self) -> Option<String>;
@@ -44,10 +72,46 @@ pub trait Backend {
     fn reload(&mut self, provider: Provider);
     /// Modelle für die Auswahl bei den Funktionen: (`provider|name`, Anzeige).
     fn available_models(&self) -> Vec<(String, String)>;
+    /// Laufende und gescheiterte Downloads (Ollama).
+    fn pulls(&self) -> Vec<PullInfo> {
+        Vec::new()
+    }
+    /// Modell aus der Ollama-Bibliothek laden.
+    fn pull(&mut self, _name: &str) {}
+    /// Download abbrechen bzw. eine Fehlermeldung wegnehmen (`id` = `provider|name`).
+    fn cancel_pull(&mut self, _id: &str) {}
+    fn search(&mut self, _query: &str) {}
+    fn search_state(&self) -> SearchInfo {
+        SearchInfo::default()
+    }
+    /// Letzter Fehler beim Löschen.
+    fn action_error(&self) -> Option<String> {
+        None
+    }
+    /// Zählt hoch, wenn sich Daten im Hintergrund geändert haben: der Dialog zeichnet dann neu.
+    fn generation(&self) -> u64 {
+        0
+    }
+    /// Gefundener Pfad von `llama-server` (Platzhalter des Feldes), `None` = nicht gefunden oder unbekannt.
+    fn llama_detected(&self) -> Option<String> {
+        None
+    }
+    /// Pis eigenes Standardmodell (`provider/modell`) für die Auswahl „Standard von Pi“.
+    fn pi_default(&self) -> Option<String> {
+        None
+    }
 }
 
-/// Konten aus `kadrell-accounts` (siehe `usage::backend`), lokale Modelle bleiben Mock. Ohne verdrahtete Konten (Tests)
-/// gilt der Mock.
+/// Wert in den Einstellungen (`provider|name`): `ollama` oder `llamacpp`.
+pub fn raw(p: Provider) -> &'static str {
+    match p {
+        Provider::Ollama => "ollama",
+        Provider::LlamaCpp => "llamacpp",
+    }
+}
+
+/// Konten aus `kadrell-accounts` und lokale Modelle aus `kadrell-models` (siehe `usage::backend`, `models::backend`).
+/// Ohne verdrahtete Konten (Tests) gilt der Mock.
 pub fn default_backend(cx: &gpui::App) -> Box<dyn Backend> {
     crate::usage::backend::create(cx).unwrap_or_else(|| Box::new(MockBackend::new()))
 }
@@ -62,7 +126,7 @@ pub struct MockBackend {
 impl MockBackend {
     pub fn new() -> MockBackend {
         let account = |id: &str, email: &str| AccountInfo { id: id.to_string(), email: email.to_string(), plan: Some("Ultra".into()) };
-        let model = |p, name: &str, detail: &str| (p, ModelInfo { id: format!("{p:?}|{name}"), name: name.to_string(), detail: detail.to_string(), can_remove: true });
+        let model = |p, name: &str, detail: &str| (p, ModelInfo { id: format!("{}|{name}", raw(p)), name: name.to_string(), detail: detail.to_string(), can_remove: true });
         MockBackend {
             accounts: vec![account("a1", "anna@example.com"), account("a2", "ben@example.org")],
             active: Some("a2".to_string()),
@@ -131,7 +195,7 @@ impl Backend for MockBackend {
 
     fn available_models(&self) -> Vec<(String, String)> {
         let label = |p: Provider| if p == Provider::Ollama { "Ollama" } else { "llama.cpp" };
-        self.models.iter().map(|(p, m)| (format!("{}|{}", label(*p).to_lowercase(), m.name), format!("{} · {}", label(*p), m.name))).collect()
+        self.models.iter().map(|(p, m)| (m.id.clone(), format!("{} · {}", label(*p), m.name))).collect()
     }
 }
 

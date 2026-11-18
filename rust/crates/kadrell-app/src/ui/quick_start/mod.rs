@@ -26,7 +26,7 @@ use super::palette::relative_de;
 use super::text_input::{TextInput, TextInputEvent};
 use super::theme;
 use crate::Shell;
-use crate::state::{AppState, now_ms, now_secs};
+use crate::state::{AppState, now_secs};
 use crate::theme::Theme;
 
 actions!(kadrell_quick_start, [MoveUp, MoveDown, Confirm, Cancel, ToggleCleaned]);
@@ -381,8 +381,7 @@ impl Shell {
     fn start_quick(&mut self, path: &str, group_id: Option<&str>, prompt: &str, window: &mut Window, cx: &mut Context<Self>) {
         let home = self.state.home();
         FolderIndex::load(&self.state.profile.dir.to_string_lossy().replace('\\', "/"), &home).record_use(path, now_secs());
-        let session = Session::fresh(&path.replace('\\', "/"), now_ms());
-        self.state.add_session(session, group_id, true, (!prompt.is_empty()).then(|| prompt.to_string()));
-        self.sync(window, cx);
+        let prompt = (!prompt.is_empty()).then(|| prompt.to_string());
+        self.start_new_session(group_id.map(String::from), path, prompt, window, cx);
     }
 }

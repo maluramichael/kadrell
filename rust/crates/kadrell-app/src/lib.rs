@@ -4,6 +4,8 @@
 
 mod appearance;
 mod ext;
+mod models;
+mod remote;
 mod lang;
 #[cfg(test)]
 mod catalog_test;
@@ -66,6 +68,9 @@ pub struct Shell {
     overlay: Option<Entity<ui::new_session::NewSession>>,
     palette: Option<Entity<ui::palette::Palette>>,
     quick_start: Option<Entity<ui::quick_start::QuickStart>>,
+    /// Auswahl „Starten mit“ (Claude oder Pi) und Dialog „Remote verbinden“ (`models::agent_pick`, `remote::dialog`).
+    agent_pick: Option<Entity<models::agent_pick::AgentPick>>,
+    remote: Option<Entity<remote::dialog::RemoteDialog>>,
     /// Index der Verlaufssuche (`#`), beim Start und bei jedem Öffnen der Suche nachgelesen.
     history: ui::palette::HistoryStore,
     settings: Option<Entity<ui::settings::SettingsDialog>>,
@@ -126,6 +131,7 @@ fn control_layout(mode: LayoutMode) -> kadrell_control::LayoutMode {
 impl Shell {
     fn new(window: &mut Window, cx: &mut Context<Self>, mut state: AppState, jobs: async_channel::Receiver<wire::Job>, server: Option<ControlServer>, ext: ExtensionManager) -> Self {
         ui::groups::dev_seed(&mut state);
+        models::install(cx, &state.models);
         let menubar = cx.new(ui::menubar::MenuBar::new);
         let mode = ui_layout(state.layout);
         let folder_home = state.home();
@@ -145,6 +151,8 @@ impl Shell {
             overlay: None,
             palette: None,
             quick_start: None,
+            agent_pick: None,
+            remote: None,
             history: ui::palette::HistoryStore::new(&folder_home),
             settings: None,
             rename: None,
@@ -180,6 +188,8 @@ impl Shell {
         shell.open_overlay_from_env(window, cx);
         shell.open_palette_from_env(window, cx);
         shell.open_quick_start_from_env(window, cx);
+        shell.open_agent_pick_from_env(window, cx);
+        shell.open_remote_from_env(window, cx);
         shell.refresh_history(cx);
         shell.open_settings_from_env(window, cx);
         shell.open_groups_from_env(window, cx);
@@ -466,6 +476,8 @@ impl Render for Shell {
             .children(self.overlay.clone())
             .children(self.palette.clone())
             .children(self.quick_start.clone())
+            .children(self.agent_pick.clone())
+            .children(self.remote.clone())
             .children(self.settings.clone())
             .children(self.ext_ui.dialog.clone())
             .children(self.rename.clone())
@@ -561,6 +573,8 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::new_session::bind_keys(cx);
         ui::palette::bind_keys(cx);
         ui::quick_start::bind_keys(cx);
+        models::agent_pick::bind_keys(cx);
+        remote::dialog::bind_keys(cx);
         ui::rename::bind_keys(cx);
         ui::groups::bind_keys(cx);
         ui::ext::dialog::bind_keys(cx);
