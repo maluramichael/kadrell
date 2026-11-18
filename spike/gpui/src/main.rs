@@ -2,13 +2,14 @@
 #![allow(dead_code)] // Spike: nicht alle Theme-Felder werden benutzt.
 
 mod fonts;
+mod menus;
 mod boxdraw;
 mod terminal;
 mod theme;
 mod ui;
 
 use gpui::{
-    App, Bounds, Context, FocusHandle, Focusable, Global, IntoElement, KeyDownEvent, Render, Window,
+    App, Bounds, Context, Entity, FocusHandle, Focusable, Global, IntoElement, KeyDownEvent, Render, Window,
     WindowBounds, WindowOptions, div, prelude::*, px, size,
 };
 use gpui_platform::application;
@@ -24,6 +25,7 @@ pub struct Shell {
     groups: Vec<Group>,
     selected: (usize, usize),
     clock: String,
+    menubar: Entity<ui::menubar::MenuBar>,
 }
 
 /// Start-Session für Screenshots ohne Eingabe: `KADRELL_SPIKE_SESSION=1,0` (Gruppe, Session), sonst die erste.
@@ -44,11 +46,27 @@ fn now_hhmm() -> String {
 
 impl Shell {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let mut shell = Shell { groups: mock_groups(), selected: (0, 0), clock: now_hhmm() };
+        let menubar = cx.new(ui::menubar::MenuBar::new);
+        let mut shell = Shell { groups: mock_groups(), selected: (0, 0), clock: now_hhmm(), menubar };
         let (g, s) = start_session(&shell.groups);
         shell.select(g, s, window, cx);
         shell.start_clock(cx);
+        shell.open_menu_from_env(window, cx);
         shell
+    }
+
+    /// `KADRELL_SPIKE_MENU=Datei` öffnet beim Start das Menü (Screenshots ohne Eingabe).
+    fn open_menu_from_env(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Ok(name) = std::env::var("KADRELL_SPIKE_MENU") {
+            self.menubar.update(cx, |m, cx| m.open_named(&name, window, cx));
+        }
+    }
+
+    /// Alt allein und Tastenfolge für die gezeichnete Menüleiste (Windows).
+    fn menubar_hooks(&self, root: gpui::Div, cx: &mut Context<Self>) -> gpui::Div {
+        let (on_mod, on_key) = (self.menubar.clone(), self.menubar.clone());
+        root.on_modifiers_changed(move |ev, window, cx| on_mod.update(cx, |m, cx| m.on_modifiers(ev, window, cx)))
+            .capture_key_down(cx.listener(move |_, _: &KeyDownEvent, _, cx| on_key.update(cx, |m, _| m.note_key())))
     }
 
     fn start_clock(&self, cx: &mut Context<Self>) {
@@ -168,7 +186,7 @@ impl Render for Shell {
         let (g, s) = self.selected;
         let tile = ui::tile::tile(&self.groups[g], &self.groups[g].sessions[s], ui::tile::TileStyle::for_count(1), window, cx);
         let sidebar = ui::sidebar::sidebar(&self.groups, self.selected, cx);
-        div()
+        let root = div()
             .flex()
             .flex_col()
             .size_full()
@@ -176,8 +194,11 @@ impl Render for Shell {
             .text_color(t.fg)
             .font_family(theme::FONT)
             .text_size(px(12.))
-            .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.on_key(ev, window, cx)))
-            .child(ui::bar::bar(&self.clock, window, cx))
+            .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.on_key(ev, window, cx)));
+        let root = self.menubar_hooks(menus::attach_actions(root, cx), cx);
+        root
+            .children(ui::bar::titlebar(&self.menubar, window, cx))
+            .child(ui::bar::bar(&self.clock, cx))
             .child(
                 div()
                     .flex()
@@ -190,13 +211,13 @@ impl Render for Shell {
     }
 }
 
-/// Eigene Titelleiste: Die Leiste der App ist die Titelleiste (Windows: eigene Knöpfe, macOS: Ampel eingerückt;
-/// der macOS-Zweig ist hier nicht getestet).
+/// Titelleiste: macOS nutzt die normale des Systems mit Ampel (nicht getestet), Windows blendet sie aus und
+/// zeichnet eigene Titelzeile samt Menü (`ui::bar::titlebar`).
 fn titlebar_options() -> gpui::TitlebarOptions {
     gpui::TitlebarOptions {
-        title: Some("Kadrell (GPUI-Spike)".into()),
-        appears_transparent: true,
-        traffic_light_position: Some(gpui::point(px(12.), px(9.))),
+        title: Some("Kadrell".into()),
+        appears_transparent: !cfg!(target_os = "macos"),
+        traffic_light_position: None,
     }
 }
 
@@ -213,6 +234,7 @@ fn main() {
     application().run(|cx: &mut App| {
         fonts::load(cx);
         cx.set_global(ThemeGlobal(start_theme()));
+        menus::init(cx);
         let bounds = Bounds::centered(None, size(px(1400.), px(900.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
