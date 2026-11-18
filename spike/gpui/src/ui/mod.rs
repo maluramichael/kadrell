@@ -10,6 +10,7 @@ pub mod chrome;
 pub mod footer;
 pub mod icons;
 pub mod menubar;
+pub mod layout;
 pub mod model;
 pub mod pill;
 pub mod sidebar;

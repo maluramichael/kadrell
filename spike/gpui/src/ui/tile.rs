@@ -2,7 +2,7 @@
 //! Mit einer einzigen sichtbaren Kachel füllt sie die Arbeitsfläche randlos (`Flat`), erst mehrere Kacheln
 //! bekommen Abstand, Rahmen und Fokuskante (`Bordered`), wie in der Mac-App.
 
-use gpui::{AnyElement, App, Div, FontWeight, IntoElement, ParentElement, Styled, Window, div, px};
+use gpui::{AnyElement, App, Div, FontWeight, IntoElement, ParentElement, Styled, div, px};
 
 use super::chrome::h_seam;
 use super::model::{Group, Session};
@@ -62,32 +62,30 @@ fn header(group: &Group, session: &Session, cx: &App) -> impl IntoElement + use<
         .child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age))
 }
 
-fn frame(style: TileStyle, focused: bool, t: &Theme) -> Div {
+/// Rahmen der Kachel: Fokus in Akzentfarbe, sonst Linienfarbe. Eine reine Titelzeile (Stack) trägt nur 1 px,
+/// damit Kopf und Rahmen in die Zeilenhöhe passen.
+fn frame(style: TileStyle, focused: bool, body: bool, t: &Theme) -> Div {
     let base = div().flex().flex_col().size_full().overflow_hidden();
     match style {
         TileStyle::Flat => base,
         TileStyle::Bordered => {
             let border = if focused { t.accent } else { t.line };
-            base.rounded(px(6.)).border_2().border_color(border)
+            let base = base.rounded(px(6.)).border_color(border);
+            if body { base.border_2() } else { base.border_1() }
         }
     }
 }
 
-pub fn tile(group: &Group, session: &Session, style: TileStyle, window: &Window, cx: &App) -> AnyElement {
+/// Eine Kachel: Kopfzeile und, wenn `body`, das Terminal. `focused` ist die Tastaturkachel.
+pub fn tile(group: &Group, session: &Session, style: TileStyle, focused: bool, body: bool, cx: &App) -> AnyElement {
     let t = theme(cx);
-    let focused = session.pane.as_ref().is_some_and(|p| p.read(cx).focus.is_focused(window));
-    let mut body = div().flex_1().min_h_0().overflow_hidden().bg(t.bg);
+    let frame = frame(style, focused, body, &t).child(header(group, session, cx));
+    if !body {
+        return frame.into_any_element();
+    }
+    let mut area = div().flex_1().min_h_0().overflow_hidden().bg(t.bg);
     if let Some(pane) = &session.pane {
-        body = body.child(pane.clone());
+        area = area.child(pane.clone());
     }
-    frame(style, focused, &t).child(header(group, session, cx)).child(h_seam(&t)).child(body).into_any_element()
-}
-
-/// Fläche um die Kachel: randlos bei einer, mit Abstand bei mehreren.
-pub fn tile_area(tile: AnyElement, style: TileStyle) -> Div {
-    let area = div().flex_1().min_w_0().min_h_0();
-    match style {
-        TileStyle::Flat => area.child(tile),
-        TileStyle::Bordered => area.p(px(8.)).child(tile),
-    }
+    frame.child(h_seam(&t)).child(area).into_any_element()
 }

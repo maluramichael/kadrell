@@ -6,7 +6,7 @@ use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
 
 use crate::Shell;
 
-actions!(kadrell, [NewSession, NextSession, PrevSession, ToggleTheme, Minimize, Zoom, Quit]);
+actions!(kadrell, [NewSession, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit]);
 
 pub enum Entry {
     Separator,
@@ -152,6 +152,9 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
     // TODO: NewSession gehört dem Overlay-Zweig (Strg+N / Cmd+N öffnet den Dialog), hier bewusst nicht belegt.
     root.on_action(cx.listener(|this, _: &NextSession, window, cx| this.step(1, window, cx)))
         .on_action(cx.listener(|this, _: &PrevSession, window, cx| this.step(-1, window, cx)))
+        .on_action(cx.listener(|this, _: &NextLayout, _, cx| this.cycle_layout(cx)))
+        .on_action(cx.listener(|this, _: &MoreColumns, _, cx| this.step_cols(1, cx)))
+        .on_action(cx.listener(|this, _: &FewerColumns, _, cx| this.step_cols(-1, cx)))
         .on_action(cx.listener(|_, _: &Minimize, window, _| window.minimize_window()))
         .on_action(cx.listener(|_, _: &Zoom, window, _| window.zoom_window()))
 }

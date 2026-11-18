@@ -1,11 +1,15 @@
 //! Obere Leiste (Tasten links, Nutzung und Status rechts) und unter Windows die eigene Titelzeile darüber
 //! (Menüs links, Titel in der Mitte, Fensterknöpfe rechts). Auf macOS liefert das System die Titelleiste.
 
+use std::rc::Rc;
+
 use gpui::{
-    App, Entity, Hsla, InteractiveElement, IntoElement, ParentElement, Styled, Window, WindowControlArea, div, px,
+    App, ClickEvent, Entity, Hsla, InteractiveElement, IntoElement, ParentElement, Styled, Window, WindowControlArea, div,
+    px,
 };
 
 use super::icons;
+use super::layout::LayoutMode;
 use super::chrome::{BAR_HEIGHT, h_seam, window_controls};
 use super::menubar::{MenuBar, TITLE_HEIGHT};
 use super::model::Status;
@@ -16,20 +20,38 @@ const LEFT: [&str; 8] = ["▦", "‹", "AUTO COL", "›", "AUTO", "SYNC", "GRP",
 
 const LEFT_INSET: f32 = 8.;
 
+type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+
+/// Zustand und Aktionen der Layout-Tasten: Symbol (reihum), ‹ und › (Spaltenzahl im Grid).
+#[derive(Clone)]
+pub struct LayoutCtl {
+    pub mode: LayoutMode,
+    pub cols_label: String,
+    pub cycle: Handler,
+    pub dec: Handler,
+    pub inc: Handler,
+}
+
+fn with_click(pill: Pill, h: &Handler) -> Pill {
+    let h = h.clone();
+    pill.on_click(move |e, w, c| h(e, w, c))
+}
+
 /// Eine Taste der linken Leiste: Layout-Symbol und Pfeile sind gezeichnet, der Rest Text.
-fn left_pill(i: usize, label: &'static str, ink: Hsla) -> Pill {
+fn left_pill(i: usize, label: &'static str, ink: Hsla, ctl: &LayoutCtl) -> Pill {
     let pill = Pill::new(("bar", i), label);
     match label {
-        "▦" => pill.icon(icons::layout_grid(ink)).min_width(26.),
-        "‹" => pill.icon(icons::arrow(true, ink)).min_width(22.),
-        "›" => pill.icon(icons::arrow(false, ink)).min_width(22.),
+        "▦" => with_click(pill.icon(icons::layout(ctl.mode, ink)).min_width(26.), &ctl.cycle),
+        "‹" => with_click(pill.icon(icons::arrow(true, ink)).min_width(22.), &ctl.dec),
+        "›" => with_click(pill.icon(icons::arrow(false, ink)).min_width(22.), &ctl.inc),
+        "AUTO COL" => Pill::new(("bar", i), ctl.cols_label.clone()),
         "A-Z" => pill.kind(PillKind::Active),
         _ => pill,
     }
 }
 
-fn left_pills(ink: Hsla) -> impl IntoElement + use<> {
-    let pills = LEFT.iter().enumerate().map(|(i, l)| left_pill(i, l, ink));
+fn left_pills(ink: Hsla, ctl: &LayoutCtl) -> impl IntoElement + use<> {
+    let pills = LEFT.iter().enumerate().map(|(i, l)| left_pill(i, l, ink, ctl));
     div().flex().flex_none().items_center().gap(px(4.)).children(pills)
 }
 
@@ -87,7 +109,7 @@ pub fn titlebar(menubar: &Entity<MenuBar>, window: &Window, cx: &App) -> Option<
 }
 
 /// Die Leiste mit Layout-Tasten, Nutzung und Status, erste Zeile unter der Titelleiste.
-pub fn bar(clock: &str, cx: &App) -> impl IntoElement + use<> {
+pub fn bar(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
     let t = theme(cx);
     let row = div()
         .flex()
@@ -95,7 +117,7 @@ pub fn bar(clock: &str, cx: &App) -> impl IntoElement + use<> {
         .h(px(BAR_HEIGHT - 2.))
         .w_full()
         .pl(px(LEFT_INSET))
-        .child(left_pills(t.sub))
+        .child(left_pills(t.sub, ctl))
         .child(div().flex_1().min_w(px(24.)))
         .child(right_side(clock, cx));
     div().flex().flex_col().flex_none().bg(t.panel).child(row).child(h_seam(&t))
