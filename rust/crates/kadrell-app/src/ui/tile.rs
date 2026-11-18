@@ -8,10 +8,10 @@ use std::time::Duration;
 use kadrell_i18n::trd;
 use gpui::{Animation, AnimationExt, AnyElement, App, AppContext, Div, FontWeight, InteractiveElement, IntoElement, ParentElement, Role, SharedString, StatefulInteractiveElement, Styled, div, px};
 
-use super::chrome::h_seam;
+use super::chrome::{h_seam, seam_dark, seam_light};
 use super::groups::drag::DragTile;
 use super::groups::rows::DragGhost;
-use super::model::{Group, Session};
+use super::model::{Group, Session, Status};
 use super::theme;
 use crate::appearance::{Appearance, a11y, breathing};
 use crate::theme::Theme;
@@ -107,21 +107,33 @@ fn header(group: &Group, session: &Session, zoomed: bool, a: &Appearance, cx: &A
         .on_drag(drag, |d, _, _, cx| cx.new(|_| DragGhost { label: d.label.clone() }))
 }
 
-/// Rahmenfarbe: Fokus in Akzentfarbe, sonst Linienfarbe.
-fn border_color(focused: bool, t: &Theme) -> gpui::Hsla {
-    if focused { t.accent } else { t.line }
+/// Rahmenfarbe wie `CellView.borderColor`: Fokus in `fg`, wartend und Fehler in ihrer Statusfarbe, sonst die dunkle Hälfte der Fuge.
+fn border_color(focused: bool, status: Status, t: &Theme) -> gpui::Hsla {
+    match (focused, status) {
+        (true, _) => t.fg,
+        (false, Status::Waiting) => t.waiting,
+        (false, Status::Error) => t.error,
+        _ => seam_dark(t),
+    }
 }
 
 /// Rahmen der Kachel. Eine reine Titelzeile (Stack) trägt nur 1 px, damit Kopf und Rahmen in die Zeilenhöhe passen.
-fn frame(style: TileStyle, focused: bool, body: bool, t: &Theme, a: &Appearance) -> Div {
-    let base = div().flex().flex_col().size_full().overflow_hidden();
+fn frame(style: TileStyle, focused: bool, status: Status, body: bool, t: &Theme) -> Div {
+    let base = div().relative().flex().flex_col().size_full().overflow_hidden();
     match style {
         TileStyle::Flat => base,
         TileStyle::Bordered => {
-            let base = base.rounded(px(a.s(6.))).border_color(border_color(focused, t));
-            if body { base.border_2() } else { base.border_1() }
+            // Eckig wie in der Mac-App; die helle Hälfte der Fuge liegt als 1 px dünner Innenrand direkt unter dem Rahmen.
+            let base = base.border_color(border_color(focused, status, t));
+            if body && focused { base.border_2() } else { base.border_1() }
         }
     }
+}
+
+/// Helle Hälfte der Fuge als 1 px dünner Innenrand direkt unter dem Rahmen (`CellView.drawInnerRim`), über dem Inhalt.
+fn inner_rim(t: &Theme, a: &Appearance) -> Div {
+    let inset = px(a.s(1.));
+    div().absolute().top(inset).left(inset).right(inset).bottom(inset).border_1().border_color(seam_light(t))
 }
 
 /// Hinweis in einer Kachel, deren Terminal in einem anderen Fenster hängt.
@@ -148,7 +160,7 @@ pub fn tile(group: &Group, session: &Session, style: TileStyle, marks: Marks, bo
     let focused = marks.ring;
     let t = theme(cx);
     let a = crate::appearance::current(cx);
-    let frame = frame(style, focused, body, &t, &a).child(header(group, session, marks.zoomed, &a, cx));
+    let frame = frame(style, focused, session.status, body, &t).child(header(group, session, marks.zoomed, &a, cx));
     let content = if body {
         let mut area = div().flex_1().min_h_0().overflow_hidden();
         // Das Terminal malt seinen Grund selbst (mit der Deckkraft), ein zweiter Grund darunter deckte doppelt.
@@ -162,6 +174,7 @@ pub fn tile(group: &Group, session: &Session, style: TileStyle, marks: Marks, bo
     } else {
         frame
     };
+    let content = if style == TileStyle::Bordered { content.child(inner_rim(&t, &a)) } else { content };
     let spoken = a11y::spoken(session.status, session.ended, false);
     let label = a11y::tile_label(&session.title, &spoken, &group.name, session.branch.as_deref());
     let node = content.id(gpui::ElementId::Name(format!("tile-{}", session.key).into())).role(Role::Group).aria_label(label);
@@ -169,7 +182,7 @@ pub fn tile(group: &Group, session: &Session, style: TileStyle, marks: Marks, bo
         return node.into_any_element();
     }
     // Wechselt der Fokus, ändert sich die Kennung und der Rahmen blendet von der alten zur neuen Farbe über.
-    let (from, to) = (border_color(!focused, &t), border_color(focused, &t));
+    let (from, to) = (border_color(!focused, session.status, &t), border_color(focused, session.status, &t));
     node.with_animation(
         gpui::ElementId::Name(format!("tile-border-{}-{focused}", session.key).into()),
         Animation::new(Duration::from_millis(120)),

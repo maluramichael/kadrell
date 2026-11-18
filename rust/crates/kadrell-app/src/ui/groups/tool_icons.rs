@@ -52,10 +52,16 @@ fn heart_points() -> Vec<(f32, f32)> {
 
 /// Herz, gefüllt wenn die Gruppe Favorit ist.
 pub fn heart(color: Hsla, filled: bool) -> impl IntoElement {
+    heart_sized(color, filled, SIZE)
+}
+
+/// Dasselbe Herz in einer anderen Kantenlänge (Favorit im Gruppenkopf: 12 pt).
+pub fn heart_sized(color: Hsla, filled: bool, size: f32) -> impl IntoElement {
+    let k = size / SIZE;
     canvas(
         |_, _, _| (),
         move |bounds: Bounds<Pixels>, _, window, _| {
-            let pts: Vec<_> = heart_points().into_iter().map(|p| to_screen(bounds.origin, p)).collect();
+            let pts: Vec<_> = heart_points().into_iter().map(|(x, y)| to_screen(bounds.origin, (x * k, y * k))).collect();
             let mut b = if filled { PathBuilder::fill() } else { PathBuilder::stroke(px(WIDTH)) };
             b.add_polygon(&pts, true);
             if let Ok(path) = b.build() {
@@ -63,7 +69,7 @@ pub fn heart(color: Hsla, filled: bool) -> impl IntoElement {
             }
         },
     )
-    .size(px(SIZE))
+    .size(px(size))
     .flex_none()
 }
 

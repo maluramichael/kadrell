@@ -102,7 +102,7 @@ fn waiting_badge(group: &Group, t: &Theme, a: &Appearance) -> Option<Div> {
 
 /// Favoritenherz ganz rechts in der Kopfzeile.
 fn favorite(group: &Group, t: &Theme, a: &Appearance) -> Option<Div> {
-    group.favorite.then(|| div().flex_none().ml(px(a.s(6.))).text_size(px(a.s(11.))).text_color(t.group(group.color)).child("♥"))
+    group.favorite.then(|| div().flex_none().ml(px(a.s(6.))).child(tool_icons::heart_sized(t.group(group.color), true, a.s(12.))))
 }
 
 /// Kompakt, eingeklappt: ein Punkt je Session, so bleibt der Status sichtbar. Aufgeklappt zeigen ihn die Zeilen selbst.
@@ -375,12 +375,13 @@ struct SessionRow {
     keys: bool,
 }
 
-/// Rand der Zeile: Fokus-Session in `fg` (mit Tastatur im Baum in der Akzentfarbe), die übrigen markierten in `muted`.
+/// Rand der Zeile: nur die Fokus-Session hat einen, in `fg` (mit Tastatur im Baum in der Akzentfarbe). Die übrigen
+/// markierten haben nur Fläche und Balken (`SidebarRenderer.drawFocusOutline`).
 fn session_edge(focused: bool, selected: bool, keys: bool, t: &Theme) -> Hsla {
     match (focused, selected) {
         (true, _) if keys => t.accent,
         (true, _) => t.fg,
-        (false, true) => t.muted,
+        (false, true) => gpui::transparent_black(),
         _ => gpui::transparent_black(),
     }
 }

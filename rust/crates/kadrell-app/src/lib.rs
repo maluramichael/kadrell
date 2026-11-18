@@ -34,7 +34,7 @@ use kadrell_control::ControlServer;
 use kadrell_ext::manager::ExtensionManager;
 use kadrell_control::endpoint::endpoint_path;
 use kadrell_core::profile::Acquire;
-use kadrell_core::{Paths, Profile, SessionStatus, SidebarSort};
+use kadrell_core::{Paths, Profile, SessionStatus, Settings, SidebarSort};
 use kadrell_term::{TermThemeGlobal, TerminalPane};
 use state::launch::LaunchEnv;
 use state::{AppState, Parts};
@@ -509,11 +509,12 @@ fn titlebar_options(profile: &Profile) -> gpui::TitlebarOptions {
     }
 }
 
-/// Startschema; `KADRELL_DEV_THEME=latte` startet hell.
-fn start_theme() -> Theme {
+/// Startschema: das aus den Einstellungen (ohne Eintrag der Standard der Mac-App, Instrument Dark). `KADRELL_DEV_THEME=latte`
+/// überschreibt es für Screenshots.
+fn start_theme(settings: &Settings) -> Theme {
     match std::env::var("KADRELL_DEV_THEME").as_deref() {
         Ok("latte") => Theme::latte(),
-        _ => Theme::mocha(),
+        _ => Theme::by_id(&settings.color_theme()).unwrap_or_else(Theme::mocha),
     }
 }
 
@@ -592,7 +593,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::notice::bind_keys(cx);
         misc::bind_keys(cx, &title_profile.settings());
         appearance::apply(cx, &title_profile.settings(), true);
-        set_theme(cx, start_theme());
+        set_theme(cx, start_theme(&title_profile.settings()));
         menus::init(cx);
         let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);
         let options = WindowOptions {
