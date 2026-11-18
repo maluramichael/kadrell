@@ -2,13 +2,50 @@
 //! und die Verbindung zur `Shell` des Hauptfensters.
 
 pub mod extra;
+pub mod frame;
+pub mod layout;
 pub mod model;
+pub mod split;
 
-use gpui::Context;
+use gpui::{Context, Div, InteractiveElement, KeyBinding, actions};
+use kadrell_core::Settings;
 
 use crate::Shell;
 use crate::state::attention::patch_setting;
 use model::{OPEN_KEY, WindowSet};
+
+actions!(kadrell_windows, [ToggleSidebar, ToggleAllGroups, ToggleAuto]);
+
+/// Tasten für Baum ein/aus (⌘B) und alle Gruppen auf-/zuklappen (⇧⌘B); unter Windows wie überall Strg statt ⌘.
+pub fn bind_keys(cx: &mut gpui::App) {
+    let (tree, groups) = if cfg!(target_os = "macos") { ("cmd-b", "cmd-shift-b") } else { ("ctrl-b", "ctrl-shift-b") };
+    cx.bind_keys([KeyBinding::new(tree, ToggleSidebar, None), KeyBinding::new(groups, ToggleAllGroups, None)]);
+}
+
+/// Aktionen der Ansicht am Wurzelelement des Hauptfensters.
+pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
+    root.on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| this.toggle_tree(cx)))
+        .on_action(cx.listener(|this, _: &ToggleAllGroups, _, cx| this.toggle_all_groups(cx)))
+        .on_action(cx.listener(|this, _: &ToggleAuto, window, cx| this.toggle_auto(window, cx)))
+}
+
+/// Zustand der Fenster in der `Shell`: Aufteilung des Hauptfensters (Breiten, Dock), das zuletzt aktive Fenster und
+/// Änderungen, die verzögert in die Einstellungen gehen (beim Ziehen eines Trenners kommen viele).
+pub struct WinState {
+    pub sides: layout::Sides,
+    /// Nummer des Fensters, das zuletzt aktiv war (`AppDelegate.current`, 0 Hauptfenster).
+    pub current: usize,
+    pending: Vec<layout::Change>,
+    generation: u64,
+}
+
+impl WinState {
+    pub fn new(settings: &Settings) -> WinState {
+        let mut sides = layout::Sides::restore(settings, 0);
+        sides.apply_dev();
+        WinState { sides, current: 0, pending: Vec::new(), generation: 0 }
+    }
+}
 
 impl Shell {
     /// Meldet, was Fenster `window` zeigt, und gleicht die Besitzer der Terminals ab. Gibt zurück, ob sich dadurch ein
@@ -37,11 +74,19 @@ impl Shell {
         patch_setting(&self.state.profile.settings_path(), OPEN_KEY, self.windows.to_value());
         // Das neue Fenster liest die Shell beim Aufbau, die gerade aktualisiert wird: erst danach öffnen.
         let shell = cx.entity();
+        let title = self.window_title(index);
         cx.defer(move |cx| {
-            if let Some(handle) = extra::open(&shell, index, format!("Kadrell {}", index + 1), cx) {
+            let cascade = frame::cascade_source(&shell, cx);
+            if let Some(handle) = extra::open(&shell, index, title, cascade, cx) {
                 shell.update(cx, |sh, _| sh.extras.push((index, handle)));
             }
         });
+    }
+
+    /// Titel des Fensters: „Kadrell“, im benannten Profil mit dessen Namen, weitere Fenster mit „ · Fenster N“.
+    pub(crate) fn window_title(&self, index: usize) -> String {
+        let extra = if index == 0 { String::new() } else { kadrell_i18n::trd!(" · Fenster %lld", index + 1) };
+        format!("Kadrell{}{extra}", self.state.profile.label())
     }
 
     /// Beim Start die zuletzt offenen Fenster wieder aufmachen; `KADRELL_DEV_WINDOWS=2` öffnet für Screenshots ein
