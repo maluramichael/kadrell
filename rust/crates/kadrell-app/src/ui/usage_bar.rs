@@ -464,8 +464,91 @@ pub fn right_side(clock: &str, b: &BarCtl, t: &Theme) -> impl IntoElement + use<
 
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// Eine Leiste ohne Konten, Nutzung und Meldungen, 1400 breit; Tests setzen, was sie brauchen.
+    pub(crate) fn test_ctl() -> BarCtl {
+        let press: Press = Rc::new(|_, _, _| {});
+        let click: Handler = Rc::new(|_, _, _| {});
+        BarCtl {
+            view: View::default(),
+            now: 0.,
+            shown: UsageShown { session: true, weekly: true, fable: true },
+            counts: StatusCounts::default(),
+            detachable: 0,
+            waiting: 0,
+            error: None,
+            lang: kadrell_accounts::Lang::De,
+            width: 1400.,
+            left: 0.,
+            on_account: press.clone(),
+            on_detach: press.clone(),
+            on_waiting: press,
+            tip: None,
+            on_tip: click.clone(),
+            version_warning: None,
+            on_version: click,
+            announcement: None,
+            pressed: None,
+            flash: Rc::new(|_, _| {}),
+            ext: Vec::new(),
+            update: None,
+        }
+    }
+
+    fn labels(b: &BarCtl) -> Vec<String> {
+        right_regions(b, &BarPlan::new(0)).into_iter().map(|r| r.label).collect()
+    }
+
+    /// Swift: `testDetachIdlePill`: die grüne Pille gibt es nur bei trennbaren fertigen Sessions, ihr Wert ist die Zahl.
+    #[test]
+    fn the_detach_pill_exists_only_with_detachable_sessions() {
+        let b = BarCtl { counts: StatusCounts { running: 2, waiting: 1, idle: 3, error: 0, detached: 4 }, ..test_ctl() };
+        assert!(!labels(&b).contains(&"Fertige Sessions trennen".to_string()), "ohne trennbare Sessions keine Pille");
+        let b = BarCtl { detachable: 3, ..b };
+        let regions = right_regions(&b, &BarPlan::new(0));
+        let pill = regions.iter().find(|r| r.label == "Fertige Sessions trennen").expect("Pille");
+        assert_eq!(pill.value.as_deref(), Some("3"));
+        assert_eq!(pill.tooltip(), "Fertige Sessions trennen: 3");
+    }
+
+    /// Swift: `testStatusDisplayReadsLongFormOrError`: das Display liest die Langform, bei Fehler diese Meldung.
+    #[test]
+    fn the_display_reads_the_long_form_or_the_error() {
+        let counts = StatusCounts { running: 2, waiting: 1, idle: 0, error: 0, detached: 0 };
+        let b = BarCtl { counts, ..test_ctl() };
+        let status = |b: &BarCtl| right_regions(b, &BarPlan::new(0)).pop().expect("Status");
+        assert_eq!(status(&b).label, "Status");
+        assert!(status(&b).value.as_deref().is_some_and(|v| v.starts_with(&logic::status_spoken(&counts))));
+        let failing = BarCtl { error: Some("x".into()), ..b };
+        assert!(status(&failing).value.as_deref().is_some_and(|v| v.starts_with('x')));
+    }
+
+    #[test]
+    fn a_waiting_count_adds_the_waiting_pill_before_the_status() {
+        let b = BarCtl { waiting: 2, ..test_ctl() };
+        assert_eq!(labels(&b), ["Wartende Sessions", "Status"]);
+        assert_eq!(right_regions(&b, &BarPlan::new(0))[0].value.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn the_error_red_stays_readable_on_the_black_display() {
+        for t in [Theme::mocha(), Theme::latte()] {
+            assert!(contrast(screen_error(&t), screen_face(&t)) >= 4.5, "dark={}", t.dark);
+        }
+    }
+
+    #[test]
+    fn the_tip_and_the_old_version_warning_are_modules_next_to_the_usage() {
+        let t = Theme::mocha();
+        let none = notice_parts(&test_ctl(), &BarPlan::new(0), &t);
+        assert!(none.is_empty());
+        let b = BarCtl { tip: Some("Hinweis".into()), version_warning: Some("alt".into()), ..test_ctl() };
+        assert_eq!(notice_parts(&b, &BarPlan::new(0), &t).len(), 2);
+        let tight = BarPlan { tip: false, version: false, ..BarPlan::new(0) };
+        assert!(notice_parts(&b, &tight, &t).is_empty(), "bei Platzmangel fallen sie weg");
+    }
 
     #[test]
     fn relative_time_is_abbreviated() {

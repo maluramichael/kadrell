@@ -109,6 +109,9 @@ impl Shell {
         if let Some(p) = step.persist {
             self.state.save_accounts(&p);
         }
+        if step.auto_switched {
+            self.play_sound(kadrell_tray::Sound::Toggle);
+        }
         self.usage.pending.extend(step.notices);
         self.show_next_notice(window, cx);
         cx.notify();

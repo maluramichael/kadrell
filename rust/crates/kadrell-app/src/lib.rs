@@ -320,6 +320,10 @@ impl Shell {
             return;
         }
         let key = self.groups[g].sessions[s].key.clone();
+        // Ein Klick ins Terminal quittiert die Marke „neu“, auch wenn es schon die Tastatur hatte.
+        if self.state.attention.mark_seen(&key) {
+            self.rebuild();
+        }
         self.owners.take(&key, 0);
         let ended = matches!(self.state.run(&key), state::Run::Ended | state::Run::Stopped);
         if !self.selection.contains((g, s)) && self.tiles().contains(&(g, s)) {

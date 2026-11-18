@@ -377,6 +377,21 @@ mod tests {
         assert_eq!(regions[0].value.as_deref(), Some("Grid"));
     }
 
+    /// Swift: `testStatusBarButtons` vollständig, links und rechts zusammen.
+    #[test]
+    fn the_whole_bar_lists_its_buttons_in_reading_order() {
+        let right = usage_bar::tests::test_ctl();
+        let right = BarCtl { waiting: 2, ..right };
+        let mut all = left_regions(&LayoutCtl { sync: true, ..ctl(LayoutMode::Grid) });
+        all.extend(usage_bar::right_regions(&right, &crate::usage::logic::BarPlan::new(0)));
+        let labels: Vec<&str> = all.iter().map(|r| r.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["Layout", "Weniger Spalten", "Mehr Spalten", "Auto-Modus", "Sync", "Gruppierung nach Projekt", "Sortierung", "Wartende Sessions", "Status"]
+        );
+        assert_eq!(all[7].value.as_deref(), Some("2"));
+    }
+
     #[test]
     fn split_only_in_free_and_zoom_only_while_zoomed() {
         assert!(labels(&ctl(LayoutMode::Custom)).contains(&"Nächste Kachel teilt".to_string()));

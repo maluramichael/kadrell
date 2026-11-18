@@ -36,6 +36,9 @@ impl Shell {
             }
         })
         .detach();
+        if std::env::var_os("KADRELL_DEV_TIP").is_some() {
+            self.state.attention.tip = Some(kadrell_claude::attention::TipText::WaitingMeansYellow);
+        }
         self.recheck_cli(cx);
     }
 
