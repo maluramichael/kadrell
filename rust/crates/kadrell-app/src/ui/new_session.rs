@@ -11,6 +11,7 @@ use gpui::{
 };
 
 use super::chrome::h_seam;
+use super::folder_row::{FolderRow, folder_row};
 use super::folders::{self, Entry};
 use super::model::Group;
 use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_height, overlay_width};
@@ -23,7 +24,6 @@ actions!(kadrell_new_session, [MoveUp, MoveDown, Confirm, Cancel, Complete]);
 
 const CONTEXT: &str = "KadrellNewSession";
 const MAX_ROWS: usize = 60;
-const ROW_HEIGHT: f32 = 46.;
 const SCAN_DEPTH: usize = 3;
 const GROUP_COLORS: [u32; 6] = [0x89b4fa, 0xa6e3a1, 0xf9e2af, 0xf5c2e7, 0x94e2d5, 0xfab387];
 
@@ -196,46 +196,9 @@ impl NewSession {
     fn row(&self, i: usize, e: &Entry, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let on = i == self.selected;
         let path = e.path.clone();
-        let outline = if on { t.fg } else { gpui::transparent_black() };
-        let right = if e.sessions > 0 { format!("{} Sessions", e.sessions) } else { String::new() };
-        let inner = div()
-            .flex()
-            .items_center()
-            .gap(px(10.))
-            .size_full()
-            .px(px(10.))
-            .rounded(px(6.))
-            .border_2()
-            .border_color(outline)
-            .when(on, |d| d.bg(t.bg))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .min_w_0()
-                    .gap(px(2.))
-                    .child(div().text_size(px(13.)).text_color(t.fg).overflow_hidden().whitespace_nowrap().child(folder_name(&e.path)))
-                    .child(
-                        div()
-                            .text_size(px(11.))
-                            .text_color(t.muted)
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .child(folders::short_path(&e.path, &self.home)),
-                    ),
-            )
-            .child(div().flex_none().text_size(px(11.)).text_color(t.muted).child(right));
-        div()
-            .id(("ns-row", i))
-            .flex_none()
-            .h(px(ROW_HEIGHT))
-            .px(px(6.))
-            .py(px(1.))
-            .cursor_pointer()
-            .on_click(cx.listener(move |_, _, _, cx| cx.emit(NewSessionEvent::Start(path.clone()))))
-            .child(inner)
+        let right = if e.sessions > 0 { vec![format!("{} Sessions", e.sessions)] } else { Vec::new() };
+        let row = FolderRow { name: folder_name(&e.path), path: folders::short_path(&e.path, &self.home), right };
+        folder_row(("ns-row", i), row, on, t, cx.listener(move |_, _, _, cx| cx.emit(NewSessionEvent::Start(path.clone()))))
     }
 
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -378,7 +341,7 @@ impl Shell {
 }
 
 /// Wurzeln des Repo-Scans: `~/development`, unter Windows zusätzlich `C:/development`, falls es dort liegt.
-fn scan_roots(home: &str) -> Vec<String> {
+pub(crate) fn scan_roots(home: &str) -> Vec<String> {
     let mut roots = vec![format!("{home}/development")];
     if cfg!(windows) && !home.to_lowercase().starts_with("c:/development") {
         roots.push("C:/development".to_string());

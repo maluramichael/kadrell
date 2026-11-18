@@ -4,6 +4,7 @@
 //! an die Shell in `shell`.
 
 mod history;
+mod resume;
 mod model;
 mod shell;
 
@@ -20,7 +21,9 @@ use gpui::{
 use kadrell_term::TerminalPane;
 
 use self::history::HistoryProvider;
-pub use self::history::MockHistory;
+pub use self::model::relative_de;
+pub use self::history::{HistoryStore, provider as history_provider};
+pub use self::resume::{HistoryAction, Known, Pick, decide as decide_history, problem_title};
 use self::model::{Command, Item, Mode, Run, SessionHits, Snapshot, Target};
 use super::chrome::h_seam;
 use super::layout::{Id, LayoutMode};
@@ -61,7 +64,8 @@ pub enum PaletteEvent {
     Menu(Box<dyn gpui::Action>),
     /// Zeile in einem Terminal anzeigen (Gridzeile, Suchbegriff).
     Hit { id: Id, line: i32, query: String },
-    Resume(String),
+    /// ⏎ auf einem Treffer des Verlaufs: springen oder fortsetzen entscheidet die Shell (`resume::decide`).
+    Resume(Pick),
 }
 
 impl EventEmitter<PaletteEvent> for Palette {}
@@ -115,6 +119,25 @@ impl Palette {
     /// Ersetzt den Eingabetext (Strg+P bei offener Palette schaltet auf `>`, Strg+Umschalt+F auf `/`).
     pub fn set_input(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.input.update(cx, |i, cx| i.set_text(text, window, cx));
+    }
+
+    /// Der Verlaufsindex hat sich geändert (Nachlesen fertig): in der Verlaufssuche neu filtern. Die Auswahl bleibt,
+    /// solange die Liste nicht kürzer ist.
+    pub fn refresh_history(&mut self, cx: &mut Context<Self>) {
+        if model::parse(&self.raw(cx)).mode != Mode::History {
+            return;
+        }
+        let keep = self.selected;
+        self.refilter(cx);
+        self.selected = keep.min(self.items.len().saturating_sub(1));
+    }
+
+    /// Zeigt statt der Treffer eine Meldung (z. B. warum sich eine Session nicht fortsetzen lässt); die nächste Eingabe
+    /// räumt sie weg.
+    pub fn show_notice(&mut self, title: &str, message: &str, cx: &mut Context<Self>) {
+        self.items = vec![model::notice_item(title, message)];
+        self.selected = 0;
+        cx.notify();
     }
 
     fn raw(&self, cx: &App) -> String {
@@ -174,7 +197,7 @@ impl Palette {
             return model::history_placeholder(false);
         }
         let now = history::now_secs();
-        self.history.search(term).iter().map(|h| model::history_item(h, now, None)).collect()
+        self.history.search(term).iter().map(|h| model::history_item(h, now, self.snapshot.live.get(&h.session_id).copied())).collect()
     }
 
     fn move_by(&mut self, delta: isize, cx: &mut Context<Self>) {
@@ -201,7 +224,7 @@ impl Palette {
             Target::Group(g) => cx.emit(PaletteEvent::Group(g)),
             Target::Command(c) => self.run_command(c, window, cx),
             Target::Hit { id, line, query } => cx.emit(PaletteEvent::Hit { id, line, query }),
-            Target::History(id) => cx.emit(PaletteEvent::Resume(id)),
+            Target::History { session_id, cwd, title } => cx.emit(PaletteEvent::Resume(Pick { session_id, cwd, title })),
             Target::Nothing => {}
         }
     }

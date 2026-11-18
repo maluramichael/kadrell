@@ -54,6 +54,9 @@ pub struct Shell {
     menubar: Entity<ui::menubar::MenuBar>,
     overlay: Option<Entity<ui::new_session::NewSession>>,
     palette: Option<Entity<ui::palette::Palette>>,
+    quick_start: Option<Entity<ui::quick_start::QuickStart>>,
+    /// Index der Verlaufssuche (`#`), beim Start und bei jedem Öffnen der Suche nachgelesen.
+    history: ui::palette::HistoryStore,
     settings: Option<Entity<ui::settings::SettingsDialog>>,
     rename: Option<Entity<ui::rename::Rename>>,
     context: Option<ui::context_menu::ContextMenu>,
@@ -93,6 +96,7 @@ impl Shell {
     fn new(window: &mut Window, cx: &mut Context<Self>, state: AppState, jobs: async_channel::Receiver<wire::Job>, server: Option<ControlServer>, ext: ExtensionManager) -> Self {
         let menubar = cx.new(ui::menubar::MenuBar::new);
         let mode = ui_layout(state.layout);
+        let folder_home = state.home();
         let mut shell = Shell {
             state,
             groups: Vec::new(),
@@ -104,6 +108,8 @@ impl Shell {
             menubar,
             overlay: None,
             palette: None,
+            quick_start: None,
+            history: ui::palette::HistoryStore::new(&folder_home),
             settings: None,
             rename: None,
             context: None,
@@ -122,6 +128,8 @@ impl Shell {
         shell.open_menu_from_env(window, cx);
         shell.open_overlay_from_env(window, cx);
         shell.open_palette_from_env(window, cx);
+        shell.open_quick_start_from_env(window, cx);
+        shell.refresh_history(cx);
         shell.open_settings_from_env(window, cx);
         shell.start_extensions();
         shell
@@ -343,7 +351,7 @@ impl Shell {
             eprintln!("key {:?}", ev.keystroke);
         }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some()) && m.alt {
+        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some()) && m.alt {
             cx.stop_propagation();
             return;
         }
@@ -411,6 +419,7 @@ impl Render for Shell {
             .child(ui::footer::footer(cx))
             .children(self.overlay.clone())
             .children(self.palette.clone())
+            .children(self.quick_start.clone())
             .children(self.settings.clone())
             .children(self.rename.clone())
             .children(self.context_layer(window, cx))
@@ -492,6 +501,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::text_input::bind_keys(cx);
         ui::new_session::bind_keys(cx);
         ui::palette::bind_keys(cx);
+        ui::quick_start::bind_keys(cx);
         ui::rename::bind_keys(cx);
         set_theme(cx, start_theme());
         menus::init(cx);
