@@ -85,8 +85,14 @@ fn frame(style: TileStyle, focused: bool, body: bool, t: &Theme, a: &Appearance)
     }
 }
 
-/// Eine Kachel: Kopfzeile und, wenn `body`, das Terminal. `focused` ist die Tastaturkachel.
-pub fn tile(group: &Group, session: &Session, style: TileStyle, focused: bool, body: bool, cx: &App) -> AnyElement {
+/// Hinweis in einer Kachel, deren Terminal in einem anderen Fenster hängt.
+fn elsewhere_hint(t: &Theme, a: &Appearance) -> Div {
+    div().size_full().flex().items_center().justify_center().text_size(px(a.s(11.))).text_color(t.muted).child(kadrell_i18n::trd!("IN ANDEREM FENSTER · KLICK HOLT HIERHER"))
+}
+
+/// Eine Kachel: Kopfzeile und, wenn `body`, das Terminal. `focused` ist die Tastaturkachel, `elsewhere` sagt, dass das
+/// Terminal in einem anderen Fenster hängt (statt seiner steht ein Hinweis).
+pub fn tile(group: &Group, session: &Session, style: TileStyle, focused: bool, body: bool, elsewhere: bool, cx: &App) -> AnyElement {
     let t = theme(cx);
     let a = crate::appearance::current(cx);
     let frame = frame(style, focused, body, &t, &a).child(header(group, session, &a, cx));
@@ -94,6 +100,7 @@ pub fn tile(group: &Group, session: &Session, style: TileStyle, focused: bool, b
         let mut area = div().flex_1().min_h_0().overflow_hidden();
         // Das Terminal malt seinen Grund selbst (mit der Deckkraft), ein zweiter Grund darunter deckte doppelt.
         match &session.pane {
+            _ if elsewhere => area = area.bg(a.panel_fill(t.bg)).child(elsewhere_hint(&t, &a)),
             Some(pane) => area = area.child(pane.clone()),
             None => area = area.bg(a.panel_fill(t.bg)),
         }

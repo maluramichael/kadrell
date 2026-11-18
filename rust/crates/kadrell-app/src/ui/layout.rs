@@ -464,7 +464,7 @@ fn placed(r: Rect, g: usize, s: usize, tile: AnyElement, cx: &mut Context<Shell>
 }
 
 /// Sitzt die Fläche anders als zuletzt gemessen, neu zeichnen, damit die Rahmen stimmen.
-fn measure(measured: Measured, entity: gpui::EntityId) -> impl IntoElement {
+pub(crate) fn measure(measured: Measured, entity: gpui::EntityId) -> impl IntoElement {
     canvas(
         move |b, _, cx| {
             let now = (b.origin.x.as_f32(), b.origin.y.as_f32(), b.size.width.as_f32(), b.size.height.as_f32());
@@ -489,7 +489,8 @@ fn tiles(shell: &Shell, frames: &[Rect], cx: &mut Context<Shell>) -> Vec<AnyElem
         let focused = Some((g, s)) == shell.selected;
         let body = !stacked || focused;
         let group: &Group = &shell.groups[g];
-        let el = tile::tile(group, &group.sessions[s], style, focused, body, cx);
+        let elsewhere = shell.owners.elsewhere(0, &group.sessions[s].key);
+        let el = tile::tile(group, &group.sessions[s], style, focused, body, elsewhere, cx);
         out.push(placed(frames[i], g, s, el, cx));
     }
     out

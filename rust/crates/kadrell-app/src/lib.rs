@@ -14,6 +14,7 @@ mod theme;
 mod tray_wire;
 mod ui;
 mod usage;
+mod windows;
 mod wire;
 
 use std::collections::HashMap;
@@ -83,6 +84,12 @@ pub struct Shell {
     ext_ui: ui::ext::ExtUi,
     /// Konten, Nutzung, Meldungen und die Statistik (`usage`).
     usage: usage::UsageUi,
+    /// Weitere Fenster (⌘⇧T): offene Nummern, was jedes zeigt, wer welches Terminal hält (`windows`).
+    windows: windows::model::WindowSet,
+    shown: HashMap<usize, Vec<String>>,
+    owners: windows::model::PaneOwners,
+    extras: Vec<(usize, gpui::AnyWindowHandle)>,
+    main_window: Option<gpui::AnyWindowHandle>,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -139,6 +146,11 @@ impl Shell {
             language_generation: kadrell_i18n::global().generation(),
             ext_ui,
             usage,
+            windows: windows::model::WindowSet::default(),
+            shown: HashMap::new(),
+            owners: windows::model::PaneOwners::default(),
+            extras: Vec::new(),
+            main_window: None,
         };
         shell.rebuild();
         shell.apply_dev_view();
@@ -268,6 +280,7 @@ impl Shell {
     /// Klick in eine Kachel: sie wird Fokus, die Auswahl bleibt.
     fn focus_tile(&mut self, g: usize, s: usize, window: &mut Window, cx: &mut Context<Self>) {
         let key = self.groups[g].sessions[s].key.clone();
+        self.owners.take(&key, 0);
         let ended = matches!(self.state.run(&key), state::Run::Ended | state::Run::Stopped);
         if self.selection.focus != (g, s) || ended {
             self.selection.focus_on((g, s));
@@ -429,6 +442,7 @@ impl Render for Shell {
         let sidebar = self.ext_left_column(sidebar, cx);
         let mut ctl = self.layout_ctl(cx);
         ctl.usage = Some(self.bar_ctl(window, cx));
+        self.note_main_shown();
         let workspace = ui::layout::workspace(self, cx);
         let root = div()
             .flex()
@@ -577,7 +591,18 @@ pub fn run(profile_name: Option<String>) -> i32 {
             async {}
         })
         .detach();
-        cx.on_window_closed(|cx, _| cx.quit()).detach();
+        // Ein weiteres Fenster zu: die App läuft weiter. Ist das Hauptfenster weg, endet sie.
+        let main_id = handle.window_id();
+        cx.on_window_closed(move |cx, _| {
+            if !cx.windows().iter().any(|w| w.window_id() == main_id) {
+                cx.quit();
+            }
+        })
+        .detach();
+        let _ = handle.update(cx, |shell, window, cx| {
+            shell.main_window = Some(window.window_handle());
+            shell.restore_windows(cx);
+        });
         signals::quit_on(cx, signals);
         cx.activate(true);
     });

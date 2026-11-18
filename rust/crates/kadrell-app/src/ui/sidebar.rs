@@ -167,7 +167,7 @@ fn new_badge(status: Status, t: &Theme, a: &Appearance) -> impl IntoElement + us
 }
 
 /// Statuspunkt; arbeitende Sessions bekommen den atmenden Punkt (Warten und Fehler behalten den Punkt).
-fn status_dot(session: &Session, t: &Theme, a: &Appearance) -> gpui::AnyElement {
+pub(crate) fn status_dot(session: &Session, t: &Theme, a: &Appearance) -> gpui::AnyElement {
     let color = session.status.color(t);
     if session.status == Status::Running {
         return div().flex_none().child(breathing::breathing_dot(color, a.s(metrics::DOT_SIZE), a.s(breathing::GLOW_RADIUS))).into_any_element();
