@@ -6,6 +6,7 @@ mod ext;
 mod menus;
 mod state;
 mod theme;
+mod tray_wire;
 mod ui;
 mod wire;
 
@@ -64,6 +65,8 @@ pub struct Shell {
     down: bool,
     /// Die Lua-Extensions dieses Profils.
     ext: ExtensionManager,
+    /// Tray-Icon, Benachrichtigungen, Badge und das Verstecken des Fensters (`tray_wire`).
+    tray: tray_wire::TrayWire,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -111,6 +114,7 @@ impl Shell {
             server,
             down: false,
             ext,
+            tray: tray_wire::TrayWire::new(),
         };
         shell.rebuild();
         shell.apply_dev_view();
@@ -124,6 +128,7 @@ impl Shell {
         shell.open_palette_from_env(window, cx);
         shell.open_settings_from_env(window, cx);
         shell.start_extensions();
+        shell.start_tray(window, cx);
         shell
     }
 
@@ -452,7 +457,8 @@ fn open_state(profile_name: Option<&str>) -> Result<Option<Opened>, String> {
         Acquire::Locked(lock) => Some(lock),
         Acquire::Unprotected => None,
         Acquire::Running(pid) => {
-            eprintln!("kadrell: dieses Profil läuft schon (pid {pid})");
+            eprintln!("kadrell: dieses Profil läuft schon (pid {pid}), das Fenster wird gezeigt");
+            tray_wire::forward_show(&endpoint_path(&profile.dir));
             return Ok(None);
         }
     };
@@ -503,6 +509,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
             ..Default::default()
         };
         let handle = cx.open_window(options, |window, cx| cx.new(|cx| Shell::new(window, cx, state, jobs, server, ext))).unwrap();
+        tray_wire::install_reopen(cx, handle);
         cx.on_app_quit(move |cx| {
             let _ = handle.update(cx, |shell, _, _| {
                 if !shell.down {

@@ -12,11 +12,18 @@ kadrell-claude = { path = "../kadrell-claude" }
 kadrell-control = { path = "../kadrell-control" }
 kadrell-accounts = { path = "../kadrell-accounts" }
 kadrell-ext = { path = "../kadrell-ext" }
+kadrell-i18n = { path = "../kadrell-i18n" }
+kadrell-tray = { path = "../kadrell-tray" }
 gpui-pre = "=0.3.13"
 gpui-pre-platform = "=0.3.13"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 async-channel = "2.5"
 serde_json = "1.0.144" # gpui-pre verlangt ^1.0.144, exakter Pin kollidiert
+
+# Fenster verstecken und zeigen (tray_wire/window.rs): HWND aus GPUI, ShowWindow.
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 # Ohne `font-kit` nimmt GPUI auf dem Mac das NoopTextSystem: kein einziger Text.
 [target.'cfg(target_os = "macos")'.dependencies]

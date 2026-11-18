@@ -6,7 +6,7 @@ use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
 
 use crate::Shell;
 
-actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings]);
+actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, CloseWindow]);
 
 pub enum Entry {
     Separator,
@@ -42,7 +42,7 @@ fn app_menu() -> MenuDef {
             Entry::Separator,
             item("Einstellungen …", keys("⌘,", "Strg+,"), OpenSettings),
             Entry::Separator,
-            item("Kadrell beenden", keys("⌘Q", "Alt+F4"), Quit),
+            item("Kadrell beenden", keys("⌘Q", "Strg+Q"), Quit),
         ],
     }
 }
@@ -58,7 +58,7 @@ fn file_menu() -> MenuDef {
             off("Neue Gruppe …", keys("⌥⌘N", "Strg+Alt+N")),
             Entry::Separator,
             off("Neues Fenster", keys("⇧⌘T", "Strg+Umschalt+T")),
-            off("Fenster schließen", keys("⇧⌘W", "Strg+Umschalt+W")),
+            item("Fenster schließen", keys("⇧⌘W", "Strg+Umschalt+W"), CloseWindow),
             Entry::Separator,
             item("Session schließen", keys("⌘W", ""), CloseSession),
         ],
@@ -152,9 +152,9 @@ pub fn init(cx: &mut App) {
     let (search_key, find_all_key) = if cfg!(target_os = "macos") { ("cmd-p", "cmd-shift-f") } else { ("ctrl-p", "ctrl-shift-f") };
     cx.bind_keys([KeyBinding::new(search_key, OpenPalette, None), KeyBinding::new(find_all_key, FindAll, None)]);
     cx.bind_keys([KeyBinding::new(if cfg!(target_os = "macos") { "cmd-," } else { "ctrl-," }, OpenSettings, None)]);
-    if cfg!(target_os = "macos") {
-        cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
-    }
+    // Alt+F4 und der rote Knopf verstecken nur das Fenster (`tray_wire`), beendet wird mit Strg+Q, über das Menü oder das Tray.
+    let (quit_key, close_key) = if cfg!(target_os = "macos") { ("cmd-q", "cmd-shift-w") } else { ("ctrl-q", "ctrl-shift-w") };
+    cx.bind_keys([KeyBinding::new(quit_key, Quit, None), KeyBinding::new(close_key, CloseWindow, None)]);
     cx.on_action(|_: &Quit, cx| cx.quit());
     cx.on_action(|_: &ToggleTheme, cx| Shell::toggle_theme(cx));
     set_native_menus(cx);
@@ -179,6 +179,7 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
         .on_action(cx.listener(|this, _: &MoreColumns, _, cx| this.step_cols(1, cx)))
         .on_action(cx.listener(|this, _: &FewerColumns, _, cx| this.step_cols(-1, cx)))
         .on_action(cx.listener(|this, _: &OpenSettings, window, cx| this.open_settings_action(window, cx)))
+        .on_action(cx.listener(|this, _: &CloseWindow, window, cx| this.hide_main_window(window, cx)))
         .on_action(cx.listener(|_, _: &Minimize, window, _| window.minimize_window()))
         .on_action(cx.listener(|_, _: &Zoom, window, _| window.zoom_window()))
 }
