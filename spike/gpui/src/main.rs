@@ -26,6 +26,18 @@ pub struct Shell {
     clock: String,
 }
 
+/// Start-Session für Screenshots ohne Eingabe: `KADRELL_SPIKE_SESSION=1,0` (Gruppe, Session), sonst die erste.
+fn start_session(groups: &[ui::model::Group]) -> (usize, usize) {
+    let parsed = std::env::var("KADRELL_SPIKE_SESSION").ok().and_then(|v| {
+        let (g, s) = v.split_once(',')?;
+        Some((g.trim().parse().ok()?, s.trim().parse().ok()?))
+    });
+    match parsed {
+        Some((g, s)) if groups.get(g).is_some_and(|gr: &ui::model::Group| s < gr.sessions.len()) => (g, s),
+        _ => (0, 0),
+    }
+}
+
 fn now_hhmm() -> String {
     chrono::Local::now().format("%H:%M").to_string()
 }
@@ -33,7 +45,8 @@ fn now_hhmm() -> String {
 impl Shell {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut shell = Shell { groups: mock_groups(), selected: (0, 0), clock: now_hhmm() };
-        shell.select(0, 0, window, cx);
+        let (g, s) = start_session(&shell.groups);
+        shell.select(g, s, window, cx);
         shell.start_clock(cx);
         shell
     }
