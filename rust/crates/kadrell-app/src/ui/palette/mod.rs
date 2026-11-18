@@ -21,7 +21,8 @@ use kadrell_term::TerminalPane;
 
 use self::history::HistoryProvider;
 pub use self::history::MockHistory;
-use self::model::{Command, Item, Mode, Run, SessionHits, Snapshot, Target};
+pub use self::model::{Command, Run};
+use self::model::{Item, Mode, SessionHits, Snapshot, Target};
 use super::chrome::h_seam;
 use super::layout::{Id, LayoutMode};
 use super::overlay::{backdrop, dialog_frame, overlay_height, overlay_width};
@@ -62,6 +63,8 @@ pub enum PaletteEvent {
     /// Zeile in einem Terminal anzeigen (Gridzeile, Suchbegriff).
     Hit { id: Id, line: i32, query: String },
     Resume(String),
+    /// Eintrag einer Extension (Statusleiste mit Aktion): `ui.action` an die Extension.
+    Ext { name: String, id: String },
 }
 
 impl EventEmitter<PaletteEvent> for Palette {}
@@ -110,6 +113,12 @@ impl Palette {
         let focus = this.input.read(cx).focus.clone();
         focus.focus(window, cx);
         this
+    }
+
+    /// Hängt Kommandos an die Liste von `>` (Einträge der Extensions, siehe `model::Run::Ext`).
+    pub fn add_commands(&mut self, extra: Vec<Command>, cx: &mut Context<Self>) {
+        self.commands.extend(extra);
+        self.refilter(cx);
     }
 
     /// Ersetzt den Eingabetext (Strg+P bei offener Palette schaltet auf `>`, Strg+Umschalt+F auf `/`).
@@ -213,6 +222,7 @@ impl Palette {
             Run::Layout(mode) => cx.emit(PaletteEvent::Layout(*mode)),
             Run::Group(g) => cx.emit(PaletteEvent::Group(*g)),
             Run::MoveFocused(g) => cx.emit(PaletteEvent::MoveFocused(*g)),
+            Run::Ext { name, id } => cx.emit(PaletteEvent::Ext { name: name.clone(), id: id.clone() }),
             Run::Mode(mode) => self.set_input(mode.prefix(), window, cx),
             Run::Unwired => {}
         }

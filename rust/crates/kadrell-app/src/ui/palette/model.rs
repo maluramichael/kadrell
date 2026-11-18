@@ -105,6 +105,8 @@ pub enum Run {
     Group(usize),
     /// Die fokussierte Session in die Gruppe an dieser Position der Ansicht verschieben.
     MoveFocused(usize),
+    /// Aktion eines Statusleisten-Eintrags einer Extension (Extension, Aktions-id).
+    Ext { name: String, id: String },
     /// Wechselt in einen anderen Modus der Suche.
     Mode(Mode),
     Unwired,

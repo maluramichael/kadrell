@@ -21,7 +21,7 @@ const LEFT: [&str; 9] = ["▦", "‹", "AUTO COL", "›", "AUTO", "SYNC", "GRP",
 
 const LEFT_INSET: f32 = 8.;
 
-type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+pub type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 /// Zustand und Aktionen der Layout-Tasten: Symbol (reihum), ‹ und › (Spaltenzahl im Grid).
 #[derive(Clone)]
@@ -41,6 +41,16 @@ pub struct LayoutCtl {
     pub running: usize,
     pub detached: usize,
     pub waiting: usize,
+    /// Statuseinträge der Extensions, links neben den Zählern.
+    pub ext: Vec<ExtStatus>,
+}
+
+/// Ein Statuseintrag einer Extension (`kadrell.status.set`): Text mit Punkt in der Farbe, mit Klick bei Aktion.
+#[derive(Clone)]
+pub struct ExtStatus {
+    pub text: String,
+    pub dot: Option<Hsla>,
+    pub click: Option<Handler>,
 }
 
 fn with_click(pill: Pill, h: &Handler) -> Pill {
@@ -72,6 +82,19 @@ fn left_pills(ink: Hsla, ctl: &LayoutCtl) -> impl IntoElement + use<> {
     div().flex().flex_none().items_center().gap(px(4.)).children(pills)
 }
 
+/// Statuseintrag einer Extension als Taste (mit Aktion) bzw. als Anzeige ohne Klick.
+fn ext_pill(i: usize, e: &ExtStatus) -> Pill {
+    let pill = Pill::new(("ext-status", i), e.text.clone());
+    let pill = match e.dot {
+        Some(color) => pill.dot(color),
+        None => pill,
+    };
+    match &e.click {
+        Some(h) => with_click(pill, h),
+        None => pill,
+    }
+}
+
 /// Rechts: wartende Sessions (nur wenn es welche gibt), getrennte, laufende. Nutzung und Konten stehen noch aus
 /// (`kadrell-accounts` ist nicht verdrahtet).
 fn right_side(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
@@ -86,6 +109,7 @@ fn right_side(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<
         .items_center()
         .gap(px(10.))
         .pr(px(if cfg!(target_os = "windows") { 6. } else { 8. }))
+        .children(ctl.ext.iter().enumerate().map(|(i, e)| ext_pill(i, e)))
         .children(waiting)
         .child(Pill::new("detach", format!("detach {}", ctl.detached)).kind(PillKind::Green))
         .child(running)

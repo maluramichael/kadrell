@@ -119,10 +119,24 @@ pub fn build(state: &AppState, service: Service) -> ExtensionManager {
     manager
 }
 
-/// Schreibt neue Logzeilen und geänderte Statuseinträge nach stderr, solange es keine Oberfläche dafür gibt.
+/// Meldet der Oberfläche, dass sich bei den Extensions etwas geändert hat. Der Manager ruft `on_change` aus
+/// Helfer-Threads, bis zu 50-mal pro Sekunde; ein Kanal mit Platz für eine Meldung bündelt das (eine offene Meldung
+/// genügt, die Oberfläche liest danach den neuesten Stand).
+fn ping() -> &'static (async_channel::Sender<()>, async_channel::Receiver<()>) {
+    static PING: OnceLock<(async_channel::Sender<()>, async_channel::Receiver<()>)> = OnceLock::new();
+    PING.get_or_init(|| async_channel::bounded(1))
+}
+
+/// Die Meldungen des Managers für die Oberfläche (eine Anwendung je Prozess).
+pub fn changes() -> async_channel::Receiver<()> {
+    ping().1.clone()
+}
+
+/// Schreibt neue Logzeilen und geänderte Statuseinträge nach stderr (Diagnose) und weckt die Oberfläche.
 fn change_logger(cell: Arc<OnceLock<ExtensionManager>>) -> Arc<dyn Fn() + Send + Sync> {
     let seen: Mutex<(HashMap<String, usize>, HashMap<String, String>)> = Mutex::default();
     Arc::new(move || {
+        let _ = ping().0.try_send(());
         let Some(manager) = cell.get() else { return };
         let mut seen = seen.lock().unwrap_or_else(PoisonError::into_inner);
         for (name, item) in manager.status_items() {

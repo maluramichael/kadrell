@@ -5,6 +5,7 @@
 use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
 
 use crate::Shell;
+use crate::ui::ext::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar};
 
 actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings]);
 
@@ -38,7 +39,7 @@ fn app_menu() -> MenuDef {
             off("Über Kadrell", ""),
             off("Was ist neu", ""),
             off("Statistik", ""),
-            off("Extensions …", ""),
+            item("Extensions …", keys("⌥F4", "Strg+Umschalt+E"), OpenExtensions),
             Entry::Separator,
             item("Einstellungen …", keys("⌘,", "Strg+,"), OpenSettings),
             Entry::Separator,
@@ -87,6 +88,8 @@ fn view_menu() -> MenuDef {
         entries: vec![
             off("Auto-Modus ein/aus", ""),
             off("Baum ein/aus", keys("⌘B", "Strg+B")),
+            item("Rechte Sidebar ein/aus", keys("⌥⌘B", "Strg+Alt+B"), ToggleRightSidebar),
+            item("Rechte Sidebar: Tastatur hierher", keys("⌘3", "Strg+3"), FocusRightSidebar),
             off("Alle Gruppen auf-/zuklappen", keys("⇧⌘B", "Strg+Umschalt+B")),
             Entry::Separator,
             off("Terminal-Schrift größer", keys("⌘+", "Strg++")),
