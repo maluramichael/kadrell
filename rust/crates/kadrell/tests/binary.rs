@@ -49,7 +49,9 @@ fn client_binary_against_server() {
         assert_eq!(req.caller.as_deref(), Some("k1"));
         assert_eq!(own.as_deref(), Some("test"));
         assert_eq!(*stranger, None);
-        assert_eq!(req.cwd.replace('\\', "/"), cwd.to_string_lossy().replace('\\', "/").trim_start_matches("//?/"));
+        // Das Kind sieht den aufgelösten Pfad (macOS: /var ist ein Link nach /private/var).
+        let real = cwd.canonicalize().unwrap();
+        assert_eq!(req.cwd.replace('\\', "/"), real.to_string_lossy().replace('\\', "/").trim_start_matches("//?/"));
     }
 
     let (code, out, err) = run_cli(server.path(), &cwd, &["kill"]);

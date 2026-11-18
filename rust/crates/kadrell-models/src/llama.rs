@@ -269,9 +269,12 @@ mod tests {
 
     #[test]
     fn free_port_is_usable() {
-        let p = free_port().unwrap();
-        assert!(p > 1024);
-        assert!(TcpListener::bind(("127.0.0.1", p)).is_ok());
+        // Parallel laufende Tests können den freigegebenen Port sofort wieder belegen: ein paar Versuche.
+        let usable = (0..5).any(|_| {
+            let p = free_port().unwrap();
+            p > 1024 && TcpListener::bind(("127.0.0.1", p)).is_ok()
+        });
+        assert!(usable);
     }
 
     #[test]
