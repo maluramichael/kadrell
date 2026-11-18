@@ -2516,7 +2516,11 @@ name = "kadrell"
 version = "0.1.0"
 dependencies = [
  "kadrell-app",
+ "kadrell-claude",
+ "kadrell-control",
+ "kadrell-core",
  "kadrell-term",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

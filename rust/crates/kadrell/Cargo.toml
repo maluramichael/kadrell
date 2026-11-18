@@ -8,3 +8,10 @@ publish.workspace = true
 [dependencies]
 kadrell-term = { path = "../kadrell-term" }
 kadrell-app = { path = "../kadrell-app" }
+kadrell-core = { path = "../kadrell-core" }
+kadrell-claude = { path = "../kadrell-claude" }
+kadrell-control = { path = "../kadrell-control" }
+
+# Konsolenfenster der App unter Windows lösen (Version wie in kadrell-control und rust/Cargo.lock).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
