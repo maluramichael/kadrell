@@ -32,7 +32,7 @@ use crate::boxdraw;
 use crate::theme::{TermStyle, TermTheme, TermThemeGlobal};
 
 /// Grundhöhe einer Zeile als Vielfaches der Schriftgröße, davor kommt der Zeilenabstand aus `TermStyle`.
-pub const LINE_HEIGHT: f32 = 1.25;
+pub const LINE_HEIGHT: f32 = 1.32;
 
 /// Namen von Umgebungsvariablen, die Kinder nicht erben sollen: die Marker einer umgebenden Claude-Code-Session
 /// (sonst meldet Claude Code in der Kachel "inherited CLAUDE_CODE_CHILD_SESSION marker") und `AI_AGENT`.
