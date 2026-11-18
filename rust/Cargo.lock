@@ -2579,7 +2579,9 @@ dependencies = [
  "chrono",
  "gpui-pre",
  "gpui-pre-platform",
+ "kadrell-core",
  "kadrell-term",
+ "serde_json",
 ]
 
 [[package]]

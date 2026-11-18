@@ -83,6 +83,8 @@ pub struct TextInput {
     last_bounds: Option<Bounds<Pixels>>,
     scroll_x: Pixels,
     selecting: bool,
+    /// Schmale Variante für Tabellenzeilen (Einstellungen): 22 px hoch, 12 pt, Fuge statt dicker Rand.
+    compact: bool,
 }
 
 // Zeichengrenzen und Wortsprünge als reine Funktionen, damit sie testbar bleiben.
@@ -128,7 +130,14 @@ impl TextInput {
             last_bounds: None,
             scroll_x: px(0.),
             selecting: false,
+            compact: false,
         }
+    }
+
+    /// Schmale Variante für Tabellenzeilen.
+    pub fn compact(mut self) -> Self {
+        self.compact = true;
+        self
     }
 
     pub fn text(&self) -> &str {
@@ -526,19 +535,24 @@ impl Element for TextElement {
 impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let ring = if self.focus.is_focused(window) { t.accent } else { seam_dark(&t) };
+        let focused = self.focus.is_focused(window);
+        let ring = if focused { t.accent } else { seam_dark(&t) };
+        // Schmal: 1 px Fuge, mit Fokus 2 px Akzentring; der Innenabstand gleicht den Unterschied aus.
+        let thick = focused || !self.compact;
+        let (height, text, pad) = if self.compact { (22., 12., if focused { 6. } else { 7. }) } else { (32., 13., 6.) };
         div()
             .flex()
             .items_center()
             .w_full()
-            .h(px(32.))
-            .px(px(6.))
+            .h(px(height))
+            .px(px(pad))
             .rounded(px(5.))
-            .border_2()
+            .when(thick, |d| d.border_2())
+            .when(!thick, |d| d.border_1())
             .border_color(ring)
             .bg(super::overlay::well(&t))
             .text_color(t.fg)
-            .text_size(px(13.))
+            .text_size(px(text))
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .cursor(CursorStyle::IBeam)

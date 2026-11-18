@@ -6,7 +6,7 @@ use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
 
 use crate::Shell;
 
-actions!(kadrell, [NewSession, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll]);
+actions!(kadrell, [NewSession, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings]);
 
 pub enum Entry {
     Separator,
@@ -40,7 +40,7 @@ fn app_menu() -> MenuDef {
             off("Statistik", ""),
             off("Extensions …", ""),
             Entry::Separator,
-            off("Einstellungen …", keys("⌘,", "Strg+,")),
+            item("Einstellungen …", keys("⌘,", "Strg+,"), OpenSettings),
             Entry::Separator,
             item("Kadrell beenden", keys("⌘Q", "Alt+F4"), Quit),
         ],
@@ -141,6 +141,7 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new(new_key, NewSession, None)]);
     let (search_key, find_all_key) = if cfg!(target_os = "macos") { ("cmd-p", "cmd-shift-f") } else { ("ctrl-p", "ctrl-shift-f") };
     cx.bind_keys([KeyBinding::new(search_key, OpenPalette, None), KeyBinding::new(find_all_key, FindAll, None)]);
+    cx.bind_keys([KeyBinding::new(if cfg!(target_os = "macos") { "cmd-," } else { "ctrl-," }, OpenSettings, None)]);
     if cfg!(target_os = "macos") {
         cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
     }
@@ -159,6 +160,7 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
         .on_action(cx.listener(|this, _: &NextLayout, _, cx| this.cycle_layout(cx)))
         .on_action(cx.listener(|this, _: &MoreColumns, _, cx| this.step_cols(1, cx)))
         .on_action(cx.listener(|this, _: &FewerColumns, _, cx| this.step_cols(-1, cx)))
+        .on_action(cx.listener(|this, _: &OpenSettings, window, cx| this.open_settings_action(window, cx)))
         .on_action(cx.listener(|_, _: &Minimize, window, _| window.minimize_window()))
         .on_action(cx.listener(|_, _: &Zoom, window, _| window.zoom_window()))
 }

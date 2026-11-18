@@ -17,12 +17,12 @@ pub const DIALOG_RADIUS: f32 = 14.;
 
 /// Dialogfläche: die hellste Schemafläche (`Theme.raised`).
 pub fn raised(t: &Theme) -> Hsla {
-    if t.dark { t.surface } else { t.bg }
+    t.raised()
 }
 
 /// Eingelassenes Feld (`Theme.well`): in dunklen Schemata `panel` 72 % zu Schwarz gemischt, sonst `bg`.
 pub fn well(t: &Theme) -> Hsla {
-    if t.dark { Hsla { l: t.panel.l * 0.72, ..t.panel } } else { t.bg }
+    t.well()
 }
 
 /// Feste Dialogbreite wie `overlayWidth(_:)`: nie breiter als das Fenster (94 %), sonst `width`.

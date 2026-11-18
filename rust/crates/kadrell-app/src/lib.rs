@@ -36,6 +36,7 @@ pub struct Shell {
     menubar: Entity<ui::menubar::MenuBar>,
     overlay: Option<Entity<ui::new_session::NewSession>>,
     palette: Option<Entity<ui::palette::Palette>>,
+    settings: Option<Entity<ui::settings::SettingsDialog>>,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"`.
@@ -90,12 +91,14 @@ impl Shell {
             menubar,
             overlay: None,
             palette: None,
+            settings: None,
         };
         shell.apply_selection(window, cx);
         shell.start_clock(cx);
         shell.open_menu_from_env(window, cx);
         shell.open_overlay_from_env(window, cx);
         shell.open_palette_from_env(window, cx);
+        shell.open_settings_from_env(window, cx);
         shell
     }
 
@@ -292,12 +295,12 @@ impl Shell {
             eprintln!("key {:?}", ev.keystroke);
         }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if (self.overlay.is_some() || self.palette.is_some()) && m.alt {
+        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some()) && m.alt {
             cx.stop_propagation();
             return;
         }
         // Strg+L (Cmd+L auf dem Mac) schaltet das Layout reihum.
-        if m.secondary(cx) && !m.alt && !m.shift && ev.keystroke.key == "l" {
+        if self.settings.is_none() && m.secondary(cx) && !m.alt && !m.shift && ev.keystroke.key == "l" {
             self.cycle_layout(cx);
             cx.stop_propagation();
             return;
@@ -352,6 +355,7 @@ impl Render for Shell {
             .child(ui::footer::footer(cx))
             .children(self.overlay.clone())
             .children(self.palette.clone())
+            .children(self.settings.clone())
     }
 }
 
