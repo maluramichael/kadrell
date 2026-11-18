@@ -18,6 +18,9 @@ use crate::ui::model::{flat_index, position};
 use crate::ui::settings::shortcut::{self, KeyInput};
 use crate::ui::tile::Marks;
 
+/// Takt der Arbeitsfläche (`WorkspaceView.tickTask`).
+const TICK: std::time::Duration = std::time::Duration::from_millis(80);
+
 fn matches_auto(state: &AppState, filter: &Filter, key: &str) -> bool {
     match state.display_status(key) {
         Some(SessionStatus::Waiting) => filter.waiting,
@@ -174,11 +177,13 @@ impl Shell {
         }
     }
 
-    /// Takt für den Nachlauf: ohne Ereignis (kein Poll) muss die Kachel nach 3 s trotzdem verschwinden.
+    /// Takt für den Nachlauf wie `WorkspaceView.tick` (80 ms): ohne Ereignis (kein Poll) muss die Kachel nach 3 s trotzdem
+    /// verschwinden. Der Fokus folgt einem Klick ins Terminal nicht über diesen Takt, sondern sofort über
+    /// `placed` (Klick auf die Kachel); der Takt kostet ohne Nachlauf nichts.
     pub(crate) fn start_auto_tick(&self, window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
             loop {
-                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                cx.background_executor().timer(TICK).await;
                 let alive = this.update_in(cx, |shell, window, cx| {
                     if shell.ws.auto.lingering() {
                         let before = shell.ws.auto.shown.clone();

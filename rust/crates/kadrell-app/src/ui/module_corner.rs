@@ -34,10 +34,13 @@ fn stroke_arc(window: &mut gpui::Window, origin: (f32, f32), k: f32, r: f32, col
     }
 }
 
-/// Die Ecke als Zeichenfläche; der Aufrufer setzt sie mit Versatz (-2, -2) an die Arbeitsfläche.
-pub fn view(t: &Theme, a: &Appearance) -> impl IntoElement + use<> {
+/// Die Ecke als Zeichenfläche; der Aufrufer setzt sie mit Versatz (-2, -2) an die Arbeitsfläche. `covering`: eine Kachel
+/// ragt seitlich unter die Ecke (Swift schneidet sie mit `moduleMask` aus), das Gehäuse liegt dann deckend, damit sie bei
+/// Deckkraft unter 100 % nicht durch das Gehäuse scheint.
+pub fn view(t: &Theme, a: &Appearance, covering: bool) -> impl IntoElement + use<> {
     let k = extent(a.scale);
-    let (panel, housing, light, dark) = (t.panel, a.panel_fill(t.panel), seam_light(t), seam_dark(t));
+    let housing = if covering { t.panel } else { a.panel_fill(t.panel) };
+    let (panel, light, dark) = (t.panel, seam_light(t), seam_dark(t));
     canvas(
         |_, _, _| (),
         move |bounds: Bounds<Pixels>, _, window, _| {

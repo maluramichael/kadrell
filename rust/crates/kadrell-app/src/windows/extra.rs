@@ -20,7 +20,7 @@ use crate::state::Run;
 use crate::state::attention::{patch_setting, patch_settings};
 use crate::ui::layout::{LayoutMode, LayoutState, Rect, measure};
 use crate::ui::model::{Group, position};
-use crate::ui::tile::{self, TileStyle};
+use crate::ui::tile;
 
 pub struct ExtraWindow {
     shell: Entity<Shell>,
@@ -239,7 +239,6 @@ impl Render for ExtraWindow {
         let focus_id = self.focus.as_deref().and_then(|f| position(groups, f)).or_else(|| ids.first().copied());
         let active = focus_id.and_then(|f| ids.iter().position(|i| *i == f)).unwrap_or(0);
         let (frames, _) = self.layout.plan(ids.len(), active);
-        let style = TileStyle::for_count(ids.len());
         let stacked = self.layout.mode == LayoutMode::Stack && ids.len() > 1;
         let tiles: Vec<gpui::AnyElement> = ids
             .iter()
@@ -249,8 +248,7 @@ impl Render for ExtraWindow {
                 let focused = Some((g, s)) == focus_id;
                 let elsewhere = sh.owners.elsewhere(index, &session.key);
                 let marks = tile::Marks { active: focused, ring: focused, ..Default::default() };
-                let el = tile::cell(&tile::Cell { group, session, marks, geo: tile::Geometry::of(frames[i]), body: !stacked || focused, elsewhere, on_icon: None }, cx);
-                let _ = style;
+                let el = tile::cell(&tile::Cell { group, session, marks, geo: tile::Geometry::of(frames[i]), body: !stacked || focused, elsewhere, on_icon: None, on_head: None }, cx);
                 placed(frames[i], &session.key, el, cx)
             })
             .collect();

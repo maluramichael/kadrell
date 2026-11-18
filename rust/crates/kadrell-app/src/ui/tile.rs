@@ -16,29 +16,13 @@ use super::groups::drag::DragTile;
 use super::groups::rows::DragGhost;
 use super::model::{Group, Session};
 use super::tile_body::{self, Body};
+use super::tile_edge;
 use super::tile_icons;
 use super::tile_look::{self, Edge, HeaderIn, Icon, Run};
 use super::layout::Rect;
 use super::theme;
 use crate::appearance::{Appearance, a11y, breathing};
 use crate::theme::Theme;
-
-/// Vorgabe für Kacheln ohne bekannte Größe (zweites Fenster ruft `tile`), die Kopfzeile bekommt dann diese Breite.
-const FALLBACK_WIDTH: f32 = 600.;
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum TileStyle {
-    /// Einzelne Kachel.
-    Flat,
-    /// Mehrere Kacheln.
-    Bordered,
-}
-
-impl TileStyle {
-    pub fn for_count(visible: usize) -> Self {
-        if visible > 1 { TileStyle::Bordered } else { TileStyle::Flat }
-    }
-}
 
 /// Was an einer Kachel zu sehen ist, über Stil und Inhalt hinaus.
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
@@ -124,6 +108,17 @@ pub struct Cell<'a> {
     pub body: bool,
     pub elsewhere: bool,
     pub on_icon: Option<IconClick>,
+    /// Aktivieren der Kopfzeile ohne Zeiger (Bedienhilfe „Drücken“): die Kachel bekommt den Fokus.
+    pub on_head: Option<HeadClick>,
+}
+
+/// Die Kopfzeile wird aktiviert.
+pub type HeadClick = std::rc::Rc<dyn Fn(&mut gpui::Window, &mut App)>;
+
+/// Beschriftung der Kopfzeile für Bedienhilfen: Titel, Status, Gruppe und Zweig.
+fn header_label(c: &Cell) -> String {
+    let spoken = a11y::spoken(c.session.status, c.session.ended, false);
+    a11y::tile_label(&c.session.title, &spoken, &c.group.name, c.session.branch.as_deref())
 }
 
 impl Cell<'_> {
@@ -270,7 +265,7 @@ fn inner_rim(c: &Cell, t: &Theme, a: &Appearance) -> Div {
     let open = c.geo.row_below;
     let rim = div().absolute().left(px(1.)).right(px(1.)).top(px(1.)).bottom(px(if open { 0. } else { 1. })).border_1().border_color(seam_light(t));
     let rim = if open { rim.border_b(px(0.)) } else { rim };
-    rim.rounded_tl(px((c.geo.corner - 1.5 * a.scale).max(0.)))
+    rim.rounded_tl(px(tile_edge::clamp_corner(c.geo.corner - 1.5 * a.scale, c.geo.width, c.geo.height)))
 }
 
 /// Rand als Schicht über dem Inhalt; wechselt die Farbe, blendet er in 120 ms über.
@@ -278,7 +273,7 @@ fn border_layer(c: &Cell, t: &Theme) -> AnyElement {
     let edge = c.edge();
     let width = tile_look::edge_width(c.marks.ring, false);
     let (to, base) = (edge_color(edge, t), edge_color(Edge::Seam, t));
-    let layer = div().absolute().size_full().border(px(width)).rounded_tl(px(c.geo.corner));
+    let layer = div().absolute().size_full().border(px(width)).rounded_tl(px(tile_edge::clamp_corner(c.geo.corner, c.geo.width, c.geo.height)));
     // Wechselt die Rangfolge, ändert sich die Kennung und der Rand blendet von der alten zur neuen Farbe über.
     let from = if edge == Edge::Seam { edge_color(Edge::Focus, t) } else { base };
     layer
@@ -301,23 +296,21 @@ pub fn cell(c: &Cell, cx: &App) -> AnyElement {
         let head = header(c, &t, &a, cx);
         let drag = DragTile { key: c.session.key.clone(), label: c.session.title.clone() };
         // Ziehen an der Titelzeile sortiert um (Ablage in `layout::placed`).
-        col = col.child(
-            head.id(SharedString::from(format!("tile-head-{}", c.session.key)))
-                .cursor_grab()
-                .on_drag(drag, |d, _, _, cx| cx.new(|_| DragGhost { label: d.label.clone() })),
-        );
+        let mut head = head
+            .id(SharedString::from(format!("tile-head-{}", c.session.key)))
+            .role(Role::Button)
+            .aria_label(header_label(c))
+            .cursor_grab()
+            .on_drag(drag, |d, _, _, cx| cx.new(|_| DragGhost { label: d.label.clone() }));
+        if let Some(on) = c.on_head.clone() {
+            head = head.on_click(move |_, window, cx| on(window, cx));
+        }
+        col = col.child(head);
     }
     if c.body {
         col = col.child(body_area(c, kind, &t, &a));
     }
     col = col.child(inner_rim(c, &t, &a)).child(border_layer(c, &t));
-    let spoken = a11y::spoken(c.session.status, c.session.ended, false);
-    let label = a11y::tile_label(&c.session.title, &spoken, &c.group.name, c.session.branch.as_deref());
-    col.id(gpui::ElementId::Name(format!("tile-{}", c.session.key).into())).role(Role::Group).aria_label(label).into_any_element()
-}
-
-/// Eine Kachel ohne bekannte Lage (Standardbreite, keine Symbole): für Aufrufer, die die Größe nicht kennen.
-pub fn tile(group: &Group, session: &Session, _style: TileStyle, marks: Marks, body: bool, elsewhere: bool, cx: &App) -> AnyElement {
-    let geo = Geometry { width: FALLBACK_WIDTH, height: FALLBACK_WIDTH, corner: 0., hovered: false, header_hidden: false, row_below: false };
-    cell(&Cell { group, session, marks, geo, body, elsewhere, on_icon: None }, cx)
+    // Die Gruppe trägt nur den Titel; die Kopfzeile ist der Knopf mit Status, Gruppe und Zweig (`CellView.accessibilityChildren`).
+    col.id(gpui::ElementId::Name(format!("tile-{}", c.session.key).into())).role(Role::Group).aria_label(c.session.title.clone()).into_any_element()
 }
