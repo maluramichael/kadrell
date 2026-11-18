@@ -2650,6 +2650,8 @@ dependencies = [
  "kadrell-term",
  "kadrell-tray",
  "libc",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
  "raw-window-handle",
  "serde_json",
  "sysinfo 0.40.4",

@@ -71,16 +71,27 @@ pub fn forward_show(endpoint: &Path) {
     let _ = kadrell_control::client::send(endpoint, &req, Duration::from_secs(5));
 }
 
-/// Nur der macOS-Dock-Klick: Fenster zurückholen, wenn die App ohne sichtbares Fenster angeklickt wird.
+/// Fenster der App, sobald es offen ist: der Dock-Klick wird vor `run` angemeldet, das Fenster gibt es erst danach.
+pub type WindowSlot = std::rc::Rc<std::cell::Cell<Option<gpui::WindowHandle<Shell>>>>;
+
+/// Nur der macOS-Dock-Klick: Fenster zurückholen, wenn die App ohne sichtbares Fenster angeklickt wird. GPUI nimmt den
+/// Handler nur an der `Application` an (vor `run`), das Fenster kommt deshalb über den Slot.
 #[cfg(target_os = "macos")]
-pub fn install_reopen(cx: &mut gpui::App, handle: gpui::WindowHandle<Shell>) {
-    cx.on_reopen(move |cx| {
-        let _ = handle.update(cx, |shell, window, cx| shell.show_main_window(window, cx));
+pub fn install_reopen(app: &gpui::Application) -> WindowSlot {
+    let slot = WindowSlot::default();
+    let window = slot.clone();
+    app.on_reopen(move |cx| {
+        if let Some(handle) = window.get() {
+            let _ = handle.update(cx, |shell, window, cx| shell.show_main_window(window, cx));
+        }
     });
+    slot
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn install_reopen(_cx: &mut gpui::App, _handle: gpui::WindowHandle<Shell>) {}
+pub fn install_reopen(_app: &gpui::Application) -> WindowSlot {
+    WindowSlot::default()
+}
 
 fn ok() -> Option<Outcome> {
     Some(Outcome { response: ControlResponse::ok(""), followup: None })
@@ -254,15 +265,16 @@ impl Shell {
         for action in rules::plan(&effects, settings.0, settings.1) {
             self.run_action(action, lang, window);
         }
+        // Ohne Icon (die Oberfläche zeichnet vor `start_tray`) nichts merken: sonst hält der erste Aufruf mit Icon den
+        // Stand für schon gesendet, und Statustext, Menü und Badge kommen nie an.
+        let Some(tray) = &self.tray.tray else { return };
         let view = self.tray_view();
         if self.tray.last.as_ref() == Some(&view) {
             return;
         }
-        if let Some(tray) = &self.tray.tray {
-            tray.set_status(view.summary);
-            tray.set_menu(view.menu.clone());
-            tray.set_badge(view.badge);
-        }
+        tray.set_status(view.summary);
+        tray.set_menu(view.menu.clone());
+        tray.set_badge(view.badge);
         self.tray.trace(&describe(&view));
         self.tray.last = Some(view);
     }
