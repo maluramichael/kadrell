@@ -287,16 +287,13 @@ impl Shell {
         .detach();
     }
 
-    /// `KADRELL_DEV_EXT_TAB=discover` zeigt „Entdecken“, `KADRELL_DEV_EXT_SELECT=<n>` wählt eine Zeile,
+    /// `KADRELL_DEV_EXT_SELECT=<n>` wählt eine Zeile,
     /// `KADRELL_DEV_EXT_LOG=1` blendet das Log ein.
     fn open_extensions_dev(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open_extensions(window, cx);
         let Some(dialog) = self.ext_ui.dialog.clone() else { return };
         let var = |name: &str| std::env::var(format!("KADRELL_DEV_EXT_{name}")).ok();
         dialog.update(cx, |d, cx| {
-            if var("TAB").as_deref() == Some("discover") {
-                d.model.tab = super::dialog_model::Tab::Discover;
-            }
             if let Some(n) = var("SELECT").and_then(|v| v.parse::<usize>().ok()) {
                 d.model.select(n);
             }

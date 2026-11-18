@@ -85,6 +85,8 @@ pub struct AppState {
     /// Wirkungen des Aufmerksamkeits-Trackers (Klang, Benachrichtigung, Hüpfen), die die Plattformschicht noch
     /// ausführen muss (`take_effects`).
     pending_effects: Vec<Effect>,
+    /// Sessions, für die der Fokus-Hook gefeuert hat und die Extensions noch `session.focus` bekommen (`take_focus_fired`).
+    focus_fired: Vec<String>,
 }
 
 impl AppState {
@@ -134,6 +136,7 @@ impl AppState {
             window_active: true,
             error: None,
             pending_effects: Vec::new(),
+            focus_fired: Vec::new(),
         };
         state.restore_view();
         state
@@ -460,10 +463,18 @@ impl AppState {
         self.attention.prune(&sessions);
         for effect in effects {
             match effect {
-                Effect::FireFocusHook(key) => self.fire_hook(HookEvent::SessionFocus, &key),
+                Effect::FireFocusHook(key) => {
+                    self.fire_hook(HookEvent::SessionFocus, &key);
+                    self.focus_fired.push(key);
+                }
                 other => self.pending_effects.push(other),
             }
         }
+    }
+
+    /// Die Sessions, die seit dem letzten Abruf den Fokus-Hook ausgelöst haben (für das Extension-Event `session.focus`).
+    pub fn take_focus_fired(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.focus_fired)
     }
 
     /// Die Wirkungen seit dem letzten Abruf (Klang, Benachrichtigung, Hüpfen), in der Reihenfolge des Trackers.

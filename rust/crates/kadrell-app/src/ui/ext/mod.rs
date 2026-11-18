@@ -15,6 +15,7 @@ use kadrell_ext::panel::ThemeColor;
 
 use crate::theme::Theme;
 
+pub mod beep;
 pub mod dialog;
 pub mod dialog_model;
 pub mod footer_bar;
@@ -23,6 +24,7 @@ pub mod keys;
 pub mod model;
 pub mod panel;
 mod shell;
+pub mod spinner;
 
 pub use shell::{ExtUi, attach_actions};
 

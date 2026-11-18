@@ -93,6 +93,8 @@ pub struct Shell {
     window_dark: Option<bool>,
     /// Oberfläche der Extensions: Seitenleisten, Statusleisten, Dialog (`ui::ext`).
     ext_ui: ui::ext::ExtUi,
+    /// Letzter Stand der Sessions für die Extension-Events `session.new/status/remove` (`ext::SessionTracker`).
+    ext_sessions: ext::SessionTracker,
     /// Konten, Nutzung, Meldungen und die Statistik (`usage`).
     usage: usage::UsageUi,
     /// Hilfe, Über, Rückfragen, Update-Pille, Leerzustand, Übernahme, Auto-Trennen (`misc`).
@@ -168,6 +170,7 @@ impl Shell {
             language_generation: kadrell_i18n::global().generation(),
             window_dark: None,
             ext_ui,
+            ext_sessions: ext::SessionTracker::default(),
             usage,
             misc: misc::Misc::new(),
             windows: windows::model::WindowSet::default(),
@@ -206,11 +209,11 @@ impl Shell {
 
     /// `KADRELL_DEV_SELECT`, `KADRELL_DEV_SESSION` und `KADRELL_DEV_LAYOUT` setzen Auswahl und Layout beim Start,
     /// gegen den echten Zustand (Positionen im Baum, die es geben muss).
-    /// Startet die Extensions (Katalog einlesen, eingeschaltete Helper starten) und meldet `app.ready`.
-    fn start_extensions(&self) {
+    /// Startet die Extensions (Katalog einlesen, eingeschaltete Helper starten); `app.ready` folgt nach dem ersten Poll.
+    fn start_extensions(&mut self) {
+        self.emit_ext_events();
         self.ext.start();
         self.ext_dev_enable();
-        self.ext.emit("app.ready", serde_json::json!({}));
     }
 
     fn apply_dev_view(&mut self) {

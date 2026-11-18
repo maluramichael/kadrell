@@ -1,14 +1,14 @@
 //! Extensions-Dialog (`ExtensionsView.swift`, `ExtensionDetail.swift`): alle gefundenen Extensions mit Zustand,
-//! an/aus, Neu laden, Ordner, Log und Einstellungen; im Reiter „Entdecken“ die Suche im GitHub-Katalog. Regeln und
-//! Zustand liegen in `dialog_model`. Das Netz wird nur auf Klick oder ⏎ angefasst, im Hintergrund.
+//! an/aus, Neu laden, Ordner, Log und Einstellungen, darunter der Block „ENTDECKEN“ mit der Suche im GitHub-Katalog.
+//! Regeln und Zustand liegen in `dialog_model`. Das Netz wird nur auf Klick oder ⏎ angefasst, im Hintergrund.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, ClickEvent, Context, Div, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement,
-    IntoElement, KeyBinding, KeyDownEvent, ParentElement, Render, ScrollHandle, Stateful, StatefulInteractiveElement, Styled,
-    SharedString, Subscription, Window, actions, div, prelude::*, px,
+    Anchor, App, AppContext, ClickEvent, Context, Div, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement,
+    IntoElement, KeyBinding, KeyDownEvent, MouseButton, ParentElement, Render, ScrollHandle, Stateful, StatefulInteractiveElement,
+    Styled, SharedString, Subscription, Window, actions, anchored, deferred, div, point, prelude::*, px,
 };
 use kadrell_ext::github::RemoteExtension;
 use kadrell_ext::http::HttpClient;
@@ -18,12 +18,14 @@ use kadrell_ext::supervisor::ExtensionState;
 use kadrell_i18n::trd;
 use serde_json::Value;
 
-use super::dialog_model::{DialogModel, Key, Tab, Toggle, run_install, run_search};
+use super::beep::beep;
+use super::dialog_model::{Coalescer, DialogModel, Publish, panel_key, run_install, run_search, should_commit};
+use super::spinner::spinner;
 use super::status_color;
 use crate::theme::Theme;
-use crate::ui::chrome::{h_seam, key_edge};
-use crate::ui::overlay::{backdrop, dialog_frame, dialog_foot, overlay_height, overlay_width};
-use crate::ui::settings::controls::{key_cap, row as form_row, table};
+use crate::ui::chrome::h_seam;
+use crate::ui::overlay::{backdrop, dialog_frame, overlay_height, overlay_width};
+use crate::ui::settings::controls::{Geometry, key_cap, measure, popover, popover_item, row as form_row, seam_ring, select_face, table};
 use crate::ui::text_input::TextInput;
 use crate::ui::theme;
 
@@ -63,6 +65,15 @@ pub struct ExtensionsDialog {
     close_hint: String,
     /// Beim Schließen verfällt jeder Entwurf: ein Blur danach darf nichts mehr speichern.
     closing: bool,
+    /// Bündelt die Meldungen des Managers auf höchstens eine alle 0,2 s.
+    coalescer: Coalescer,
+    /// Scrollstand des Logs: bleibt am Ende, solange neue Zeilen kommen (`defaultScrollAnchor(.bottom)`).
+    log_scroll: ScrollHandle,
+    log_lines: usize,
+    log_for: Option<String>,
+    /// Die offene Auswahl einer `choice`-Einstellung (ihr Schlüssel) und die gemessenen Flächen für die Lage der Liste.
+    open_choice: Option<String>,
+    geometry: Geometry,
 }
 
 impl ExtensionsDialog {
@@ -78,15 +89,56 @@ impl ExtensionsDialog {
             scroll: ScrollHandle::new(),
             close_hint,
             closing: false,
+            coalescer: Coalescer::default(),
+            log_scroll: ScrollHandle::new(),
+            log_lines: 0,
+            log_for: None,
+            open_choice: None,
+            geometry: Geometry::default(),
         };
         this.focus.focus(window, cx);
         this
     }
 
-    /// Der Manager hat sich gemeldet (höchstens alle 0,2 s): Auswahl nachziehen, neu zeichnen.
+    /// Der Manager hat sich gemeldet (bis zu 50-mal je Sekunde): höchstens alle 0,2 s Auswahl nachziehen und neu zeichnen,
+    /// sonst einmal am Ende der Wartezeit.
     pub fn changed(&mut self, cx: &mut Context<Self>) {
+        match self.coalescer.changed(std::time::Instant::now()) {
+            Publish::Now => self.publish(cx),
+            Publish::Skip => {}
+            Publish::After(wait) => {
+                cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(wait).await;
+                    this.update(cx, |this, cx| {
+                        this.coalescer.flushed(std::time::Instant::now());
+                        this.publish(cx);
+                    })
+                    .ok();
+                })
+                .detach();
+            }
+        }
+    }
+
+    fn publish(&mut self, cx: &mut Context<Self>) {
         self.model.clamp_selection();
         cx.notify();
+    }
+
+    /// Spielt die Pieptöne, die das Modell vorgemerkt hat.
+    fn sound_beeps(&mut self) {
+        for _ in 0..self.model.take_beeps() {
+            beep();
+        }
+    }
+
+    /// Esc: schließt zuerst eine offene Auswahl, dann den Dialog.
+    fn cancel(&mut self, cx: &mut Context<Self>) {
+        if self.open_choice.take().is_some() {
+            cx.notify();
+        } else {
+            self.close(cx);
+        }
     }
 
     fn close(&mut self, cx: &mut Context<Self>) {
@@ -127,7 +179,7 @@ impl ExtensionsDialog {
         let (Some(field), Some(ext)) = (self.fields.get(key), self.model.current()) else { return };
         let text = field.input.read(cx).text().to_string();
         let secret = ext.manifest.iter().flat_map(|m| m.settings.iter()).any(|s| s.key == key && s.kind == "secret");
-        if (secret && text.is_empty()) || (!secret && text == self.model.field_text(key)) {
+        if !should_commit(secret, &text, &self.model.field_text(key)) {
             return;
         }
         self.model.save(&ext, key, &Value::from(text));
@@ -159,17 +211,10 @@ impl ExtensionsDialog {
 
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
-        if m.control || m.alt || m.platform || self.any_field_focused(window, cx) {
-            return;
-        }
-        let key = match ev.keystroke.key.as_str() {
-            "up" => Key::Up,
-            "down" => Key::Down,
-            "space" => Key::Space,
-            k if k.chars().count() == 1 => Key::Char(k.chars().next().unwrap_or(' ')),
-            _ => return,
-        };
-        if self.model.tab == Tab::Installed && self.model.handle_key(key) {
+        let focused = self.any_field_focused(window, cx);
+        let Some(key) = panel_key(ev.keystroke.key.as_str(), m.control, m.alt, m.platform, focused) else { return };
+        if self.model.handle_key(key) {
+            self.sound_beeps();
             self.after_selection(window, cx);
             cx.stop_propagation();
         }
@@ -188,9 +233,8 @@ impl ExtensionsDialog {
     }
 
     fn toggle(&mut self, ext: &FoundExtension, cx: &mut Context<Self>) {
-        if self.model.toggle(ext) == Toggle::Blocked {
-            eprintln!("kadrell: Extension {} lässt sich nicht schalten", ext.name);
-        }
+        self.model.toggle(ext);
+        self.sound_beeps();
         cx.notify();
     }
 
@@ -203,11 +247,6 @@ impl ExtensionsDialog {
         let dir = self.model.manager.catalog_dir().to_path_buf();
         let _ = std::fs::create_dir_all(&dir);
         cx.open_with_system(&dir);
-    }
-
-    fn set_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
-        self.model.tab = tab;
-        cx.notify();
     }
 
     fn search(&mut self, cx: &mut Context<Self>) {
@@ -265,37 +304,26 @@ impl ExtensionsDialog {
 
     // MARK: Zeichnen
 
+    /// Kopf: „EXTENSIONS“ als gesperrtes Versal-Label (gedämpft), rechts die Taste für den Ordner und der Link zur Doku.
     fn header(&self, t: &Theme, cx: &mut Context<Self>) -> Div {
-        let tab = |id: &'static str, label: String, tab: Tab, this: &Self, cx: &mut Context<Self>| {
-            let on = this.model.tab == tab;
-            let cap = div()
-                .px(px(10.))
-                .py(px(3.))
-                .rounded(px(4.))
-                .text_size(px(11.))
-                .font_weight(FontWeight::BOLD)
-                .when(on, |d| d.bg(t.accent).text_color(t.pill_text()))
-                .when(!on, |d| d.bg(t.surface).text_color(t.key_label()))
-                .child(label);
-            div().id(id).flex_none().pb(px(2.)).rounded(px(5.)).bg(key_edge(t)).cursor_pointer().child(cap).on_click(cx.listener(move |this, _, _, cx| this.set_tab(tab, cx)))
-        };
         let folder = key_cap(div().child(trd!("Extensions-Ordner öffnen")), false, t).id("open-catalog").on_click(cx.listener(|this, _, _, cx| this.open_catalog(cx)));
         let docs = div().id("docs").flex_none().text_size(px(11.)).text_color(t.accent_text).cursor_pointer().child(trd!("Doku")).on_click(|_, _, cx| cx.open_url(DOCS_URL));
         div()
             .flex()
             .flex_none()
-            .items_center()
-            .gap(px(8.))
+            .items_baseline()
+            .gap(px(14.))
             .px(px(16.))
             .pt(px(12.))
-            .child(tab("tab-installed", trd!("Extensions").to_uppercase(), Tab::Installed, self, cx))
-            .child(tab("tab-discover", trd!("ENTDECKEN"), Tab::Discover, self, cx))
+            .text_size(px(11.))
+            .child(div().flex_none().text_color(t.muted).child("EXTENSIONS"))
             .child(div().flex_1())
             .child(folder)
             .child(docs)
     }
 
     /// Einmalige Warnung vor dem ersten Einschalten: fremder Code läuft ohne Sandbox mit den Rechten des Nutzers.
+    /// Gruppenfläche mit 1,5 px Rand in der Fehlerfarbe, ohne den Fugenring der Gruppe darunter zu verdecken.
     fn enable_warning(&self, name: &str, t: &Theme, cx: &mut Context<Self>) -> Div {
         let rights = self.model.items().into_iter().find(|e| e.name == name).and_then(|e| e.manifest).map(|m| m.permissions).filter(|p| !p.is_empty());
         let yes = key_cap(div().child(trd!("Einschalten")), true, t).id("confirm-yes").on_click(cx.listener(|this, _, _, cx| {
@@ -310,21 +338,20 @@ impl ExtensionsDialog {
             .flex()
             .flex_col()
             .gap(px(8.))
-            .mx(px(16.))
-            .my(px(12.))
             .p(px(12.))
-            .rounded(px(9.))
-            .bg(t.bg)
-            .border_2()
-            .border_color(t.error_text)
             .text_size(px(12.))
             .child(div().text_color(t.fg).child(trd!("%@ läuft ohne Sandbox und darf auf Dateien, Netzwerk und Programme zugreifen. Wirklich einschalten?", name)));
         if let Some(p) = rights {
             col = col.child(div().text_color(t.muted).child(trd!("Angegebene Rechte: %@ (nicht erzwungen)", p.join(", "))));
         }
-        col.child(div().flex().gap(px(14.)).child(yes).child(no))
+        let col = col.child(div().flex().gap(px(14.)).child(yes).child(no));
+        let ring = div().absolute().top_0().bottom_0().left_0().right_0().rounded(px(9.)).border(px(1.5)).border_color(t.error_text);
+        div().px(px(16.)).py(px(12.)).child(seam_ring(t, 9., t.bg, col).relative().child(ring))
     }
 
+    /// Eine Zeile der Liste: Punkt, Name, Version, Zustand, Schalter, Beschreibung, Rechte. Gewählt trägt sie die
+    /// Zeilenfläche in `bg` mit 1,5 px Umriss in `fg` (`instrumentRow`: 6 px seitlich und 1 px oben und unten eingerückt,
+    /// Radius 6).
     fn ext_row(&self, i: usize, ext: &FoundExtension, t: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
         let selected = i == self.model.selected;
         let state = self.model.state(&ext.name);
@@ -369,26 +396,28 @@ impl ExtensionsDialog {
             .flex()
             .items_start()
             .gap(px(10.))
-            .mx(px(10.))
-            .my(px(1.))
-            .px(px(6.))
-            .py(px(7.))
-            .rounded(px(7.))
-            .border_2()
+            .px(px(8.5))
+            .py(px(6.5))
+            .rounded(px(6.))
+            .border(px(1.5))
             .border_color(if selected { t.fg } else { gpui::transparent_black() })
             .when(selected, |d| d.bg(t.bg))
             .child(div().mt(px(4.)).size(px(8.)).flex_none().rounded_full().bg(dot_color(dot, t)))
             .child(info);
-        div().id(("ext", i)).cursor_pointer().child(face).on_click(cx.listener(move |this, _, window, cx| this.select(i, window, cx)))
+        div().id(("ext", i)).cursor_pointer().px(px(6.)).py(px(1.)).child(face).on_click(cx.listener(move |this, _, window, cx| this.select(i, window, cx)))
     }
 
+    /// Die Zeilen mit einer Fuge dazwischen.
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> Div {
         let items = self.model.items();
-        let mut col = div().flex().flex_col().text_size(px(12.)).py(px(6.));
+        let mut col = div().flex().flex_col().text_size(px(12.));
         if items.is_empty() {
             col = col.child(div().p(px(16.)).text_color(t.muted).child(trd!("Noch keine Extensions. Ordner hineinlegen oder per git clone holen, sie erscheinen sofort.")));
         }
         for (i, ext) in items.iter().enumerate() {
+            if i > 0 {
+                col = col.child(h_seam(t));
+            }
             col = col.child(self.ext_row(i, ext, t, cx));
         }
         col
@@ -404,7 +433,9 @@ impl ExtensionsDialog {
         let e1 = ext.clone();
         let e2 = ext.clone();
         let reload = self.small_button("reload", trd!("Neu laden  R"), t).on_click(cx.listener(move |this, _, _, cx| {
-            this.model.reload(&e1);
+            if can_reload {
+                this.model.reload(&e1);
+            }
             cx.notify();
         }));
         let reload = if can_reload { reload.into_any_element() } else { div().opacity(0.4).child(reload).into_any_element() };
@@ -452,7 +483,7 @@ impl ExtensionsDialog {
                 let (e, key) = (ext.clone(), s.key.clone());
                 div().flex().child(switch(on, true, t).id(SharedString::from(format!("bool-{}", s.key))).on_click(cx.listener(move |this, _, _, cx| this.commit_value(&e, &key, Value::Bool(!on), cx)))).into_any_element()
             }
-            "choice" => self.choice(ext, s, t, cx).into_any_element(),
+            "choice" => self.choice(s, t, cx).into_any_element(),
             "secret" => {
                 let label = if self.model.secrets_set.contains(&s.key) { trd!("gesetzt") } else { trd!("nicht gesetzt") };
                 let input = self.fields.get(&s.key).map(|f| f.input.clone());
@@ -462,59 +493,59 @@ impl ExtensionsDialog {
         }
     }
 
-    /// Auswahl für `choice`: ein Taster je Option, der gewählte gefüllt.
-    fn choice(&self, ext: &FoundExtension, s: &Setting, t: &Theme, cx: &mut Context<Self>) -> Div {
-        let current = self.model.stored.get(&s.key).and_then(Value::as_str).map(str::to_string);
-        let mut row = div().flex().flex_wrap().gap(px(6.));
-        for (i, o) in s.options.iter().flatten().enumerate() {
+    /// Auswahl für `choice` (`ChoiceMenu`): Fläche mit dem gewählten Namen (sonst dem Rohwert oder „–“) und Auf-Ab-Pfeilen,
+    /// ein Klick öffnet die Liste mit dem gewählten Eintrag hervorgehoben.
+    fn choice(&self, s: &Setting, t: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
+        let value = self.model.stored.get(&s.key).and_then(Value::as_str).map(str::to_string);
+        let label = choice_label(s.options.as_deref().unwrap_or(&[]), value.as_deref());
+        let key = s.key.clone();
+        let open = self.open_choice.as_deref() == Some(s.key.as_str());
+        let face = select_face(&label, open, t).relative().child(measure(&self.geometry, format!("choice:{}", s.key)));
+        div().id(SharedString::from(format!("choice-{}", s.key))).cursor_pointer().child(face).on_click(cx.listener(move |this, _, _, cx| {
+            this.open_choice = if this.open_choice.as_deref() == Some(key.as_str()) { None } else { Some(key.clone()) };
+            cx.notify();
+        }))
+    }
+
+    /// Die offene Liste einer Auswahl unter ihrer Fläche (über allem, am Fenster gehalten).
+    fn choice_popover(&self, t: &Theme, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        let key = self.open_choice.clone()?;
+        let ext = self.model.current()?;
+        let setting = ext.manifest.as_ref()?.settings.iter().find(|s| s.key == key)?.clone();
+        let target = self.geometry.borrow().get(&format!("choice:{key}")).copied()?;
+        let current = self.model.stored.get(&key).and_then(Value::as_str).map(str::to_string);
+        let mut list = popover(f32::from(target.size.width), t).id("choice-list").occlude().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation());
+        for (i, o) in setting.options.iter().flatten().enumerate() {
             let on = current.as_deref() == Some(o.value.as_str());
-            let cap = div()
-                .px(px(8.))
-                .py(px(2.))
-                .rounded(px(4.))
-                .text_size(px(11.))
-                .when(on, |d| d.bg(t.accent).text_color(t.pill_text()))
-                .when(!on, |d| d.bg(t.surface).text_color(t.key_label()))
-                .child(o.label.clone());
-            let (e, key, value) = (ext.clone(), s.key.clone(), o.value.clone());
-            row = row.child(
-                div()
-                    .id(SharedString::from(format!("choice-{}-{i}", s.key)))
-                    .pb(px(2.))
-                    .rounded(px(5.))
-                    .bg(key_edge(t))
-                    .cursor_pointer()
-                    .child(cap)
-                    .on_click(cx.listener(move |this, _, _, cx| this.commit_value(&e, &key, Value::from(value.clone()), cx))),
-            );
+            let (e, k, v) = (ext.clone(), key.clone(), o.value.clone());
+            list = list.child(popover_item(&o.label, on, false, t).id(("choice-opt", i)).cursor_pointer().on_click(cx.listener(move |this, _, _, cx| {
+                this.open_choice = None;
+                this.commit_value(&e, &k, Value::from(v.clone()), cx);
+            })));
         }
-        row
+        let placed = anchored().anchor(Anchor::TopLeft).snap_to_window_with_margin(px(8.)).position(point(target.origin.x, target.origin.y + target.size.height + px(2.))).child(list);
+        Some(deferred(placed).priority(1).into_any_element())
     }
 
-    fn log_view(&self, name: &str, t: &Theme) -> Div {
+    /// Log der gewählten Extension: Höhe 180, am Ende verankert (neue Zeilen scrollen mit). Auswählen lässt sich der
+    /// Text hier nicht (GPUI-Text ist nicht markierbar).
+    fn log_view(&mut self, name: &str, t: &Theme) -> Div {
         let lines = self.model.manager.log(name);
+        if self.log_for.as_deref() != Some(name) || lines.len() != self.log_lines {
+            self.log_for = Some(name.to_string());
+            self.log_lines = lines.len();
+            self.log_scroll.scroll_to_bottom();
+        }
         let text = if lines.is_empty() { trd!("Noch keine Logzeilen.") } else { lines.join("\n") };
-        let body = div().id("ext-log").flex().flex_col().h(px(180.)).overflow_y_scroll().px(px(8.)).py(px(5.)).rounded(px(6.)).bg(t.well()).text_size(px(11.)).text_color(t.muted).child(text);
+        let body = div().id("ext-log").h(px(180.)).overflow_y_scroll().track_scroll(&self.log_scroll).px(px(8.)).py(px(5.)).rounded(px(6.)).bg(t.well()).text_size(px(11.)).text_color(t.muted).child(text);
         div().px(px(16.)).pt(px(10.)).child(body)
-    }
-
-    fn installed_tab(&mut self, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> Div {
-        let mut col = div().flex().flex_col();
-        if let Some(name) = self.model.confirm.clone() {
-            col = col.child(self.enable_warning(&name, t, cx));
-        }
-        col = col.child(self.list(t, cx));
-        if let Some(ext) = self.model.current() {
-            col = col.child(h_seam(t)).child(self.detail(&ext, window, t, cx));
-        }
-        col
     }
 
     fn result_row(&self, i: usize, remote: &RemoteExtension, t: &Theme, cx: &mut Context<Self>) -> Div {
         let busy = self.model.installing.contains(&remote.full_name());
         let label = if self.model.is_installed(remote) { trd!("Aktualisieren") } else { trd!("Installieren") };
         let action: gpui::AnyElement = if busy {
-            div().text_color(t.muted).child("…").into_any_element()
+            spinner(t.muted).into_any_element()
         } else {
             let r = remote.clone();
             self.small_button("install", label, t).id(("install", i)).on_click(cx.listener(move |this, _, _, cx| this.install(r.clone(), cx))).into_any_element()
@@ -529,24 +560,47 @@ impl ExtensionsDialog {
         if !remote.description.is_empty() {
             info = info.child(div().text_color(t.muted).child(remote.description.clone()));
         }
-        div().flex().items_start().gap(px(12.)).px(px(16.)).py(px(5.)).text_size(px(12.)).child(info).child(action)
+        div().flex().items_start().gap(px(10.)).text_size(px(12.)).child(info).child(action)
     }
 
-    fn discover_tab(&self, t: &Theme, cx: &mut Context<Self>) -> Div {
+    /// Marktplatz-Block: „ENTDECKEN“ mit Spinner während der Suche, Suchfeld und Taste, Fehlertext, Treffer.
+    fn discover(&self, t: &Theme, cx: &mut Context<Self>) -> Div {
+        let title = div()
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .child(div().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.accent_text).child("ENTDECKEN"))
+            .child(div().flex_1())
+            .children(self.model.searching.then(|| spinner(t.muted)));
         let search = self.small_button("search", trd!("Suchen"), t).on_click(cx.listener(|this, _, _, cx| this.search(cx)));
-        let bar = div().flex().items_center().gap(px(10.)).px(px(16.)).pt(px(14.)).pb(px(8.)).child(div().flex_1().min_w_0().child(self.query.clone())).child(search);
-        let mut col = div().flex().flex_col().pb(px(12.)).child(bar);
-        if self.model.searching {
-            col = col.child(div().px(px(16.)).text_size(px(12.)).text_color(t.muted).child("…"));
-        }
+        let bar = div().flex().items_center().gap(px(10.)).child(div().flex_1().min_w_0().child(self.query.clone())).child(search);
+        let mut col = div().flex().flex_col().gap(px(8.)).px(px(16.)).py(px(10.)).text_size(px(12.)).child(title).child(bar);
         if let Some(e) = &self.model.store_error {
-            col = col.child(div().px(px(16.)).py(px(4.)).text_size(px(12.)).text_color(t.error_text).child(e.clone()));
+            col = col.child(div().text_color(t.error_text).child(e.clone()));
         }
         for (i, r) in self.model.results.iter().enumerate() {
             col = col.child(self.result_row(i, r, t, cx));
         }
         col
     }
+
+    /// Alles zwischen Kopf und Fußzeile: Warnung, Liste, Detail der Auswahl, Marktplatz.
+    fn body(&mut self, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> Div {
+        let mut col = div().flex().flex_col();
+        if let Some(name) = self.model.confirm.clone() {
+            col = col.child(self.enable_warning(&name, t, cx));
+        }
+        col = col.child(self.list(t, cx));
+        if let Some(ext) = self.model.current() {
+            col = col.child(h_seam(t)).child(self.detail(&ext, window, t, cx));
+        }
+        col.child(h_seam(t)).child(self.discover(t, cx))
+    }
+}
+
+/// Name der gewählten Option, sonst der Rohwert, sonst „–“.
+pub fn choice_label(options: &[kadrell_ext::manifest::SettingOption], value: Option<&str>) -> String {
+    options.iter().find(|o| Some(o.value.as_str()) == value).map(|o| o.label.clone()).or_else(|| value.map(str::to_string)).unwrap_or_else(|| "–".to_string())
 }
 
 /// Zustandsfarbe der Punkte: läuft ok, startet warn, Fehler err, aus muted (mit Problem err).
@@ -574,25 +628,39 @@ fn switch(on: bool, enabled: bool, t: &Theme) -> Div {
 impl Render for ExtensionsDialog {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let body = match self.model.tab {
-            Tab::Installed => self.installed_tab(window, &t, cx),
-            Tab::Discover => self.discover_tab(&t, cx),
-        };
+        let body = self.body(window, &t, cx);
         let hint = if self.close_hint.is_empty() { trd!("Esc schließt") } else { trd!("Esc oder %@ schließen", self.close_hint.clone()) };
         let hint = trd!("↑↓ wählen · Leertaste an/aus · R neu laden · L Log · %@", hint);
-        let scroll = div().id("extensions-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).child(body);
-        let foot = dialog_foot(hint, trd!("Fertig ⏎"), &t, cx.listener(|this, _, _, cx| this.close(cx)));
+        let scroll = div()
+            .id("extensions-scroll")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .track_scroll(&self.scroll)
+            .on_scroll(cx.listener(|this, _, _, cx| {
+                if this.open_choice.take().is_some() {
+                    cx.notify();
+                }
+            }))
+            .child(body);
+        let foot = div()
+            .flex()
+            .flex_col()
+            .flex_none()
+            .child(h_seam(&t))
+            .child(div().flex().justify_end().px(px(16.)).py(px(10.)).text_size(px(11.)).text_color(t.muted).child(hint));
         let frame = overlay_height(overlay_width(dialog_frame(&t), WIDTH), HEIGHT)
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .text_color(t.fg)
-            .on_action(cx.listener(|this, _: &Cancel, _, cx| this.close(cx)))
+            .on_action(cx.listener(|this, _: &Cancel, _, cx| this.cancel(cx)))
             .on_action(cx.listener(|this, _: &Confirm, window, cx| this.commit_key(window, cx)))
             .on_key_down(cx.listener(|this, ev, window, cx| this.on_key(ev, window, cx)))
             .child(self.header(&t, cx))
             .child(div().pt(px(12.)).child(h_seam(&t)))
             .child(scroll)
-            .child(foot);
+            .child(foot)
+            .children(self.choice_popover(&t, cx));
         backdrop(cx.listener(|this, _, _, cx| this.close(cx))).pt(px(48.)).items_start().child(frame)
     }
 }
