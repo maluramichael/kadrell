@@ -133,6 +133,7 @@ impl Shell {
             on_detach: Rc::new(cx.listener(|this, _, window, cx| this.detach_idle(window, cx))),
             on_waiting: Rc::new(cx.listener(|this, _, window, cx| this.show_next_waiting(window, cx))),
             ext: Vec::new(),
+            update: None,
         }
     }
 
@@ -151,7 +152,7 @@ impl Shell {
     }
 
     /// Fertige Claude-Sessions mit Prozess (Terminals ohne Claude bleiben).
-    fn detachable_keys(&self) -> Vec<String> {
+    pub(crate) fn detachable_keys(&self) -> Vec<String> {
         self.state
             .store
             .sessions

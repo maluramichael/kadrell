@@ -51,6 +51,15 @@ pub struct BarCtl {
     pub on_waiting: Handler,
     /// Statuseinträge der Extensions, links neben den Nutzungswerten (der erste ganz links).
     pub ext: Vec<ExtStatus>,
+    /// Neuere Version bereit (`misc::update`): dezente Taste „<Version> verfügbar“.
+    pub update: Option<UpdatePill>,
+}
+
+/// Die Update-Taste: Versionsnummer und was ein Klick tut (Changelog und Download-Link zeigen).
+#[derive(Clone)]
+pub struct UpdatePill {
+    pub version: String,
+    pub on_click: Handler,
 }
 
 fn text_width(s: &str, size: f32) -> f32 {
@@ -214,6 +223,9 @@ fn key_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
     if b.detachable > 0 {
         let tip = format!("{}: {}", trd!("Fertige Sessions trennen"), b.detachable);
         parts.push(key_part("detach", trd!("%lld trennen", b.detachable), Some(t.idle), tip, &b.on_detach));
+    }
+    if let Some(u) = &b.update {
+        parts.push(key_part("update", trd!("%@ verfügbar", u.version.as_str()), None, trd!("Update verfügbar"), &u.on_click));
     }
     if plan.account {
         parts.extend(account_part(b, plan.short_account));

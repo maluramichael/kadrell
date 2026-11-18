@@ -85,10 +85,12 @@ impl EventListener for Listener {
 }
 
 /// Ereignisse einer Kachel für den, der sie hält (`cx.subscribe`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TerminalEvent {
     /// Der Kindprozess hat sich beendet (`/exit`, Absturz, Kill).
     Exited,
+    /// Klick mit Strg (Mac: ⌘) auf Text: URL oder Pfad, die App löst das Ziel auf und öffnet es.
+    Link(String),
 }
 
 /// Was eine Kachel startet: Programm, Argumente, Ordner und Umgebung (zusätzlich zur geerbten).
@@ -414,6 +416,21 @@ impl TerminalPane {
 
     /// Suche (⌘F / Strg+Shift+F): Tippen sucht, Enter springt zum nächsten älteren Treffer, Esc schließt.
     fn search_key(&mut self, ks: &Keystroke, cx: &mut Context<Self>) -> bool {
+        let m = ks.modifiers;
+        let mods = crate::links::Mods { platform: m.platform, control: m.control, alt: m.alt, shift: m.shift };
+        match crate::links::search_step(mods, &ks.key, cfg!(target_os = "macos")) {
+            Some(crate::links::SearchStep::Older) => {
+                self.find(true);
+                cx.notify();
+                return true;
+            }
+            Some(crate::links::SearchStep::Newer) => {
+                self.find_newer();
+                cx.notify();
+                return true;
+            }
+            None => {}
+        }
         match ks.key.as_str() {
             "escape" => {
                 self.search = None;
@@ -451,6 +468,29 @@ impl TerminalPane {
         };
         let origin = if next { origin.sub(&*term, Boundary::None, 1) } else { origin };
         let hit = term.search_next(&mut regex, origin, Direction::Left, Side::Left, None);
+        if let Some(hit) = &hit {
+            let mut sel = Selection::new(SelectionType::Simple, *hit.start(), Side::Left);
+            sel.update(*hit.end(), Side::Right);
+            term.selection = Some(sel);
+            term.scroll_to_point(*hit.start());
+        }
+        search.hit = hit;
+    }
+
+    /// Zum nächsten neueren Treffer (⌘⇧G), Gegenstück zu `find(true)`; ohne Treffer vom Anfang des Verlaufs an.
+    fn find_newer(&mut self) {
+        let Some(search) = self.search.as_mut() else { return };
+        let mut term = self.term.lock();
+        term.selection = None;
+        if search.query.is_empty() {
+            return;
+        }
+        let Ok(mut regex) = RegexSearch::new(&escape_regex(&search.query)) else { return };
+        let origin = match &search.hit {
+            Some(hit) => hit.end().add(&*term, Boundary::None, 1),
+            None => TPoint::new(term.topmost_line(), Column(0)),
+        };
+        let hit = term.search_next(&mut regex, origin, Direction::Right, Side::Left, None);
         if let Some(hit) = &hit {
             let mut sel = Selection::new(SelectionType::Simple, *hit.start(), Side::Left);
             sel.update(*hit.end(), Side::Right);
@@ -536,8 +576,33 @@ impl TerminalPane {
         (alacritty_terminal::term::viewport_to_point(offset, TPoint::new(row, Column(col))), side)
     }
 
+    /// Link unter dem Punkt (Zeichenfolge, die die App zu einem Ziel auflöst), `None` ohne Text darunter.
+    fn link_under(&self, pos: Point<Pixels>) -> Option<String> {
+        let (p, _) = self.cell_at(pos);
+        let term = self.term.lock();
+        let (text, cols) = Self::line_text(&term, p.line);
+        let at = crate::links::index_at_column(&cols, p.column.0)?;
+        crate::links::link_at(&text, at)
+    }
+
+    /// Strg+Klick (Windows) bzw. ⌘-Klick (Mac) öffnet einen Link, statt zu markieren.
+    fn open_link(&mut self, e: &MouseDownEvent, cx: &mut Context<Self>) -> bool {
+        let m = e.modifiers;
+        let held = if cfg!(target_os = "macos") { m.platform && !m.control } else { m.control && !m.platform };
+        if !held || m.alt || m.shift {
+            return false;
+        }
+        if let Some(link) = self.link_under(e.position) {
+            cx.emit(TerminalEvent::Link(link));
+        }
+        true
+    }
+
     fn mouse_down(&mut self, e: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
+        if self.open_link(e, cx) {
+            return;
+        }
         self.reveal = None;
         let (p, side) = self.cell_at(e.position);
         let ty = match e.click_count {
@@ -605,6 +670,7 @@ impl Render for TerminalPane {
         });
         div()
             .id("terminal")
+            .key_context("KadrellTerminal")
             .size_full()
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::key_down))

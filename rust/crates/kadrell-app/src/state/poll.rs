@@ -24,7 +24,8 @@ impl PollJob {
     /// Wie `run`, dazu die Nachrichten, die seit dem letzten Poll in den Transcripts dazugekommen sind (Statistik).
     pub fn run_counted(self) -> (Change, usize) {
         let runner = SystemRunner;
-        let env = FsPollEnv::new(&self.config_dir, self.pids, &runner);
+        let mut env = FsPollEnv::new(&self.config_dir, self.pids, &runner);
+        env.running_shells = Box::new(crate::misc::procs::running_shells);
         let change = self.registry.lock().unwrap_or_else(PoisonError::into_inner).poll_now(&env);
         let messages = env.reader.lock().map_or(0, |mut r| r.take_new_messages());
         (change, messages)

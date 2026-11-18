@@ -7,6 +7,7 @@ mod lang;
 #[cfg(test)]
 mod catalog_test;
 mod menus;
+mod misc;
 mod signals;
 mod state;
 mod theme;
@@ -81,6 +82,8 @@ pub struct Shell {
     ext_ui: ui::ext::ExtUi,
     /// Konten, Nutzung, Meldungen und die Statistik (`usage`).
     usage: usage::UsageUi,
+    /// Hilfe, Über, Rückfragen, Update-Pille, Leerzustand, Übernahme, Auto-Trennen (`misc`).
+    misc: misc::Misc,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -137,6 +140,7 @@ impl Shell {
             language_generation: kadrell_i18n::global().generation(),
             ext_ui,
             usage,
+            misc: misc::Misc::new(),
         };
         shell.rebuild();
         shell.apply_dev_view();
@@ -156,6 +160,7 @@ impl Shell {
         shell.start_extensions();
         shell.start_tray(window, cx);
         shell.open_extensions_from_env(window, cx);
+        shell.start_misc(window, cx);
         shell
     }
 
@@ -381,7 +386,7 @@ impl Shell {
             return;
         }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some() || self.usage.overlay_open()) && m.alt {
+        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some() || self.usage.overlay_open() || self.misc.overlay_open()) && m.alt {
             cx.stop_propagation();
             return;
         }
@@ -426,7 +431,9 @@ impl Render for Shell {
         let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, cx);
         let sidebar = self.ext_left_column(sidebar, cx);
         let mut ctl = self.layout_ctl(cx);
-        ctl.usage = Some(self.bar_ctl(window, cx));
+        let mut bar = self.bar_ctl(window, cx);
+        bar.update = self.update_pill(cx);
+        ctl.usage = Some(bar);
         let workspace = ui::layout::workspace(self, cx);
         let root = div()
             .flex()
@@ -437,7 +444,7 @@ impl Render for Shell {
             .font_family(theme::FONT)
             .text_size(px(12.))
             .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.on_key(ev, window, cx)));
-        let root = self.menubar_hooks(ui::ext::attach_actions(menus::attach_actions(root, cx), cx), cx);
+        let root = self.menubar_hooks(misc::attach_actions(ui::ext::attach_actions(menus::attach_actions(root, cx), cx), cx), cx);
         let right = self.ext_right_panel(cx);
         let footer = self.ext_footer(window, cx);
         root
@@ -459,6 +466,8 @@ impl Render for Shell {
             .children(self.settings.clone())
             .children(self.ext_ui.dialog.clone())
             .children(self.rename.clone())
+            .children(self.misc.help.clone())
+            .children(self.misc.confirm.clone())
             .children(self.usage.stats.clone())
             .children(self.context_layer(window, cx))
             .children(self.usage.notice.clone())
@@ -549,6 +558,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::ext::dialog::bind_keys(cx);
         ui::ext::keys::bind_keys(cx, &title_profile.settings());
         ui::notice::bind_keys(cx);
+        misc::bind_keys(cx, &title_profile.settings());
         set_theme(cx, start_theme());
         menus::init(cx);
         let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);

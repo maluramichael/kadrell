@@ -14,6 +14,7 @@ pub static KEYS: &[(&str, &str)] = &[
     ("Herz entfernen", "x-herz-entfernen-2421"),
     ("Herz setzen (bleibt auch leer)", "x-herz-setzen-bleibt-auch-leer-39d6"),
     ("Im Explorer zeigen", "x-im-explorer-zeigen-21e3"),
+    ("Import: tools/tmux-dump.py dump (siehe README)", "x-import-tmux-dump-readme-5c1e"),
     ("Kachel zoomen", "x-kachel-zoomen-1673"),
     ("Kein Ordner gefunden. ⌘O wählt im %@.", "x-kein-ordner-gefunden-o-waehlt-im-eb27"),
     ("Mi.", "x-mi-1aa0"),

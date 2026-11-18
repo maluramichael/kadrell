@@ -100,7 +100,7 @@ impl Shell {
     pub(crate) fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reconcile(window, cx);
         self.rebuild();
-        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() {
+        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() && !self.misc.overlay_open() {
             let focus = self.selected.and_then(|(g, s)| self.groups[g].sessions[s].pane.as_ref().map(|p| p.read(cx).focus.clone()));
             if let Some(focus) = focus {
                 focus.focus(window, cx);
@@ -136,7 +136,11 @@ impl Shell {
         let handle: Rc<dyn Term> = Rc::new(parts.handle());
         let pane = cx.new(|cx| TerminalPane::from_parts(parts, cx));
         let exited_key = key.clone();
-        cx.subscribe_in(&pane, window, move |shell, _, _: &TerminalEvent, window, cx| shell.on_exited(&exited_key, window, cx)).detach();
+        cx.subscribe_in(&pane, window, move |shell, _, ev: &TerminalEvent, window, cx| match ev {
+            TerminalEvent::Exited => shell.on_exited(&exited_key, window, cx),
+            TerminalEvent::Link(link) => shell.on_link(&exited_key, link),
+        })
+        .detach();
         self.panes.insert(key.clone(), pane);
         self.state.attach(&key, handle);
     }

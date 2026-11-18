@@ -19,6 +19,8 @@ x-herz-setzen-bleibt-auch-leer-39d6 = Set heart (group stays even when empty)
 
 x-im-explorer-zeigen-21e3 = Show in Explorer
 
+x-import-tmux-dump-readme-5c1e = Import: tools/tmux-dump.py dump (see README)
+
 x-kachel-zoomen-1673 = Zoom tile
 
 x-kein-ordner-gefunden-o-waehlt-im-eb27 = No folder found. ⌘O picks one in { $arg1 }.
