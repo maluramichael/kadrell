@@ -55,7 +55,7 @@ pub struct TrayConfig {
 
 impl Default for TrayConfig {
     fn default() -> Self {
-        Self { app_id: "de.malura.kadrell".into(), display_name: "Kadrell".into(), toast_sound: false, set_process_app_id: true }
+        Self { app_id: "de.malura.kadrell.rust".into(), display_name: "Kadrell".into(), toast_sound: false, set_process_app_id: true }
     }
 }
 

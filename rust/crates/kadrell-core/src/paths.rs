@@ -11,10 +11,10 @@ use std::path::{Component, Path, PathBuf};
 pub struct Paths {
     /// Persönlicher Ordner des Nutzers.
     pub home: PathBuf,
-    /// Standardprofil: macOS `~/Library/Application Support/de.malura.kadrell`, Windows `%APPDATA%\Kadrell`,
+    /// Standardprofil: macOS `~/Library/Application Support/de.malura.kadrell.rust`, Windows `%APPDATA%\KadrellRust`,
     /// sonst `$XDG_DATA_HOME/kadrell` (nur für Entwicklung und Tests).
     pub app_support: PathBuf,
-    /// Ordner für Wegwerfprofile (`kadrell-tmp-<pid>`).
+    /// Ordner für Wegwerfprofile (`kadrell-rust-tmp-<pid>`).
     pub temp: PathBuf,
 }
 
@@ -47,7 +47,12 @@ impl Paths {
 }
 
 /// Namensanfang der Wegwerfprofile im Temp-Ordner.
-pub const TEMP_PREFIX: &str = "kadrell-tmp-";
+/// Eigener Präfix, damit Aufräumen nie die Wegwerfprofile der Swift-App oder der Windows-TUI trifft.
+pub const TEMP_PREFIX: &str = "kadrell-rust-tmp-";
+
+/// Kennung der Rust-App. Eigene Ordner, Schlüsselbund-Dienste und Caches, solange sie neben der Swift-App
+/// (`de.malura.kadrell`) und der Windows-TUI (`%APPDATA%\Kadrell`) läuft; ein Umzug der Daten kommt bewusst später.
+pub const APP_ID: &str = "de.malura.kadrell.rust";
 
 /// Persönlicher Ordner: unter Windows `USERPROFILE`, sonst `HOME`, notfalls der aktuelle Ordner.
 pub fn home_dir() -> PathBuf {
@@ -58,9 +63,9 @@ pub fn home_dir() -> PathBuf {
 /// Ordner des Standardprofils für `home`, je nach Betriebssystem.
 pub fn app_support_dir(home: &Path) -> PathBuf {
     if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/de.malura.kadrell")
+        home.join("Library/Application Support").join(APP_ID)
     } else if cfg!(windows) {
-        std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| home.join("AppData/Roaming")).join("Kadrell")
+        std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| home.join("AppData/Roaming")).join("KadrellRust")
     } else {
         std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| home.join(".local/share")).join("kadrell")
     }
@@ -151,7 +156,7 @@ mod tests {
         let p = Paths::new("/h", "/h/support", "/tmp");
         assert_eq!(p.default_profile_dir(), PathBuf::from("/h/support"));
         assert_eq!(p.named_profile_dir("work"), PathBuf::from("/h/support").join("profiles").join("work"));
-        assert_eq!(p.temp_profile_dir(42), PathBuf::from("/tmp").join("kadrell-tmp-42"));
+        assert_eq!(p.temp_profile_dir(42), PathBuf::from("/tmp").join("kadrell-rust-tmp-42"));
     }
 
     #[test]
@@ -159,9 +164,9 @@ mod tests {
         let dir = app_support_dir(Path::new("/h"));
         let last = dir.file_name().unwrap().to_string_lossy().to_string();
         if cfg!(target_os = "macos") {
-            assert_eq!(last, "de.malura.kadrell");
+            assert_eq!(last, "de.malura.kadrell.rust");
         } else if cfg!(windows) {
-            assert_eq!(last, "Kadrell");
+            assert_eq!(last, "KadrellRust");
         } else {
             assert_eq!(last, "kadrell");
         }

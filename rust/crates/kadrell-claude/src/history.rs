@@ -356,7 +356,7 @@ pub fn snippet(s: &HistorySession, word: &str) -> Option<String> {
 /// Claude-Datenordner eine Datei. `/`, `\` und `:` fallen aus dem Namen (Windows verbietet den Doppelpunkt).
 pub fn cache_path(cache_dir: &str, config_dir: &str) -> String {
     let name: String = config_dir.chars().map(|c| if matches!(c, '/' | '\\' | ':') { '_' } else { c }).collect();
-    format!("{cache_dir}/de.malura.kadrell/session-history-v3{name}.json")
+    format!("{cache_dir}/de.malura.kadrell.rust/session-history-v3{name}.json")
 }
 
 pub fn load_cache(path: &str) -> HashMap<String, HistorySession> {
@@ -583,7 +583,7 @@ mod tests {
     #[test]
     fn cache_name_has_no_path_separators_or_colons() {
         let p = cache_path("/c", "C:\\Users\\me\\.claude");
-        assert_eq!(p, "/c/de.malura.kadrell/session-history-v3C__Users_me_.claude.json");
+        assert_eq!(p, "/c/de.malura.kadrell.rust/session-history-v3C__Users_me_.claude.json");
     }
 
     #[test]

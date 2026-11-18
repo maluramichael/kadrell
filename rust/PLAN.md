@@ -14,9 +14,13 @@ Spike `spike/gpui`. Nichts davon geht nach `master`, kein Release, keine Version
 - Verhalten aus Swift 1:1 übernehmen, Swift-Tests als Rust-Unit-Tests mitportieren. Die Swift-Datei ist die Quelle der
   Wahrheit für Regeln, Texte, Reihenfolgen und Grenzwerte.
 - CLI-Vertrag `docs/cli-contract.md` und `docs/contract/ls.json` gelten unverändert.
+- Eigene Kennung `de.malura.kadrell.rust` (kadrell-core `APP_ID`): Standardprofil macOS
+  `~/Library/Application Support/de.malura.kadrell.rust`, Windows `%APPDATA%\KadrellRust`, Temp-Profile
+  `kadrell-rust-tmp-<pid>`, eigene Schlüsselbund-Dienste und Caches. Nie die Ordner der Swift-App
+  (`de.malura.kadrell`) oder der Windows-TUI (`%APPDATA%\Kadrell`) anfassen; ein Datenumzug kommt bewusst später.
 - Testen an der laufenden App nur mit `--profile tmp`, nie mit dem Standardprofil. Jeder CLI-Aufruf
   (`kadrell ls`, `new`, …) braucht vorher `KADRELL_SOCKET` auf die Endpunktdatei des Temp-Profils: ohne startet der
-  Client sonst eine App im Standardprofil (`%APPDATA%\Kadrell`). Prozesse nie per Name beenden (`Stop-Process -Name`,
+  Client sonst eine App im Standardprofil. Prozesse nie per Name beenden (`Stop-Process -Name`,
   `taskkill /IM`, `pkill`), nur die eigene pid: `kadrell.exe` kann auch Michaels Windows-Kadrell sein.
 - Vor dem Commit im Workspace `rust/`: `cargo clippy --workspace --all-targets -- -D warnings` und
   `cargo test --workspace` ohne Fehler. Commit nur eigene Pfade (`git add <pfade>`).

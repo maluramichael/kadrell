@@ -19,7 +19,8 @@ mod windows;
 /// Der Eintrag, den die `claude`-CLI liest.
 pub const LIVE_SERVICE: &str = "Claude Code-credentials";
 /// Die Slots der hinterlegten Konten (`account` ist die Konto-Id).
-pub const STORE_SERVICE: &str = "de.malura.kadrell.account";
+/// Eigener Dienst der Rust-App (kadrell-core `APP_ID`), getrennt von den Konten der Swift-App.
+pub const STORE_SERVICE: &str = "de.malura.kadrell.rust.account";
 
 pub trait SecretStore: Send + Sync {
     /// Wert eines Eintrags, `None` bei fehlendem Eintrag oder Fehler. `account` grenzt zusätzlich ein.

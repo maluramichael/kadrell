@@ -8,7 +8,8 @@ use serde_json::{Map, Value};
 use crate::bridge::{SecretStore, SettingsStore};
 use crate::manifest::FoundExtension;
 
-pub const KEYCHAIN_SERVICE: &str = "de.malura.kadrell.extension";
+/// Eigener Dienst der Rust-App (kadrell-core `APP_ID`), getrennt von der Swift-App.
+pub const KEYCHAIN_SERVICE: &str = "de.malura.kadrell.rust.extension";
 
 /// Zugriff auf die Einstellungswerte einer Extension.
 #[derive(Clone)]

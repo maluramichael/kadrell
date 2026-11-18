@@ -1,5 +1,5 @@
 //! Profile wie auf dem Mac (`App/Profile.swift`): ohne Namen das Standardprofil, `--profile <name>` unter
-//! `profiles/<name>`, `--profile tmp` ein Wegwerfprofil in `<Temp>/kadrell-tmp-<pid>`, das beim Beenden verschwindet
+//! `profiles/<name>`, `--profile tmp` ein Wegwerfprofil in `<Temp>/kadrell-rust-tmp-<pid>`, das beim Beenden verschwindet
 //! und die Einstellungen des Standardprofils übernimmt. Mehrere Profile laufen parallel, dasselbe Profil nur
 //! einmal (Lock-Datei).
 //!
@@ -177,7 +177,7 @@ pub fn clean_name(s: &str) -> Option<String> {
 }
 
 /// Reste von Wegwerfprofilen, deren Prozess nicht mehr läuft (Absturz, Testläufe). Läuft bei jedem Start. Nur
-/// Ordner `kadrell-tmp-<pid>` mit lesbarer pid, nie der eigene und nie einer mit lebendem Prozess.
+/// Ordner `kadrell-rust-tmp-<pid>` mit lesbarer pid, nie der eigene und nie einer mit lebendem Prozess.
 pub fn sweep_stale(paths: &Paths, own_pid: u32, is_alive: PidAlive) {
     let Ok(entries) = std::fs::read_dir(&paths.temp) else { return };
     for entry in entries.flatten() {
@@ -268,7 +268,7 @@ mod tests {
         assert_eq!(named.label(), " · work");
         let tmp = Profile::open(Some("tmp"), &p, 7, &alive).unwrap();
         assert!(tmp.temporary);
-        assert_eq!(tmp.dir, p.temp.join("kadrell-tmp-7"));
+        assert_eq!(tmp.dir, p.temp.join("kadrell-rust-tmp-7"));
         assert!(tmp.dir.is_dir());
     }
 
@@ -297,15 +297,15 @@ mod tests {
     fn sweep_removes_only_dead_foreign_temp_profiles() {
         let d = TempDir::new();
         let p = setup(&d);
-        for name in ["kadrell-tmp-100", "kadrell-tmp-200", "kadrell-tmp-300", "kadrell-tmp-x", "andere"] {
+        for name in ["kadrell-rust-tmp-100", "kadrell-rust-tmp-200", "kadrell-rust-tmp-300", "kadrell-rust-tmp-x", "andere"] {
             std::fs::create_dir_all(p.temp.join(name)).unwrap();
         }
         // 100 tot, 200 lebt, 300 ist die eigene Instanz.
         sweep_stale(&p, 300, &|pid| pid == 200);
-        assert!(!p.temp.join("kadrell-tmp-100").exists());
-        assert!(p.temp.join("kadrell-tmp-200").exists());
-        assert!(p.temp.join("kadrell-tmp-300").exists());
-        assert!(p.temp.join("kadrell-tmp-x").exists(), "unlesbare pid bleibt");
+        assert!(!p.temp.join("kadrell-rust-tmp-100").exists());
+        assert!(p.temp.join("kadrell-rust-tmp-200").exists());
+        assert!(p.temp.join("kadrell-rust-tmp-300").exists());
+        assert!(p.temp.join("kadrell-rust-tmp-x").exists(), "unlesbare pid bleibt");
         assert!(p.temp.join("andere").exists());
     }
 
@@ -313,10 +313,10 @@ mod tests {
     fn opening_a_temp_profile_sweeps_stale_ones() {
         let d = TempDir::new();
         let p = setup(&d);
-        std::fs::create_dir_all(p.temp.join("kadrell-tmp-5")).unwrap();
+        std::fs::create_dir_all(p.temp.join("kadrell-rust-tmp-5")).unwrap();
         Profile::open(Some("tmp"), &p, 6, &|_| false).unwrap();
-        assert!(!p.temp.join("kadrell-tmp-5").exists());
-        assert!(p.temp.join("kadrell-tmp-6").exists());
+        assert!(!p.temp.join("kadrell-rust-tmp-5").exists());
+        assert!(p.temp.join("kadrell-rust-tmp-6").exists());
     }
 
     #[test]
