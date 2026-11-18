@@ -36,12 +36,20 @@ pub trait Backend {
     fn current_email(&self) -> Option<String>;
     fn switch_account(&mut self, id: &str);
     fn remove_account(&mut self, id: &str);
+    /// Das angemeldete Konto aufnehmen (die Mock-Daten brauchen das nicht).
+    fn add_account(&mut self) {}
     fn status(&self, provider: Provider) -> ProviderStatus;
     fn models(&self, provider: Provider) -> Vec<ModelInfo>;
     fn delete_model(&mut self, id: &str);
     fn reload(&mut self, provider: Provider);
     /// Modelle für die Auswahl bei den Funktionen: (`provider|name`, Anzeige).
     fn available_models(&self) -> Vec<(String, String)>;
+}
+
+/// Konten aus `kadrell-accounts` (siehe `usage::backend`), lokale Modelle bleiben Mock. Ohne verdrahtete Konten (Tests)
+/// gilt der Mock.
+pub fn default_backend(cx: &gpui::App) -> Box<dyn Backend> {
+    crate::usage::backend::create(cx).unwrap_or_else(|| Box::new(MockBackend::new()))
 }
 
 /// MOCK: feste Beispieldaten mit erfundenen Adressen.

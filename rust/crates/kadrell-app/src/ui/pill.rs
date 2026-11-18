@@ -28,11 +28,25 @@ pub struct Pill {
     icon: Option<AnyElement>,
     min_w: Option<f32>,
     on_click: Option<ClickFn>,
+    fill: Option<Hsla>,
+    tip: Option<SharedString>,
 }
 
 impl Pill {
     pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
-        Self { id: id.into(), label: label.into(), kind: PillKind::Normal, dot: None, icon: None, min_w: None, on_click: None }
+        Self { id: id.into(), label: label.into(), kind: PillKind::Normal, dot: None, icon: None, min_w: None, on_click: None, fill: None, tip: None }
+    }
+
+    /// Tooltip beim Daraufzeigen.
+    pub fn tooltip_text(mut self, text: impl Into<SharedString>) -> Self {
+        self.tip = Some(text.into());
+        self
+    }
+
+    /// Eigene Kappenfarbe (die Schrift wird passend gewählt), etwa Gelb für „N warten“.
+    pub fn fill(mut self, face: Hsla) -> Self {
+        self.fill = Some(face);
+        self
     }
 
     pub fn kind(mut self, kind: PillKind) -> Self {
@@ -70,6 +84,7 @@ impl RenderOnce for Pill {
             return display(self, screen_face(&t)).into_any_element();
         }
         let (face, ink) = match self.kind {
+            _ if self.fill.is_some() => self.fill.map_or((t.surface, t.fg), |f| (f, t.pill_text_on(f))),
             PillKind::Active => (t.sub, t.pill_text_on(t.sub)),
             PillKind::Green => (t.idle, t.pill_text_on(t.idle)),
             _ => (t.surface, t.fg),
@@ -112,6 +127,9 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
         .active(|s| s.pt(px(2.)).pb(px(2.)));
     if let Some(f) = pill.on_click {
         outer = outer.on_click(move |e, w, c| f(e, w, c));
+    }
+    if let Some(tip) = pill.tip {
+        outer = outer.tooltip(super::tooltip::text(tip));
     }
     if let Some(w) = pill.min_w {
         cap = cap.min_w(px(w - 2.)).justify_center();

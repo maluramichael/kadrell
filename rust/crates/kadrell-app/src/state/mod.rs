@@ -5,6 +5,7 @@
 pub mod attention;
 mod handler;
 mod poll;
+pub mod stats;
 pub mod launch;
 pub mod mapping;
 mod tiles;
@@ -161,6 +162,7 @@ impl AppState {
         let keys: Vec<String> = keys.into_iter().filter(|k| self.store.sessions.get(k).is_some() && seen.insert(k.clone())).collect();
         let focus = focus.filter(|f| keys.contains(f)).or_else(|| keys.last().cloned());
         let changed = self.selected != keys || self.focused != focus;
+        self.count_focus_switch(&self.focused.clone(), &focus);
         self.selected = keys;
         self.focused = focus;
         if self.anchor.as_ref().is_none_or(|a| !self.selected.contains(a)) {
@@ -242,6 +244,7 @@ impl AppState {
             return false;
         }
         self.registry.lock().unwrap_or_else(PoisonError::into_inner).add(mapping::record_of(&session));
+        self.count_opened(session.is_shell());
         if let Some(prompt) = prompt {
             self.prompts.insert(key.clone(), prompt);
         }
@@ -334,7 +337,8 @@ impl AppState {
 
     /// Übernimmt die Einstellungen aus dem Dialog: nur geänderte und entfernte Schlüssel gehen in die Datei des Profils,
     /// damit Schlüssel, die andere Stellen schreiben (Aufmerksamkeit, Auswahl), nicht überschrieben werden.
-    pub fn apply_settings(&mut self, new: Settings) {
+    pub fn apply_settings(&mut self, mut new: Settings) {
+        stats::keep_live_keys(&mut new, &self.settings);
         let mut changes: Vec<(String, Option<serde_json::Value>)> = new.keys().filter(|k| new.get(k) != self.settings.get(k)).map(|k| (k.clone(), new.get(k).cloned())).collect();
         changes.extend(self.settings.keys().filter(|k| !new.contains(k)).map(|k| (k.clone(), None)));
         self.settings = new;

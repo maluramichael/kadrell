@@ -12,6 +12,7 @@ mod state;
 mod theme;
 mod tray_wire;
 mod ui;
+mod usage;
 mod wire;
 
 use std::collections::HashMap;
@@ -78,6 +79,8 @@ pub struct Shell {
     language_generation: u64,
     /// Oberfläche der Extensions: Seitenleisten, Statusleisten, Dialog (`ui::ext`).
     ext_ui: ui::ext::ExtUi,
+    /// Konten, Nutzung, Meldungen und die Statistik (`usage`).
+    usage: usage::UsageUi,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -109,6 +112,7 @@ impl Shell {
         let mode = ui_layout(state.layout);
         let folder_home = state.home();
         let ext_ui = ui::ext::ExtUi::new(&ext, cx);
+        let usage = usage::UsageUi::new(&state);
         let mut shell = Shell {
             state,
             groups: Vec::new(),
@@ -132,6 +136,7 @@ impl Shell {
             tray: tray_wire::TrayWire::new(),
             language_generation: kadrell_i18n::global().generation(),
             ext_ui,
+            usage,
         };
         shell.rebuild();
         shell.apply_dev_view();
@@ -140,6 +145,7 @@ impl Shell {
         shell.start_clock(cx);
         shell.start_jobs(jobs, window, cx);
         shell.start_poll(window, cx);
+        shell.start_usage(window, cx);
         shell.open_menu_from_env(window, cx);
         shell.open_overlay_from_env(window, cx);
         shell.open_palette_from_env(window, cx);
@@ -307,6 +313,7 @@ impl Shell {
             detached: self.state.store.sessions.sessions.len().saturating_sub(running),
             waiting: self.waiting_count(),
             ext: self.ext_status(cx),
+            usage: None,
         }
     }
 
@@ -370,8 +377,11 @@ impl Shell {
         if std::env::var_os("KADRELL_DEV_KEYLOG").is_some() {
             eprintln!("key {:?}", ev.keystroke);
         }
+        if self.usage_key(ev, window, cx) {
+            return;
+        }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some()) && m.alt {
+        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some() || self.usage.overlay_open()) && m.alt {
             cx.stop_propagation();
             return;
         }
@@ -415,7 +425,8 @@ impl Render for Shell {
         let t = ui::theme(cx);
         let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, cx);
         let sidebar = self.ext_left_column(sidebar, cx);
-        let ctl = self.layout_ctl(cx);
+        let mut ctl = self.layout_ctl(cx);
+        ctl.usage = Some(self.bar_ctl(window, cx));
         let workspace = ui::layout::workspace(self, cx);
         let root = div()
             .flex()
@@ -448,7 +459,9 @@ impl Render for Shell {
             .children(self.settings.clone())
             .children(self.ext_ui.dialog.clone())
             .children(self.rename.clone())
+            .children(self.usage.stats.clone())
             .children(self.context_layer(window, cx))
+            .children(self.usage.notice.clone())
     }
 }
 
@@ -535,6 +548,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::rename::bind_keys(cx);
         ui::ext::dialog::bind_keys(cx);
         ui::ext::keys::bind_keys(cx, &title_profile.settings());
+        ui::notice::bind_keys(cx);
         set_theme(cx, start_theme());
         menus::init(cx);
         let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);

@@ -220,7 +220,7 @@ impl Shell {
                     let name = name.clone();
                     Rc::new(cx.listener(move |this, _, _, _| this.ext_action(&name, &action))) as Handler
                 });
-                ExtStatus { text: item.text.clone(), dot: item.color.map(|c| status_color(c, &t)), click }
+                ExtStatus { name: name.clone(), text: item.text.clone(), dot: item.color.map(|c| status_color(c, &t)), click }
             })
             .collect()
     }

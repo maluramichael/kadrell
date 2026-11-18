@@ -1,3 +1,6 @@
+//! HINWEIS: Die App benutzt `kadrell_core::stats` (arbeitet direkt auf `Settings`); dieser Port bleibt nur als
+//! Referenz, damit nichts doppelt zählt.
+//!
 //! Lebenszeit-Zähler des Profils (Port von `Stats.swift`): geschickte Nachrichten, geöffnete Sessions und Terminals,
 //! Kachelwechsel und der Rekord gleichzeitig offener Sessions. Sechs Zahlen brauchen keine eigene Datei, sie liegen
 //! in den Einstellungen des Profils (`stats.*`, hier hinter [`KeyValueStore`]); ein Wegwerfprofil (`--profile tmp`)

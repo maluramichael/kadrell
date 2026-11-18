@@ -1,11 +1,10 @@
 //! Obere Leiste (Tasten links, Nutzung und Status rechts) und unter Windows die eigene Titelzeile darüber
 //! (Menüs links, Titel in der Mitte, Fensterknöpfe rechts). Auf macOS liefert das System die Titelleiste.
 
-use kadrell_i18n::trd;
 use std::rc::Rc;
 
 use gpui::{
-    App, ClickEvent, Entity, Hsla, InteractiveElement, IntoElement, ParentElement, Styled, Window, WindowControlArea, div,
+    AnyElement, App, ClickEvent, Entity, Hsla, InteractiveElement, IntoElement, ParentElement, Styled, Window, WindowControlArea, div,
     px,
 };
 
@@ -13,8 +12,8 @@ use super::icons;
 use super::layout::LayoutMode;
 use super::chrome::{BAR_HEIGHT, h_seam, window_controls};
 use super::menubar::{MenuBar, TITLE_HEIGHT};
-use super::model::Status;
 use super::pill::{Pill, PillKind};
+use super::usage_bar::{self, BarCtl};
 use super::theme;
 use kadrell_core::SidebarSort;
 
@@ -42,13 +41,17 @@ pub struct LayoutCtl {
     pub running: usize,
     pub detached: usize,
     pub waiting: usize,
-    /// Statuseinträge der Extensions, links neben den Zählern.
+    /// Statuseinträge der Extensions, links neben den Nutzungswerten.
     pub ext: Vec<ExtStatus>,
+    /// Konten, Nutzung und Status-Display der rechten Seite (`usage_bar`).
+    pub usage: Option<BarCtl>,
 }
 
 /// Ein Statuseintrag einer Extension (`kadrell.status.set`): Text mit Punkt in der Farbe, mit Klick bei Aktion.
 #[derive(Clone)]
 pub struct ExtStatus {
+    /// Name der Extension (Tooltip).
+    pub name: String,
     pub text: String,
     pub dot: Option<Hsla>,
     pub click: Option<Handler>,
@@ -83,38 +86,25 @@ fn left_pills(ink: Hsla, ctl: &LayoutCtl) -> impl IntoElement + use<> {
     div().flex().flex_none().items_center().gap(px(4.)).children(pills)
 }
 
-/// Statuseintrag einer Extension als Taste (mit Aktion) bzw. als Anzeige ohne Klick.
-fn ext_pill(i: usize, e: &ExtStatus) -> Pill {
-    let pill = Pill::new(("ext-status", i), e.text.clone());
-    let pill = match e.dot {
-        Some(color) => pill.dot(color),
-        None => pill,
+/// Geschätzte Breite der linken Tasten samt Rand (Schrift 10 px fett, dicktengleich: 6 px je Zeichen, Kappe 18 px mehr).
+fn left_width(ctl: &LayoutCtl) -> f32 {
+    let key = |label: &str| match label {
+        "▦" => 26.,
+        "‹" | "›" => 22.,
+        "AUTO COL" => ctl.cols_label.chars().count() as f32 * 6. + 18.,
+        other => other.chars().count() as f32 * 6. + 18.,
     };
-    match &e.click {
-        Some(h) => with_click(pill, h),
-        None => pill,
-    }
+    LEFT_INSET + LEFT.iter().map(|l| key(l) + 4.).sum::<f32>()
 }
 
-/// Rechts: wartende Sessions (nur wenn es welche gibt), getrennte, laufende. Nutzung und Konten stehen noch aus
-/// (`kadrell-accounts` ist nicht verdrahtet).
-fn right_side(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
-    let t = theme(cx);
-    let running = Pill::new("running", format!("{} RUNNING  {clock}", ctl.running))
-        .kind(PillKind::Dark)
-        .dot(Status::Running.color(&t));
-    let waiting = (ctl.waiting > 0).then(|| Pill::new("waiting", trd!("%@ wartet", ctl.waiting)).dot(Status::Waiting.color(&t)));
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(px(10.))
-        .pr(px(if cfg!(target_os = "windows") { 6. } else { 8. }))
-        .children(ctl.ext.iter().enumerate().map(|(i, e)| ext_pill(i, e)))
-        .children(waiting)
-        .child(Pill::new("detach", format!("detach {}", ctl.detached)).kind(PillKind::Green))
-        .child(running)
+/// Rechts: Konto, „N trennen“, „N warten“, Nutzung und das Status-Display (`usage_bar`). Ohne Anbindung (nur Tests)
+/// bleibt die Seite leer.
+fn right_side(clock: &str, ctl: &LayoutCtl, cx: &App) -> AnyElement {
+    let Some(usage) = &ctl.usage else { return div().into_any_element() };
+    let b = BarCtl { left: left_width(ctl), ext: ctl.ext.clone(), ..usage.clone() };
+    usage_bar::right_side(clock, &b, &theme(cx)).into_any_element()
 }
+
 
 /// Die freie Fläche der Titelzeile mit dem Fenstertitel: zieht das Fenster.
 fn title_area(cx: &App) -> impl IntoElement + use<> {

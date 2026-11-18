@@ -28,6 +28,8 @@ pub enum Cmd {
     CloseGroup(String),
     /// Aktion eines Extension-Panels (`ui.action` an die Extension `tab`).
     Ext { tab: String, id: String },
+    /// Konto-Menü der Leiste (Wechseln, Auto-Wechsel, Hinzufügen, Verwalten).
+    Account(crate::usage::AccountCmd),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -124,6 +126,7 @@ impl Shell {
             Cmd::ToggleFavorite(id) => self.state.store.groups.toggle_favorite(&id),
             Cmd::CloseGroup(id) => self.state.close_group(&id),
             Cmd::Ext { tab, id } => self.ext_action(&tab, &id),
+            Cmd::Account(cmd) => return self.run_account_cmd(cmd, window, cx),
         }
         self.sync(window, cx);
     }
