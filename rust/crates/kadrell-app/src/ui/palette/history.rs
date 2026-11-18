@@ -225,6 +225,6 @@ mod tests {
     #[test]
     fn cache_file_is_derived_from_the_config_dir() {
         let f = cache_file("C:/Users/m/.claude", "C:/Users/m");
-        assert!(f.contains("de.malura.kadrell/session-history-v3C__Users_m_.claude.json"), "{f}");
+        assert!(f.contains("de.malura.kadrell.rust/session-history-v3C__Users_m_.claude.json"), "{f}");
     }
 }
