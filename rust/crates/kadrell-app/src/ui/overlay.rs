@@ -18,6 +18,8 @@ use crate::theme::Theme;
 
 /// Dialogradius der Mac-App.
 pub const DIALOG_RADIUS: f32 = 14.;
+/// Zeilenabstand der Oberfläche als Vielfaches der Schrift (Swift: natürliche Zeilenhöhe, ca. 1,32); GPUI nähme 1,618.
+pub const LINE_HEIGHT: f32 = 1.32;
 /// Abstand zentrierter Dialoge und der Palette zum Rand der Inhaltsfläche (`OverlayGeometry.margin`).
 pub const MARGIN: f32 = 24.;
 /// Tiefe des festen Schattens unter erhabenen Flächen (`Instrument.shadowDepth`).
@@ -272,6 +274,7 @@ pub fn dialog_frame(t: &Theme) -> Div {
         .border_color(seam_dark(t))
         .shadow(vec![drop_shadow(t)])
         .text_size(px(12. * a.scale))
+        .line_height(gpui::relative(LINE_HEIGHT))
         .text_color(t.fg)
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .child(inner_ring(t, radius))

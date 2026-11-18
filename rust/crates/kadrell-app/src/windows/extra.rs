@@ -281,6 +281,7 @@ impl Render for ExtraWindow {
             .text_color(t.fg)
             .font_family(crate::theme::FONT)
             .text_size(px(a.s(12.)))
+            .line_height(gpui::relative(crate::ui::overlay::LINE_HEIGHT))
             .on_action(cx.listener(|_, _: &CloseWindow, window, _| window.remove_window()))
             .on_action(cx.listener(|this, _: &crate::menus::NextLayout, _, cx| this.cycle_layout(cx)))
             .on_action(cx.listener(|this, _: &super::ToggleSidebar, _, cx| this.toggle_tree(cx)))

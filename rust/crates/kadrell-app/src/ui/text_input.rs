@@ -123,18 +123,22 @@ pub fn next_word(text: &str, offset: usize) -> usize {
     text.len() - after_word.len()
 }
 
-/// Höhe und Schriftgröße eines Feldes in logischen Punkten: schmal 22 hoch bei 12, sonst aus der Schrift (13 gibt 32,
-/// 15 gibt 35). `size` 0 nimmt den Standard der Variante.
+/// Höhe und Schriftgröße eines Feldes in logischen Punkten: schmal 22 hoch bei 12, sonst aus der Schrift (13 gibt 23,
+/// 15 gibt 26, an den Swift-Dialogen gemessen). `size` 0 nimmt den Standard der Variante.
 pub fn field_metrics(compact: bool, size: f32) -> (f32, f32) {
     if compact {
         return (22., if size > 0. { size } else { 12. });
     }
     let text = if size > 0. { size } else { 13. };
-    ((text * 1.62 + 11.).round(), text)
+    ((text * 1.5 + 3.5).round(), text)
 }
 
 impl TextInput {
     fn metrics(&self) -> (f32, f32) {
+        // Suchfeld der Palette: 32 pt hoch bei 15 (Swift `PaletteWindow`).
+        if self.large {
+            return (32., self.size);
+        }
         field_metrics(self.compact, self.size)
     }
 
@@ -590,8 +594,6 @@ impl Render for TextInput {
         // eine Haarlinie außen dunkel und direkt innen hell (`seamRing`).
         let edge = if focused { super::instrument::RING_WIDTH * s } else { super::overlay::hairline() };
         let (height, text) = self.metrics();
-        // Pfadfeld der Mac-App: Innenabstand v 3 um den Text, niedriger als das normale Feld.
-        let height = if self.path && !self.compact { 26. } else { height };
         let el = super::overlay::border_px(div(), edge)
             .relative()
             .flex()
@@ -669,8 +671,8 @@ mod tests {
 
     #[test]
     fn field_size_follows_the_font() {
-        assert_eq!(field_metrics(false, 0.), (32., 13.));
-        assert_eq!(field_metrics(false, 15.), (35., 15.));
+        assert_eq!(field_metrics(false, 0.), (23., 13.));
+        assert_eq!(field_metrics(false, 15.), (26., 15.));
         assert_eq!(field_metrics(true, 0.), (22., 12.));
     }
 
