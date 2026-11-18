@@ -6,17 +6,18 @@
 mod history;
 mod resume;
 mod model;
+mod remote;
 mod shell;
 
 use kadrell_i18n::trd;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, HighlightStyle, Hsla, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement, Render, ScrollHandle, StatefulInteractiveElement, Styled, StyledText,
-    Subscription, Window, actions, div, prelude::*, px, relative,
+    App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement, Render, Role, ScrollHandle, StatefulInteractiveElement, Styled, Subscription, Window, actions, div,
+    prelude::*, px, relative,
 };
 
 use kadrell_term::TerminalPane;
@@ -25,8 +26,10 @@ use self::history::HistoryProvider;
 pub use self::model::relative_de;
 pub use self::history::{HistoryStore, provider as history_provider};
 pub use self::resume::{HistoryAction, Known, Pick, decide as decide_history, problem_title};
-pub use self::model::{Command, Run};
+pub use self::model::{AccountRun, Command, Run};
 use self::model::{Item, Mode, SessionHits, Snapshot, Target};
+use self::remote::HostSource;
+use crate::remote::dialog::{Connect, RemoteState, Sessions};
 use super::chrome::h_seam;
 use super::layout::{Id, LayoutMode};
 use super::overlay::{backdrop, dialog_frame, overlay_height, overlay_width};
@@ -42,7 +45,6 @@ const HEIGHT: f32 = 420.;
 /// Oberkante bei 12 % der Fensterhöhe (`PaletteWindow.follow`).
 const TOP: f32 = 0.12;
 const ROW_HEIGHT: f32 = 44.;
-const COMPACT_ROW_HEIGHT: f32 = 30.;
 /// Wartezeit nach dem letzten Tastendruck, bevor die Textsuche über alle Terminals läuft.
 const TEXT_DEBOUNCE: Duration = Duration::from_millis(50);
 
@@ -70,6 +72,13 @@ pub enum PaletteEvent {
     Resume(Pick),
     /// Eintrag einer Extension (Statusleiste mit Aktion): `ui.action` an die Extension.
     Ext { name: String, id: String },
+    /// ⏎ im `@`-Modus: mit dem Host verbinden.
+    Connect(Connect),
+    ResetRatios,
+    Reload,
+    Account(AccountRun),
+    /// Sessions, die die Trefferliste gerade hervorhebt (`onHighlight`); `None` hebt nichts hervor.
+    Highlight(Option<HashSet<Id>>),
 }
 
 impl EventEmitter<PaletteEvent> for Palette {}
@@ -85,6 +94,11 @@ pub struct Palette {
     scroll: ScrollHandle,
     /// Zählt Eingaben, damit eine verzögerte Textsuche nur für die letzte läuft.
     generation: u64,
+    /// Hosts des `@`-Modus, erst beim ersten `@` gelesen; `remote` behält die tmux-Sessions je Host für diese Öffnung.
+    hosts: HostSource,
+    remote: Option<RemoteState>,
+    /// Zuletzt gemeldete Hervorhebung (`PaletteEvent::Highlight`).
+    highlight: Option<HashSet<Id>>,
     _typing: Subscription,
 }
 
@@ -93,12 +107,13 @@ impl Palette {
         snapshot: Snapshot,
         panes: HashMap<Id, Entity<TerminalPane>>,
         history: Rc<dyn HistoryProvider>,
+        hosts: HostSource,
         initial: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let hint = trd!("Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, # alle Claude-Sessions, @ Remote )");
-        let input = cx.new(|cx| TextInput::new(&hint, cx));
+        let input = cx.new(|cx| TextInput::new(&hint, cx).large());
         let typing = cx.subscribe(&input, |this, _, _: &TextInputEvent, cx| this.on_typed(cx));
         let commands = model::build_commands(&snapshot);
         let mut this = Self {
@@ -111,6 +126,9 @@ impl Palette {
             selected: 0,
             scroll: ScrollHandle::new(),
             generation: 0,
+            hosts,
+            remote: None,
+            highlight: None,
             _typing: typing,
         };
         this.input.update(cx, |i, cx| i.set_text(initial, window, cx));
@@ -180,10 +198,69 @@ impl Palette {
             Mode::Commands => model::command_items(&self.commands, &q.term),
             Mode::Text => self.text_items(&q.term, cx),
             Mode::History => self.history_items(&q.term),
+            Mode::Remote => self.remote_items(&q.term, cx),
         };
         self.selected = 0;
         self.scroll.scroll_to_item(0);
+        self.report_highlight(&q, cx);
         cx.notify();
+    }
+
+    /// Meldet der Shell, welche Sessions die Liste gerade zeigt (nur bei Änderung).
+    fn report_highlight(&mut self, q: &model::Query, cx: &mut Context<Self>) {
+        let now = model::highlight(q, &self.items);
+        if now != self.highlight {
+            self.highlight = now.clone();
+            cx.emit(PaletteEvent::Highlight(now));
+        }
+    }
+
+    /// Hervorhebung der Trefferliste beim Öffnen (die Shell liest sie, weil die Meldung vor dem Abonnieren fällt).
+    pub fn highlight(&self) -> Option<HashSet<Id>> {
+        self.highlight.clone()
+    }
+
+    /// Strg+P bei offener Palette ohne Präfix: wechselt in den Kommandomodus, ohne schon Getipptes zu löschen, wenn
+    /// sie bereits dort ist (`switchToCommandMode`).
+    pub fn switch_to_commands(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.raw(cx).starts_with('>') {
+            self.set_input(">", window, cx);
+        }
+    }
+
+    /// `@`: Hosts, mit `host:` die tmux-Sessions des Hosts (einmal je Host und Öffnung geholt, bis dahin „lädt …“).
+    fn remote_items(&mut self, term: &str, cx: &mut Context<Self>) -> Vec<Item> {
+        let hosts = self.hosts.clone();
+        let state = self.remote.get_or_insert_with(|| remote::state_from(&hosts));
+        state.set_query(term);
+        let wanted = state.wanted_sessions();
+        let items = remote::items(state);
+        if let Some(host) = wanted {
+            self.load_sessions(host, cx);
+        }
+        items
+    }
+
+    fn load_sessions(&mut self, host: String, cx: &mut Context<Self>) {
+        if let Some(state) = self.remote.as_mut() {
+            state.sessions.insert(host.clone(), Sessions::Loading);
+        }
+        cx.spawn(async move |this, cx| {
+            let ask = host.clone();
+            let found = cx.background_executor().spawn(async move { crate::remote::tmux_sessions(&crate::remote::system_ssh(), &ask) }).await;
+            let _ = this.update(cx, |this, cx| this.sessions_loaded(host, found, cx));
+        })
+        .detach();
+    }
+
+    /// Die Antwort von `tmux ls` ist da: in den Zustand und, wenn der `@`-Modus noch offen ist, die Liste neu bauen.
+    fn sessions_loaded(&mut self, host: String, found: Option<Vec<String>>, cx: &mut Context<Self>) {
+        if let Some(state) = self.remote.as_mut() {
+            state.sessions.insert(host, found.map_or(Sessions::Unreachable, Sessions::Found));
+        }
+        if model::parse(&self.raw(cx)).mode == Mode::Remote {
+            self.refilter(cx);
+        }
     }
 
     /// Terminal für Terminal, solange das Limit nicht erreicht ist; erst ab zwei Zeichen.
@@ -235,6 +312,7 @@ impl Palette {
             Target::Command(c) => self.run_command(c, window, cx),
             Target::Hit { id, line, query } => cx.emit(PaletteEvent::Hit { id, line, query }),
             Target::History { session_id, cwd, title } => cx.emit(PaletteEvent::Resume(Pick { session_id, cwd, title })),
+            Target::Connect(connect) => cx.emit(PaletteEvent::Connect(connect)),
             Target::Nothing => {}
         }
     }
@@ -248,6 +326,9 @@ impl Palette {
             Run::MoveFocused(g) => cx.emit(PaletteEvent::MoveFocused(*g)),
             Run::Ext { name, id } => cx.emit(PaletteEvent::Ext { name: name.clone(), id: id.clone() }),
             Run::Mode(mode) => self.set_input(mode.prefix(), window, cx),
+            Run::ResetRatios => cx.emit(PaletteEvent::ResetRatios),
+            Run::Reload => cx.emit(PaletteEvent::Reload),
+            Run::Account(run) => cx.emit(PaletteEvent::Account(run.clone())),
             Run::Unwired => {}
         }
     }
@@ -261,45 +342,49 @@ impl Palette {
 
     fn label(&self, item: &Item, t: &Theme) -> impl IntoElement + use<> {
         let color = if item.dim { t.muted } else { t.fg };
-        let mark = HighlightStyle {
-            color: Some(t.fg),
-            font_weight: Some(FontWeight::BOLD),
-            background_color: Some(Hsla { a: 0.35, ..t.accent }),
-            ..Default::default()
-        };
-        let text = StyledText::new(item.label.clone()).with_highlights(item.highlights.iter().map(|r| (r.clone(), mark)));
-        div().text_size(px(12.5)).text_color(color).overflow_hidden().whitespace_nowrap().text_ellipsis().child(text)
+        div().h(px(16.)).line_height(px(16.)).text_size(px(12.5)).text_color(color).overflow_hidden().whitespace_nowrap().text_ellipsis().child(item.label.clone())
     }
 
+    fn sub(&self, item: &Item, t: &Theme) -> impl IntoElement + use<> {
+        div().h(px(14.)).line_height(px(14.)).text_size(px(11.)).text_color(t.muted).overflow_hidden().whitespace_nowrap().text_ellipsis().child(item.sub.clone())
+    }
+
+    /// Zeile wie `PaletteRow.drawRow` (Maße relativ zur 44 pt hohen Zeile; der 1,5 pt breite Umriss und der Rand von
+    /// 6/1 pt sind schon abgezogen): Punkt bei y 13, Titel bei y 7, Zusatzzeile bei y 24, rechts Gruppe bei y 8.
     fn row(&self, i: usize, item: &Item, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let on = i == self.selected;
         let outline = if on { t.fg } else { gpui::transparent_black() };
-        let height = if item.compact { COMPACT_ROW_HEIGHT } else { ROW_HEIGHT };
-        let mut text = div().flex().flex_col().flex_1().min_w_0().gap(px(2.)).child(self.label(item, t));
-        if !item.sub.is_empty() {
-            text = text.child(
-                div().text_size(px(11.)).text_color(t.muted).overflow_hidden().whitespace_nowrap().text_ellipsis().child(item.sub.clone()),
-            );
-        }
-        let right = item.right.clone().map(|r| div().flex_none().text_size(px(11.)).text_color(t.muted).child(r));
+        let text = div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_w_0()
+            .mt(px(4.5))
+            .gap(px(1.))
+            .child(self.label(item, t))
+            .child(self.sub(item, t));
+        let right = item.right.clone().map(|r| div().flex_none().mt(px(5.5)).h(px(14.)).line_height(px(14.)).text_size(px(11.)).text_color(t.muted).child(r));
         let inner = div()
             .flex()
-            .items_center()
+            .items_start()
             .gap(px(10.))
             .size_full()
-            .pl(px(10. + 16. * f32::from(item.indent)))
-            .pr(px(10.))
+            .pl(px(8.5 + 16. * f32::from(item.indent)))
+            .pr(px(8.5))
             .rounded(px(6.))
-            .border_2()
+            .border(px(1.5))
             .border_color(outline)
             .when(on, |d| d.bg(t.bg))
-            .children(self.dot(item, t))
+            .children(self.dot(item, t).map(|d| d.mt(px(10.5))))
             .child(text)
             .children(right);
         div()
             .id(("palette-row", i))
+            .role(Role::Label)
+            .aria_label(item.spoken())
+            .when(on, |d| d.aria_active_descendant())
             .flex_none()
-            .h(px(height))
+            .h(px(ROW_HEIGHT))
             .px(px(6.))
             .py(px(1.))
             .cursor_pointer()
@@ -310,16 +395,27 @@ impl Palette {
             .child(inner)
     }
 
+    fn empty_row(&self, t: &Theme) -> impl IntoElement + use<> {
+        div()
+            .id("palette-empty")
+            .role(Role::Label)
+            .aria_label(trd!("Keine Treffer"))
+            .px(px(16.))
+            .pt(px(14.))
+            .text_size(px(12.))
+            .text_color(t.muted)
+            .child(trd!("Keine Treffer"))
+    }
+
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let rows: Vec<_> = self.items.iter().enumerate().map(|(i, it)| self.row(i, it, t, cx)).collect();
-        let empty = self.items.is_empty().then(|| div().px(px(16.)).py(px(14.)).text_color(t.muted).child(trd!("Keine Treffer")));
+        let empty = self.items.is_empty().then(|| self.empty_row(t));
         div()
             .id("palette-list")
             .flex()
             .flex_col()
             .flex_1()
             .min_h_0()
-            .py(px(4.))
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .children(empty)
@@ -336,9 +432,10 @@ fn foot(t: &Theme) -> impl IntoElement + use<> {
         .child(
             div()
                 .flex()
+                .items_center()
                 .justify_end()
+                .h(px(34.))
                 .px(px(16.))
-                .py(px(9.))
                 .text_size(px(11.))
                 .text_color(t.muted)
                 .child(trd!("↑↓ wählen · ⏎ öffnen · Esc schließen")),
@@ -358,7 +455,7 @@ impl Render for Palette {
             .on_action(cx.listener(|this, _: &MoveDown, _, cx| this.move_by(1, cx)))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(|_, _: &Cancel, _, cx| cx.emit(PaletteEvent::Close)))
-            .child(div().flex_none().p(px(12.)).child(self.input.clone()))
+            .child(div().flex_none().px(px(10.)).pt(px(16.)).pb(px(6.)).child(self.input.clone()))
             .child(h_seam(&t))
             .child(self.list(&t, cx))
             .child(foot(&t));

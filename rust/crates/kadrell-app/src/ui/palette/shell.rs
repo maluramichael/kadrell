@@ -1,12 +1,14 @@
 //! Anbindung der Suche an die `Shell`: Momentaufnahme der Sessions beim Öffnen, Öffnen und Schließen, Wirkung der
 //! Auswahl (Session zeigen, Gruppe, Layout, Menü-Aktion, Treffer im Terminal).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{AppContext, Context, Entity, Window};
 
-use super::model::{GroupRow, SessionRow, Snapshot};
+use super::model::{AccountRun, GroupRow, SessionRow, Snapshot};
+use super::remote::HostSource;
 use super::{HistoryAction, Known, Pick, decide_history, history_provider, problem_title};
 use crate::ui::model::Status;
 use kadrell_control::{ControlHandler, NewRequest};
@@ -20,8 +22,25 @@ fn path_of(s: &crate::ui::model::Session) -> String {
     s.cwd.replace('\\', "/")
 }
 
+/// Letzte nicht leere Zeile des Bildschirms ohne Leerraum am Ende (`snapshotRows(trimTrailing: true).last`).
+fn last_line(rows: &[String]) -> Option<String> {
+    rows.iter().rev().map(|r| r.trim_end()).find(|r| !r.is_empty()).map(String::from)
+}
+
+/// Was die Palette vom Shell-Zustand braucht, ohne Verweis auf die Shell: Fokus, Home, laufende Sessions, letzte
+/// Terminalzeile je Session und Konten.
+struct Inputs {
+    focused: Option<(usize, usize)>,
+    home: String,
+    live: HashMap<String, ((usize, usize), Status)>,
+    last_lines: HashMap<(usize, usize), String>,
+    accounts: Vec<(String, String)>,
+}
+
 /// Gruppen und Sessions in der Form, die die Palette braucht (ohne Verweis auf die Shell).
-fn snapshot(groups: &[Group], focused: Option<(usize, usize)>, home: &str, live: HashMap<String, ((usize, usize), Status)>) -> Snapshot {
+fn snapshot(groups: &[Group], c: Inputs) -> Snapshot {
+    let Inputs { focused, home, live, last_lines, accounts } = c;
+    let home = home.as_str();
     let rows = groups.iter().enumerate().map(|(g, group)| {
         let sessions: Vec<SessionRow> = group
             .sessions
@@ -36,13 +55,14 @@ fn snapshot(groups: &[Group], focused: Option<(usize, usize)>, home: &str, live:
                     short: folders::short_path(&path, home),
                     path,
                     has_pane: session.pane.is_some(),
+                    last_line: last_lines.get(&(g, s)).cloned(),
                 }
             })
             .collect();
         let path = if group.cwd.is_empty() { sessions.first().map(|s| s.path.clone()).unwrap_or_default() } else { group.cwd.replace('\\', "/") };
         GroupRow { index: g, name: group.name.clone(), short: folders::short_path(&path, home), path, sessions }
     });
-    Snapshot { groups: rows.collect(), focused, live }
+    Snapshot { groups: rows.collect(), focused, live, accounts }
 }
 
 impl Shell {
@@ -50,13 +70,14 @@ impl Shell {
     /// Präfix (Strg+Umschalt+F: `/`) wechselt die offene Suche in diesen Modus.
     pub fn open_palette(&mut self, prefix: &str, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(open) = self.palette.clone() {
-            let text = if prefix.is_empty() { ">" } else { prefix };
-            open.update(cx, |p, cx| p.set_input(text, window, cx));
-            return;
+            if prefix.is_empty() {
+                open.update(cx, |p, cx| p.switch_to_commands(window, cx));
+                return;
+            }
+            // Mit Präfix öffnet sie neu in diesem Modus (`dismiss(runHighlightReset: false)`, dann frisch).
+            self.palette = None;
         }
-        if self.overlay.is_some() {
-            return;
-        }
+        self.dismiss_sheets();
         let panes: HashMap<_, _> = self
             .groups
             .iter()
@@ -64,18 +85,66 @@ impl Shell {
             .flat_map(|(g, group)| group.sessions.iter().enumerate().map(move |(s, session)| ((g, s), session)))
             .filter_map(|(id, session)| Some((id, session.pane.clone()?)))
             .collect();
-        if self.quick_start.is_some() {
-            return;
-        }
-        let snap = snapshot(&self.groups, self.selected, &folders::home_dir(), self.live_conversations());
+        let snap = snapshot(&self.groups, self.palette_inputs(&panes, cx));
         let history = history_provider(&self.history);
-        let palette = cx.new(|cx| Palette::new(snap, panes, history, prefix, window, cx));
+        let hosts = self.host_source();
+        let palette = cx.new(|cx| Palette::new(snap, panes, history, hosts, prefix, window, cx));
         let ext = self.ext_palette_commands();
         palette.update(cx, |p, cx| p.add_commands(ext, cx));
+        self.palette_highlight = palette.read(cx).highlight().map(|ids| self.keys_of(&ids));
         cx.subscribe_in(&palette, window, Self::on_palette_event).detach();
         self.palette = Some(palette);
         self.refresh_history(cx);
         cx.notify();
+    }
+
+    /// Host-Gruppe: kein Claude dort, das „+“ öffnet die Auswahl der tmux-Sessions des Hosts (`@host:`).
+    pub fn pick_remote_session(&mut self, group_id: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(host) = self.state.store.groups.group(group_id).and_then(|g| g.host.clone()) else { return false };
+        self.open_palette(&format!("@{host}:"), window, cx);
+        true
+    }
+
+    /// Andere Dialoge schließen, bevor die Suche aufgeht (`sheets.dismiss()`).
+    fn dismiss_sheets(&mut self) {
+        self.overlay = None;
+        self.quick_start = None;
+        self.agent_pick = None;
+        self.remote = None;
+        self.settings = None;
+    }
+
+    /// Fokus, laufende Sessions, letzte Terminalzeilen und Konten für die Momentaufnahme.
+    fn palette_inputs(&self, panes: &HashMap<(usize, usize), gpui::Entity<kadrell_term::TerminalPane>>, cx: &Context<Self>) -> Inputs {
+        let last_lines = panes.iter().filter_map(|(id, pane)| Some((*id, last_line(&pane.read(cx).handle().visible_rows())?))).collect();
+        let accounts = cx.try_global::<crate::usage::backend::HubGlobal>().map(|h| h.0.view().accounts).unwrap_or_default();
+        Inputs {
+            focused: self.selected,
+            home: folders::home_dir(),
+            live: self.live_conversations(),
+            last_lines,
+            accounts: accounts.into_iter().map(|a| (a.id, a.title)).collect(),
+        }
+    }
+
+    /// Hosts für `@`: zuletzt verbundene vorn, danach `~/.ssh/config`; gelesen wird erst beim ersten `@`.
+    fn host_source(&self) -> HostSource {
+        let (home, recent) = (self.state.home(), self.state.recent_hosts());
+        Rc::new(move || {
+            let hosts = kadrell_claude::ssh_config::hosts(&kadrell_claude::ssh_config::default_config(&home), &home);
+            (recent.clone(), hosts)
+        })
+    }
+
+    /// Schlüssel der Sessions an diesen Plätzen (die Hervorhebung kennt Schlüssel, nicht Plätze).
+    fn keys_of(&self, ids: &HashSet<(usize, usize)>) -> HashSet<String> {
+        ids.iter().filter_map(|(g, s)| Some(self.groups.get(*g)?.sessions.get(*s)?.key.clone())).collect()
+    }
+
+    /// Ist diese Session gerade Treffer der Suche? Kacheln und Baum zeichnen sich damit hervor, solange die Suche offen
+    /// ist (`None`: keine Hervorhebung, alle gleich).
+    pub fn palette_highlights(&self, key: &str) -> Option<bool> {
+        self.palette_highlight.as_ref().map(|keys| keys.contains(key))
     }
 
     /// Verlaufsindex nachlesen (beim Start und bei jedem Öffnen der Suche); danach filtert eine offene Verlaufssuche neu.
@@ -173,6 +242,7 @@ impl Shell {
     /// Schließt die Suche; die Tastatur geht zurück an das Terminal der gewählten Session.
     fn close_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.palette = None;
+        self.palette_highlight = None;
         self.sync(window, cx);
     }
 
@@ -217,7 +287,56 @@ impl Shell {
                 self.close_palette(window, cx);
                 self.ext_action(name, id);
             }
+            PaletteEvent::Connect(c) => {
+                self.close_palette(window, cx);
+                self.state.new_remote_session(&c.host, c.tmux.as_deref(), true);
+                self.sync(window, cx);
+            }
+            PaletteEvent::ResetRatios => {
+                self.close_palette(window, cx);
+                self.reset_ratios(cx);
+            }
+            PaletteEvent::Reload => {
+                self.close_palette(window, cx);
+                self.reload_now(window, cx);
+            }
+            PaletteEvent::Account(run) => {
+                self.close_palette(window, cx);
+                self.account_command(run, cx);
+            }
+            PaletteEvent::Highlight(ids) => self.palette_highlight = ids.as_ref().map(|ids| self.keys_of(ids)),
         }
+    }
+
+    /// „Trennlinien zurücksetzen“: alle gezogenen Verhältnisse weg, auch aus den Einstellungen (`resetRatios`).
+    fn reset_ratios(&mut self, cx: &mut Context<Self>) {
+        for key in self.layout.reset_all() {
+            self.persist_ratio(&key);
+        }
+        cx.notify();
+    }
+
+    /// „Reload“: sofort pollen und neu auslegen (`registry.pollNow()`, `workspace.relayout()`).
+    fn reload_now(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let job = self.state.poll_job();
+        cx.spawn_in(window, async move |this, cx| {
+            let (change, messages) = cx.background_executor().spawn(async move { job.run_counted() }).await;
+            let _ = this.update_in(cx, |shell, window, cx| {
+                shell.state.count_stat(kadrell_core::stats::StatKey::Messages, messages as i64);
+                shell.state.apply_registry(change);
+                shell.sync(window, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// „Konto hinzufügen“ und „Zu Konto wechseln“: Aufträge an den Hub der Konten.
+    fn account_command(&mut self, run: &AccountRun, cx: &mut Context<Self>) {
+        let Some(hub) = cx.try_global::<crate::usage::backend::HubGlobal>().map(|h| h.0.clone()) else { return };
+        hub.request(match run {
+            AccountRun::AddCurrent => crate::usage::hub::Cmd::AddCurrent,
+            AccountRun::Switch(id) => crate::usage::hub::Cmd::Switch(id.clone()),
+        });
     }
 
     /// Scrollt das Terminal zur Treffer-Zeile und öffnet dort seine Suchleiste mit dem Begriff.
@@ -226,5 +345,18 @@ impl Shell {
         if let Some(pane) = pane {
             pane.update(cx, |p, cx| p.reveal_line(query, line, cx));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_line_skips_blank_rows_and_trailing_space() {
+        let rows: Vec<String> = ["alt", "  fertig  ", "", "   "].map(String::from).to_vec();
+        assert_eq!(last_line(&rows).as_deref(), Some("  fertig"));
+        assert_eq!(last_line(&[String::new()]), None);
+        assert_eq!(last_line(&[]), None);
     }
 }

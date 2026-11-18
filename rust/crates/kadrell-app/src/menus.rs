@@ -196,7 +196,7 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
     let root = crate::appearance::zoom::attach_actions(root, cx);
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
-        .on_action(cx.listener(|this, _: &NewRemote, window, cx| this.open_remote(window, cx)))
+        .on_action(cx.listener(|this, _: &NewRemote, window, cx| this.open_palette("@", window, cx)))
         .on_action(cx.listener(|this, _: &FindAll, window, cx| this.open_palette("/", window, cx)))
         .on_action(cx.listener(|this, _: &SearchHistory, window, cx| this.open_palette("#", window, cx)))
         .on_action(cx.listener(|this, _: &QuickStart, window, cx| this.open_quick_start(window, cx)))

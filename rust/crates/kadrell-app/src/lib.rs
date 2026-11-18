@@ -67,6 +67,8 @@ pub struct Shell {
     menubar: Entity<ui::menubar::MenuBar>,
     overlay: Option<Entity<ui::new_session::NewSession>>,
     palette: Option<Entity<ui::palette::Palette>>,
+    /// Schlüssel der Sessions, die die offene Suche als Treffer zeigt (`ui::palette`, `palette_highlights`).
+    palette_highlight: Option<std::collections::HashSet<String>>,
     quick_start: Option<Entity<ui::quick_start::QuickStart>>,
     /// Auswahl „Starten mit“ (Claude oder Pi) und Dialog „Remote verbinden“ (`models::agent_pick`, `remote::dialog`).
     agent_pick: Option<Entity<models::agent_pick::AgentPick>>,
@@ -152,6 +154,7 @@ impl Shell {
             menubar,
             overlay: None,
             palette: None,
+            palette_highlight: None,
             quick_start: None,
             agent_pick: None,
             remote: None,
