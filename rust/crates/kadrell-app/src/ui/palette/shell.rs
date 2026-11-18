@@ -70,6 +70,8 @@ impl Shell {
         let snap = snapshot(&self.groups, self.selected, &folders::home_dir(), self.live_conversations());
         let history = history_provider(&self.history);
         let palette = cx.new(|cx| Palette::new(snap, panes, history, prefix, window, cx));
+        let ext = self.ext_palette_commands();
+        palette.update(cx, |p, cx| p.add_commands(ext, cx));
         cx.subscribe_in(&palette, window, Self::on_palette_event).detach();
         self.palette = Some(palette);
         self.refresh_history(cx);
@@ -212,6 +214,10 @@ impl Shell {
                 self.reveal_hit(*id, query, *line, cx);
             }
             PaletteEvent::Resume(pick) => self.resume_history(pick, window, cx),
+            PaletteEvent::Ext { name, id } => {
+                self.close_palette(window, cx);
+                self.ext_action(name, id);
+            }
         }
     }
 

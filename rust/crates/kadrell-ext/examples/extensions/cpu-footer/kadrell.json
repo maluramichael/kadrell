@@ -1,0 +1,9 @@
+{
+  "name": "cpu-footer",
+  "version": "1.0.0",
+  "description": "Beispiel: Statusleiste unten mit CPU-Last je Kern, Gesamtlast und Speicherbelegung.",
+  "apiVersion": 1,
+  "settings": [
+    { "key": "alle", "type": "number", "label": "Messen alle (Sekunden)", "default": 2 }
+  ]
+}

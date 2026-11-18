@@ -65,3 +65,7 @@ x-uebernehmen-esc-schliessen-2a9b = ⏎ apply · Esc close
 
 x-sprache-des-systems-e0a8 = 🌐  System language
 
+
+x-fertig-5d2e = Done ⏎
+
+x-rechte-sidebar-tastatur-hierher-7b3a = Right sidebar: focus keyboard here

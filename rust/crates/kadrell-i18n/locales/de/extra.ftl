@@ -65,3 +65,7 @@ x-uebernehmen-esc-schliessen-2a9b = ⏎ übernehmen · Esc schließen
 
 x-sprache-des-systems-e0a8 = 🌐  Sprache des Systems
 
+
+x-fertig-5d2e = Fertig ⏎
+
+x-rechte-sidebar-tastatur-hierher-7b3a = Rechte Sidebar: Tastatur hierher

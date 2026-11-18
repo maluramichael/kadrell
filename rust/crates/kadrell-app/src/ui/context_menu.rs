@@ -26,6 +26,8 @@ pub enum Cmd {
     CopyPath(String),
     ToggleFavorite(String),
     CloseGroup(String),
+    /// Aktion eines Extension-Panels (`ui.action` an die Extension `tab`).
+    Ext { tab: String, id: String },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -121,6 +123,7 @@ impl Shell {
             Cmd::CopyPath(path) => cx.write_to_clipboard(ClipboardItem::new_string(path)),
             Cmd::ToggleFavorite(id) => self.state.store.groups.toggle_favorite(&id),
             Cmd::CloseGroup(id) => self.state.close_group(&id),
+            Cmd::Ext { tab, id } => self.ext_action(&tab, &id),
         }
         self.sync(window, cx);
     }

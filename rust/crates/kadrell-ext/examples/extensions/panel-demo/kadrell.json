@@ -1,0 +1,15 @@
+{
+  "name": "panel-demo",
+  "version": "1.0.0",
+  "description": "Beispiel: ein Panel mit Abschnitten, Einträgen, Text und Knöpfen, dazu ein Statuseintrag oben.",
+  "apiVersion": 1,
+  "permissions": ["sessions"],
+  "settings": [
+    { "key": "titel", "type": "string", "label": "Titel des Panels", "default": "Demo" },
+    { "key": "alle", "type": "number", "label": "Zähler erhöhen alle (Sekunden)", "default": 5 },
+    { "key": "ansicht", "type": "choice", "label": "Ansicht", "default": "kurz",
+      "options": [ { "value": "kurz", "label": "Kurz" }, { "value": "lang", "label": "Ausführlich" } ] },
+    { "key": "token", "type": "secret", "label": "API-Token" },
+    { "key": "nurMeine", "type": "bool", "label": "Nur meine Sessions", "default": true }
+  ]
+}

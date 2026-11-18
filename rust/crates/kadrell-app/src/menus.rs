@@ -8,7 +8,8 @@ use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
 use kadrell_i18n::trd;
 
 use crate::Shell;
-use crate::lang::{de, shortcut, shortcut_mac_only};
+use crate::lang::{de, shortcut, shortcut_mac_only, shortcut_os};
+use crate::ui::ext::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar};
 
 actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, QuickStart, SearchHistory, CloseWindow]);
 
@@ -56,7 +57,7 @@ fn app_menu() -> MenuDef {
             off(de!("Über Kadrell"), none()),
             off(de!("Was ist neu"), none()),
             off(de!("Statistik"), none()),
-            off(de!("Extensions …"), none()),
+            item(de!("Extensions …"), shortcut_os("⌥F4", "⇧⌘E"), OpenExtensions),
             Entry::Separator,
             item(de!("Einstellungen …"), shortcut("⌘,"), OpenSettings),
             Entry::Separator,
@@ -107,6 +108,8 @@ fn view_menu() -> MenuDef {
         vec![
             off(de!("Auto-Modus ein/aus"), none()),
             off(de!("Baum ein/aus"), shortcut("⌘B")),
+            item(de!("Rechte Sidebar ein/aus"), shortcut("⌥⌘B"), ToggleRightSidebar),
+            item(de!("Rechte Sidebar: Tastatur hierher"), shortcut("⌘3"), FocusRightSidebar),
             off(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B")),
             Entry::Separator,
             off(de!("Terminal-Schrift größer"), shortcut("⌘+")),

@@ -75,6 +75,8 @@ pub struct Shell {
     tray: tray_wire::TrayWire,
     /// Stand der Sprache, für die Menüs und die Ansicht zuletzt gebaut wurden (`lang::sync_language`).
     language_generation: u64,
+    /// Oberfläche der Extensions: Seitenleisten, Statusleisten, Dialog (`ui::ext`).
+    ext_ui: ui::ext::ExtUi,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -105,6 +107,7 @@ impl Shell {
         let menubar = cx.new(ui::menubar::MenuBar::new);
         let mode = ui_layout(state.layout);
         let folder_home = state.home();
+        let ext_ui = ui::ext::ExtUi::new(&ext, cx);
         let mut shell = Shell {
             state,
             groups: Vec::new(),
@@ -127,6 +130,7 @@ impl Shell {
             ext,
             tray: tray_wire::TrayWire::new(),
             language_generation: kadrell_i18n::global().generation(),
+            ext_ui,
         };
         shell.rebuild();
         shell.apply_dev_view();
@@ -141,8 +145,10 @@ impl Shell {
         shell.open_quick_start_from_env(window, cx);
         shell.refresh_history(cx);
         shell.open_settings_from_env(window, cx);
+        shell.start_ext_ui(window, cx);
         shell.start_extensions();
         shell.start_tray(window, cx);
+        shell.open_extensions_from_env(window, cx);
         shell
     }
 
@@ -151,6 +157,7 @@ impl Shell {
     /// Startet die Extensions (Katalog einlesen, eingeschaltete Helper starten) und meldet `app.ready`.
     fn start_extensions(&self) {
         self.ext.start();
+        self.ext_dev_enable();
         self.ext.emit("app.ready", serde_json::json!({}));
     }
 
@@ -298,6 +305,7 @@ impl Shell {
             running,
             detached: self.state.store.sessions.sessions.len().saturating_sub(running),
             waiting: self.waiting_count(),
+            ext: self.ext_status(cx),
         }
     }
 
@@ -362,7 +370,7 @@ impl Shell {
             eprintln!("key {:?}", ev.keystroke);
         }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some()) && m.alt {
+        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some()) && m.alt {
             cx.stop_propagation();
             return;
         }
@@ -405,6 +413,7 @@ impl Render for Shell {
         self.sync_language(cx);
         let t = ui::theme(cx);
         let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, cx);
+        let sidebar = self.ext_left_column(sidebar, cx);
         let ctl = self.layout_ctl(cx);
         let workspace = ui::layout::workspace(self, cx);
         let root = div()
@@ -416,7 +425,9 @@ impl Render for Shell {
             .font_family(theme::FONT)
             .text_size(px(12.))
             .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.on_key(ev, window, cx)));
-        let root = self.menubar_hooks(menus::attach_actions(root, cx), cx);
+        let root = self.menubar_hooks(ui::ext::attach_actions(menus::attach_actions(root, cx), cx), cx);
+        let right = self.ext_right_panel(cx);
+        let footer = self.ext_footer(window, cx);
         root
             .children(ui::bar::titlebar(&self.menubar, window, cx))
             .child(ui::bar::bar(&self.clock, &ctl, cx))
@@ -426,13 +437,15 @@ impl Render for Shell {
                     .flex_1()
                     .min_h_0()
                     .child(sidebar)
-                    .child(workspace),
+                    .child(workspace)
+                    .children(right),
             )
-            .child(ui::footer::footer(cx))
+            .children(footer)
             .children(self.overlay.clone())
             .children(self.palette.clone())
             .children(self.quick_start.clone())
             .children(self.settings.clone())
+            .children(self.ext_ui.dialog.clone())
             .children(self.rename.clone())
             .children(self.context_layer(window, cx))
     }
@@ -517,6 +530,8 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::palette::bind_keys(cx);
         ui::quick_start::bind_keys(cx);
         ui::rename::bind_keys(cx);
+        ui::ext::dialog::bind_keys(cx);
+        ui::ext::keys::bind_keys(cx, &title_profile.settings());
         set_theme(cx, start_theme());
         menus::init(cx);
         let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);
