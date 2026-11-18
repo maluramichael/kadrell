@@ -194,19 +194,10 @@ fn status_bar_label(d: StatusBarDisplay) -> &'static str {
     }
 }
 
-/// Auswahl der Terminal-Schrift: die mitgelieferte und gängige Windows-Schriften. Eine gespeicherte, die nicht
-/// dabei ist, steht vorn (wie in der Mac-App).
+/// Auswahl der Terminal-Schrift: die mitgelieferte und alle installierten Monospace-Familien (`appearance::fonts`).
+/// Eine gespeicherte, die nicht dabei ist, steht vorn (wie in der Mac-App).
 fn fonts(current: &str) -> Vec<(String, String)> {
-    let mut list = vec![
-        (t("JetBrainsMonoNF-Regular"), t("JetBrainsMono Nerd Font Mono")),
-        (t("Cascadia Mono"), t("Cascadia Mono")),
-        (t("Consolas"), t("Consolas")),
-        (t("Courier New"), t("Courier New")),
-    ];
-    if !list.iter().any(|(n, _)| n == current) {
-        list.insert(0, (t(current), t(current)));
-    }
-    list
+    crate::appearance::fonts::choices(current).into_iter().map(|(v, d)| (t(&v), t(&d))).collect()
 }
 
 fn theme_row(c: &Context) -> Row {

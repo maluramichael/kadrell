@@ -112,9 +112,9 @@ fn view_menu() -> MenuDef {
             item(de!("Rechte Sidebar: Tastatur hierher"), shortcut("⌘3"), FocusRightSidebar),
             off(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B")),
             Entry::Separator,
-            off(de!("Terminal-Schrift größer"), shortcut("⌘+")),
-            off(de!("Terminal-Schrift kleiner"), shortcut("⌘-")),
-            off(de!("Terminal-Schrift Standardgröße"), shortcut("⌘0")),
+            item(de!("Terminal-Schrift größer"), shortcut("⌘+"), crate::appearance::zoom::FontBigger),
+            item(de!("Terminal-Schrift kleiner"), shortcut("⌘-"), crate::appearance::zoom::FontSmaller),
+            item(de!("Terminal-Schrift Standardgröße"), shortcut("⌘0"), crate::appearance::zoom::FontReset),
             Entry::Separator,
             item(de!("Kachel zoomen"), shortcut("⌘⇧↩"), ZoomTile),
             item(de!("Nächste Session"), shortcut("⌥N"), NextSession),
@@ -187,6 +187,7 @@ pub fn init(cx: &mut App) {
 
 /// Aktionen des Fensters: wirken auf die Shell und laufen über den Fokuspfad (Menü, Tastatur).
 pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
+    let root = crate::appearance::zoom::attach_actions(root, cx);
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
         .on_action(cx.listener(|this, _: &FindAll, window, cx| this.open_palette("/", window, cx)))

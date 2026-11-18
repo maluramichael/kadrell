@@ -379,11 +379,14 @@ pub struct LayoutState {
     pub measured: Measured,
     /// Zuletzt berechnete Rahmen (Fokusbewegung).
     pub frames: Vec<Rect>,
+    /// Abstand zwischen den Kacheln und zum Rand (`tiles.gap`) und UI-Größe, bei jedem Zeichnen aus `appearance` gesetzt.
+    pub gap: f32,
+    pub ui_scale: f32,
 }
 
 impl LayoutState {
     pub fn new(mode: LayoutMode) -> Self {
-        Self { mode, cols: 0, ratios: HashMap::new(), dragging: None, measured: Rc::new(Cell::new(None)), frames: Vec::new() }
+        Self { mode, cols: 0, ratios: HashMap::new(), dragging: None, measured: Rc::new(Cell::new(None)), frames: Vec::new(), gap: GAP, ui_scale: 1. }
     }
 
     pub fn ratios_for(&self, key: &str, count: usize) -> Option<Vec<f64>> {
@@ -397,20 +400,20 @@ impl LayoutState {
 
     /// Rahmen und Grenzen für `n` Kacheln mit Fokus `active`; die Rahmen der Stack-Zeilen enthalten beim aktiven den Körper.
     pub fn plan(&self, n: usize, active: usize) -> (Vec<Rect>, Vec<SplitLine>) {
-        let area = if n > 1 { self.area().inset(GAP) } else { self.area() };
+        let area = if n > 1 { self.area().inset(self.gap) } else { self.area() };
         if self.mode == LayoutMode::Stack && n > 1 {
-            let (mut rows, body) = stack(n, active, area, ROW_HEIGHT);
+            let (mut rows, body) = stack(n, active, area, (ROW_HEIGHT * self.ui_scale).round());
             rows[active].h += body.h;
             return (rows, Vec::new());
         }
         let ratios = |k: &str, c: usize| self.ratios_for(k, c);
-        layout(self.mode, n, area, GAP, self.cols, &ratios)
+        layout(self.mode, n, area, self.gap, self.cols, &ratios)
     }
 
     pub fn drag_to(&mut self, p: (f32, f32)) {
         let Some(d) = self.dragging.clone() else { return };
         let current = self.ratios.get(&d.key).cloned().unwrap_or_default();
-        self.ratios.insert(d.key.clone(), drag(&d, p, GAP, &current));
+        self.ratios.insert(d.key.clone(), drag(&d, p, self.gap, &current));
     }
 
     pub fn reset(&mut self, key: &str) {
@@ -520,6 +523,9 @@ fn on_move(this: &mut Shell, ev: &MouseMoveEvent, cx: &mut Context<Shell>) {
 /// Arbeitsfläche: alle sichtbaren Kacheln samt ziehbaren Grenzen.
 pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::Div> {
     let t = theme(cx);
+    let a = crate::appearance::current(cx);
+    shell.layout.gap = a.gap;
+    shell.layout.ui_scale = a.scale;
     let visible_n = shell.visible().len();
     let active = shell.selected.and_then(|sel| shell.visible().iter().position(|id| *id == sel)).unwrap_or(0);
     let (frames, dividers) = shell.layout.plan(visible_n, active);
@@ -531,7 +537,7 @@ pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::D
         .min_w_0()
         .min_h_0()
         .overflow_hidden()
-        .bg(t.bg)
+        .bg(a.panel_fill(t.bg))
         .child(measure(shell.layout.measured.clone(), cx.entity_id()))
         .children(tiles(shell, &frames, cx))
         .children((visible_n == 0).then(|| empty_hint(&t)));

@@ -165,6 +165,7 @@ impl Shell {
     fn settings_changed(&mut self, cx: &mut Context<Self>) {
         let new = store::snapshot(cx);
         let language_changed = crate::lang::apply(&new);
+        crate::appearance::apply(cx, &new, false);
         self.state.apply_settings(new);
         if language_changed {
             cx.notify(); // zeichnet neu, `sync_language` baut Menüs und Ansicht

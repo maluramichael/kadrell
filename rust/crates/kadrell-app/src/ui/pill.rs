@@ -6,6 +6,7 @@ use gpui::{
 };
 
 use super::chrome::{key_edge, screen_face, screen_ink};
+use crate::appearance::Appearance;
 use super::theme;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -81,7 +82,7 @@ impl RenderOnce for Pill {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme(cx);
         if self.kind == PillKind::Dark {
-            return display(self, screen_face(&t)).into_any_element();
+            return display(self, screen_face(&t), &crate::appearance::current(cx)).into_any_element();
         }
         let (face, ink) = match self.kind {
             _ if self.fill.is_some() => self.fill.map_or((t.surface, t.fg), |f| (f, t.pill_text_on(f))),
@@ -93,38 +94,39 @@ impl RenderOnce for Pill {
     }
 }
 
-fn dot_el(color: Hsla) -> impl IntoElement {
-    div().size(px(7.)).flex_none().rounded_full().bg(color)
+fn dot_el(color: Hsla, a: &Appearance) -> impl IntoElement {
+    div().size(px(a.s(7.))).flex_none().rounded_full().bg(color)
 }
 
 /// Taste: Außenmaß 20 px, Kante 1 px, unten 3 px (Kante plus 2 px Tiefe).
 fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
     let t = theme(cx);
+    let a = crate::appearance::current(cx);
     let mut cap = div()
         .flex()
         .items_center()
-        .gap(px(5.))
-        .h(px(16.))
-        .px(px(8.))
-        .rounded(px(4.))
+        .gap(px(a.s(5.)))
+        .h(px(a.s(16.)))
+        .px(px(a.s(8.)))
+        .rounded(px(a.s(4.)))
         .bg(face)
         .text_color(ink)
-        .text_size(px(10.))
+        .text_size(px(a.s(10.)))
         .font_weight(FontWeight::BOLD)
         .whitespace_nowrap();
     if let Some(c) = pill.dot {
-        cap = cap.child(dot_el(c));
+        cap = cap.child(dot_el(c, &a));
     }
     let mut outer = div()
         .id(pill.id)
         .flex_none()
-        .pt(px(if pill.kind == PillKind::Active { 2. } else { 1. }))
-        .px(px(1.))
-        .pb(px(if pill.kind == PillKind::Active { 2. } else { 3. }))
-        .rounded(px(5.))
+        .pt(px(a.s(if pill.kind == PillKind::Active { 2. } else { 1. })))
+        .px(px(a.s(1.)))
+        .pb(px(a.s(if pill.kind == PillKind::Active { 2. } else { 3. })))
+        .rounded(px(a.s(5.)))
         .bg(key_edge(&t))
         .cursor_pointer()
-        .active(|s| s.pt(px(2.)).pb(px(2.)));
+        .active(|s| s.pt(px(a.s(2.))).pb(px(a.s(2.))));
     if let Some(f) = pill.on_click {
         outer = outer.on_click(move |e, w, c| f(e, w, c));
     }
@@ -142,23 +144,23 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
 }
 
 /// Display: dunkle Fläche mit heller Schrift, in allen Schemata gleich.
-fn display(pill: Pill, face: Hsla) -> impl IntoElement {
+fn display(pill: Pill, face: Hsla, a: &Appearance) -> impl IntoElement {
     let mut el = div()
         .id(pill.id)
         .flex_none()
         .flex()
         .items_center()
-        .gap(px(7.))
-        .h(px(20.))
-        .px(px(10.))
-        .rounded(px(5.))
+        .gap(px(a.s(7.)))
+        .h(px(a.s(20.)))
+        .px(px(a.s(10.)))
+        .rounded(px(a.s(5.)))
         .bg(face)
         .text_color(screen_ink())
-        .text_size(px(10.5))
+        .text_size(px(a.s(10.5)))
         .font_weight(FontWeight::BOLD)
         .whitespace_nowrap();
     if let Some(c) = pill.dot {
-        el = el.child(dot_el(c));
+        el = el.child(dot_el(c, a));
     }
     el.child(pill.label)
 }

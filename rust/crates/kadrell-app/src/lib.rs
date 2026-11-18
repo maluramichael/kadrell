@@ -2,6 +2,7 @@
 //! Steuerkanal, Status. Der Einstieg ist [`run`].
 #![allow(dead_code)] // Theme: nicht alle Felder werden schon benutzt.
 
+mod appearance;
 mod ext;
 mod lang;
 #[cfg(test)]
@@ -42,6 +43,7 @@ impl Global for ThemeGlobal {}
 fn set_theme(cx: &mut App, theme: Theme) {
     cx.set_global(TermThemeGlobal(theme.term()));
     cx.set_global(ThemeGlobal(theme));
+    appearance::set_term_alpha(cx, appearance::current(cx).opacity);
 }
 
 pub struct Shell {
@@ -445,9 +447,11 @@ impl Render for Shell {
             .child(ui::bar::bar(&self.clock, &ctl, cx))
             .child(
                 div()
+                    .relative()
                     .flex()
                     .flex_1()
                     .min_h_0()
+                    .children(appearance::wallpaper::layer(&appearance::current(cx).wallpaper, t.bg))
                     .child(sidebar)
                     .child(workspace)
                     .children(right),
@@ -541,6 +545,8 @@ pub fn run(profile_name: Option<String>) -> i32 {
     lang::apply_at_start(&state.settings);
     application().run(move |cx: &mut App| {
         kadrell_term::fonts::load(cx);
+        appearance::fonts::scan(cx);
+        appearance::zoom::bind_keys(cx);
         ui::text_input::bind_keys(cx);
         ui::new_session::bind_keys(cx);
         ui::palette::bind_keys(cx);
@@ -549,6 +555,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::ext::dialog::bind_keys(cx);
         ui::ext::keys::bind_keys(cx, &title_profile.settings());
         ui::notice::bind_keys(cx);
+        appearance::apply(cx, &title_profile.settings(), true);
         set_theme(cx, start_theme());
         menus::init(cx);
         let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);

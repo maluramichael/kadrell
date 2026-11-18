@@ -44,8 +44,13 @@ fn icon(size: f32, strokes: Vec<Stroke>, color: Hsla, width: f32) -> impl IntoEl
     .flex_none()
 }
 
-/// Gruppen-Chevron (16 x 16, Strich 1,5): offen zeigt nach unten, zu nach rechts.
+/// Gruppen-Chevron in Normalgröße.
 pub fn chevron(open_state: bool, color: Hsla) -> impl IntoElement {
+    chevron_scaled(open_state, color, 1.)
+}
+
+/// Gruppen-Chevron (16 x 16, Strich 1,5, mal UI-Größe `scale`): offen zeigt nach unten, zu nach rechts.
+pub fn chevron_scaled(open_state: bool, color: Hsla, scale: f32) -> impl IntoElement {
     // Innenfläche 7 x 7 ab (4,5 | 4,5), Mitte bei 8.
     let (a, b) = (4.5, 11.5);
     let mid = 8.;
@@ -54,7 +59,8 @@ pub fn chevron(open_state: bool, color: Hsla) -> impl IntoElement {
     } else {
         open(&[(mid - 2., a), (mid + 2., mid), (mid - 2., b)])
     };
-    icon(16., vec![stroke], color, 1.5)
+    let stroke = Stroke { points: stroke.points.iter().map(|p| (p.0 * scale, p.1 * scale)).collect(), closed: stroke.closed };
+    icon(16. * scale, vec![stroke], color, 1.5 * scale)
 }
 
 /// Pfeil der Leiste: nach links (`left`) oder rechts, 10 x 10.
