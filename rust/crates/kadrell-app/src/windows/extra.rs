@@ -4,7 +4,7 @@
 //! (`PaneOwners`): in dem anderen steht in der Kachel „IN ANDEREM FENSTER“, ein Klick holt es her. Schließen (⌘⇧W oder
 //! Fensterknopf) beendet keine Session.
 
-use gpui::{AppContext as _,
+use gpui::{AppContext as _, DragMoveEvent, MouseButton, MouseUpEvent,
     AnyWindowHandle, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, Role,
     StatefulInteractiveElement, Styled, Window, WindowOptions, div, px, size,
 };
@@ -13,7 +13,8 @@ use serde_json::json;
 
 use super::model::{key_for, keys_of};
 use crate::Shell;
-use crate::appearance::metrics;
+use super::layout::{self, Change, Sides};
+use super::split;
 use crate::menus::CloseWindow;
 use crate::state::Run;
 use crate::state::attention::{patch_setting, patch_settings};
@@ -28,15 +29,28 @@ pub struct ExtraWindow {
     focus: Option<String>,
     layout: LayoutState,
     idle_focus: FocusHandle,
+    /// Aufteilung dieses Fensters: Breite des Baums (`sidebar.width.N`), Baum ein/aus.
+    sides: Sides,
+    /// Noch nicht gespeicherte Breite, bis die Maus losgelassen wird.
+    unsaved: Option<Change>,
 }
 
 impl ExtraWindow {
     /// Öffnet Fenster `index` (aus der Einstellung oder frisch). Auswahl und Layout kommen aus den Schlüsseln mit Suffix.
-    pub fn new(shell: Entity<Shell>, index: usize, cx: &mut Context<Self>) -> ExtraWindow {
+    pub fn new(shell: Entity<Shell>, index: usize, window: &mut Window, cx: &mut Context<Self>) -> ExtraWindow {
         cx.observe(&shell, |_, _, cx| cx.notify()).detach();
         cx.on_release(|this, cx| this.released(cx)).detach();
         let (selected, focus, mode) = this_state(&shell, index, cx);
-        let me = ExtraWindow { shell, index, selected, focus, layout: LayoutState::new(mode), idle_focus: cx.focus_handle() };
+        let sides = Sides::restore(&Settings::load(&shell.read(cx).state.profile.settings_path()), index);
+        super::frame::watch(window, cx, shell.read(cx).state.profile.settings_path(), index);
+        cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() {
+                let (shell, index) = (this.shell.clone(), this.index);
+                shell.update(cx, |sh, cx| sh.note_current(index, cx));
+            }
+        })
+        .detach();
+        let me = ExtraWindow { shell, index, selected, focus, layout: LayoutState::new(mode), idle_focus: cx.focus_handle(), sides, unsaved: None };
         cx.spawn(async move |this, cx| {
             let _ = this.update(cx, |this, cx| this.start_missing(cx));
         })
@@ -152,6 +166,25 @@ impl ExtraWindow {
         cx.notify();
     }
 
+    /// ⌘B: Baum dieses Fensters ein/aus.
+    fn toggle_tree(&mut self, cx: &mut Context<Self>) {
+        self.sides.toggle_tree();
+        cx.notify();
+    }
+
+    fn drag_tree(&mut self, ev: &DragMoveEvent<split::TreeDrag>, window: &Window, cx: &mut Context<Self>) {
+        let x = (ev.event.position.x - ev.bounds.origin.x).as_f32();
+        self.unsaved = Some(self.sides.drag_tree(x, window.viewport_size().width.as_f32()));
+        cx.notify();
+    }
+
+    /// Maus losgelassen: die gezogene Breite in die Einstellungen (`sidebar.width.N`).
+    fn save_sides(&mut self, cx: &mut Context<Self>) {
+        let Some((key, value)) = self.unsaved.take() else { return };
+        let path = self.shell.read(cx).state.profile.settings_path();
+        patch_setting(&path, &key, value);
+    }
+
     fn cycle_layout(&mut self, cx: &mut Context<Self>) {
         self.layout.mode = self.layout.mode.next();
         self.save(cx);
@@ -182,7 +215,7 @@ impl Focusable for ExtraWindow {
 }
 
 impl Render for ExtraWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = crate::ui::theme(cx);
         let a = crate::appearance::current(cx);
         self.layout.gap = a.gap;
@@ -220,7 +253,9 @@ impl Render for ExtraWindow {
                 placed(frames[i], &session.key, el, cx)
             })
             .collect();
-        let mut tree = div().id("extra-tree").role(Role::Tree).flex().flex_col().flex_none().w(px(metrics::sidebar_width(a.scale))).h_full().pt(px(a.s(6.))).overflow_y_scroll().bg(a.panel_fill(t.panel));
+        let vw = window.viewport_size().width.as_f32();
+        let tree_w = self.sides.tree_width(vw);
+        let mut tree = div().id("extra-tree").role(Role::Tree).flex().flex_col().flex_none().w(px(tree_w)).h_full().pt(px(a.s(6.))).overflow_y_scroll().bg(a.panel_fill(t.panel));
         for group in groups {
             tree = tree.child(
                 div().px(px(a.s(10.))).pt(px(a.s(8.))).pb(px(a.s(2.))).text_size(px(a.s(10.5))).text_color(t.sub).child(format!("{} · {}", group.name.to_uppercase(), group.sessions.len())),
@@ -249,8 +284,14 @@ impl Render for ExtraWindow {
             .text_size(px(a.s(12.)))
             .on_action(cx.listener(|_, _: &CloseWindow, window, _| window.remove_window()))
             .on_action(cx.listener(|this, _: &crate::menus::NextLayout, _, cx| this.cycle_layout(cx)))
-            .child(tree)
+            .on_action(cx.listener(|this, _: &super::ToggleSidebar, _, cx| this.toggle_tree(cx)))
+            .on_drag_move::<split::TreeDrag>(cx.listener(|this, ev: &DragMoveEvent<split::TreeDrag>, window, cx| this.drag_tree(ev, window, cx)))
+            .on_mouse_up(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| this.save_sides(cx)))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| this.save_sides(cx)))
+            .relative()
+            .children((!self.sides.tree_hidden).then_some(tree))
             .child(work)
+            .children((!self.sides.tree_hidden).then(|| split::grip("extra-grip-tree", split::TreeDrag, true).left(px(tree_w - layout::GRAB / 2.))))
     }
 }
 
@@ -304,13 +345,16 @@ fn placed(r: Rect, key: &str, tile: gpui::AnyElement, cx: &Context<ExtraWindow>)
 }
 
 /// Öffnet das Fenster mit dieser Nummer. Gibt das Handle zurück, `None` bei Fehlschlag.
-pub fn open(shell: &Entity<Shell>, index: usize, title: String, cx: &mut gpui::App) -> Option<AnyWindowHandle> {
+pub fn open(shell: &Entity<Shell>, index: usize, title: String, cascade: Option<super::frame::Frame>, cx: &mut gpui::App) -> Option<AnyWindowHandle> {
+    let saved = Settings::load(&shell.read(cx).state.profile.settings_path()).get(&super::frame::frame_key(index)).cloned();
+    let bounds = super::frame::bounds_for(index, saved.as_ref(), cascade, cx)
+        .unwrap_or_else(|| gpui::Bounds::centered(None, crate::ui::overlay::window_size(), cx));
     let options = WindowOptions {
         titlebar: Some(gpui::TitlebarOptions { title: Some(title.into()), appears_transparent: false, traffic_light_position: None }),
-        window_min_size: Some(size(px(640.), px(400.))),
-        window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::centered(None, crate::ui::overlay::window_size(), cx))),
+        window_min_size: Some(size(px(super::frame::MIN_SIZE.0), px(super::frame::MIN_SIZE.1))),
+        window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
         ..Default::default()
     };
     let shell = shell.clone();
-    cx.open_window(options, move |_, cx| cx.new(|cx| ExtraWindow::new(shell, index, cx))).ok().map(Into::into)
+    cx.open_window(options, move |window, cx| cx.new(|cx| ExtraWindow::new(shell, index, window, cx))).ok().map(Into::into)
 }

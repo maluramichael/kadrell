@@ -24,7 +24,7 @@ mod wire;
 use std::collections::HashMap;
 
 use gpui::{
-    App, Bounds, Context, Entity, FocusHandle, Focusable, Global, IntoElement, KeyDownEvent, Render, Window, WindowBounds,
+    App, Context, Entity, FocusHandle, Focusable, Global, IntoElement, KeyDownEvent, Render, Window, WindowBounds,
     WindowOptions, div, prelude::*, px, size,
 };
 use gpui_platform::application;
@@ -105,6 +105,8 @@ pub struct Shell {
     owners: windows::model::PaneOwners,
     extras: Vec<(usize, gpui::AnyWindowHandle)>,
     main_window: Option<gpui::AnyWindowHandle>,
+    /// Aufteilung des Hauptfensters (Baum, Dock, rechte Seitenleiste) und das zuletzt aktive Fenster (`windows`).
+    win: windows::WinState,
     /// Zoom-, Sync-, Vorschau-, Auto- und Baum-Zustand der Arbeitsfläche samt Tabelle der Kürzel (`workspace`).
     ws: workspace::Ws,
 }
@@ -142,6 +144,7 @@ impl Shell {
         let ext_ui = ui::ext::ExtUi::new(&ext, cx);
         let usage = usage::UsageUi::new(&state);
         let ws = workspace::Ws::new(&state.settings);
+        let win = windows::WinState::new(&state.settings);
         let layout = LayoutState::from_settings(mode, &state.settings);
         let mut shell = Shell {
             state,
@@ -178,6 +181,7 @@ impl Shell {
             owners: windows::model::PaneOwners::default(),
             extras: Vec::new(),
             main_window: None,
+            win,
             ws,
         };
         shell.rebuild();
@@ -204,6 +208,7 @@ impl Shell {
         shell.start_tray(window, cx);
         shell.open_extensions_from_env(window, cx);
         shell.start_misc(window, cx);
+        shell.start_windows(window, cx);
         shell
     }
 
@@ -447,9 +452,10 @@ impl Render for Shell {
             self.window_dark = Some(t.dark);
             appearance::window_theme::apply(window, t.dark);
         }
+        self.publish_tree_width(window, cx);
         let sidebar_ctx = self.sidebar_ctx();
         let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, &sidebar_ctx, cx);
-        let sidebar = self.ext_left_column(sidebar, cx);
+        let sidebar = self.ext_left_column(sidebar, window, cx);
         let mut ctl = self.layout_ctl(cx);
         let mut bar = self.bar_ctl(window, cx);
         bar.update = self.update_pill(cx);
@@ -466,22 +472,12 @@ impl Render for Shell {
             .text_size(px(12.))
             .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.on_key(ev, window, cx)));
         let root = self.menubar_hooks(misc::attach_actions(ui::ext::attach_actions(menus::attach_actions(root, cx), cx), cx), cx);
-        let right = self.ext_right_panel(cx);
+        let right = self.ext_right_panel(window, cx);
         let footer = self.ext_footer(window, cx);
         root
             .children(ui::bar::titlebar(&self.menubar, window, cx))
             .child(ui::bar::bar(&self.clock, &ctl, cx))
-            .child(
-                div()
-                    .relative()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .children(appearance::wallpaper::layer(&appearance::current(cx).wallpaper, t.bg))
-                    .child(sidebar)
-                    .child(workspace)
-                    .children(right),
-            )
+            .child(self.split_row(sidebar, workspace, right, window, cx))
             .children(footer)
             .children(self.overlay.clone())
             .children(self.palette.clone())
@@ -598,11 +594,11 @@ pub fn run(profile_name: Option<String>) -> i32 {
         appearance::apply(cx, &title_profile.settings(), true);
         set_theme(cx, start_theme(&title_profile.settings()));
         menus::init(cx);
-        let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);
+        let bounds = windows::frame::main_bounds(&title_profile.settings(), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(titlebar_options(&title_profile)),
-            window_min_size: Some(size(px(640.), px(400.))),
+            window_min_size: Some(size(px(windows::frame::MIN_SIZE.0), px(windows::frame::MIN_SIZE.1))),
             ..Default::default()
         };
         let handle = cx.open_window(options, |window, cx| cx.new(|cx| Shell::new(window, cx, state, jobs, server, ext))).unwrap();

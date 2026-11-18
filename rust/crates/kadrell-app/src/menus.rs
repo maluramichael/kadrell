@@ -107,11 +107,11 @@ fn view_menu() -> MenuDef {
     menu(
         de!("Ansicht"),
         vec![
-            off(de!("Auto-Modus ein/aus"), none()),
-            off(de!("Baum ein/aus"), shortcut("⌘B")),
+            item(de!("Auto-Modus ein/aus"), none(), crate::windows::ToggleAuto),
+            item(de!("Baum ein/aus"), shortcut("⌘B"), crate::windows::ToggleSidebar),
             item(de!("Rechte Sidebar ein/aus"), shortcut("⌥⌘B"), ToggleRightSidebar),
             item(de!("Rechte Sidebar: Tastatur hierher"), shortcut("⌘3"), FocusRightSidebar),
-            off(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B")),
+            item(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B"), crate::windows::ToggleAllGroups),
             Entry::Separator,
             item(de!("Terminal-Schrift größer"), shortcut("⌘+"), crate::appearance::zoom::FontBigger),
             item(de!("Terminal-Schrift kleiner"), shortcut("⌘-"), crate::appearance::zoom::FontSmaller),
@@ -188,12 +188,13 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new(quit_key, Quit, None), KeyBinding::new(close_key, CloseWindow, None), KeyBinding::new(new_window_key, NewWindow, None)]);
     cx.on_action(|_: &Quit, cx| cx.quit());
     cx.on_action(|_: &ToggleTheme, cx| Shell::toggle_theme(cx));
+    crate::windows::bind_keys(cx);
     set_native_menus(cx);
 }
 
 /// Aktionen des Fensters: wirken auf die Shell und laufen über den Fokuspfad (Menü, Tastatur).
 pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
-    let root = crate::appearance::zoom::attach_actions(root, cx);
+    let root = crate::windows::attach_actions(crate::appearance::zoom::attach_actions(root, cx), cx);
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
         .on_action(cx.listener(|this, _: &NewRemote, window, cx| this.open_palette("@", window, cx)))

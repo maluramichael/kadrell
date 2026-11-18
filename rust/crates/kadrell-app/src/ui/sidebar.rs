@@ -485,7 +485,7 @@ pub fn sidebar(groups: &[Group], sel: &Selection, ctx: &SidebarCtx, cx: &mut Con
         .flex()
         .flex_col()
         .flex_none()
-        .w(px(metrics::sidebar_width(a.scale)))
+        .w(px(crate::windows::split::tree_width(cx)))
         .h_full()
         .pt(px(a.s(a.rows().top_inset)))
         .pb(px(a.s(8.)))

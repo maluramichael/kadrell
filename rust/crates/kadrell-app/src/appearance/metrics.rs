@@ -1,4 +1,4 @@
-//! Maße der Darstellung ohne GPUI: UI-Größe (`Theme.scale` der Mac-App), die Zeilenmaße der beiden Baum-Designs
+//! Maße der Darstellung ohne GPUI (Breiten der Seitenleisten: `windows::layout`): UI-Größe (`Theme.scale` der Mac-App), die Zeilenmaße der beiden Baum-Designs
 //! (`ClassicSidebarRenderer`, `CompactSidebarRenderer`, gemeinsame Bausteine aus `SidebarRenderer`) und die Aufteilung
 //! des Baums in Zeilen. Alles rein rechnerisch, damit es sich wie die Swift-Tests ohne Fenster prüfen lässt.
 
@@ -28,11 +28,6 @@ pub fn bar_height(scale: f32) -> f32 {
 /// sonst hat die Fläche Bruchteile von Pixeln und zeichnet sich als Viereck ab.
 pub fn corner_radius(scale: f32) -> f32 {
     (14. * scale).round()
-}
-
-/// Breite der Seitenleiste in Punkten bei dieser UI-Größe.
-pub fn sidebar_width(scale: f32) -> f32 {
-    (260. * scale).round()
 }
 
 /// Zeilenmaße eines Designs (`groupRow`, `sessionRow`, `groupGap`, `topInset` der Renderer), unskaliert.
@@ -186,7 +181,6 @@ mod tests {
         assert_eq!(corner_radius(1.), 14.);
         assert_eq!(corner_radius(1.3), 18.);
         assert_eq!(corner_radius(0.9), 13.);
-        assert_eq!(sidebar_width(1.3), 338.);
         assert_eq!(scaled(8., 1.3), 8. * 1.3);
     }
 

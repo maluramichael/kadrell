@@ -121,6 +121,12 @@ impl PanelModel {
         true
     }
 
+    /// Fällt mit diesen Panels der gewählte Tab weg? Dann soll eine Seitenleiste mit der Tastatur sie abgeben, bevor sie
+    /// umspringt oder verschwindet (`updateExtensionPanels`).
+    pub fn loses_tab(&self, panels: &[PanelEntry]) -> bool {
+        self.selected_tab.as_ref().is_some_and(|tab| !panels.iter().any(|p| &p.0 == tab))
+    }
+
     pub fn select_tab(&mut self, name: &str) {
         if self.selected_tab.as_deref() == Some(name) || !self.panels.iter().any(|p| p.0 == name) {
             return;
@@ -352,6 +358,17 @@ mod tests {
         m.set_panels(Vec::new());
         assert_eq!(m.selected_tab(), None);
         assert!(m.lines().is_empty());
+    }
+
+    #[test]
+    fn losing_the_selected_tab_is_detected() {
+        let mut m = PanelModel::default();
+        assert!(!m.loses_tab(&[]), "ohne gewählten Tab geht nichts verloren");
+        m.set_panels(two_tabs());
+        m.select_tab("b");
+        assert!(!m.loses_tab(&two_tabs()));
+        assert!(m.loses_tab(&two_tabs()[..1]), "b fehlt");
+        assert!(m.loses_tab(&[]), "alle Panels weg");
     }
 
     #[test]
