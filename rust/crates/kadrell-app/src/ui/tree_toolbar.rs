@@ -12,7 +12,6 @@ use kadrell_i18n::trd;
 use super::context_menu::Cmd;
 use super::groups::tool_icons;
 use super::model::Group;
-use super::tree_rules::hover_on_raised;
 use super::{chrome, overlay::raised, tooltip};
 use crate::Shell;
 use crate::appearance::Appearance;
@@ -45,7 +44,7 @@ fn tool_button(tool: Tool, t: &Theme, a: &Appearance, on_click: impl Fn(&ClickEv
     let group = format!("tool-{}-{}", tool.id.0, tool.id.1);
     let hot = if tool.last { t.error } else { t.fg };
     let overlay = div().absolute().top_0().left_0().size_full().flex().items_center().justify_center().opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)).child((tool.icon)(hot));
-    let hover_face = hover_on_raised(t);
+    let hover_face = t.hover_on_raised();
     div()
         .id(tool.id)
         .group(group)

@@ -24,15 +24,6 @@ pub fn activity_color(status: Status, shell_running: bool, t: &Theme) -> Option<
     works.then(|| status_color(status, shell_running, t))
 }
 
-/// Hover-Fläche auf der erhabenen Leiste (`Instrument.hoverOnRaised`): von `bg`, `panel` und `surface` die mit dem
-/// größten Helligkeitsabstand zu `raised` (`bg` allein reicht nicht, in hellen Schemata ist es so hell wie `raised`).
-/// Bei Gleichstand die erste, wie `max(by:)` in Swift.
-pub fn hover_on_raised(t: &Theme) -> Hsla {
-    let raised = crate::theme::luminance(t.raised());
-    let distance = |c: Hsla| (crate::theme::luminance(c) - raised).abs();
-    [t.panel, t.surface].into_iter().fold(t.bg, |best, c| if distance(c) > distance(best) { c } else { best })
-}
-
 // MARK: Form des Punkts
 
 /// Form des Statuspunkts. Mit „Unterscheiden ohne Farbe“ trägt sie den Status: Ring = nicht gestartet, zwei Balken =
@@ -302,17 +293,6 @@ mod tests {
         }
         assert_eq!(rgba(Theme::by_id("instrument-light").unwrap().shell), 0x5c5a54);
         assert_eq!(rgba(Theme::mocha().shell), 0x89b4fa, "sonst das Blau der Terminalfarben");
-    }
-
-    #[test]
-    fn hover_on_raised_differs_from_raised() {
-        for t in Theme::all() {
-            let raised = crate::theme::luminance(t.raised());
-            let d = |c: Hsla| (crate::theme::luminance(c) - raised).abs();
-            let hot = hover_on_raised(&t);
-            assert!([t.bg, t.panel, t.surface].contains(&hot), "{}", t.id);
-            assert!(d(hot) >= d(t.bg) && d(hot) >= d(t.panel) && d(hot) >= d(t.surface), "{}", t.id);
-        }
     }
 
     #[test]

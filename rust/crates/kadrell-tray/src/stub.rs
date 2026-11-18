@@ -20,6 +20,8 @@ impl Backend {
 
 pub fn play(_sound: Sound) {}
 
+pub fn beep() {}
+
 pub fn reduce_motion() -> bool {
     false
 }

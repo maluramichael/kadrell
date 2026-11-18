@@ -280,7 +280,7 @@ impl Shell {
     pub(crate) fn ext_palette_commands(&self) -> Vec<Command> {
         footer_model::commands(&self.ext.status_items(), &self.ext.footer_items())
             .into_iter()
-            .map(|(name, what, id)| Command { title: trd!("Statusleiste: %@ · %@", name.clone(), what), shortcut: String::new(), run: Run::Ext { name, id } })
+            .map(|(name, what, id)| Command { title: trd!("Statusleiste: %@ · %@", name.clone(), what), run: Run::Ext { name, id } })
             .collect()
     }
 
@@ -291,7 +291,7 @@ impl Shell {
         if self.ext_ui.dialog.is_some() {
             self.close_extensions(window, cx);
         } else if !self.overlays.ext_started {
-            super::super::overlay_queue::beep();
+            kadrell_tray::beep();
         } else if self.panel_open() {
             self.overlays.defer(Box::new(|shell, window, cx| shell.open_extensions(window, cx)));
         } else if self.overlay.is_none() && self.palette.is_none() && self.settings.is_none() && self.rename.is_none() {

@@ -18,6 +18,7 @@ use super::groups::drag::{DragRow, Dragged, Over, TreeView, can_drag, plan};
 use super::groups::files;
 use super::groups::rows::{DragGhost, Mark, RowKey, block_mark, middle_released, row_mark};
 use super::icons;
+use super::instrument::{LABEL_KERN, kerned};
 use super::layout::Selection;
 use super::model::{Group, Session, Status};
 use super::theme;
@@ -88,20 +89,19 @@ fn chars_in(avail: f32, size: f32) -> usize {
 }
 
 /// Gesperrtes Versal-Label mit Zahl: `KADRELL · 2`. Nur der Name wird gekürzt, die Zahl bleibt ganz sichtbar.
-/// Die Sperrung (0,8 pt) fehlt: GPUI kennt keinen Buchstabenabstand.
+/// Gesperrt wie in Swift (`Instrument.groupLabel`, 0,8 pt, Zeichen für Zeichen gesetzt, `instrument::kerned`); bei
+/// Platzmangel wird der Name am Rand abgeschnitten.
 fn group_label(group: &Group, t: &Theme, a: &Appearance, gap_right: f32) -> impl IntoElement + use<> {
     let (name, count) = tree_rules::group_label_parts(&group.name, group.sessions.len());
+    let (size, kern) = (a.s(10.5), a.s(LABEL_KERN));
     div()
         .flex()
         .flex_1()
         .min_w_0()
         .overflow_hidden()
         .mr(px(a.s(gap_right)))
-        .text_size(px(a.s(10.5)))
-        .font_weight(FontWeight::BOLD)
-        .text_color(t.sub)
-        .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name))
-        .child(div().flex_none().whitespace_nowrap().child(count))
+        .child(div().min_w_0().overflow_hidden().child(kerned(&name, size, kern, true, t.sub)))
+        .child(kerned(&count, size, kern, true, t.sub))
 }
 
 /// Chevron als eigene Klickfläche: klappt die Gruppe beim Drücken der Maustaste auf oder zu (`mouseDown`, nicht erst

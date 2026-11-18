@@ -64,7 +64,7 @@ pub fn number(n: i64, lang: kadrell_accounts::Lang) -> String {
 }
 
 fn section_title(text: String, t: &Theme) -> impl IntoElement {
-    div().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.accent_text).child(text)
+    crate::ui::instrument::kerned(&text, 11., crate::ui::instrument::LABEL_KERN, true, t.accent_text)
 }
 
 fn swatch(color: Hsla) -> impl IntoElement {

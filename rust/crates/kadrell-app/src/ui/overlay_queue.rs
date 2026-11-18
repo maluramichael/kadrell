@@ -210,31 +210,6 @@ pub fn first_line(output: &str) -> String {
     output.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("").to_string()
 }
 
-/// Systemton für „geht nicht“ (`NSSound.beep`, Windows `MessageBeep`).
-pub fn beep() {
-    #[cfg(target_os = "windows")]
-    // SAFETY: MessageBeep hat keine Vorbedingungen; 0xFFFFFFFF ist der Standardton.
-    unsafe {
-        let _ = MessageBeep(0xFFFF_FFFF);
-    }
-    #[cfg(target_os = "macos")]
-    // SAFETY: NSBeep (AppKit) hat keine Parameter.
-    unsafe {
-        NSBeep();
-    }
-}
-
-#[cfg(target_os = "macos")]
-unsafe extern "C" {
-    fn NSBeep();
-}
-
-#[cfg(target_os = "windows")]
-#[link(name = "user32")]
-unsafe extern "system" {
-    fn MessageBeep(kind: u32) -> i32;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

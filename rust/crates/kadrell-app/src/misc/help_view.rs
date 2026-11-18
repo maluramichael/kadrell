@@ -194,10 +194,7 @@ fn section_view(s: &Section, first: bool, t: &Theme) -> impl IntoElement + use<>
         .pl(px(KEY_COLUMN + 12.))
         .pt(px(if first { 0. } else { 12. }))
         .pb(px(2.))
-        .text_size(px(11.))
-        .font_weight(FontWeight::BOLD)
-        .text_color(t.accent_text)
-        .child(s.title.to_uppercase());
+        .child(crate::ui::instrument::kerned(&s.title.to_uppercase(), 11., crate::ui::instrument::LABEL_KERN, true, t.accent_text));
     let rows = s.rows.iter().map(|r| {
         div()
             .flex()

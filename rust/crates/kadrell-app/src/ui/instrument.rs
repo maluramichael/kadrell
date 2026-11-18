@@ -122,12 +122,26 @@ pub fn key_button_with(
 /// Versalien an; Leerzeichen werden geschützt, damit sie nicht zusammenfallen.
 pub fn caps_label(text: &str, bold: bool, color: Hsla) -> Div {
     let s = scale();
+    kerned(text, 11. * s, LABEL_KERN * s, bold, color)
+}
+
+/// Text mit Buchstabenabstand (`NSAttributedString.kern`, `Text.kerning`): Schriftgröße `size` und Sperrung `kern`
+/// in fertigen Punkten. Der einzige Helfer dafür; GPUI hat keinen Buchstabenabstand, jedes Zeichen steht deshalb in
+/// einer eigenen Zelle mit rechtem Abstand (wie bei AppKit hängt die Sperrung auch hinter dem letzten Zeichen).
+/// Leerzeichen werden geschützt, damit sie nicht zusammenfallen. Ein Umbruch oder eine Auslassung gibt es nicht,
+/// wer kürzt, tut das vorher (`kerned_width`).
+pub fn kerned(text: &str, size: f32, kern: f32, bold: bool, color: Hsla) -> Div {
     let cells = text.chars().map(|c| {
         let shown = if c == ' ' { '\u{a0}' } else { c };
-        div().flex_none().mr(px(LABEL_KERN * s)).child(shown.to_string())
+        div().flex_none().mr(px(kern)).child(shown.to_string())
     });
-    let label = div().flex().flex_none().whitespace_nowrap().text_size(px(11. * s)).text_color(color).children(cells);
+    let label = div().flex().flex_none().whitespace_nowrap().text_size(px(size)).text_color(color).children(cells);
     if bold { label.font_weight(FontWeight::BOLD) } else { label }
+}
+
+/// Breite von `text` mit Sperrung: die Breite ohne Sperrung plus `kern` je Zeichen.
+pub fn kerned_width(plain_width: f32, text: &str, kern: f32) -> f32 {
+    plain_width + text.chars().count() as f32 * kern
 }
 
 /// Abschnittstitel (`sectionTitle`): fettes Versal-Label in Akzent-Textfarbe.

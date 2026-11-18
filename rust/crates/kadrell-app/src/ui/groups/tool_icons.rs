@@ -52,19 +52,16 @@ pub fn x_at(size: f32, color: Hsla) -> impl IntoElement {
 }
 
 /// Kreis-Umriss: Kachel aus der Ansicht nehmen, ohne die Session zu schließen (`Icons.circle`).
-#[allow(dead_code)] // TODO(paket-tiles): Kachel-Titelzeile
 pub fn circle_at(size: f32, color: Hsla) -> impl IntoElement {
     icon(size, vec![ellipse(4., 4., size - 8., size - 8.)], color, WIDTH)
 }
 
 /// Quadrat-Umriss: Kachel auf die ganze Arbeitsfläche zoomen (`Icons.square`).
-#[allow(dead_code)] // TODO(paket-tiles): Kachel-Titelzeile
 pub fn square_at(size: f32, color: Hsla) -> impl IntoElement {
     icon(size, vec![rect(4., 4., size - 8., size - 8.)], color, WIDTH)
 }
 
 /// Waagerechter Strich: den Zoom wieder verkleinern (`Icons.minus`).
-#[allow(dead_code)] // TODO(paket-tiles): Kachel-Titelzeile
 pub fn minus_at(size: f32, color: Hsla) -> impl IntoElement {
     icon(size, vec![square_line((4., size / 2.), (size - 4., size / 2.), WIDTH)], color, WIDTH)
 }
@@ -88,7 +85,6 @@ fn computer_strokes() -> Vec<Stroke> {
     vec![rounded_rect(1.5, 2., 13., 9., 1.5), open(&[(8., 11.), (8., 14.)]), open(&[(4.5, 14.), (11.5, 14.)])]
 }
 
-#[allow(dead_code)] // TODO(paket-tree): Typ-Symbol der Shell-Session im Baum
 pub fn computer_at(size: f32, color: Hsla) -> impl IntoElement {
     icon(size, scaled(computer_strokes(), size, 0.), color, THIN)
 }
@@ -107,7 +103,6 @@ fn server_strokes() -> Vec<Stroke> {
     ]
 }
 
-#[allow(dead_code)] // TODO(paket-tree): Typ-Symbol der Remote-Session im Baum
 pub fn server_at(size: f32, color: Hsla) -> impl IntoElement {
     icon(size, scaled(server_strokes(), size, 0.), color, THIN)
 }
@@ -117,7 +112,6 @@ pub fn server(color: Hsla) -> impl IntoElement {
 }
 
 /// π: Pi mit lokalem Modell statt Claude (`Icons.pi`): Systemschrift in `size * 1,15`, halbfett, zentriert.
-#[allow(dead_code)] // TODO(paket-tree): Typ-Symbol der Pi-Session im Baum
 pub fn pi_at(size: f32, color: Hsla) -> impl IntoElement {
     div()
         .flex()
@@ -141,7 +135,7 @@ pub fn folder(color: Hsla) -> impl IntoElement {
 
 /// Umriss des Herzens als Bézierpfad aus `Icons.heart` (16er-Raster): unten (8 | 13,5), links hoch, Mulde bei
 /// (8 | 5,2), rechts wieder hinunter.
-pub(crate) fn heart_points() -> Vec<(f32, f32)> {
+fn heart_points() -> Vec<(f32, f32)> {
     let mut pts = vec![(8., 13.5)];
     pts.extend(cubic((8., 13.5), (4.2, 11.), (1.8, 8.6), (1.8, 6.2)));
     pts.extend(cubic((1.8, 6.2), (1.8, 2.6), (6., 2.4), (8., 5.2)));
@@ -162,7 +156,6 @@ pub fn heart(color: Hsla, filled: bool) -> impl IntoElement {
 }
 
 /// Herz in einer Fläche `size` x `size` ohne Rand (gefülltes Herz der Gruppenzeile, 12 x 12).
-#[allow(dead_code)] // TODO(paket-tree): Favoritenherz der Gruppenzeile
 pub fn heart_at(size: f32, color: Hsla, filled: bool) -> impl IntoElement {
     icon(size, scaled(heart_strokes(filled), size, 0.), color, WIDTH)
 }

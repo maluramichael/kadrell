@@ -238,6 +238,15 @@ pub fn play(sound: Sound) {
     }
 }
 
+pub fn beep() {
+    #[link(name = "AppKit", kind = "framework")]
+    unsafe extern "C" {
+        fn NSBeep();
+    }
+    // SAFETY: `NSBeep` hat keine Vorbedingungen und darf vom Hauptthread aufgerufen werden.
+    unsafe { NSBeep() }
+}
+
 pub fn reduce_motion() -> bool {
     NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion()
 }
