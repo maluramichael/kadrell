@@ -480,3 +480,19 @@ fn exit_reason_names_status_and_last_error() {
         "der letzte Fehler steht im Grund: {reason}"
     );
 }
+
+/// Unter Unix liegen `kadrell.exec`-Kinder in eigenen Prozessgruppen; der Akteur beendet sie darum vor jedem Signal über
+/// die Prozessliste. Die Funktion selbst ist plattformunabhängig und hier prüfbar.
+#[test]
+fn kill_descendants_reaches_exec_children() {
+    let (p, _root) = HostPipe::start_ready(&sleeping_child_lua());
+    assert!(wait_until(3.0, || !children_of(p.pid()).is_empty()));
+    let child = children_of(p.pid())[0];
+    assert!(kadrell_ext::sys::descendants(p.pid()).contains(&child));
+    kadrell_ext::sys::kill_descendants(p.pid());
+    assert!(
+        wait_until(3.0, || !alive(child)),
+        "sleep 77 ({child}) lebt nach kill_descendants weiter"
+    );
+    assert!(!kadrell_ext::sys::descendants(p.pid()).contains(&child));
+}

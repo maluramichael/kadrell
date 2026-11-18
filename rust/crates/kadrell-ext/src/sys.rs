@@ -107,6 +107,49 @@ pub fn untrack_exec(_group: &KillGroup) {
         .retain(|g| *g != _group.pgid);
 }
 
+/// Prozess-ids aller Nachkommen von `pid` (Kinder, Enkel, …), über die Eltern-Beziehungen der Prozessliste.
+pub fn descendants(pid: u32) -> Vec<u32> {
+    use sysinfo::{Pid, ProcessesToUpdate, System};
+    let Ok(mut system) = System::new() else {
+        return Vec::new();
+    };
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    let mut found: Vec<u32> = Vec::new();
+    let mut queue = vec![pid];
+    while let Some(parent) = queue.pop() {
+        for (id, p) in system.processes() {
+            let id = id.as_u32();
+            if p.parent() == Some(Pid::from_u32(parent)) && id != pid && !found.contains(&id) {
+                found.push(id);
+                queue.push(id);
+            }
+        }
+    }
+    found
+}
+
+/// SIGKILL an alle Nachkommen von `pid`, die Prozessgruppen eigener Kinder eingeschlossen. Ein über `kadrell.exec`
+/// gestartetes Kind liegt in einer eigenen Gruppe, ein Signal an die Gruppe des Helfers erreicht es nicht, und stirbt
+/// der Helfer, laufen die Kinder weiter. Darum vor jedem Signal an einen Helfer aufrufen, auch vor dem sanften: danach
+/// hängen die Kinder nicht mehr an ihm.
+pub fn kill_descendants(pid: u32) {
+    use sysinfo::{Pid, ProcessesToUpdate, System};
+    let ids = descendants(pid);
+    if ids.is_empty() {
+        return;
+    }
+    let Ok(mut system) = System::new() else {
+        return;
+    };
+    let pids: Vec<Pid> = ids.iter().map(|i| Pid::from_u32(*i)).collect();
+    system.refresh_processes(ProcessesToUpdate::Some(&pids), true);
+    for p in pids {
+        if let Some(process) = system.process(p) {
+            process.kill();
+        }
+    }
+}
+
 /// Beendet alle noch laufenden `kadrell.exec`-Kinder; vor jedem Ende des Helfers aufzurufen. Unter Windows erledigt das
 /// Job Object das beim Prozessende von selbst.
 pub fn kill_exec_children() {

@@ -771,6 +771,9 @@ impl Actor {
         if self.finished || self.exit.is_some() {
             return;
         }
+        // Unter Unix zuerst die Kinder aus `kadrell.exec` (eigene Prozessgruppen), unter Windows trägt das Job Object sie.
+        #[cfg(unix)]
+        sys::kill_descendants(self.child.id());
         match (&self.group, hard) {
             (Some(g), true) => g.kill(),
             (Some(g), false) => g.terminate(),
