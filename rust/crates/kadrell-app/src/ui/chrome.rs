@@ -30,19 +30,19 @@ pub fn seam_light(t: &Theme) -> Hsla {
     white(if t.dark { 0.05 } else { 0.65 })
 }
 
-/// Behält `keep` (0 bis 1) der Helligkeit einer Farbe, zieht sie also Richtung Schwarz.
-fn darkened(c: Hsla, keep: f32) -> Hsla {
-    Hsla { l: c.l * keep, ..c }
-}
-
 /// Kante und Dicke der Taste.
 pub fn key_edge(t: &Theme) -> Hsla {
-    if t.dark { darkened(t.bg, 0.7) } else { darkened(t.line, 0.55) }
+    t.key_edge()
 }
 
 /// Display-Grund erhabener Status-Anzeigen, in allen Schemata gleich dunkel.
 pub fn screen_face(t: &Theme) -> Hsla {
     rgb(if t.dark { 0x050505 } else { 0x0d0d0c }).into()
+}
+
+/// Fester Schatten erhabener Flächen, ohne Weichzeichnung.
+pub fn drop_shadow(t: &Theme) -> Hsla {
+    black(if t.dark { 0.5 } else { 0.16 })
 }
 
 pub fn screen_ink() -> Hsla {
