@@ -6,7 +6,7 @@ use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
 
 use crate::Shell;
 
-actions!(kadrell, [NewSession, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings]);
+actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings]);
 
 pub enum Entry {
     Separator,
@@ -52,15 +52,15 @@ fn file_menu() -> MenuDef {
         name: "Datei",
         entries: vec![
             item("Neue Session", keys("⌘N", "Strg+N"), NewSession),
-            off("Neue Session im selben Ordner", keys("⌘↩", "Strg+Enter")),
-            off("Neues Terminal ohne Claude", keys("⌘T", "Strg+T")),
+            item("Neue Session im selben Ordner", keys("⌘↩", "Strg+Enter"), NewSessionHere),
+            item("Neues Terminal ohne Claude", keys("⌘T", "Strg+T"), NewTerminal),
             off("Remote verbinden …", keys("⇧⌘N", "Strg+Umschalt+N")),
             off("Neue Gruppe …", keys("⌥⌘N", "Strg+Alt+N")),
             Entry::Separator,
             off("Neues Fenster", keys("⇧⌘T", "Strg+Umschalt+T")),
             off("Fenster schließen", keys("⇧⌘W", "Strg+Umschalt+W")),
             Entry::Separator,
-            off("Session schließen", keys("⌘W", "Strg+W")),
+            item("Session schließen", keys("⌘W", ""), CloseSession),
         ],
     }
 }
@@ -93,6 +93,7 @@ fn view_menu() -> MenuDef {
             off("Terminal-Schrift kleiner", keys("⌘-", "Strg+-")),
             off("Terminal-Schrift Standardgröße", keys("⌘0", "Strg+0")),
             Entry::Separator,
+            item("Kachel zoomen", keys("⌘⇧↩", "Strg+Umschalt+Enter"), ZoomTile),
             item("Nächste Session", "Alt+N", NextSession),
             item("Vorherige Session", "Alt+P", PrevSession),
             item("Farbschema wechseln", "Alt+T", ToggleTheme),
@@ -106,9 +107,11 @@ fn session_menu() -> MenuDef {
     MenuDef {
         name: "Session",
         entries: vec![
-            off("Fortsetzen", ""),
-            off("Stoppen", ""),
-            off("Entfernen …", ""),
+            item("Fortsetzen", "", ResumeSession),
+            item("Stoppen", "", StopSession),
+            item("Umbenennen", "F2", RenameSession),
+            item("Gruppe umbenennen", "", RenameGroup),
+            item("Entfernen …", "", CloseSession),
             Entry::Separator,
             off("Nur diese zeigen", ""),
             off("Aus Ansicht nehmen", ""),
@@ -139,6 +142,13 @@ pub fn menus() -> Vec<MenuDef> {
 pub fn init(cx: &mut App) {
     let new_key = if cfg!(target_os = "macos") { "cmd-n" } else { "ctrl-n" };
     cx.bind_keys([KeyBinding::new(new_key, NewSession, None)]);
+    let (here_key, term_key, zoom_key) = if cfg!(target_os = "macos") { ("cmd-enter", "cmd-t", "cmd-shift-enter") } else { ("ctrl-enter", "ctrl-t", "ctrl-shift-enter") };
+    cx.bind_keys([
+        KeyBinding::new(here_key, NewSessionHere, None),
+        KeyBinding::new(term_key, NewTerminal, None),
+        KeyBinding::new(zoom_key, ZoomTile, None),
+        KeyBinding::new("f2", RenameSession, None),
+    ]);
     let (search_key, find_all_key) = if cfg!(target_os = "macos") { ("cmd-p", "cmd-shift-f") } else { ("ctrl-p", "ctrl-shift-f") };
     cx.bind_keys([KeyBinding::new(search_key, OpenPalette, None), KeyBinding::new(find_all_key, FindAll, None)]);
     cx.bind_keys([KeyBinding::new(if cfg!(target_os = "macos") { "cmd-," } else { "ctrl-," }, OpenSettings, None)]);
@@ -155,6 +165,14 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
         .on_action(cx.listener(|this, _: &FindAll, window, cx| this.open_palette("/", window, cx)))
+        .on_action(cx.listener(|this, _: &NewSessionHere, window, cx| this.new_session_here(window, cx)))
+        .on_action(cx.listener(|this, _: &NewTerminal, window, cx| this.new_terminal(window, cx)))
+        .on_action(cx.listener(|this, _: &CloseSession, window, cx| this.remove_focused(window, cx)))
+        .on_action(cx.listener(|this, _: &StopSession, window, cx| this.stop_focused(window, cx)))
+        .on_action(cx.listener(|this, _: &ResumeSession, window, cx| this.resume_focused(window, cx)))
+        .on_action(cx.listener(|this, _: &RenameSession, window, cx| this.rename_focused(window, cx)))
+        .on_action(cx.listener(|this, _: &RenameGroup, window, cx| this.rename_focused_group(window, cx)))
+        .on_action(cx.listener(|this, _: &ZoomTile, _, cx| this.toggle_zoom(cx)))
         .on_action(cx.listener(|this, _: &NextSession, window, cx| this.step(1, window, cx)))
         .on_action(cx.listener(|this, _: &PrevSession, window, cx| this.step(-1, window, cx)))
         .on_action(cx.listener(|this, _: &NextLayout, _, cx| this.cycle_layout(cx)))

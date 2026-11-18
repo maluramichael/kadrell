@@ -1,18 +1,26 @@
-//! Mock-Daten: Gruppen und Sessions, dazu das Startkommando je Session.
+//! Ansicht der Sessions für den Baum, die Kacheln und die Suche: Gruppen und Sessions in Anzeigereihenfolge, aus dem
+//! `AppState` gebaut. Die Oberfläche kennt nur diese Felder; Schlüssel (`key`, `id`) bleiben stabil, die Positionen
+//! (Gruppe, Session) gelten nur bis zur nächsten Änderung.
 
-use std::path::PathBuf;
+use std::collections::HashMap;
 
 use gpui::{Entity, Hsla};
 
+use kadrell_core::group::SidebarFlat;
+use kadrell_core::{Group as CoreGroup, Session as CoreSession, SessionStatus};
 use kadrell_term::TerminalPane;
+
+use super::folders;
+use crate::state::AppState;
 use crate::theme::Theme;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Status {
     Running,
     Waiting,
     Idle,
     Error,
+    /// Kein laufender Prozess (gestoppt, beendet, noch nicht gestartet).
     Detached,
 }
 
@@ -26,118 +34,101 @@ impl Status {
             Status::Detached => t.detached,
         }
     }
-}
 
-type Command = (&'static str, &'static [&'static str]);
-
-pub struct Launch {
-    pub program: &'static str,
-    pub args: &'static [&'static str],
-    pub in_spike: bool,
-    /// Eigener Startordner (Sessions aus „Neue Session“); sonst gilt `in_spike`.
-    pub dir: Option<PathBuf>,
-}
-
-impl Launch {
-    /// Eigener Ordner, sonst der der App (`rust/crates/kadrell-app`) oder die Repo-Wurzel.
-    pub fn cwd(&self) -> PathBuf {
-        if let Some(dir) = &self.dir {
-            return dir.clone();
+    /// Ohne laufenden Prozess (`None`) gilt die Session als getrennt.
+    pub fn of(status: Option<SessionStatus>) -> Status {
+        match status {
+            None => Status::Detached,
+            Some(SessionStatus::Running) => Status::Running,
+            Some(SessionStatus::Waiting) => Status::Waiting,
+            Some(SessionStatus::Idle) => Status::Idle,
+            Some(SessionStatus::Error) => Status::Error,
         }
-        let spike = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        if self.in_spike {
-            return spike;
-        }
-        spike.ancestors().nth(3).map(PathBuf::from).unwrap_or(spike)
     }
 }
 
 pub struct Session {
-    pub title: &'static str,
+    pub key: String,
+    pub title: String,
     pub status: Status,
+    /// Fertig oder wartend, aber noch nicht angesehen.
     pub is_new: bool,
-    pub age: &'static str,
+    pub age: String,
     pub branch: Option<String>,
-    pub launch: Launch,
+    /// Ordner mit `/`.
+    pub cwd: String,
+    pub is_shell: bool,
     pub pane: Option<Entity<TerminalPane>>,
 }
 
 pub struct Group {
-    pub name: &'static str,
+    pub id: String,
+    pub name: String,
     pub color: u32,
-    pub path: &'static str,
+    /// Ordner mit `~` für die Anzeige.
+    pub path: String,
+    /// Ordner mit `/`.
+    pub cwd: String,
+    pub favorite: bool,
     pub collapsed: bool,
     pub sessions: Vec<Session>,
 }
 
-#[cfg(target_os = "macos")]
-const CLAUDE: Command = ("/bin/zsh", &["-lc", "claude"]);
-#[cfg(not(target_os = "macos"))]
-const CLAUDE: Command = ("claude", &[]);
-
-#[cfg(target_os = "macos")]
-const SHELL: Command = ("/bin/zsh", &["-l"]);
-#[cfg(not(target_os = "macos"))]
-const SHELL: Command = ("pwsh.exe", &[]);
-
-fn session(title: &'static str, status: Status, age: &'static str, cmd: Command) -> Session {
-    let launch = Launch { program: cmd.0, args: cmd.1, in_spike: false, dir: None };
-    Session { title, status, is_new: false, age, branch: None, launch, pane: None }
+/// `#rrggbb` aus `groups.json` als Zahl, bei Unlesbarem ein neutrales Grau.
+pub fn parse_color(text: &str) -> u32 {
+    u32::from_str_radix(text.trim_start_matches('#'), 16).ok().filter(|_| text.trim_start_matches('#').len() == 6).unwrap_or(0x6c7086)
 }
 
-/// Neue Claude-Session in einem beliebigen Ordner („Neue Session“).
-pub fn claude_session_in(title: &'static str, dir: PathBuf) -> Session {
-    let mut s = session(title, Status::Running, "jetzt", CLAUDE);
-    s.is_new = true;
-    s.launch.dir = Some(dir);
-    s
+fn session_view(s: &CoreSession, state: &AppState, panes: &HashMap<String, Entity<TerminalPane>>, now: f64) -> Session {
+    Session {
+        key: s.id.clone(),
+        title: s.title(),
+        status: Status::of(state.display_status(&s.id)),
+        is_new: state.is_unseen(&s.id),
+        age: s.elapsed(now),
+        branch: s.branch.clone(),
+        cwd: s.cwd.clone(),
+        is_shell: s.is_shell(),
+        pane: panes.get(&s.id).cloned(),
+    }
 }
 
-fn in_spike(mut s: Session) -> Session {
-    s.launch.in_spike = true;
-    s
+fn group_view(g: &CoreGroup, sessions: Vec<Session>, state: &AppState, home: &str) -> Group {
+    Group {
+        id: g.id.clone(),
+        name: g.name.clone(),
+        color: parse_color(&g.color),
+        path: folders::short_path(&g.cwd, home),
+        cwd: g.cwd.clone(),
+        favorite: g.favorite,
+        collapsed: state.collapsed.contains(&g.id),
+        sessions,
+    }
 }
 
-fn marked_new(mut s: Session) -> Session {
-    s.is_new = true;
-    s
+/// Gruppen mit der Sortierung der Leiste. Ohne Gruppierung steht eine einzige Gruppe mit allen Sessions da.
+pub fn build(state: &AppState, panes: &HashMap<String, Entity<TerminalPane>>) -> Vec<Group> {
+    let now = crate::state::now_secs();
+    let home = state.home();
+    let groups = state.sorted_groups();
+    let by_key: HashMap<String, CoreSession> = state.store.sessions.sessions.iter().map(|s| (s.id.clone(), s.clone())).collect();
+    if !state.grouped() {
+        return flat_view(state, &groups, &by_key, panes, now);
+    }
+    groups
+        .iter()
+        .map(|g| {
+            let sessions = g.session_ids.iter().filter_map(|id| by_key.get(id)).map(|s| session_view(s, state, panes, now)).collect();
+            group_view(g, sessions, state, &home)
+        })
+        .collect()
 }
 
-pub fn mock_groups() -> Vec<Group> {
-    vec![
-        Group {
-            name: "kadrell",
-            color: 0x89b4fa,
-            path: "~/development/projects/kadrell",
-            collapsed: false,
-            sessions: vec![
-                marked_new(session("claude", Status::Running, "3h", CLAUDE)),
-                session("shell", Status::Idle, "1d", SHELL),
-            ],
-        },
-        Group {
-            name: "spike",
-            color: 0xa6e3a1,
-            path: "~/development/projects/kadrell/spike/gpui",
-            collapsed: false,
-            sessions: vec![
-                in_spike(session("claude-zwei", Status::Waiting, "3h", CLAUDE)),
-                in_spike(session("zweite shell", Status::Detached, "1d", SHELL)),
-            ],
-        },
-    ]
-}
-
-/// Aktueller Git-Zweig des Ordners, `None` außerhalb eines Repos (oder ohne Zweig, etwa bei `HEAD`).
-/// Blockiert, deshalb nur aus dem Hintergrund aufrufen.
-pub fn git_branch(cwd: &std::path::Path) -> Option<String> {
-    let mut cmd = std::process::Command::new("git");
-    cmd.args(["rev-parse", "--abbrev-ref", "HEAD"]).current_dir(cwd);
-    #[cfg(windows)]
-    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
-    let out = cmd.output().ok().filter(|o| o.status.success())?;
-    let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (!name.is_empty() && name != "HEAD").then_some(name)
+fn flat_view(state: &AppState, groups: &[CoreGroup], by_key: &HashMap<String, CoreSession>, panes: &HashMap<String, Entity<TerminalPane>>, now: f64) -> Vec<Group> {
+    let order = state.settings.sidebar_flat_order();
+    let rows = SidebarFlat::rows(groups, by_key, state.sort(), &order);
+    let sessions: Vec<Session> = rows.iter().map(|r| session_view(r.session, state, panes, now)).collect();
+    vec![Group { id: String::new(), name: "Sessions".into(), color: 0x6c7086, path: String::new(), cwd: String::new(), favorite: false, collapsed: false, sessions }]
 }
 
 /// Alle Sessions in Anzeigereihenfolge als (Gruppe, Session).
@@ -147,4 +138,28 @@ pub fn flat_index(groups: &[Group]) -> Vec<(usize, usize)> {
         out.extend((0..group.sessions.len()).map(|s| (g, s)));
     }
     out
+}
+
+/// Position einer Session in der Ansicht.
+pub fn position(groups: &[Group], key: &str) -> Option<(usize, usize)> {
+    groups.iter().enumerate().find_map(|(g, group)| group.sessions.iter().position(|s| s.key == key).map(|s| (g, s)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn colors_parse_with_fallback() {
+        assert_eq!(parse_color("#fab387"), 0xfab387);
+        assert_eq!(parse_color("fab387"), 0xfab387);
+        assert_eq!(parse_color("rot"), 0x6c7086);
+        assert_eq!(parse_color("#fff"), 0x6c7086);
+    }
+
+    #[test]
+    fn status_without_process_is_detached() {
+        assert_eq!(Status::of(None), Status::Detached);
+        assert_eq!(Status::of(Some(SessionStatus::Waiting)), Status::Waiting);
+    }
 }

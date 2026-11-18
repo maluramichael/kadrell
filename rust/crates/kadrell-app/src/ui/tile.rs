@@ -52,14 +52,14 @@ fn header(group: &Group, session: &Session, cx: &App) -> impl IntoElement + use<
                 .text_size(px(11.5))
                 .font_weight(FontWeight::BOLD)
                 .text_color(t.fg)
-                .child(session.title),
+                .child(session.title.clone()),
         );
     if let Some(branch) = &session.branch {
         row = row.child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(branch.clone()));
     }
     row.child(group_tag(group, &t))
         .child(div().flex_1())
-        .child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age))
+        .child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age.clone()))
 }
 
 /// Rahmen der Kachel: Fokus in Akzentfarbe, sonst Linienfarbe. Eine reine Titelzeile (Stack) trägt nur 1 px,

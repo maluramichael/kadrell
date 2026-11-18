@@ -2,7 +2,7 @@
 //! ohne Einrückung, Auswahlbalken in Gruppenfarbe, Zeilenfläche in `bg` mit Umriss in `fg`.
 
 use gpui::{
-    Context, Div, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Stateful,
+    Context, Div, FontWeight, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement, Stateful,
     StatefulInteractiveElement, Styled, div, px,
 };
 
@@ -92,7 +92,7 @@ fn group_path(group: &Group, t: &Theme) -> impl IntoElement + use<> {
         .text_ellipsis()
         .text_size(px(10.5))
         .text_color(t.muted)
-        .child(group.path)
+        .child(group.path.clone())
 }
 
 fn group_header(
@@ -113,6 +113,13 @@ fn group_header(
     let face = if SHOW_GROUP_PATH { face.child(group_path(group, &t)) } else { face };
     row_frame(("group", g), GROUP_ROW, bar)
         .on_click(cx.listener(move |this, _, window, cx| this.select_group(g, window, cx)))
+        .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+            let id = this.groups[g].id.clone();
+            if !id.is_empty() {
+                let items = this.group_menu_items(&id);
+                this.open_context(ev.position, items, cx);
+            }
+        }))
         .child(face)
 }
 
@@ -134,7 +141,7 @@ fn new_badge(status: Status, t: &Theme) -> impl IntoElement + use<> {
 
 fn session_face(session: &Session, selected: bool, t: &Theme) -> Div {
     let title_color = if selected || session.is_new { t.fg } else { t.sub };
-    let title = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(title_color).child(session.title);
+    let title = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(title_color).child(session.title.clone());
     let title = if session.is_new { title.font_weight(FontWeight::BOLD) } else { title };
     let mut face = div()
         .size_full()
@@ -149,7 +156,7 @@ fn session_face(session: &Session, selected: bool, t: &Theme) -> Div {
     if session.is_new {
         face = face.child(new_badge(session.status, t));
     }
-    face.child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age))
+    face.child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age.clone()))
 }
 
 fn session_row(
@@ -178,6 +185,11 @@ fn session_row(
     row_frame(("session", g * 100 + s), SESSION_ROW, bar)
         .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| {
             this.click_session(g, s, ev.modifiers(), window, cx)
+        }))
+        .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+            let key = this.groups[g].sessions[s].key.clone();
+            let items = this.session_menu_items(&key);
+            this.open_context(ev.position, items, cx);
         }))
         .child(face)
 }

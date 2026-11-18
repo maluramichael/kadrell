@@ -2610,7 +2610,12 @@ name = "kadrell"
 version = "0.1.0"
 dependencies = [
  "kadrell-app",
+ "kadrell-claude",
+ "kadrell-control",
+ "kadrell-core",
+ "kadrell-ext",
  "kadrell-term",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2630,10 +2635,15 @@ dependencies = [
 name = "kadrell-app"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "chrono",
  "gpui-pre",
  "gpui-pre-platform",
+ "kadrell-accounts",
+ "kadrell-claude",
+ "kadrell-control",
  "kadrell-core",
+ "kadrell-ext",
  "kadrell-term",
  "serde_json",
 ]
@@ -2703,6 +2713,7 @@ dependencies = [
  "async-channel",
  "gpui-pre",
  "gpui-pre-platform",
+ "libc",
 ]
 
 [[package]]

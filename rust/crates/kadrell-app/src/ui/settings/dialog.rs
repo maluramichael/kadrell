@@ -25,6 +25,8 @@ use crate::ui::text_input::{TextInput, TextInputEvent};
 
 pub enum SettingsEvent {
     Close,
+    /// Die Kopie der Einstellungen (`store`) hat sich geändert.
+    Changed,
 }
 
 impl EventEmitter<SettingsEvent> for SettingsDialog {}
@@ -75,7 +77,6 @@ pub struct SettingsDialog {
 
 impl SettingsDialog {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        store::ensure(cx);
         super::bind_keys(cx);
         let filter_input = cx.new(|cx| TextInput::new("Filtern …", cx).compact());
         let filter_sub = cx.subscribe(&filter_input, |this, input, _: &TextInputEvent, cx| {
@@ -131,6 +132,7 @@ impl SettingsDialog {
     pub(super) fn change(&mut self, f: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
         store::update(cx, f);
         sync_theme(cx);
+        cx.emit(SettingsEvent::Changed);
         cx.notify();
     }
 

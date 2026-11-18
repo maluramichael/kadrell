@@ -6,9 +6,10 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use alacritty_terminal::event::{Event, EventListener, Notify, OnResize, WindowSize};
-use alacritty_terminal::event_loop::{EventLoop, Notifier};
+use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Msg, Notifier};
 use alacritty_terminal::grid::{Dimensions, Indexed, Scroll};
 use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point as TPoint, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
@@ -20,7 +21,7 @@ use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 use gpui::{
     App, Bounds, ClipboardItem, Context, Element, ElementId, ElementInputHandler, Entity,
-    EntityInputHandler, FocusHandle, Font, FontStyle, FontWeight, GlobalElementId, Hsla,
+    EntityInputHandler, EventEmitter, FocusHandle, Font, FontStyle, FontWeight, GlobalElementId, Hsla,
     InspectorElementId, IntoElement, KeyDownEvent, Keystroke, LayoutId, MouseButton,
     MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollEvent, SharedString, Style,
     StrikethroughStyle, TextRun, UTF16Selection, UnderlineStyle, Window, div, fill, font, point,
@@ -48,6 +49,8 @@ pub fn inherited_env_to_strip(names: &[String]) -> Vec<String> {
             u == "CLAUDECODE"
                 || u.starts_with("CLAUDE_CODE_")
                 || u == "AI_AGENT"
+                || u == "CLAUDE_PID"
+                || u == "CLAUDE_JOB_DIR"
                 || (in_claude_session && u == "NO_COLOR")
         })
         .cloned()
@@ -66,12 +69,112 @@ pub fn strip_inherited_env() {
 }
 
 #[derive(Clone)]
-struct Listener(async_channel::Sender<Event>);
+struct Listener {
+    tx: async_channel::Sender<Event>,
+    /// Vom PTY-Thread gesetzt, sobald der Kindprozess endet: von jedem Thread lesbar (`TermHandle::exited`).
+    exited: Arc<AtomicBool>,
+}
 
 impl EventListener for Listener {
     fn send_event(&self, event: Event) {
-        let _ = self.0.try_send(event);
+        if matches!(event, Event::ChildExit(_) | Event::Exit) {
+            self.exited.store(true, Ordering::SeqCst);
+        }
+        let _ = self.tx.try_send(event);
     }
+}
+
+/// Ereignisse einer Kachel für den, der sie hält (`cx.subscribe`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerminalEvent {
+    /// Der Kindprozess hat sich beendet (`/exit`, Absturz, Kill).
+    Exited,
+}
+
+/// Was eine Kachel startet: Programm, Argumente, Ordner und Umgebung (zusätzlich zur geerbten).
+#[derive(Debug, Clone, Default)]
+pub struct TermSpec {
+    pub program: String,
+    pub args: Vec<String>,
+    pub cwd: PathBuf,
+    pub env: Vec<(String, String)>,
+}
+
+/// Zugriff auf eine Kachel ohne GPUI und von jedem Thread: schreiben, lesen, beenden. Das ist, was Steuerkanal
+/// (`send`, `capture`, `stop`) und Statuspoll brauchen; die Oberfläche selbst bleibt beim `TerminalPane`.
+#[derive(Clone)]
+pub struct TermHandle {
+    term: Arc<FairMutex<Term<Listener>>>,
+    sender: EventLoopSender,
+    exited: Arc<AtomicBool>,
+    pid: Option<u32>,
+}
+
+impl TermHandle {
+    /// pid des Kindprozesses (Windows: des Prozesses hinter der ConPTY).
+    pub fn pid(&self) -> Option<u32> {
+        self.pid
+    }
+
+    /// Der Kindprozess ist beendet.
+    pub fn exited(&self) -> bool {
+        self.exited.load(Ordering::SeqCst)
+    }
+
+    /// Rohe Bytes an den Prozess, springt dabei ans Ende des Verlaufs.
+    pub fn write(&self, bytes: &[u8]) {
+        self.term.lock().scroll_display(Scroll::Bottom);
+        let _ = self.sender.send(Msg::Input(Cow::Owned(bytes.to_vec())));
+    }
+
+    /// Hat das Programm bracketed paste eingeschaltet?
+    pub fn bracketed_paste(&self) -> bool {
+        self.term.lock().mode().contains(TermMode::BRACKETED_PASTE)
+    }
+
+    /// Sichtbare Zeilen ohne Leerraum am Ende.
+    pub fn visible_rows(&self) -> Vec<String> {
+        let term = self.term.lock();
+        (0..term.screen_lines() as i32).map(|l| TerminalPane::line_text(&term, Line(l)).0).collect()
+    }
+
+    /// Ganzer Puffer samt Verlauf, Zeilen mit `\n` getrennt.
+    pub fn buffer_text(&self) -> String {
+        let term = self.term.lock();
+        (term.topmost_line().0..=term.bottommost_line().0).map(|l| TerminalPane::line_text(&term, Line(l)).0).collect::<Vec<_>>().join("\n")
+    }
+
+    /// Beendet den Prozess (samt Kindern) und die Schleife der Kachel.
+    pub fn shutdown(&self) {
+        let _ = self.sender.send(Msg::Shutdown);
+        if let Some(pid) = self.pid.filter(|_| !self.exited()) {
+            kill_process_tree(pid);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn kill_process_tree(pid: u32) {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("taskkill");
+    cmd.args(["/F", "/T", "/PID", &pid.to_string()]).creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let _ = cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+}
+
+#[cfg(unix)]
+fn kill_process_tree(pid: u32) {
+    // SAFETY: `kill` mit einer pid und einem Signal hat keine weiteren Voraussetzungen.
+    unsafe { libc::kill(pid as libc::pid_t, libc::SIGHUP) };
+}
+
+#[cfg(windows)]
+fn pty_pid(pty: &tty::Pty) -> Option<u32> {
+    pty.child_watcher().pid().map(|p| p.get())
+}
+
+#[cfg(unix)]
+fn pty_pid(pty: &tty::Pty) -> Option<u32> {
+    Some(pty.child().id())
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -100,6 +203,9 @@ struct Search {
 pub struct TerminalPane {
     term: Arc<FairMutex<Term<Listener>>>,
     notifier: Notifier,
+    sender: EventLoopSender,
+    exited_flag: Arc<AtomicBool>,
+    pid: Option<u32>,
     pub focus: FocusHandle,
     grid: Grid,
     cell: gpui::Size<Pixels>,
@@ -115,28 +221,18 @@ pub struct TerminalPane {
     pub title: Option<String>,
 }
 
+impl EventEmitter<TerminalEvent> for TerminalPane {}
+
 impl TerminalPane {
     pub fn new(program: &str, args: &[&str], cwd: PathBuf, cx: &mut Context<Self>) -> Self {
-        let (tx, rx) = async_channel::unbounded();
-        let listener = Listener(tx);
-        let grid = Grid { cols: 100, lines: 30 };
-        let term = Arc::new(FairMutex::new(Term::new(Config::default(), &grid, listener.clone())));
+        let spec = TermSpec { program: program.into(), args: args.iter().map(|a| a.to_string()).collect(), cwd, env: Vec::new() };
+        Self::from_parts(start_pty(spec).expect("PTY"), cx)
+    }
 
-        let mut options = tty::Options {
-            shell: Some(tty::Shell::new(program.into(), args.iter().map(|a| a.to_string()).collect())),
-            working_directory: Some(cwd),
-            env: HashMap::from([
-                ("TERM".into(), "xterm-256color".into()),
-                ("COLORTERM".into(), "truecolor".into()),
-            ]),
-            ..Default::default()
-        };
-        options.drain_on_exit = false;
-        let pty = tty::new(&options, window_size(grid, size(px(8.), px(16.))), 0).expect("PTY");
-        let event_loop = EventLoop::new(term.clone(), listener, pty, false, false).expect("event loop");
-        let notifier = Notifier(event_loop.channel());
-        event_loop.spawn();
-
+    /// Kachel zu einem schon gestarteten Prozess (`start_pty`). Der Start ist von GPUI getrennt, damit ein
+    /// gescheiterter Start (Programm fehlt) ein Fehler bleibt statt einer Kachel.
+    pub fn from_parts(parts: PtyParts, cx: &mut Context<Self>) -> Self {
+        let PtyParts { term, notifier, sender, exited_flag, pid, rx, grid } = parts;
         cx.spawn(async move |this, cx| {
             while let Ok(event) = rx.recv().await {
                 if this.update(cx, |pane, cx| pane.on_event(event, cx)).is_err() {
@@ -149,6 +245,9 @@ impl TerminalPane {
         Self {
             term,
             notifier,
+            sender,
+            exited_flag,
+            pid,
             focus: cx.focus_handle(),
             grid,
             cell: size(px(8.), px(16.)),
@@ -161,6 +260,58 @@ impl TerminalPane {
             exited: false,
             title: None,
         }
+    }
+}
+
+/// Ein gestarteter Prozess samt Terminal-Zustand, noch ohne Oberfläche.
+pub struct PtyParts {
+    term: Arc<FairMutex<Term<Listener>>>,
+    notifier: Notifier,
+    sender: EventLoopSender,
+    exited_flag: Arc<AtomicBool>,
+    pid: Option<u32>,
+    rx: async_channel::Receiver<Event>,
+    grid: Grid,
+}
+
+impl PtyParts {
+    /// Zugriff auf die Kachel ohne GPUI, von jedem Thread (Steuerkanal, Statuspoll).
+    pub fn handle(&self) -> TermHandle {
+        TermHandle { term: self.term.clone(), sender: self.sender.clone(), exited: self.exited_flag.clone(), pid: self.pid }
+    }
+}
+
+/// Startet das Programm der Kachel. `spec.env` kommt zur geerbten Umgebung dazu (`TERM` und `COLORTERM` gelten,
+/// wenn sie fehlen); unter Windows werden die Argumente für die Kommandozeile maskiert (Anführungszeichen in
+/// `--settings {...}`).
+pub fn start_pty(spec: TermSpec) -> std::io::Result<PtyParts> {
+    let (tx, rx) = async_channel::unbounded();
+    let exited_flag = Arc::new(AtomicBool::new(false));
+    let listener = Listener { tx, exited: exited_flag.clone() };
+    let grid = Grid { cols: 100, lines: 30 };
+    let term = Arc::new(FairMutex::new(Term::new(Config::default(), &grid, listener.clone())));
+
+    let mut env = HashMap::from([("TERM".to_string(), "xterm-256color".to_string()), ("COLORTERM".to_string(), "truecolor".to_string())]);
+    env.extend(spec.env);
+    let mut options = tty::Options { shell: Some(tty::Shell::new(spec.program, spec.args)), working_directory: Some(spec.cwd), env, ..Default::default() };
+    options.drain_on_exit = false;
+    #[cfg(windows)]
+    {
+        options.escape_args = true;
+    }
+    let pty = tty::new(&options, window_size(grid, size(px(8.), px(16.))), 0)?;
+    let pid = pty_pid(&pty);
+    let event_loop = EventLoop::new(term.clone(), listener, pty, false, false)?;
+    let sender = event_loop.channel();
+    let notifier = Notifier(sender.clone());
+    event_loop.spawn();
+    Ok(PtyParts { term, notifier, sender, exited_flag, pid, rx, grid })
+}
+
+impl TerminalPane {
+    /// Zugriff auf die Kachel ohne GPUI, von jedem Thread (Steuerkanal, Statuspoll).
+    pub fn handle(&self) -> TermHandle {
+        TermHandle { term: self.term.clone(), sender: self.sender.clone(), exited: self.exited_flag.clone(), pid: self.pid }
     }
 
     fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
@@ -181,7 +332,10 @@ impl TerminalPane {
             }
             Event::Title(title) => self.title = Some(title),
             Event::ResetTitle => self.title = None,
-            Event::ChildExit(_) | Event::Exit => self.exited = true,
+            Event::ChildExit(_) | Event::Exit if !self.exited => {
+                self.exited = true;
+                cx.emit(TerminalEvent::Exited);
+            }
             _ => {}
         }
         cx.notify();
@@ -1212,7 +1366,7 @@ mod tests {
     }
 
     fn feed(input: &str) -> Term<Listener> {
-        let mut t = Term::new(Config::default(), &Grid { cols: 20, lines: 2 }, Listener(async_channel::unbounded().0));
+        let mut t = Term::new(Config::default(), &Grid { cols: 20, lines: 2 }, Listener { tx: async_channel::unbounded().0, exited: Arc::default() });
         let mut parser = alacritty_terminal::vte::ansi::Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::new();
         parser.advance(&mut t, input.as_bytes());
         t
@@ -1257,7 +1411,7 @@ mod tests {
 
     #[test]
     fn farbwuerfel_ecken() {
-        let t = Term::new(Config::default(), &Grid { cols: 4, lines: 2 }, Listener(async_channel::unbounded().0));
+        let t = Term::new(Config::default(), &Grid { cols: 4, lines: 2 }, Listener { tx: async_channel::unbounded().0, exited: Arc::default() });
         let theme = test_theme();
         let same = |i: usize, r: u8, g: u8, b: u8| {
             assert_eq!(indexed(&t, i, &theme).to_rgb(), rgb_hsla(Rgb { r, g, b }).to_rgb(), "Index {i}");

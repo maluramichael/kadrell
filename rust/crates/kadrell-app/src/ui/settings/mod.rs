@@ -141,10 +141,12 @@ impl Shell {
     }
 
     fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        store::seed(cx, self.state.settings.clone());
         let dialog = cx.new(|cx| SettingsDialog::new(window, cx));
         dialog.update(cx, |d, cx| d.dev_setup(window, cx));
         cx.subscribe_in(&dialog, window, |this, _, ev: &SettingsEvent, window, cx| match ev {
             SettingsEvent::Close => this.close_settings(window, cx),
+            SettingsEvent::Changed => this.settings_changed(cx),
         })
         .detach();
         self.settings = Some(dialog);
@@ -154,7 +156,14 @@ impl Shell {
     /// Schließt den Dialog; der Fokus geht zurück an das Terminal der gewählten Session.
     fn close_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.settings = None;
-        let (g, s) = self.selected;
-        self.select(g, s, window, cx);
+        self.sync(window, cx);
+    }
+}
+
+impl Shell {
+    /// Übernimmt die Kopie des Dialogs in den echten Zustand und das Profil.
+    fn settings_changed(&mut self, cx: &mut Context<Self>) {
+        let new = store::snapshot(cx);
+        self.state.apply_settings(new);
     }
 }

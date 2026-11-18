@@ -76,7 +76,7 @@ impl LayoutMode {
         }
     }
 
-    fn key(self) -> &'static str {
+    pub fn key(self) -> &'static str {
         match self {
             LayoutMode::Grid => "grid",
             LayoutMode::Main => "main",
@@ -481,13 +481,26 @@ fn tiles(shell: &Shell, frames: &[Rect], cx: &mut Context<Shell>) -> Vec<AnyElem
     let stacked = shell.layout.mode == LayoutMode::Stack && visible.len() > 1;
     let mut out = Vec::new();
     for (i, &(g, s)) in visible.iter().enumerate() {
-        let focused = (g, s) == shell.selected;
+        let focused = Some((g, s)) == shell.selected;
         let body = !stacked || focused;
         let group: &Group = &shell.groups[g];
         let el = tile::tile(group, &group.sessions[s], style, focused, body, cx);
         out.push(placed(frames[i], g, s, el, cx));
     }
     out
+}
+
+/// Leere Arbeitsfläche: noch keine Session.
+fn empty_hint(t: &crate::theme::Theme) -> impl IntoElement + use<> {
+    let key = if cfg!(target_os = "macos") { "⌘N" } else { "Strg+N" };
+    div()
+        .absolute()
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_color(t.muted)
+        .child(format!("Noch keine Session. {key} startet eine neue, Strg+P sucht."))
 }
 
 fn on_move(this: &mut Shell, ev: &MouseMoveEvent, cx: &mut Context<Shell>) {
@@ -507,7 +520,7 @@ fn on_move(this: &mut Shell, ev: &MouseMoveEvent, cx: &mut Context<Shell>) {
 pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::Div> {
     let t = theme(cx);
     let visible_n = shell.visible().len();
-    let active = shell.visible().iter().position(|id| *id == shell.selected).unwrap_or(0);
+    let active = shell.selected.and_then(|sel| shell.visible().iter().position(|id| *id == sel)).unwrap_or(0);
     let (frames, dividers) = shell.layout.plan(visible_n, active);
     shell.layout.frames = frames.clone();
     let mut area = div()
@@ -519,7 +532,8 @@ pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::D
         .overflow_hidden()
         .bg(t.bg)
         .child(measure(shell.layout.measured.clone(), cx.entity_id()))
-        .children(tiles(shell, &frames, cx));
+        .children(tiles(shell, &frames, cx))
+        .children((visible_n == 0).then(|| empty_hint(&t)));
     for (i, d) in dividers.iter().enumerate() {
         area = area.child(grip(d, i, cx));
     }

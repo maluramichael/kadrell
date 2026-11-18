@@ -56,6 +56,7 @@ pub enum PaletteEvent {
     Close,
     Session(Id),
     Group(usize),
+    MoveFocused(usize),
     Layout(LayoutMode),
     Menu(Box<dyn gpui::Action>),
     /// Zeile in einem Terminal anzeigen (Gridzeile, Suchbegriff).
@@ -211,6 +212,7 @@ impl Palette {
             Run::Menu(action) => cx.emit(PaletteEvent::Menu(action.boxed_clone())),
             Run::Layout(mode) => cx.emit(PaletteEvent::Layout(*mode)),
             Run::Group(g) => cx.emit(PaletteEvent::Group(*g)),
+            Run::MoveFocused(g) => cx.emit(PaletteEvent::MoveFocused(*g)),
             Run::Mode(mode) => self.set_input(mode.prefix(), window, cx),
             Run::Unwired => {}
         }
