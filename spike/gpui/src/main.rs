@@ -24,6 +24,7 @@ pub struct Shell {
     groups: Vec<Group>,
     selected: (usize, usize),
     clock: String,
+    overlay: Option<gpui::Entity<ui::new_session::NewSession>>,
 }
 
 /// Start-Session für Screenshots ohne Eingabe: `KADRELL_SPIKE_SESSION=1,0` (Gruppe, Session), sonst die erste.
@@ -44,10 +45,11 @@ fn now_hhmm() -> String {
 
 impl Shell {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let mut shell = Shell { groups: mock_groups(), selected: (0, 0), clock: now_hhmm() };
+        let mut shell = Shell { groups: mock_groups(), selected: (0, 0), clock: now_hhmm(), overlay: None };
         let (g, s) = start_session(&shell.groups);
         shell.select(g, s, window, cx);
         shell.start_clock(cx);
+        shell.open_overlay_from_env(window, cx);
         shell
     }
 
@@ -141,6 +143,10 @@ impl Shell {
     }
 
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.overlay_shortcut(ev, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         let m = ev.keystroke.modifiers;
         // Strg+Alt ist AltGr unter Windows und gehört dem Terminal.
         if !m.alt || m.control || m.platform || m.shift {
@@ -187,6 +193,7 @@ impl Render for Shell {
                     .child(ui::tile::tile_area(tile, ui::tile::TileStyle::for_count(1))),
             )
             .child(ui::footer::footer(cx))
+            .children(self.overlay.clone())
     }
 }
 
@@ -212,8 +219,10 @@ fn main() {
     terminal::strip_inherited_env();
     application().run(|cx: &mut App| {
         fonts::load(cx);
+        ui::text_input::bind_keys(cx);
+        ui::new_session::bind_keys(cx);
         cx.set_global(ThemeGlobal(start_theme()));
-        let bounds = Bounds::centered(None, size(px(1400.), px(900.)), cx);
+        let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(titlebar_options()),
