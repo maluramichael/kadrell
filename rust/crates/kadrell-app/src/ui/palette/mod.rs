@@ -22,7 +22,6 @@ use gpui::{
 use kadrell_term::TerminalPane;
 
 use self::history::HistoryProvider;
-pub use self::model::relative_de;
 pub use self::history::{HistoryStore, provider as history_provider};
 pub use self::resume::{HistoryAction, Known, Pick, decide as decide_history, problem_title};
 pub use self::model::{Command, Run};

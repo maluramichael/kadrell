@@ -10,6 +10,7 @@ pub mod stats;
 pub mod launch;
 pub mod mapping;
 mod tiles;
+mod titles;
 mod workspace;
 
 use std::collections::{HashMap, HashSet};
@@ -60,6 +61,8 @@ pub struct AppState {
     pub models: kadrell_models::LocalModels,
     /// Hintergrundarbeit vor dem Start von Pi- und Remote-Kacheln (`agents`).
     prep: agents::Preparations,
+    /// Lokaler Sessiontitel (`titles`).
+    titles: titles::Titles,
     pub registry: Arc<Mutex<SessionRegistry>>,
     pub attention: AttentionTracker<ProfileAttention>,
     tiles: HashMap<String, Tile>,
@@ -117,6 +120,7 @@ impl AppState {
             endpoint,
             models,
             prep: Default::default(),
+            titles: Default::default(),
             registry,
             attention,
             tiles: HashMap::new(),
@@ -424,6 +428,7 @@ impl AppState {
 
     /// Kopiert den Live-Zustand des Registers in die Sessions des Kerns und gleicht die Marke „neu“ ab.
     pub fn apply_registry(&mut self, change: Change) {
+        self.apply_titles();
         let records = self.registry.lock().unwrap_or_else(PoisonError::into_inner).sessions.clone();
         let mut stored = false;
         for r in &records {
@@ -444,6 +449,7 @@ impl AppState {
         if let Some(change) = change {
             self.apply_registry(change);
         }
+        self.note_title(key);
     }
 
     /// Marke „neu“, Klang und Fokus-Hook nach jeder Änderung. Klang und Benachrichtigung bleiben Aufgabe der Plattform.
