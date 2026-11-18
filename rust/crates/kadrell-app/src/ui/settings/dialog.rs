@@ -2,6 +2,7 @@
 //! Schieberegler, Kürzel-Aufnahme. Gezeichnet wird in `view.rs`. Jede Änderung geht sofort in die Einstellungen
 //! (`store`), der Dialog hält keinen eigenen Entwurf außer dem Wert eines Reglers, der erst beim Loslassen gilt.
 
+use kadrell_i18n::trd;
 use std::collections::HashMap;
 
 use gpui::{
@@ -78,7 +79,7 @@ pub struct SettingsDialog {
 impl SettingsDialog {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         super::bind_keys(cx);
-        let filter_input = cx.new(|cx| TextInput::new("Filtern …", cx).compact());
+        let filter_input = cx.new(|cx| TextInput::new(&trd!("Filtern …"), cx).compact());
         let filter_sub = cx.subscribe(&filter_input, |this, input, _: &TextInputEvent, cx| {
             this.filter.query = input.read(cx).text().to_string();
             cx.notify();

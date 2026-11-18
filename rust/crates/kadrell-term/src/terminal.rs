@@ -600,8 +600,8 @@ impl Render for TerminalPane {
         let entity = cx.entity();
         let theme = cx.global::<TermThemeGlobal>().0;
         let search = self.search.as_ref().map(|s| {
-            let found = if s.query.is_empty() || s.hit.is_some() { "" } else { "  keine Treffer" };
-            format!("Suche: {}▏{found}   Enter weiter · Esc schließen", s.query)
+            let found = if s.query.is_empty() || s.hit.is_some() { String::new() } else { format!("  {}", kadrell_i18n::trd!("keine Treffer")) };
+            kadrell_i18n::trd!("Suche: %@▏%@   Enter weiter · Esc schließen", &s.query, &found)
         });
         div()
             .id("terminal")

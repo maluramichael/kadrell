@@ -3,6 +3,7 @@
 //! dieselbe Zuordnung wie in der Shell (`secondary`): Strg steht für ⌘, Alt für ⌥, Umschalt für ⇧, die Win-Taste
 //! für ⌃. Die Zuordnung steht nur hier, `Platform` macht beide Seiten auf jedem Rechner testbar.
 
+use crate::lang::{Modifier, modifier_name};
 use kadrell_core::Settings;
 use kadrell_core::hotkeys::{self, Hotkey, HotkeyAction, mods};
 
@@ -27,9 +28,11 @@ pub fn format(h: &Hotkey, platform: Platform) -> String {
 
 fn format_windows(h: &Hotkey) -> String {
     let mut parts: Vec<String> = Vec::new();
-    for (flag, name) in [(mods::COMMAND, "Strg"), (mods::CONTROL, "Win"), (mods::OPTION, "Alt"), (mods::SHIFT, "Umschalt")] {
+    let lang = kadrell_i18n::global().lang();
+    let named = [(mods::COMMAND, Modifier::Ctrl), (mods::CONTROL, Modifier::Win), (mods::OPTION, Modifier::Alt), (mods::SHIFT, Modifier::Shift)];
+    for (flag, modifier) in named {
         if h.has(flag) {
-            parts.push(name.to_string());
+            parts.push(modifier_name(modifier, lang).to_string());
         }
     }
     parts.push(h.key.to_uppercase());

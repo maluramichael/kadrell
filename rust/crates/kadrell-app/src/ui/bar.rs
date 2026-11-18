@@ -1,6 +1,7 @@
 //! Obere Leiste (Tasten links, Nutzung und Status rechts) und unter Windows die eigene Titelzeile darüber
 //! (Menüs links, Titel in der Mitte, Fensterknöpfe rechts). Auf macOS liefert das System die Titelleiste.
 
+use kadrell_i18n::trd;
 use std::rc::Rc;
 
 use gpui::{
@@ -79,7 +80,7 @@ fn right_side(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<
     let running = Pill::new("running", format!("{} RUNNING  {clock}", ctl.running))
         .kind(PillKind::Dark)
         .dot(Status::Running.color(&t));
-    let waiting = (ctl.waiting > 0).then(|| Pill::new("waiting", format!("wartet {}", ctl.waiting)).dot(Status::Waiting.color(&t)));
+    let waiting = (ctl.waiting > 0).then(|| Pill::new("waiting", trd!("%@ wartet", ctl.waiting)).dot(Status::Waiting.color(&t)));
     div()
         .flex()
         .flex_none()

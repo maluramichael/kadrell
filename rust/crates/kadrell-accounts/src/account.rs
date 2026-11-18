@@ -403,7 +403,7 @@ impl AccountService {
         if self.state.accounts.is_empty() {
             return vec![LimitSource {
                 id: NO_ACCOUNT_ID.into(),
-                title: lang.current_account().into(),
+                title: lang.current_account(),
                 detail: String::new(),
                 kinds: LimitKind::ALL.to_vec(),
                 current: None,

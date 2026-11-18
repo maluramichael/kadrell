@@ -38,7 +38,7 @@ fn vars_of_inline(inline: &ast::InlineExpression<&str>, out: &mut BTreeSet<Strin
     }
 }
 
-fn vars_of_pattern(pattern: &ast::Pattern<&str>, out: &mut BTreeSet<String>) {
+pub(crate) fn vars_of_pattern(pattern: &ast::Pattern<&str>, out: &mut BTreeSet<String>) {
     for el in &pattern.elements {
         if let ast::PatternElement::Placeable { expression } = el {
             vars_of_expression(expression, out);

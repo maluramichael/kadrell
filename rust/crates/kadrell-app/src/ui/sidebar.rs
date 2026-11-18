@@ -1,6 +1,7 @@
 //! Linke Seitenleiste im Stil des klassischen Baums der Mac-App: Gruppenzeile mit Pfad darunter, Sessions
 //! ohne Einrückung, Auswahlbalken in Gruppenfarbe, Zeilenfläche in `bg` mit Umriss in `fg`.
 
+use kadrell_i18n::trd;
 use gpui::{
     Context, Div, FontWeight, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement, Stateful,
     StatefulInteractiveElement, Styled, div, px,
@@ -136,7 +137,7 @@ fn new_badge(status: Status, t: &Theme) -> impl IntoElement + use<> {
         .text_color(t.pill_text_on(face))
         .text_size(px(10.))
         .font_weight(FontWeight::BOLD)
-        .child("neu")
+        .child(trd!("neu"))
 }
 
 fn session_face(session: &Session, selected: bool, t: &Theme) -> Div {

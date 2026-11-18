@@ -1,0 +1,39 @@
+//! Zusatztexte der Rust-App (deutscher Quelltext -> Nachrichten-Id), von Hand gepflegt, sortiert nach Quelltext
+//! (Binärsuche). Die Texte stehen in `locales/{de,en}/extra.ftl`. Was in den xcstrings der Mac-App steht, gehört
+//! nicht hierher, sondern in `catalog.rs` (Konverter).
+
+#[rustfmt::skip]
+pub static KEYS: &[(&str, &str)] = &[
+    ("%lld Git-Repos unter ~ gefunden", "x-git-repos-unter-gefunden-d4f3"),
+    ("Di.", "x-di-212f"),
+    ("Do.", "x-do-86a9"),
+    ("Farbschema wechseln", "x-farbschema-wechseln-4c95"),
+    ("Fr.", "x-fr-3edb"),
+    ("Gruppe umbenennen", "x-gruppe-umbenennen-8e4a"),
+    ("Herz entfernen", "x-herz-entfernen-2421"),
+    ("Herz setzen (bleibt auch leer)", "x-herz-setzen-bleibt-auch-leer-39d6"),
+    ("Im Explorer zeigen", "x-im-explorer-zeigen-21e3"),
+    ("Kachel zoomen", "x-kachel-zoomen-1673"),
+    ("Kein Ordner gefunden. ⌘O wählt im %@.", "x-kein-ordner-gefunden-o-waehlt-im-eb27"),
+    ("Mi.", "x-mi-1aa0"),
+    ("Minimieren", "x-minimieren-092c"),
+    ("Mo.", "x-mo-bd26"),
+    ("Noch keine Session. ⌘N startet eine neue, ⌘P sucht.", "x-noch-keine-session-n-startet-eine-ne-b3f9"),
+    ("Nächste Session", "x-naechste-session-9a67"),
+    ("Nächstes Layout", "x-naechstes-layout-ab9f"),
+    ("Sa.", "x-sa-1ed2"),
+    ("So.", "x-so-335c"),
+    ("Suche: %@▏%@   Enter weiter · Esc schließen", "x-suche-enter-weiter-esc-schliessen-4f0a"),
+    ("Verschieben nach: %@", "x-verschieben-nach-dc9b"),
+    ("Vorherige Session", "x-vorherige-session-feba"),
+    ("keine Treffer", "x-keine-treffer-0b48"),
+    ("vor %lld J.", "x-vor-j-3006"),
+    ("vor %lld Min.", "x-vor-min-f328"),
+    ("vor %lld Mon.", "x-vor-mon-8f9a"),
+    ("vor %lld Std.", "x-vor-std-0b2d"),
+    ("vor %lld Tg.", "x-vor-tg-da71"),
+    ("vor %lld Wo.", "x-vor-wo-ee20"),
+    ("⏎ starten · Tab ergänzt · ⌘O %@ · Ordner hineinziehen", "x-starten-tab-ergaenzt-o-ordner-hinein-097b"),
+    ("⏎ übernehmen · Esc schließen", "x-uebernehmen-esc-schliessen-2a9b"),
+    ("🌐  Sprache des Systems", "x-sprache-des-systems-e0a8"),
+];

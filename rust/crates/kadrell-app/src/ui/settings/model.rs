@@ -8,6 +8,7 @@ use kadrell_core::Settings;
 use kadrell_core::hotkeys::HotkeyAction;
 
 use super::filter::Filter;
+use crate::lang::tx;
 
 /// Schreibt einen Wert in die Einstellungen.
 pub type Setter<T> = Rc<dyn Fn(&mut Settings, T)>;
@@ -63,7 +64,7 @@ pub struct Btn {
 
 impl Btn {
     pub fn text(label: &str, msg: Msg) -> Btn {
-        Btn { label: label.to_string(), icon: None, msg, destructive: false }
+        Btn { label: tx(label), icon: None, msg, destructive: false }
     }
 
     pub fn icon(icon: Icon, msg: Msg) -> Btn {
@@ -104,7 +105,8 @@ pub struct Row {
 
 impl Row {
     pub fn new(id: &str, title: &str, control: Control) -> Row {
-        Row { id: id.to_string(), title: title.to_string(), control, search: vec![title.to_string()] }
+        let title = tx(title);
+        Row { id: id.to_string(), title: title.clone(), control, search: vec![title] }
     }
 
     /// Zeile ohne eigenen Suchtext.

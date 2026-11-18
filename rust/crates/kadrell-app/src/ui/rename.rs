@@ -6,6 +6,7 @@ use gpui::{
     Styled, Window, actions, div, prelude::*, px,
 };
 
+use kadrell_i18n::trd;
 use super::chrome::h_seam;
 use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
 use super::text_input::TextInput;
@@ -43,7 +44,7 @@ pub struct Rename {
 
 impl Rename {
     pub fn new(target: Target, heading: &str, current: &str, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = cx.new(|cx| TextInput::new("Name", cx));
+        let input = cx.new(|cx| TextInput::new(&trd!("Name"), cx));
         input.update(cx, |i, cx| i.set_text(current, window, cx));
         let focus = input.read(cx).focus.clone();
         focus.focus(window, cx);
@@ -59,7 +60,7 @@ impl Rename {
 impl Render for Rename {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let foot = dialog_foot("⏎ übernehmen · Esc schließen", "Übernehmen ⏎", &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let foot = dialog_foot(trd!("⏎ übernehmen · Esc schließen"), format!("{} ⏎", trd!("Übernehmen")), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
         let dialog = overlay_width(dialog_frame(&t), 420.)
             .key_context(CONTEXT)
             .text_color(t.fg)
@@ -88,10 +89,10 @@ impl Shell {
             return;
         }
         let (heading, current) = match &target {
-            Target::Session(key) => ("Session umbenennen", self.state.session(key).map(|s| s.title()).unwrap_or_default()),
-            Target::Group(id) => ("Gruppe umbenennen", self.state.store.groups.group(id).map(|g| g.name.clone()).unwrap_or_default()),
+            Target::Session(key) => (trd!("Session umbenennen"), self.state.session(key).map(|s| s.title()).unwrap_or_default()),
+            Target::Group(id) => (trd!("Gruppe umbenennen"), self.state.store.groups.group(id).map(|g| g.name.clone()).unwrap_or_default()),
         };
-        let dialog = cx.new(|cx| Rename::new(target, heading, &current, window, cx));
+        let dialog = cx.new(|cx| Rename::new(target, &heading, &current, window, cx));
         cx.subscribe_in(&dialog, window, |this, _, ev: &RenameEvent, window, cx| {
             this.rename = None;
             if let RenameEvent::Apply(target, name) = ev {

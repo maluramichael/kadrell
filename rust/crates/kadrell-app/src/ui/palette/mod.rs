@@ -7,6 +7,7 @@ mod history;
 mod model;
 mod shell;
 
+use kadrell_i18n::trd;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -89,8 +90,8 @@ impl Palette {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let hint = "Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, # alle Claude-Sessions )";
-        let input = cx.new(|cx| TextInput::new(hint, cx));
+        let hint = trd!("Session, Gruppe, Pfad suchen …  ( > Kommandos, / in allen Terminals, # alle Claude-Sessions, @ Remote )");
+        let input = cx.new(|cx| TextInput::new(&hint, cx));
         let typing = cx.subscribe(&input, |this, _, _: &TextInputEvent, cx| this.on_typed(cx));
         let commands = model::build_commands(&snapshot);
         let mut this = Self {
@@ -278,7 +279,7 @@ impl Palette {
 
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let rows: Vec<_> = self.items.iter().enumerate().map(|(i, it)| self.row(i, it, t, cx)).collect();
-        let empty = self.items.is_empty().then(|| div().px(px(16.)).py(px(14.)).text_color(t.muted).child("Keine Treffer"));
+        let empty = self.items.is_empty().then(|| div().px(px(16.)).py(px(14.)).text_color(t.muted).child(trd!("Keine Treffer")));
         div()
             .id("palette-list")
             .flex()
@@ -307,7 +308,7 @@ fn foot(t: &Theme) -> impl IntoElement + use<> {
                 .py(px(9.))
                 .text_size(px(11.))
                 .text_color(t.muted)
-                .child("↑↓ wählen · ⏎ öffnen · Esc schließen"),
+                .child(trd!("↑↓ wählen · ⏎ öffnen · Esc schließen")),
         )
 }
 

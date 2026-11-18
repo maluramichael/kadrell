@@ -7,6 +7,7 @@ use gpui::{
     Styled, Window, div, px,
 };
 
+use kadrell_i18n::trd;
 use super::overlay::raised;
 use super::rename::Target;
 use super::theme;
@@ -51,38 +52,38 @@ impl Shell {
     pub fn session_menu_items(&self, key: &str) -> Vec<Item> {
         let mut items = Vec::new();
         if self.state.run(key) == Run::Running {
-            items.push(entry("Stoppen", Cmd::Stop(key.into())));
+            items.push(entry(&trd!("Stoppen"), Cmd::Stop(key.into())));
         } else {
-            items.push(entry("Fortsetzen", Cmd::Resume(key.into())));
+            items.push(entry(&trd!("Fortsetzen"), Cmd::Resume(key.into())));
         }
-        items.push(entry("Umbenennen", Cmd::Rename(Target::Session(key.into()))));
+        items.push(entry(&trd!("Umbenennen"), Cmd::Rename(Target::Session(key.into()))));
         items.push(Item::Separator);
-        items.push(entry("Nur diese zeigen", Cmd::ShowOnly(key.into())));
+        items.push(entry(&trd!("Nur diese zeigen"), Cmd::ShowOnly(key.into())));
         if self.state.selected.len() > 1 && self.state.selected.iter().any(|k| k == key) {
-            items.push(entry("Aus Ansicht nehmen", Cmd::HideFromView(key.into())));
+            items.push(entry(&trd!("Aus Ansicht nehmen"), Cmd::HideFromView(key.into())));
         }
         let own = self.state.store.groups.group_for_session(key).map(|g| g.id.clone());
         let others = self.state.store.groups.groups.iter().filter(|g| Some(&g.id) != own.as_ref());
-        let moves: Vec<Item> = others.map(|g| entry(&format!("Verschieben nach: {}", g.name), Cmd::MoveTo { key: key.into(), group: g.id.clone() })).collect();
+        let moves: Vec<Item> = others.map(|g| entry(&trd!("Verschieben nach: %@", &g.name), Cmd::MoveTo { key: key.into(), group: g.id.clone() })).collect();
         if !moves.is_empty() {
             items.push(Item::Separator);
             items.extend(moves);
         }
         items.push(Item::Separator);
         if let Some(s) = self.state.session(key) {
-            items.push(entry("Pfad kopieren", Cmd::CopyPath(s.cwd.clone())));
+            items.push(entry(&trd!("Pfad kopieren"), Cmd::CopyPath(s.cwd.clone())));
         }
-        items.push(entry("Entfernen", Cmd::Remove(key.into())));
+        items.push(entry(&trd!("Entfernen"), Cmd::Remove(key.into())));
         items
     }
 
     pub fn group_menu_items(&self, id: &str) -> Vec<Item> {
         let favorite = self.state.store.groups.group(id).is_some_and(|g| g.favorite);
         vec![
-            entry("Umbenennen", Cmd::Rename(Target::Group(id.into()))),
-            entry(if favorite { "Herz entfernen" } else { "Herz setzen (bleibt auch leer)" }, Cmd::ToggleFavorite(id.into())),
+            entry(&trd!("Umbenennen"), Cmd::Rename(Target::Group(id.into()))),
+            entry(&if favorite { trd!("Herz entfernen") } else { trd!("Herz setzen (bleibt auch leer)") }, Cmd::ToggleFavorite(id.into())),
             Item::Separator,
-            entry("Gruppe schließen", Cmd::CloseGroup(id.into())),
+            entry(&trd!("Gruppe schließen"), Cmd::CloseGroup(id.into())),
         ]
     }
 

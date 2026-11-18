@@ -1,6 +1,8 @@
 //! Kacheln der Arbeitsfläche: reine Layout-Mathematik (Port von `app/Kadrell/Workspace/Tiling.swift`),
 //! Auswahlmodell (wie `WorkspaceView`) und die Ansicht, die die Kacheln absolut platziert.
 
+use kadrell_i18n::trd;
+use crate::lang::tx;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -492,7 +494,6 @@ fn tiles(shell: &Shell, frames: &[Rect], cx: &mut Context<Shell>) -> Vec<AnyElem
 
 /// Leere Arbeitsfläche: noch keine Session.
 fn empty_hint(t: &crate::theme::Theme) -> impl IntoElement + use<> {
-    let key = if cfg!(target_os = "macos") { "⌘N" } else { "Strg+N" };
     div()
         .absolute()
         .size_full()
@@ -500,7 +501,7 @@ fn empty_hint(t: &crate::theme::Theme) -> impl IntoElement + use<> {
         .items_center()
         .justify_center()
         .text_color(t.muted)
-        .child(format!("Noch keine Session. {key} startet eine neue, Strg+P sucht."))
+        .child(tx(&trd!("Noch keine Session. ⌘N startet eine neue, ⌘P sucht.")))
 }
 
 fn on_move(this: &mut Shell, ev: &MouseMoveEvent, cx: &mut Context<Shell>) {

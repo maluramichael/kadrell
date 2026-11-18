@@ -2,6 +2,8 @@
 //! Ordner der Gruppen plus Git-Repos unter `~/development` (Hintergrund-Scan); getippt wird per Wortsuche oder als
 //! Pfadkürzel (`~/d/p/kad`). Dazu die Anbindung an `Shell` (Öffnen, Schließen, Session anlegen).
 
+use kadrell_i18n::trd;
+use crate::lang::{file_manager, tx};
 use std::collections::{HashMap, HashSet};
 
 use gpui::{
@@ -70,7 +72,7 @@ fn folder_name(path: &str) -> String {
 
 impl NewSession {
     pub fn new(groups: &[Group], query: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = cx.new(|cx| TextInput::new("Projekt suchen oder Pfad tippen (~/d/p/kad)", cx));
+        let input = cx.new(|cx| TextInput::new(&trd!("Projekt suchen oder Pfad tippen (~/d/p/kad)"), cx));
         let typing = cx.subscribe(&input, |this, _, _: &TextInputEvent, cx| this.refilter(cx));
         let mut known = HashMap::new();
         let mut base = Vec::new();
@@ -185,9 +187,9 @@ impl NewSession {
 
     fn status_line(&self, t: &Theme) -> Option<gpui::Div> {
         let text = if self.scanning {
-            "Durchsuche Git-Repos unter ~ …".to_string()
+            trd!("Suche Git-Repos unter ~ …")
         } else {
-            format!("{} Git-Repos unter ~ gefunden", self.repo_count)
+            trd!("%lld Git-Repos unter ~ gefunden", self.repo_count)
         };
         let line = div().flex_none().px(px(16.)).pt(px(8.)).pb(px(2.)).text_size(px(10.)).text_color(t.muted);
         Some(line.child(text))
@@ -197,7 +199,7 @@ impl NewSession {
         let on = i == self.selected;
         let path = e.path.clone();
         let outline = if on { t.fg } else { gpui::transparent_black() };
-        let right = if e.sessions > 0 { format!("{} Sessions", e.sessions) } else { String::new() };
+        let right = if e.sessions > 0 { trd!("%lld Sessions", e.sessions) } else { String::new() };
         let inner = div()
             .flex()
             .items_center()
@@ -241,7 +243,7 @@ impl NewSession {
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let rows: Vec<_> = self.shown.iter().enumerate().map(|(i, e)| self.row(i, e, t, cx)).collect();
         let empty = self.shown.is_empty().then(|| {
-            div().px(px(16.)).py(px(16.)).text_color(t.muted).child(format!("Kein Ordner gefunden. {}+O wählt im Explorer.", mod_name()))
+            div().px(px(16.)).py(px(16.)).text_color(t.muted).child(tx(&trd!("Kein Ordner gefunden. ⌘O wählt im %@.", file_manager())))
         });
         div()
             .id("ns-list")
@@ -257,10 +259,6 @@ impl NewSession {
     }
 }
 
-fn mod_name() -> &'static str {
-    if cfg!(target_os = "macos") { "⌘" } else { "Strg" }
-}
-
 fn starts_with_line(t: &Theme) -> impl IntoElement + use<> {
     div()
         .flex()
@@ -271,15 +269,15 @@ fn starts_with_line(t: &Theme) -> impl IntoElement + use<> {
         .py(px(6.))
         .text_size(px(10.5))
         .text_color(t.muted)
-        .child("Startet mit: sonnet · bypassPermissions · high")
-        .child(div().id("ns-change").cursor_pointer().text_color(t.accent).hover(|s| s.underline()).child("ändern"))
+        .child(trd!("Startet mit: %@", "sonnet · bypassPermissions · high"))
+        .child(div().id("ns-change").cursor_pointer().text_color(t.accent).hover(|s| s.underline()).child(trd!("ändern")))
 }
 
 impl Render for NewSession {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let hint = format!("⏎ starten · Tab ergänzt · {}+O Explorer · Ordner hineinziehen", mod_name());
-        let foot = dialog_foot(hint, "Starten ⏎", &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let hint = tx(&trd!("⏎ starten · Tab ergänzt · ⌘O %@ · Ordner hineinziehen", file_manager()));
+        let foot = dialog_foot(hint, format!("{} ⏎", trd!("Starten")), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
         let dialog = overlay_height(overlay_width(dialog_frame(&t), 560.), 600.)
             .key_context(CONTEXT)
             .text_color(t.fg)
@@ -288,7 +286,7 @@ impl Render for NewSession {
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::complete))
             .on_action(cx.listener(|_, _: &Cancel, _, cx| cx.emit(NewSessionEvent::Close)))
-            .child(dialog_title("NEUE SESSION", &t))
+            .child(dialog_title(trd!("NEUE SESSION"), &t))
             .child(div().flex_none().p(px(14.)).child(self.input.clone()))
             .child(h_seam(&t))
             .child(self.list(&t, cx))

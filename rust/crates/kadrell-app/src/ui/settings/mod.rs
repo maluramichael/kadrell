@@ -164,6 +164,10 @@ impl Shell {
     /// Übernimmt die Kopie des Dialogs in den echten Zustand und das Profil.
     fn settings_changed(&mut self, cx: &mut Context<Self>) {
         let new = store::snapshot(cx);
+        let language_changed = crate::lang::apply(&new);
         self.state.apply_settings(new);
+        if language_changed {
+            cx.notify(); // zeichnet neu, `sync_language` baut Menüs und Ansicht
+        }
     }
 }
