@@ -185,7 +185,7 @@ impl AgentPick {
         let on = i == self.state.selected;
         let s = crate::ui::overlay::scale();
         // Name 12, Detail 11 gedämpft rechts; Auswahl als Instrument-Zeile (Fläche `bg`, 1,5-pt-Umriss in `fg`, kein Ring).
-        let inner = selected_row(div().flex().items_center().gap(px(10. * s)).size_full().px(px(8.5 * s)), on, t)
+        let inner = selected_row(div().flex().items_center().gap(px(10. * s)).size_full().px(px(10. * s)), on, t)
             .child(div().flex_none().text_size(px(12. * s)).text_color(t.fg).child(o.kind.display_name()))
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_align(gpui::TextAlign::Right).text_size(px(11. * s)).text_color(t.muted).child(o.detail.clone()));
         let kind = o.kind;

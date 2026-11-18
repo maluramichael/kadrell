@@ -348,7 +348,6 @@ impl Palette {
     /// 6/1 pt sind schon abgezogen): Punkt bei y 13, Titel bei y 7, Zusatzzeile bei y 24, rechts Gruppe bei y 8.
     fn row(&self, i: usize, item: &Item, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let on = i == self.selected;
-        let outline = if on { t.fg } else { gpui::transparent_black() };
         let text = div()
             .flex()
             .flex_col()
@@ -364,12 +363,13 @@ impl Palette {
             .items_start()
             .gap(px(10.))
             .size_full()
-            .pl(px(8.5 + 16. * f32::from(item.indent)))
-            .pr(px(8.5))
+            .relative()
+            .pt(px(1.5))
+            .pl(px(10. + 16. * f32::from(item.indent)))
+            .pr(px(10.))
             .rounded(px(6.))
-            .border(px(1.5))
-            .border_color(outline)
-            .when(on, |d| d.bg(t.bg))
+            // Umriss als Overlay innen an der Fläche (`rowHighlight`), ohne Layoutwirkung.
+            .when(on, |d| d.bg(t.bg).child(overlay::ring_inside(t.fg, 6., 1.5)))
             .children(self.dot(item, t).map(|d| d.mt(px(10.5))))
             .child(text)
             .children(right);
@@ -413,6 +413,9 @@ impl Palette {
             .min_h_0()
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
+            // Die Tabelle sitzt im Inset-Stil von macOS: 16 pt seitlich, 10 pt oben und unten.
+            .px(px(16.))
+            .py(px(10.))
             .children(empty)
             .children(rows)
     }

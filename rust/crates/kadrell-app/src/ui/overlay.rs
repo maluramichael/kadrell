@@ -239,8 +239,11 @@ pub fn backdrop_full(on_close: impl Fn(&MouseDownEvent, &mut Window, &mut App) +
         .flex_col()
         .pl(px(f.left))
         .pr(px(f.left))
-        .pt(px(a.inset()))
-        .pb(px(a.inset()))
+        // Oben beginnt die Fläche 1 pt unter dem Rand (an Swift gemessen: Ring bei inset + 1 unter der Titelleiste).
+        .pt(px(a.inset() + 1.))
+        // Unten bleibt der feste Schatten frei: `raisedSurface` hängt `shadowDepth` an die Fläche, der Ring endet also
+        // `inset + shadowDepth` über dem Fensterrand.
+        .pb(px(a.inset() + SHADOW_DEPTH * a.scale))
         .bg(dim());
     if super::overlay_anim::leaving() {
         // Fährt hinaus: keine Klicks mehr im Dialog, sie gehen ans Hauptfenster (`ignoresMouseEvents`).
@@ -264,11 +267,17 @@ fn drop_shadow(t: &Theme) -> BoxShadow {
     }
 }
 
+/// Ring ohne Layoutwirkung: liegt absolut im Elternelement, `width` breit nach innen, Radius außen (Swift zeichnet Ringe
+/// und Feldränder als Overlay in den Rahmen, `Instrument.ring`).
+pub fn ring_inside(color: Hsla, radius: f32, width: f32) -> Div {
+    border_px(div().absolute().top_0().left_0().right_0().bottom_0().rounded(px(radius.max(0.))), width).border_color(color)
+}
+
 /// Fugenring: außen eine dunkle, direkt innen eine helle Haarlinie (`Instrument.seamRing`), ohne Auswirkung auf das
-/// Layout (liegt absolut im Rahmen).
-pub fn inner_ring(t: &Theme, radius: f32) -> Div {
-    let h = hairline();
-    border_px(div().absolute().top_0().left_0().right_0().bottom_0().rounded(px((radius - h).max(0.))), h).border_color(seam_light(t))
+/// Layout (liegt absolut im Rahmen, Elternelement ohne eigenen Rand).
+pub fn seam_ring_overlay(t: &Theme, radius: f32) -> Div {
+    let h = seam();
+    ring_inside(seam_dark(t), radius, h).child(ring_inside(seam_light(t), radius - h, h))
 }
 
 /// Erhabene Dialogfläche mit festem Schatten nach unten und geschlossenem Fugenring (außen dunkel, innen hell). Bewusst
@@ -276,20 +285,19 @@ pub fn inner_ring(t: &Theme, radius: f32) -> Div {
 pub fn dialog_frame(t: &Theme) -> Div {
     let a = area();
     let radius = DIALOG_RADIUS;
-    border_px(div(), a.hairline())
+    div()
         .relative()
         .flex()
         .flex_col()
         .max_h(px((a.max_height() - SHADOW_DEPTH * a.scale).max(0.)))
         .rounded(px(radius))
         .bg(raised(t))
-        .border_color(seam_dark(t))
         .shadow(vec![drop_shadow(t)])
         .text_size(px(12. * a.scale))
         .line_height(gpui::relative(LINE_HEIGHT))
         .text_color(t.fg)
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .child(inner_ring(t, radius))
+        .child(seam_ring_overlay(t, radius))
 }
 
 /// Fensterfüllende Dialogfläche (`Placement.fullWindow`): füllt, was `backdrop_full` ihr lässt.
@@ -297,10 +305,18 @@ pub fn full_window_frame(t: &Theme) -> Div {
     dialog_frame(t).flex_1().min_h_0().max_h_full()
 }
 
+/// Zeilenhöhe von SwiftUI-`Text` in Schrift `size` (Punkte): `LINE_HEIGHT` mal Schrift, auf ganze Punkte abgerundet
+/// (gemessen: 11 pt gibt 14 pt, nicht 14,52). Für die 11-pt-Zeilen der Dialoge (Titel, Hinweise); GPUI rundet die
+/// gemessene Höhe sonst auf das nächste Gerätepixel auf und die Dialoge werden zu hoch.
+pub fn line_px(size: f32) -> f32 {
+    let s = scale().max(0.01);
+    (size / s * LINE_HEIGHT + 1e-3).floor() * s
+}
+
 /// Titelzeile in Versalien (`dialogTitle()`): gesperrt, gedämpft, links, Rand 16, oben 12. Der Text kommt in Versalien an.
 pub fn dialog_title(text: impl Into<SharedString>, t: &Theme) -> Div {
     let s = scale();
-    div().flex().flex_none().w_full().px(px(16. * s)).pt(px(12. * s)).child(instrument::caps_label(&text.into(), false, t.muted))
+    div().flex().flex_none().w_full().px(px(16. * s)).pt(px(12. * s)).line_height(px(line_px(11. * s))).child(instrument::caps_label(&text.into(), false, t.muted))
 }
 
 /// Taste im Instrument-Look in der Rolle Primär (Akzent): Kante als Dicke, darauf die Kappe.

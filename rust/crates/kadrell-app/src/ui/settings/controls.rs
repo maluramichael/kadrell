@@ -13,7 +13,7 @@ use gpui::{
 
 use super::model::Icon;
 use crate::theme::Theme;
-use crate::ui::chrome::{h_seam, seam_dark, seam_light};
+use crate::ui::chrome::{h_seam, seam_dark};
 use crate::ui::instrument::{self, KEY_RADIUS, KeyRole, OUTLINE_WIDTH, RING_WIDTH, section_label};
 use crate::ui::overlay::{SHADOW_DEPTH, border_px, hairline, raised, scale, shadow_color};
 
@@ -26,11 +26,10 @@ pub fn measure(geometry: &Geometry, key: String) -> impl IntoElement + use<> {
     canvas(move |bounds, _, _| sink.borrow_mut().insert(key.clone(), bounds), |_, _, _, _| ()).absolute().size_full()
 }
 
-/// Fläche mit Fugenring: außen eine dunkle, innen eine helle Haarlinie (`Instrument.seamRing`).
+/// Fläche mit Fugenring: außen eine dunkle, innen eine helle Haarlinie als Overlay (`Instrument.seamRing`), ohne
+/// Layoutwirkung.
 pub fn seam_ring(t: &Theme, radius: f32, fill: Hsla, inner: Div) -> Div {
-    let h = hairline();
-    let inner = border_px(inner.flex_1().min_w_0().rounded(px(radius - h)), h).border_color(seam_light(t));
-    border_px(div().flex().flex_col().rounded(px(radius)), h).border_color(seam_dark(t)).bg(fill).child(inner)
+    div().relative().flex().flex_col().rounded(px(radius)).bg(fill).child(crate::ui::overlay::seam_ring_overlay(t, radius)).child(inner.flex_1().min_w_0())
 }
 
 // MARK: Abschnitt und Tabelle
@@ -40,7 +39,7 @@ pub fn section_heading(title: &str, note: &str, t: &Theme) -> Div {
     // Gesperrt wie `sectionTitle()`: bold, Akzent-Textfarbe, Sperrung 0,8.
     let label = section_label(&title.to_uppercase(), t);
     let note = (!note.is_empty()).then(|| div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(11.)).text_color(t.muted).child(note.to_string()));
-    div().flex().items_baseline().gap(px(8.)).px(px(16.)).pt(px(14.)).pb(px(6.)).child(label).children(note)
+    div().flex().items_baseline().gap(px(8.)).px(px(16.)).pt(px(14.)).pb(px(6.)).line_height(px(crate::ui::overlay::line_px(11.))).child(label).children(note)
 }
 
 /// Zwischentitel („Navigation“): Versalien in Fließtext-Gewicht, gedämpft.
@@ -79,15 +78,12 @@ pub fn wide_row(content: Div) -> Div {
 
 /// Eingelassenes Feld, 22 px hoch. Mit Fokus trägt es 2 px Akzentring statt der Fuge.
 pub fn well(t: &Theme, focused: bool, content: Div) -> Div {
-    // Abstand 8 seitlich wie `instrumentWell`; der Rand (Fuge oder Akzentring) liegt innerhalb davon.
+    // Abstand 8 seitlich wie `instrumentWell`; der Rand (Fuge oder Akzentring) liegt als Overlay darüber.
     let s = scale();
-    let edge = if focused { RING_WIDTH * s } else { hairline() * 2. };
-    let content = content.flex().items_center().h_full().px(px(8. * s - edge)).text_size(px(12. * s));
-    if focused {
-        let inner = content.rounded(px((KEY_RADIUS - RING_WIDTH).max(0.) * s));
-        return border_px(div().h(px(22. * s)).flex().flex_col().rounded(px(KEY_RADIUS * s)), edge).border_color(t.accent).bg(t.well()).child(inner.flex_1());
-    }
-    seam_ring(t, KEY_RADIUS * s, t.well(), content).h(px(22. * s))
+    let r = KEY_RADIUS * s;
+    let content = content.flex().items_center().h_full().px(px(8. * s)).text_size(px(12. * s));
+    let ring = if focused { crate::ui::overlay::ring_inside(t.accent, r, RING_WIDTH * s) } else { crate::ui::overlay::seam_ring_overlay(t, r) };
+    div().relative().flex().flex_col().h(px(22. * s)).rounded(px(r)).bg(t.well()).child(ring).child(content.flex_1())
 }
 
 /// Dropdown-Fläche: Text links, Auf-Ab-Pfeile rechts.

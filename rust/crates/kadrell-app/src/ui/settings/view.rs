@@ -265,7 +265,7 @@ impl SettingsDialog {
     fn header(t: &Theme) -> Div {
         let label = crate::ui::instrument::kerned(&trd!("EINSTELLUNGEN"), 11., crate::ui::instrument::LABEL_KERN, false, t.muted);
         let version = div().text_size(px(11.)).text_color(t.muted).child(format!("Kadrell v{VERSION}"));
-        div().flex().flex_none().items_center().justify_between().px(px(16.)).pt(px(12.)).child(label).child(version)
+        div().flex().flex_none().items_center().justify_between().px(px(16.)).pt(px(12.)).line_height(px(crate::ui::overlay::line_px(11.))).child(label).child(version)
     }
 
     fn filter_bar(&self, hits: usize, t: &Theme) -> Option<Div> {

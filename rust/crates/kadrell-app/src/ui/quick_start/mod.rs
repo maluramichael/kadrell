@@ -272,7 +272,7 @@ impl QuickStart {
     // --- Zeichnen ---
 
     fn idea_phase(&self, t: &Theme) -> gpui::Div {
-        let line = div().flex().items_center().gap(px(6.)).text_size(px(11.)).text_color(t.muted);
+        let line = div().flex().items_center().gap(px(6.)).text_size(px(11.)).line_height(px(crate::ui::overlay::line_px(11.))).text_color(t.muted);
         let status = if self.flow.phase == Phase::Thinking {
             let text = model::thinking_text(self.flow.model_name.as_deref().unwrap_or_default());
             line.child(spinner::spinner(t.muted)).child(div().overflow_hidden().whitespace_nowrap().child(text))

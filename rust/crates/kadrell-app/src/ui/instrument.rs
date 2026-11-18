@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use gpui::{
     App, ClickEvent, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Stateful,
-    StatefulInteractiveElement, Styled, Window, div, px, transparent_black,
+    StatefulInteractiveElement, Styled, Window, div, px,
 };
 
 use super::chrome::{key_edge, seam_dark, seam_light};
@@ -151,12 +151,30 @@ pub fn caps_label(text: &str, bold: bool, color: Hsla) -> Div {
 /// Leerzeichen werden geschützt, damit sie nicht zusammenfallen. Ein Umbruch oder eine Auslassung gibt es nicht,
 /// wer kürzt, tut das vorher (`kerned_width`).
 pub fn kerned(text: &str, size: f32, kern: f32, bold: bool, color: Hsla) -> Div {
-    let cells = text.chars().map(|c| {
+    let widths = kerned_cells(text.chars().count(), size * super::tree_rules::MONO_ADVANCE + kern, overlay::hairline());
+    let cells = text.chars().zip(widths).map(|(c, w)| {
         let shown = if c == ' ' { '\u{a0}' } else { c };
-        div().flex_none().mr(px(kern)).child(shown.to_string())
+        div().flex_none().w(px(w)).child(shown.to_string())
     });
     let label = div().flex().flex_none().whitespace_nowrap().text_size(px(size)).text_color(color).children(cells);
     if bold { label.font_weight(FontWeight::BOLD) } else { label }
+}
+
+/// Zellbreiten für `count` Zeichen mit Schritt `step` (Zeichenbreite plus Sperrung) in Punkten, auf Gerätepixel `px_pt`
+/// (ein Pixel in Punkten) gerastet. GPUI rundet jede Zelle einzeln auf ganze Gerätepixel (Textbreite hoch, Abstand
+/// kaufmännisch), das machte jede Zelle am Mac 0,6 pt zu breit. Hier summieren sich die Zellen auf `count * step`: die
+/// Kante jeder Zelle liegt auf dem Gerätepixel, das ihrer wahren Position am nächsten ist.
+pub fn kerned_cells(count: usize, step: f32, px_pt: f32) -> Vec<f32> {
+    let px_pt = px_pt.max(0.01);
+    let mut prev = 0.;
+    (1..=count)
+        .map(|i| {
+            let edge = ((i as f32 * step) / px_pt).round() * px_pt;
+            let w = edge - prev;
+            prev = edge;
+            w
+        })
+        .collect()
 }
 
 /// Breite von `text` mit Sperrung: die Breite ohne Sperrung plus `kern` je Zeichen.
@@ -183,21 +201,16 @@ pub fn focus_ring(t: &Theme) -> Div {
 pub fn well_frame(content: impl IntoElement, focused: bool, t: &Theme) -> Div {
     let s = scale();
     let r = KEY_RADIUS * s;
-    let edge = if focused { RING_WIDTH * s } else { hairline() };
-    let color = if focused { t.accent } else { seam_dark(t) };
-    let mut el = border_px(div().relative().flex().items_center().rounded(px(r)).bg(overlay::well(t)), edge).border_color(color);
-    if !focused {
-        el = el.child(overlay::inner_ring(t, KEY_RADIUS * s));
-    }
-    el.px(px(8. * s - edge)).py(px(3. * s - edge)).child(content)
+    let edge = if focused { overlay::ring_inside(t.accent, r, RING_WIDTH * s) } else { overlay::seam_ring_overlay(t, r) };
+    div().relative().flex().items_center().rounded(px(r)).bg(overlay::well(t)).px(px(8. * s)).py(px(3. * s)).child(edge).child(content)
 }
 
 /// Zeilenauswahl in Dialoglisten (`instrumentRow(selected:)`): Fläche `bg` mit 1,5 pt Umriss in `fg`, ohne Akzentring.
-/// Ungewählt bleibt der Umriss unsichtbar, damit sich nichts verschiebt.
+/// Der Umriss liegt als Overlay innen an der Fläche und verschiebt nichts.
 pub fn selected_row(row: Div, selected: bool, t: &Theme) -> Div {
     let s = scale();
-    let row = border_px(row.rounded(px(ROW_RADIUS * s)), OUTLINE_WIDTH * s);
-    if selected { row.bg(t.bg).border_color(t.fg) } else { row.border_color(transparent_black()) }
+    let row = row.relative().rounded(px(ROW_RADIUS * s));
+    if selected { row.bg(t.bg).child(overlay::ring_inside(t.fg, ROW_RADIUS * s, OUTLINE_WIDTH * s)) } else { row }
 }
 
 /// Radius der einen runden Ecke, auf die kürzere Kante der Fläche begrenzt (`topLeftRounded`).
@@ -233,12 +246,19 @@ pub fn rim(content: impl IntoElement, top: bool, radius: f32, t: &Theme) -> Div 
 pub fn group_frame(content: impl IntoElement, t: &Theme) -> Div {
     let s = scale();
     let r = GROUP_RADIUS * s;
-    border_px(div().relative().rounded(px(r)).bg(t.bg), hairline()).border_color(seam_dark(t)).child(overlay::inner_ring(t, r)).child(content)
+    div().relative().rounded(px(r)).bg(t.bg).child(overlay::seam_ring_overlay(t, r)).child(content)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kerned_cells_add_up_to_the_exact_width() {
+        let cells = kerned_cells(17, 11. * 0.6 + 0.8, 0.5);
+        assert!((cells.iter().sum::<f32>() - 17. * 7.4).abs() <= 0.25);
+        assert!(cells.iter().all(|w| *w == 7. || *w == 7.5));
+    }
 
     #[test]
     fn key_style_follows_the_role() {
