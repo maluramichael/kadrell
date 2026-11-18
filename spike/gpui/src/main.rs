@@ -1,6 +1,7 @@
 //! GPUI-Spike: Kadrell-Fenster mit Baum, Leiste und Terminal-Kachel.
 #![allow(dead_code)] // Spike: nicht alle Theme-Felder werden benutzt.
 
+mod boxdraw;
 mod terminal;
 mod theme;
 mod ui;
@@ -180,6 +181,7 @@ impl Render for Shell {
 }
 
 fn main() {
+    terminal::strip_inherited_env();
     application().run(|cx: &mut App| {
         cx.set_global(ThemeGlobal(Theme::mocha()));
         let bounds = Bounds::centered(None, size(px(1400.), px(900.)), cx);
