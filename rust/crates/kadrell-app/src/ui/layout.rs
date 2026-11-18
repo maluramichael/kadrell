@@ -16,6 +16,7 @@ use gpui::{
 use super::groups::drag::DragTile;
 use super::model::Group;
 use super::tile;
+use super::tile_edge::{self, Ghosts};
 use super::tile_look;
 use super::{module_corner, stack_row};
 use super::theme;
@@ -147,6 +148,8 @@ pub struct LayoutState {
     fading: std::collections::HashSet<String>,
     /// Das erste Zeichnen ist vorbei: ab jetzt blenden neue Kacheln ein, beim allerersten Laden erscheint alles sofort.
     loaded: bool,
+    /// Kacheln, deren Session verschwunden ist, blenden mit dem letzten Rahmen aus (0,15 s).
+    pub ghosts: Ghosts,
 }
 
 impl LayoutState {
@@ -170,7 +173,15 @@ impl LayoutState {
             seen: Default::default(),
             fading: Default::default(),
             loaded: false,
+            ghosts: Ghosts::default(),
         }
+    }
+
+    /// Ragt eine Kachel seitlich unter die Modul-Ecke (Scrollen)? Die Kachel in der Ecke selbst rundet sich und zählt nicht.
+    pub fn under_corner(&self, scale: f32) -> bool {
+        let at_corner = |f: &Rect| tile_look::corner_radius((f.x, f.y), self.gap, scale) > 0.;
+        let others: Vec<Rect> = self.frames.iter().filter(|f| !at_corner(f)).copied().collect();
+        tile_edge::any_under_corner(&others, tile_look::module_radius(scale))
     }
 
     /// Merkt die sichtbaren Kacheln: wer nach dem ersten Laden neu dazukommt, blendet ein.
@@ -462,6 +473,14 @@ fn icon_click(cx: &mut Context<Shell>, key: &str) -> tile::IconClick {
     })
 }
 
+/// Kopfzeile ohne Zeiger aktiviert (Bedienhilfe „Drücken“): die Kachel bekommt den Fokus.
+fn head_click(cx: &mut Context<Shell>, g: usize, s: usize) -> tile::HeadClick {
+    let entity = cx.entity();
+    Rc::new(move |window, app| {
+        entity.update(app, |this, cx| this.focus_tile(g, s, window, cx));
+    })
+}
+
 /// Eine Kachel mit ihrer Lage; neue blenden in 0,18 s ein.
 fn one_tile(shell: &Shell, i: usize, frame: Rect, stacked: bool, cx: &mut Context<Shell>) -> AnyElement {
     let visible = shell.visible();
@@ -478,7 +497,8 @@ fn one_tile(shell: &Shell, i: usize, frame: Rect, stacked: bool, cx: &mut Contex
         row_below: stacked && i + 1 != visible.len(),
     };
     let elsewhere = shell.owners.elsewhere(0, &session.key);
-    let el = tile::cell(&tile::Cell { group, session, marks, geo, body: true, elsewhere, on_icon: Some(icon_click(cx, &session.key)) }, cx);
+    let on_head = head_click(cx, g, s);
+    let el = tile::cell(&tile::Cell { group, session, marks, geo, body: true, elsewhere, on_icon: Some(icon_click(cx, &session.key)), on_head: Some(on_head) }, cx);
     let spot = if stacked { Spot::Body } else { Spot::Tile };
     fade_in(shell, &session.key, placed(frame, g, s, &session.key, spot, el, cx))
 }
@@ -489,6 +509,30 @@ fn fade_in(shell: &Shell, key: &str, el: gpui::Stateful<gpui::Div>) -> AnyElemen
         return el.into_any_element();
     }
     el.with_animation(gpui::ElementId::Name(format!("tile-fade-{key}").into()), Animation::new(Duration::from_millis(180)), |el, delta| el.opacity(delta)).into_any_element()
+}
+
+/// Geisterebene einer entfernten Kachel: Fläche mit dem letzten Rahmen und dunkler Fuge, blendet in 0,15 s aus.
+fn ghost(g: &tile_edge::Ghost, cx: &mut Context<Shell>) -> AnyElement {
+    let t = theme(cx);
+    let a = crate::appearance::current(cx);
+    let r = g.frame;
+    let corner = tile_look::corner_radius((r.x, r.y), a.gap, a.scale);
+    div()
+        .absolute()
+        .left(px(r.x))
+        .top(px(r.y))
+        .w(px(r.w))
+        .h(px(r.h))
+        .rounded_tl(px(tile_edge::clamp_corner(corner, r.w, r.h)))
+        .bg(a.panel_fill(t.bg))
+        .border_1()
+        .border_color(super::chrome::seam_dark(&t))
+        .with_animation(
+            gpui::ElementId::Name(format!("tile-ghost-{}", g.key).into()),
+            Animation::new(tile_edge::FADE_OUT),
+            |el, delta| el.opacity(1. - delta),
+        )
+        .into_any_element()
 }
 
 /// Eine Stack-Zeile mit ihrer Lage.
@@ -575,13 +619,18 @@ pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::D
         let (frames, dividers) = shell.layout.plan(visible.len(), active);
         (tiles(shell, &frames, cx), dividers)
     };
+    let shown: Vec<(String, Rect)> = keys.iter().cloned().zip(shell.layout.frames.iter().copied()).collect();
+    let state = &shell.state;
+    shell.layout.ghosts.update(std::time::Instant::now(), &shown, &|k| state.session(k).is_some());
+    let ghosts: Vec<AnyElement> = shell.layout.ghosts.live().to_vec().iter().map(|g| ghost(g, cx)).collect();
+    let covering = shell.layout.under_corner(a.scale);
     let empty = visible.is_empty().then(|| crate::misc::empty::view(shell, &t, cx));
     // Die Kacheln liegen in einer beschnittenen Fläche, die Ecke darüber ragt 2 px über den Rand hinaus (auf die Fugen).
-    let mut clipped = div().absolute().size_full().overflow_hidden().child(measure_scrolling(shell.layout.measured.clone(), cx.entity())).children(children).children(empty);
+    let mut clipped = div().absolute().size_full().overflow_hidden().child(measure_scrolling(shell.layout.measured.clone(), cx.entity())).children(children).children(ghosts).children(empty);
     for (i, d) in dividers.iter().enumerate() {
         clipped = clipped.child(grip(d, i, cx));
     }
-    let area = div().id("workspace").relative().flex_1().min_w_0().min_h_0().bg(a.panel_fill(t.bg)).child(clipped).child(module_corner::view(&t, &a));
+    let area = div().id("workspace").relative().flex_1().min_w_0().min_h_0().bg(a.panel_fill(t.bg)).child(clipped).child(module_corner::view(&t, &a, covering));
     area.on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| on_move(this, ev, cx)))
         .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.end_drag()))
         .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, _| this.end_drag()))

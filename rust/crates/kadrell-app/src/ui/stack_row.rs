@@ -11,6 +11,7 @@ use super::groups::rows::DragGhost;
 use super::model::{Group, Session};
 use super::theme;
 use super::tile::{IconClick, dot, group_label, text_width};
+use super::tile_edge;
 use super::tile_icons;
 use super::tile_look::{self, Icon};
 use crate::appearance::{Appearance, a11y};
@@ -106,14 +107,9 @@ fn hairline(top: f32, color: gpui::Hsla) -> Div {
     div().absolute().left_0().right_0().top(px(top)).h(px(1.)).bg(color)
 }
 
-/// Rand der eingesetzten Fläche ohne Unterkante: außen dunkel, direkt innen hell; mit `first` auch oben, mit Bogen.
+/// Rand der eingesetzten Fläche ohne Unterkante (`Instrument.rim`): mit `first` auch oben, mit Bogen.
 fn rim(c: &RowCell, t: &Theme) -> Vec<Div> {
-    let side = |inset: f32, color: gpui::Hsla, radius: f32| {
-        let d = div().absolute().left(px(inset)).right(px(inset)).top(px(if c.first { inset } else { 0. })).bottom_0().border_l_1().border_r_1().border_color(color);
-        if c.first { d.border_t_1().rounded_tl(px(radius.max(0.))) } else { d }
-    };
-    let r = c.corner.max(0.);
-    vec![side(0., seam_dark(t), r), side(1., seam_light(t), r - 1.)]
+    tile_edge::rim(c.first, c.corner, c.width, c.height, seam_dark(t), seam_light(t))
 }
 
 fn icon_button(icon: Icon, x: f32, c: &RowCell, t: &Theme, a: &Appearance) -> AnyElement {
