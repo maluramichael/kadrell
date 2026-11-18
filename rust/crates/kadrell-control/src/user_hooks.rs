@@ -108,6 +108,19 @@ pub fn trusted(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// Wartet, bis das Skript seine Ausgabe vollständig geschrieben hat (Datei da und mit Zeilenende), höchstens 30 s.
+    /// Nur auf die Datei zu warten reicht nicht: sie entsteht, bevor der Inhalt drin ist.
+    #[allow(dead_code)]
+    fn wait_for_output(out: &std::path::Path) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while std::time::Instant::now() < deadline {
+            if std::fs::read_to_string(out).is_ok_and(|t| t.ends_with('\n')) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
     use super::*;
     use crate::testing::TempDir;
 
@@ -165,11 +178,7 @@ mod tests {
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
         let fired = fire(dir.path(), HookEvent::SessionNew, &session(), Some("main"), &[("EXTRA".into(), "x".into())]);
         assert_eq!(fired, Fired::Started(script.clone()));
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while !out.exists() && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        wait_for_output(&out);
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "/nonexistent-dir|sid-1|Mein Titel|session-new|key-1|main|x\n");
         // Eine für andere beschreibbare Datei wird nicht gestartet.
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o757)).unwrap();
@@ -184,11 +193,7 @@ mod tests {
         std::fs::write(dir.path().join("session-new.cmd"), format!("@echo off\r\necho %1;%2;%KADRELL_EVENT%;%KADRELL_BRANCH%> \"{}\"\r\n", out.display())).unwrap();
         let fired = fire(dir.path(), HookEvent::SessionNew, &session(), Some("dev"), &[]);
         assert_eq!(fired, Fired::Started(dir.path().join("session-new.cmd")));
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while !out.exists() && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        wait_for_output(&out);
         let text = std::fs::read_to_string(&out).unwrap();
         assert!(text.contains("sid-1") && text.contains("session-new;dev"), "{text}");
     }

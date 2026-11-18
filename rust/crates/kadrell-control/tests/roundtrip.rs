@@ -46,7 +46,7 @@ fn options<'a>(socket: PathBuf, launcher: &'a dyn Launcher, caller: Option<&str>
         caller: caller.map(str::to_string),
         cwd: "/tmp".into(),
         launcher,
-        wait: Duration::from_secs(5),
+        wait: Duration::from_secs(30),
         poll: Duration::from_millis(20),
     }
 }

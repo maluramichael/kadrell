@@ -12,7 +12,7 @@ fn disk_root() -> &'static str {
 fn texts(p: &HostPipe, count: usize) -> Vec<String> {
     (0..count)
         .filter_map(|_| {
-            p.next_of("log", 5.0)
+            p.next_of("log", WAIT)
                 .and_then(|m| m["text"].as_str().map(String::from))
         })
         .collect()
@@ -31,7 +31,7 @@ fn cpu_and_disk_from_lua() {
         end)"#,
         disk_root()
     ));
-    assert!(p.next_of("ready", 3.0).is_some());
+    assert!(p.next_of("ready", WAIT).is_some());
     p.send(json!({"t": "event", "name": "app.ready", "data": {}}));
     assert_eq!(
         texts(&p, 3),
@@ -47,7 +47,7 @@ fn mem_from_lua() {
             kadrell.log("mem " .. tostring(m.total > 0 and m.used <= m.total and m.fraction >= 0 and m.fraction <= 1))
         end)"#,
     );
-    assert!(p.next_of("ready", 3.0).is_some());
+    assert!(p.next_of("ready", WAIT).is_some());
     p.send(json!({"t": "event", "name": "app.ready", "data": {}}));
     assert_eq!(texts(&p, 1), ["mem true"]);
 }
@@ -58,7 +58,7 @@ fn system_outside_handler_fails() {
         "local ok, err = pcall(kadrell.system.cpu)\nkadrell.log(tostring(ok) .. ' ' .. tostring(err):match('only allowed inside handlers') )",
     );
     assert_eq!(
-        p.next_of("log", 3.0)
+        p.next_of("log", WAIT)
             .and_then(|m| m["text"].as_str().map(String::from))
             .as_deref(),
         Some("false only allowed inside handlers")
@@ -71,7 +71,7 @@ fn footer_set_sends_only_the_last_list() {
         r#"kadrell.footer.set({ { id = "a", text = "1" } })
         kadrell.footer.set({ { id = "a", text = "2", bars = { 0.5, 1 } } })"#,
     );
-    let m = p.next_of("footer", 3.0).expect("footer");
+    let m = p.next_of("footer", WAIT).expect("footer");
     assert_eq!(m["items"][0]["text"], "2");
     assert_eq!(m["items"][0]["bars"], json!([0.5, 1]));
     assert!(
@@ -83,7 +83,7 @@ fn footer_set_sends_only_the_last_list() {
 #[test]
 fn footer_clear_sends_null() {
     let (p, _r) = HostPipe::start("kadrell.footer.clear()");
-    assert!(p.next_of("footer", 3.0).expect("footer")["items"].is_null());
+    assert!(p.next_of("footer", WAIT).expect("footer")["items"].is_null());
 }
 
 #[test]
@@ -91,10 +91,10 @@ fn locale_event_updates_before_handlers() {
     let (p, _r) = HostPipe::start(
         r#"kadrell.on("app.locale", function(d) kadrell.log(kadrell.locale .. "/" .. d.locale) end)"#,
     );
-    assert!(p.next_of("ready", 3.0).is_some());
+    assert!(p.next_of("ready", WAIT).is_some());
     p.send(json!({"t": "event", "name": "app.locale", "data": {"locale": "en"}}));
     assert_eq!(
-        p.next_of("log", 3.0)
+        p.next_of("log", WAIT)
             .and_then(|m| m["text"].as_str().map(String::from))
             .as_deref(),
         Some("en/en")
@@ -111,7 +111,7 @@ fn second_cpu_call_is_quick() {
             kadrell.log(tostring(c ~= nil))
         end)"#,
     );
-    assert!(p.next_of("ready", 3.0).is_some());
+    assert!(p.next_of("ready", WAIT).is_some());
     p.send(json!({"t": "event", "name": "app.ready", "data": {}}));
     assert_eq!(texts(&p, 1), ["true"]);
 }

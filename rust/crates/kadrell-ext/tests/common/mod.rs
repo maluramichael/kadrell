@@ -14,6 +14,9 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 #[allow(unused_imports)]
 pub use kadrell_ext::testutil::{TempDir, make_extension, wait_until};
 
+/// Obergrenze für das Warten auf eine erwartete Nachricht oder ein Prozessende (endet sofort, wenn sie da ist).
+pub const WAIT: f64 = kadrell_ext::testutil::MIN_WAIT;
+
 pub const HOST_EXE: &str = env!("CARGO_BIN_EXE_kadrell-ext-host");
 pub const FAKE_EXE: &str = env!("CARGO_BIN_EXE_kadrell-ext-fake");
 
@@ -105,7 +108,7 @@ impl HostPipe {
 
     pub fn expect_ready(&self) {
         assert_eq!(
-            self.next(3.0)
+            self.next(WAIT)
                 .and_then(|m| m["t"].as_str().map(String::from))
                 .as_deref(),
             Some("ready")
@@ -164,7 +167,7 @@ impl HostPipe {
 
     pub fn assert_alive(&self, id: i64) {
         self.send(json!({"t": "ping", "id": id}));
-        let pong = self.next_of("pong", 3.0).expect("pong");
+        let pong = self.next_of("pong", WAIT).expect("pong");
         assert_eq!(pong["id"], id);
     }
 
@@ -213,6 +216,24 @@ pub fn helpers_in(dir: &Path) -> usize {
             cmd.iter().any(|c| c == "ext-host") && cmd.iter().any(|c| c.starts_with(&needle))
         })
         .count()
+}
+
+/// Beendet übrig gebliebene Helfer für Extensions unter `dir` (nur solche mit dessen eindeutigem Temp-Pfad in der
+/// Kommandozeile, nie nach Namen). Fallback, falls ein Test scheitert, bevor der Manager sie abgeräumt hat.
+pub fn kill_helpers_in(dir: &Path) {
+    let mut sys = System::new().expect("sysinfo");
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
+    );
+    let needle = dir.to_string_lossy().to_string();
+    for p in sys.processes().values() {
+        let cmd: Vec<String> = p.cmd().iter().map(|c| c.to_string_lossy().into_owned()).collect();
+        if cmd.iter().any(|c| c == "ext-host") && cmd.iter().any(|c| c.starts_with(&needle)) {
+            p.kill();
+        }
+    }
 }
 
 /// Lebt der Prozess noch?
