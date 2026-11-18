@@ -2646,7 +2646,10 @@ dependencies = [
  "kadrell-ext",
  "kadrell-i18n",
  "kadrell-term",
+ "kadrell-tray",
+ "raw-window-handle",
  "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

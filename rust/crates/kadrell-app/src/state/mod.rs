@@ -73,6 +73,9 @@ pub struct AppState {
     pub window_active: bool,
     /// Letzter Fehler zum Anzeigen (claude fehlt, Start schlägt fehl).
     pub error: Option<String>,
+    /// Wirkungen des Aufmerksamkeits-Trackers (Klang, Benachrichtigung, Hüpfen), die die Plattformschicht noch
+    /// ausführen muss (`take_effects`).
+    pending_effects: Vec<Effect>,
 }
 
 impl AppState {
@@ -110,6 +113,7 @@ impl AppState {
             quit_requested: false,
             window_active: true,
             error: None,
+            pending_effects: Vec::new(),
         };
         state.restore_view();
         state
@@ -417,10 +421,16 @@ impl AppState {
         let (_, effects) = self.attention.update(&input);
         self.attention.prune(&sessions);
         for effect in effects {
-            if let Effect::FireFocusHook(key) = effect {
-                self.fire_hook(HookEvent::SessionFocus, &key);
+            match effect {
+                Effect::FireFocusHook(key) => self.fire_hook(HookEvent::SessionFocus, &key),
+                other => self.pending_effects.push(other),
             }
         }
+    }
+
+    /// Die Wirkungen seit dem letzten Abruf (Klang, Benachrichtigung, Hüpfen), in der Reihenfolge des Trackers.
+    pub fn take_effects(&mut self) -> Vec<Effect> {
+        std::mem::take(&mut self.pending_effects)
     }
 
     // MARK: Eigene Hooks des Nutzers

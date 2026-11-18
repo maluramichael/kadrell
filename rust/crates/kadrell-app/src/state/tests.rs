@@ -328,3 +328,94 @@ fn applied_settings_reach_the_profile_file_without_losing_foreign_keys() {
     assert_eq!(saved.get("foreign.key"), Some(&serde_json::json!(1)));
     assert_eq!(state.settings.claude_model(), "haiku");
 }
+
+// MARK: Tray, Benachrichtigung, Klang und Badge (Regeln in `tray_wire`)
+
+use kadrell_claude::attention::{Effect, Sound as TrackerSound};
+use kadrell_core::settings::{NotificationLevel, SoundLevel};
+use kadrell_tray::model::{Lang, Sound, TrayItem};
+
+use crate::tray_wire::rules::{Action, plan};
+use crate::tray_wire::view;
+
+fn report_status(state: &mut AppState, key: &str, status: &str) {
+    state.report(key, &kadrell_claude::hook::HookReport { state: status.into(), ..Default::default() });
+}
+
+/// Zwei laufende Sessions, `a` gezeigt und im Fokus, `b` nur im Baum; das Fenster ist vorn oder nicht.
+fn two_running(dir: &Dir, window_active: bool) -> (AppState, String, String) {
+    let mut state = state_in(dir);
+    let a = state.new_claude_session(&cwd(dir, "alpha"), None, true);
+    let b = state.new_claude_session(&cwd(dir, "beta"), None, false);
+    start_all(&mut state);
+    state.window_active = window_active;
+    report_status(&mut state, &a, "working");
+    report_status(&mut state, &b, "working");
+    state.take_effects();
+    (state, a, b)
+}
+
+fn actions(state: &mut AppState) -> Vec<Action> {
+    plan(&state.take_effects(), SoundLevel::All, NotificationLevel::All)
+}
+
+#[test]
+fn waiting_session_out_of_sight_notifies_plays_and_counts() {
+    let dir = Dir::new();
+    let (mut state, _a, b) = two_running(&dir, true);
+    report_status(&mut state, &b, "waiting");
+    let todo = actions(&mut state);
+    assert_eq!(todo, [Action::Play(Sound::Waiting), Action::Notify { key: b.clone(), waiting: true }]);
+    let v = view::build(&state, Lang::De, super::now_secs());
+    assert_eq!((v.summary.waiting, v.summary.done, v.summary.working, v.badge), (1, 0, 1, 1));
+    assert_eq!(v.waiting, std::slice::from_ref(&b));
+    assert!(matches!(&v.menu[0], TrayItem::Entry { id, label, .. } if *id == format!("session:{b}") && label.starts_with("beta › ")), "{:?}", v.menu[0]);
+}
+
+#[test]
+fn waiting_session_in_view_of_the_active_window_stays_quiet() {
+    let dir = Dir::new();
+    let (mut state, a, _b) = two_running(&dir, true);
+    report_status(&mut state, &a, "waiting");
+    assert_eq!(actions(&mut state), [], "die Fokus-Kachel im vorderen Fenster sieht man schon");
+    assert_eq!(view::build(&state, Lang::De, 0.0).badge, 1, "wartend zählt trotzdem im Badge");
+}
+
+#[test]
+fn hidden_window_notifies_even_for_the_focused_session() {
+    let dir = Dir::new();
+    let (mut state, a, _b) = two_running(&dir, false);
+    report_status(&mut state, &a, "waiting");
+    let todo = actions(&mut state);
+    assert!(todo.contains(&Action::Notify { key: a.clone(), waiting: true }), "{todo:?}");
+    assert!(todo.contains(&Action::RequestAttention), "{todo:?}");
+    assert!(state.is_unseen(&a));
+}
+
+#[test]
+fn finished_session_follows_the_notification_setting_and_clears_when_seen() {
+    let dir = Dir::new();
+    let (mut state, _a, b) = two_running(&dir, true);
+    report_status(&mut state, &b, "idle");
+    let effects = state.take_effects();
+    assert_eq!(plan(&effects, SoundLevel::All, NotificationLevel::All), [Action::Play(Sound::Done), Action::Notify { key: b.clone(), waiting: false }]);
+    assert_eq!(plan(&effects, SoundLevel::Important, NotificationLevel::Waiting), [Action::Play(Sound::Done)], "fertig meldet nur „wartet und fertig“");
+    assert_eq!(plan(&effects, SoundLevel::Off, NotificationLevel::Off), []);
+    let v = view::build(&state, Lang::En, 0.0);
+    assert_eq!((v.summary.done, v.badge), (1, 1), "fertig und ungesehen: „neu“ und Badge");
+    state.show_only(&b);
+    state.update_attention();
+    let v = view::build(&state, Lang::En, 0.0);
+    assert_eq!((v.summary.done, v.badge), (0, 0), "angesehen: Badge weg");
+}
+
+#[test]
+fn effects_are_handed_over_once_in_tracker_order() {
+    let dir = Dir::new();
+    let (mut state, _a, b) = two_running(&dir, true);
+    report_status(&mut state, &b, "waiting");
+    let effects = state.take_effects();
+    assert!(matches!(effects.first(), Some(Effect::SetBadge(1))), "{effects:?}");
+    assert!(effects.contains(&Effect::Play(TrackerSound::Waiting)));
+    assert!(state.take_effects().is_empty());
+}

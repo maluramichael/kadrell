@@ -106,6 +106,7 @@ impl Shell {
                 focus.focus(window, cx);
             }
         }
+        self.refresh_tray(window, cx);
         cx.notify();
     }
 
@@ -163,7 +164,10 @@ impl Shell {
 
     fn run_job(&mut self, job: Job, window: &mut Window, cx: &mut Context<Self>) {
         let (outcome, reply) = match job {
-            Job::Request { req, peer, reply } => (exec::handle(&mut self.state, &SystemProcessTree, &req, peer), reply),
+            Job::Request { req, peer, reply } => {
+                let outcome = self.window_command(&req, window, cx).unwrap_or_else(|| exec::handle(&mut self.state, &SystemProcessTree, &req, peer));
+                (outcome, reply)
+            }
             Job::Finish { followup, reply } => {
                 exec::finish(&mut self.state, &followup);
                 (Outcome { response: ControlResponse::ok(""), followup: None }, reply)
@@ -210,6 +214,7 @@ impl Shell {
     /// Beim Beenden: Prozesse enden, der Kanal verschwindet, ein Wegwerfprofil räumt sich weg.
     pub(crate) fn shutdown(&mut self) {
         self.state.shutdown_all();
+        self.tray.close();
         self.server = None;
         if !self.state.profile.temporary {
             kadrell_core::profile::mark_quit(&self.state.profile.dir, crate::state::now_secs());
