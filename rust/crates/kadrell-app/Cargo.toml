@@ -21,3 +21,7 @@ serde_json = "1.0.144" # gpui-pre verlangt ^1.0.144, exakter Pin kollidiert
 # Ohne `font-kit` nimmt GPUI auf dem Mac das NoopTextSystem: kein einziger Text.
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-pre-platform = { version = "=0.3.13", features = ["font-kit"] }
+
+# SIGTERM/SIGINT/SIGHUP fangen (Version wie in kadrell-control und rust/Cargo.lock).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"

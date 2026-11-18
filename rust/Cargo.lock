@@ -2645,6 +2645,7 @@ dependencies = [
  "kadrell-core",
  "kadrell-ext",
  "kadrell-term",
+ "libc",
  "serde_json",
 ]
 
