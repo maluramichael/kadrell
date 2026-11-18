@@ -390,7 +390,7 @@ impl ExtensionsDialog {
             info = info.child(div().text_color(t.fg).child(d));
         }
         if let Some(p) = ext.manifest.as_ref().map(|m| m.permissions.clone()).filter(|p| !p.is_empty()) {
-            info = info.child(div().text_size(px(11.)).text_color(t.muted).child(trd!("Rechte: %@", p.join(", "))));
+            info = info.child(div().text_size(px(11.)).line_height(px(13.5)).text_color(t.muted).child(trd!("Rechte: %@", p.join(", "))));
         }
         let face = div()
             .flex()
@@ -618,10 +618,12 @@ fn dot_color(c: ThemeColor, t: &Theme) -> gpui::Hsla {
     status_color(c, t)
 }
 
-/// Schalter wie im Mac-Dialog: Spur in Akzent (an) oder Linie (aus), runder Knopf. Ausgegraut, wenn nicht schaltbar.
+/// Schalter wie im Mac-Dialog (`Toggle` im Stil `.switch`, `.mini`): Spur 36 × 16 in Akzent (an) oder Linie (aus),
+/// flacher Knopf 21 × 13. Ausgegraut, wenn nicht schaltbar.
 fn switch(on: bool, enabled: bool, t: &Theme) -> Div {
-    let knob = div().absolute().top(px(2.)).left(px(if on { 14. } else { 2. })).size(px(12.)).rounded_full().bg(gpui::white());
-    let track = div().relative().flex_none().w(px(28.)).h(px(16.)).rounded_full().bg(if on { t.accent } else { t.line }).cursor_pointer().child(knob);
+    let knob_color = if on { gpui::rgb(0xEAF1FF) } else { gpui::rgb(0xE1E1E4) };
+    let knob = div().absolute().top(px(1.5)).left(px(if on { 13.5 } else { 1.5 })).w(px(21.)).h(px(13.)).rounded_full().bg(knob_color);
+    let track = div().relative().flex_none().w(px(36.)).h(px(16.)).rounded_full().bg(if on { t.accent } else { t.line }).cursor_pointer().child(knob);
     if enabled { track } else { track.opacity(0.4) }
 }
 

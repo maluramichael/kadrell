@@ -73,7 +73,7 @@ impl Pill {
         self
     }
 
-    /// Mindestbreite der Kappe in px (die Umschalttaste der Leiste ist 26 breit).
+    /// Feste Breite der Kappe samt Kante in px (die Umschalttaste der Leiste ist 26 breit).
     pub fn min_width(mut self, w: f32) -> Self {
         self.min_w = Some(w);
         self
@@ -106,7 +106,7 @@ fn dot_el(color: Hsla, a: &Appearance) -> impl IntoElement {
     div().size(px(a.s(7.))).flex_none().rounded_full().bg(color)
 }
 
-/// Taste: Außenmaß 20 px, Kante 1 px, unten 3 px (Kante plus 2 px Tiefe).
+/// Taste: Außenmaß 20 px, Kante 1 px, unten 3 px (Kante plus 2 px Tiefe). Text plus 16 px Breite wie `segment` der Mac-Leiste.
 fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
     let t = theme(cx);
     let a = crate::appearance::current(cx);
@@ -115,7 +115,7 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
         .items_center()
         .gap(px(a.s(5.)))
         .h(px(a.s(16.)))
-        .px(px(a.s(8.)))
+        .px(px(a.s(7.)))
         .rounded(px(a.s(4.)))
         .bg(face)
         .text_color(ink)
@@ -143,7 +143,8 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
         outer = outer.tooltip(super::tooltip::text(tip));
     }
     if let Some(w) = pill.min_w {
-        cap = cap.min_w(px(w - 2.)).justify_center();
+        // Feste Breite samt Kante (Swift: `keyRect(width:)`), der Inhalt sitzt mittig ohne eigenen Rand.
+        cap = cap.w(px(a.s(w - 2.))).px_0().justify_center();
     }
     cap = match pill.icon {
         Some(icon) => cap.child(icon),

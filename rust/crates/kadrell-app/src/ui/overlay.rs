@@ -101,9 +101,11 @@ impl Area {
         Frame { left: ((self.width - width) / 2.).max(0.), top: top.max(0.), width, height }
     }
 
-    /// Ein Gerätepixel in Punkten (`Instrument.hairline`).
+    /// Feinste Linie (`Instrument.hairline`). Swift rechnet `1 / Theme.scale` in den mit `scale` vergrößerten
+    /// Koordinaten, das ist am Mac immer 1 pt (auf Retina 2 Gerätepixel, gemessen an Fugen von Leiste und Dialogen).
+    /// Andere Systeme nehmen ein Gerätepixel.
     pub fn hairline(&self) -> f32 {
-        1. / self.device.max(0.01)
+        if cfg!(target_os = "macos") { 1. } else { 1. / self.device.max(0.01) }
     }
 
     /// Rastet eine Position aufs Gerätepixel ein (`Instrument.snapped`).
@@ -468,9 +470,9 @@ mod tests {
     }
 
     #[test]
-    fn hairline_is_one_device_pixel() {
+    fn hairline_is_one_point_on_mac_and_one_device_pixel_elsewhere() {
         let a = Area { device: 2., ..window(100., 100.) };
-        assert_eq!(a.hairline(), 0.5);
+        assert_eq!(a.hairline(), if cfg!(target_os = "macos") { 1. } else { 0.5 });
         assert_eq!(a.snapped(10.3), 10.5);
         assert_eq!(window(100., 100.).snapped(10.4), 10.);
     }

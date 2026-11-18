@@ -223,7 +223,7 @@ impl Shell {
                 self.show_main_window(window, cx);
                 self.new_session_action(window, cx);
             }
-            ID_QUIT => cx.quit(),
+            ID_QUIT => self.request_quit(window, cx),
             _ => {}
         }
     }

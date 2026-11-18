@@ -202,8 +202,8 @@ fn switch(id: usize, label: String, on: bool, face: Hsla, t: &crate::theme::Them
     if on { pill.kind(PillKind::Active).fill(face) } else { pill.icon(colored(label, t.muted)) }
 }
 
-/// Breite der Pfeiltasten: Glyphe in 12 px fett plus 12 px Rand (Swift: `arrowKey`).
-const ARROW_WIDTH: f32 = 20.;
+/// Breite der Pfeiltasten: Glyphe in 12 px fett (7,2 px) plus 12 px Rand (Swift: `arrowKey`).
+const ARROW_WIDTH: f32 = 19.2;
 
 /// Pfeil der Spaltentasten als Textglyphe „‹“ bzw. „›“, 12 px fett in `color` (Swift: `arrowKey`).
 fn arrow_glyph(glyph: &'static str, color: Hsla) -> impl IntoElement {
@@ -255,13 +255,13 @@ fn left_pills(ctl: &LayoutCtl, t: &crate::theme::Theme) -> impl IntoElement + us
     div().flex().flex_none().items_center().h_full().gap(px(4.)).children(pills)
 }
 
-/// Geschätzte Breite der linken Tasten samt Rand (Schrift 10 px fett, dicktengleich: 6 px je Zeichen, Kappe 18 px mehr).
+/// Geschätzte Breite der linken Tasten samt Rand (Schrift 10 px fett, dicktengleich: 6 px je Zeichen, Kappe 16 px mehr).
 fn left_width(ctl: &LayoutCtl) -> f32 {
     let width = |key: Key| match key {
         Key::Layout => 26.,
         Key::Less | Key::More => ARROW_WIDTH,
         Key::Cols => key_label(key, ctl).chars().count() as f32 * 6. - 14.,
-        other => key_label(other, ctl).chars().count() as f32 * 6. + 18.,
+        other => key_label(other, ctl).chars().count() as f32 * 6. + 16.,
     };
     LEFT_INSET + left_keys(ctl).into_iter().map(|k| width(k) + 4.).sum::<f32>()
 }

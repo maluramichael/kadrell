@@ -256,7 +256,7 @@ fn usage_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
 
 /// Taste der rechten Seite: feuert beim Drücken, Trefferfläche über die ganze Höhe, Tooltip „Label: Wert“.
 fn key_part(id: &'static str, label: String, fill: Option<Hsla>, region: Region, press: &Press, b: &BarCtl, t: &Theme) -> Part {
-    let width = text_width(&label, 10.) + 18. + KEY_GAP;
+    let width = text_width(&label, 10.) + 16. + KEY_GAP;
     let mut pill = Pill::new(id, label);
     match fill {
         Some(f) => pill = pill.fill(f),
@@ -269,7 +269,7 @@ fn key_part(id: &'static str, label: String, fill: Option<Hsla>, region: Region,
 /// Die Update-Taste hat ihren eigenen Klick (`misc::update`), sie feuert beim Loslassen.
 fn update_part(u: &UpdatePill) -> Part {
     let label = trd!("%@ verfügbar", u.version.as_str());
-    let width = text_width(&label, 10.) + 18. + KEY_GAP;
+    let width = text_width(&label, 10.) + 16. + KEY_GAP;
     let h = u.on_click.clone();
     let pill = Pill::new("update", label).tooltip_text(Region::new(trd!("Update verfügbar"), Some(u.version.clone())).tooltip()).on_click(move |e, w, c| h(e, w, c));
     Part { width, el: pill.into_any_element() }

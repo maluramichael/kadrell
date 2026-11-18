@@ -186,7 +186,16 @@ pub fn init(cx: &mut App) {
     let (quit_key, close_key) = if cfg!(target_os = "macos") { ("cmd-q", "cmd-shift-w") } else { ("ctrl-q", "ctrl-shift-w") };
     let new_window_key = if cfg!(target_os = "macos") { "cmd-shift-t" } else { "ctrl-shift-t" };
     cx.bind_keys([KeyBinding::new(quit_key, Quit, None), KeyBinding::new(close_key, CloseWindow, None), KeyBinding::new(new_window_key, NewWindow, None)]);
-    cx.on_action(|_: &Quit, cx| cx.quit());
+    cx.on_action(|_: &Quit, cx| {
+        // Mit laufenden Sessions fragt das Hauptfenster erst nach (`Shell::request_quit`).
+        // `defer`: der Fenster steckt gerade im Dispatch der Aktion und lässt sich dann nicht ein zweites Mal ändern.
+        match cx.windows().into_iter().find_map(|w| w.downcast::<Shell>()) {
+            Some(main) => cx.defer(move |cx| {
+                let _ = main.update(cx, |shell, window, cx| shell.request_quit(window, cx));
+            }),
+            None => cx.quit(),
+        }
+    });
     cx.on_action(|_: &ToggleTheme, cx| Shell::toggle_theme(cx));
     crate::windows::bind_keys(cx);
     set_native_menus(cx);
