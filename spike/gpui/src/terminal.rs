@@ -22,7 +22,7 @@ use gpui::{
     App, Bounds, ClipboardItem, Context, Element, ElementId, ElementInputHandler, Entity,
     EntityInputHandler, FocusHandle, Font, FontStyle, FontWeight, GlobalElementId, Hsla,
     InspectorElementId, IntoElement, KeyDownEvent, Keystroke, LayoutId, MouseButton,
-    MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollWheelEvent, SharedString, Style,
+    MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollEvent, SharedString, Style,
     TextRun, UTF16Selection, UnderlineStyle, Window, div, fill, font, point, prelude::*, px,
     relative, rgb, size,
 };
@@ -197,7 +197,9 @@ impl TerminalPane {
             self.paste(cx);
             true
         } else if is_cmd(ks, "c") {
-            self.copy(cx)
+            // Auch ohne Auswahl verschlucken: Strg+Shift+C soll nie ein Strg+C an den Prozess schicken.
+            self.copy(cx);
+            true
         } else if is_cmd(ks, "f") {
             self.search = Some(Search { query: String::new(), hit: None });
             cx.notify();
@@ -301,7 +303,7 @@ impl TerminalPane {
         cx.notify();
     }
 
-    fn scroll(&mut self, e: &ScrollWheelEvent, _w: &mut Window, cx: &mut Context<Self>) {
+    fn scroll(&mut self, e: &ScrollEvent, _w: &mut Window, cx: &mut Context<Self>) {
         let dy = e.delta.pixel_delta(self.cell.height).y / self.cell.height + self.scroll_rest;
         let lines = dy.trunc() as i32;
         self.scroll_rest = dy.fract();
@@ -328,9 +330,16 @@ impl TerminalPane {
     }
 }
 
+impl gpui::Focusable for TerminalPane {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus.clone()
+    }
+}
+
 impl Render for TerminalPane {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
+        let theme = cx.global::<crate::ThemeGlobal>().0;
         let search = self.search.as_ref().map(|s| {
             let found = if s.query.is_empty() || s.hit.is_some() { "" } else { "  keine Treffer" };
             format!("Suche: {}▏{found}   Enter weiter · Esc schließen", s.query)
@@ -342,7 +351,7 @@ impl Render for TerminalPane {
             .on_key_down(cx.listener(Self::key_down))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
             .on_mouse_move(cx.listener(Self::mouse_move))
-            .on_scroll_wheel(cx.listener(Self::scroll))
+            .on_scroll(cx.listener(Self::scroll))
             .relative()
             .child(TerminalElement { pane: entity })
             .children(search.map(|text| {
@@ -353,8 +362,8 @@ impl Render for TerminalPane {
                     .px_2()
                     .py_1()
                     .rounded(px(5.))
-                    .bg(rgb(0x313244))
-                    .text_color(rgb(0xcdd6f4))
+                    .bg(theme.line)
+                    .text_color(theme.fg)
                     .text_size(px(12.))
                     .child(text)
             }))
@@ -565,26 +574,36 @@ struct TerminalElement {
     pane: Entity<TerminalPane>,
 }
 
-impl IntoElement for TerminalElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 
+/// Zusammenhängende Zellen einer Zeile mit gleichem Stil, ein `shape_line`-Aufruf.
 struct Run {
     col: usize,
+    /// Belegte Zellen (Zeichen mit Breite 1 oder 2, kombinierende Zeichen zählen nicht).
+    cells: usize,
     text: String,
     fg: Hsla,
     bold: bool,
     italic: bool,
     underline: bool,
+    wide: bool,
+}
+
+impl Run {
+    fn continues(&self, col: usize, fg: Hsla, bold: bool, italic: bool, underline: bool) -> bool {
+        !self.wide
+            && self.col + self.cells == col
+            && self.fg == fg
+            && self.bold == bold
+            && self.italic == italic
+            && self.underline == underline
+    }
 }
 
 #[derive(Default)]
 pub struct Frame {
     rects: Vec<(Bounds<Pixels>, Hsla)>,
-    rows: Vec<(usize, Vec<Run>)>,
+    /// Ein Eintrag pro sichtbarer Zeile.
+    rows: Vec<Vec<Run>>,
     cursor: Option<(Bounds<Pixels>, CursorShape)>,
     marked: Option<(Point<Pixels>, String)>,
     bg: Hsla,
@@ -626,7 +645,7 @@ impl Element for TerminalElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Frame {
-        let theme = *cx.global::<crate::ThemeGlobal>().0.as_ref();
+        let theme = cx.global::<crate::ThemeGlobal>().0;
         let font_size = px(FONT_SIZE);
         let base = font(FONT);
         let ts = window.text_system();
@@ -649,7 +668,12 @@ impl Element for TerminalElement {
         let offset = content.display_offset;
         let selection = content.selection;
         let mut frame = Frame { bg: theme.bg, fg: theme.fg, focused, ..Default::default() };
-        let mut row_of: HashMap<usize, Vec<Run>> = HashMap::new();
+        let mut row_of: Vec<Vec<Run>> = (0..lines).map(|_| Vec::new()).collect();
+        // Unter einem gefüllten Block-Cursor steht das Zeichen in Hintergrundfarbe, sonst wäre es unlesbar.
+        let block_cursor = (focused && content.cursor.shape == CursorShape::Block)
+            .then(|| alacritty_terminal::term::point_to_viewport(offset, content.cursor.point))
+            .flatten()
+            .map(|vp| (vp.line, vp.column.0));
 
         for item in content.display_iter {
             let flags = item.flags;
@@ -658,6 +682,9 @@ impl Element for TerminalElement {
             }
             let Some(vp) = alacritty_terminal::term::point_to_viewport(offset, item.point) else { continue };
             let (row, col) = (vp.line, vp.column.0);
+            if row >= lines {
+                continue;
+            }
             let mut fg = color(&term, item.fg, &theme);
             let mut bg = color(&term, item.bg, &theme);
             if flags.contains(Flags::INVERSE) {
@@ -669,6 +696,9 @@ impl Element for TerminalElement {
             let selected = selection.is_some_and(|s| s.contains(item.point));
             if selected {
                 bg = theme.accent.opacity(0.35);
+            }
+            if block_cursor == Some((row, col)) && !selected {
+                fg = theme.bg;
             }
             let wide = flags.contains(Flags::WIDE_CHAR);
             if bg != theme.bg {
@@ -682,26 +712,29 @@ impl Element for TerminalElement {
             let bold = flags.contains(Flags::BOLD);
             let italic = flags.contains(Flags::ITALIC);
             let underline = flags.intersects(Flags::ALL_UNDERLINES);
-            let runs = row_of.entry(row).or_default();
+            let runs = &mut row_of[row];
             let mut text = item.c.to_string();
             if let Some(zw) = item.zerowidth() {
                 text.extend(zw);
             }
             match runs.last_mut() {
-                Some(r)
-                    if !wide
-                        && r.col + r.text.chars().count() == col
-                        && r.fg == fg
-                        && r.bold == bold
-                        && r.italic == italic
-                        && r.underline == underline =>
-                {
-                    r.text.push_str(&text)
+                Some(r) if !wide && r.continues(col, fg, bold, italic, underline) => {
+                    r.text.push_str(&text);
+                    r.cells += 1;
                 }
-                _ => runs.push(Run { col, text, fg, bold, italic, underline }),
+                _ => runs.push(Run {
+                    col,
+                    cells: if wide { 2 } else { 1 },
+                    text,
+                    fg,
+                    bold,
+                    italic,
+                    underline,
+                    wide,
+                }),
             }
         }
-        frame.rows = row_of.into_iter().collect();
+        frame.rows = row_of;
 
         let c = content.cursor;
         if c.shape != CursorShape::Hidden
@@ -747,13 +780,14 @@ impl Element for TerminalElement {
                         Bounds::new(point(b.origin.x, b.origin.y + b.size.height - px(2.)), size(b.size.width, px(2.))),
                         c,
                     ),
-                    (true, _) => fill(b, c.opacity(0.85)),
+                    (true, CursorShape::HollowBlock) => gpui::outline(b, c, gpui::BorderStyle::Solid),
+                    (true, _) => fill(b, c),
                     (false, _) => gpui::outline(b, c.opacity(0.6), gpui::BorderStyle::Solid),
                 };
                 window.paint_quad(quad);
             }
-            for (row, runs) in &frame.rows {
-                let y = origin.y + line_h * *row as f32;
+            for (row, runs) in frame.rows.iter().enumerate() {
+                let y = origin.y + line_h * row as f32;
                 for run in runs {
                     let f = Font {
                         weight: if run.bold { FontWeight::BOLD } else { FontWeight::NORMAL },
@@ -773,7 +807,8 @@ impl Element for TerminalElement {
                         strikethrough: None,
                     };
                     let text: SharedString = run.text.clone().into();
-                    let line = window.text_system().shape_line(text, font_size, &[tr], Some(cell_w));
+                    let advance = if run.wide { cell_w * 2. } else { cell_w };
+                    let line = window.text_system().shape_line(text, font_size, &[tr], Some(advance));
                     let at = point(origin.x + cell_w * run.col as f32, y);
                     let _ = line.paint(at, line_h, gpui::TextAlign::Left, None, window, cx);
                 }
@@ -840,5 +875,74 @@ fn indexed(term: &Term<Listener>, i: usize, t: &Theme) -> Hsla {
             let v = (8 + (i - 232) * 10) as u8;
             rgb_hsla(Rgb { r: v, g: v, b: v })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn keys(s: &'static str, app_cursor: bool) -> Option<Vec<u8>> {
+        key_bytes(&Keystroke::parse(s).expect("gültiger Tastenname"), app_cursor)
+    }
+
+    #[test]
+    fn enter_und_ctrl_c() {
+        assert_eq!(keys("enter", false), Some(b"\r".to_vec()));
+        assert_eq!(keys("ctrl-c", false), Some(vec![0x03]));
+        assert_eq!(keys("ctrl-a", false), Some(vec![0x01]));
+        assert_eq!(keys("ctrl-space", false), Some(vec![0x00]));
+    }
+
+    #[test]
+    fn pfeile_normal_und_app_cursor() {
+        assert_eq!(keys("up", false), Some(b"\x1b[A".to_vec()));
+        assert_eq!(keys("up", true), Some(b"\x1bOA".to_vec()));
+        assert_eq!(keys("left", false), Some(b"\x1b[D".to_vec()));
+        // Mit Modifikator immer die CSI-Form
+        assert_eq!(keys("ctrl-right", true), Some(b"\x1b[1;5C".to_vec()));
+        assert_eq!(keys("delete", false), Some(b"\x1b[3~".to_vec()));
+    }
+
+    #[test]
+    fn shift_tab() {
+        assert_eq!(keys("shift-tab", false), Some(b"\x1b[Z".to_vec()));
+        assert_eq!(keys("tab", false), Some(b"\t".to_vec()));
+    }
+
+    #[test]
+    fn altgr_und_text_gehen_an_den_input_handler() {
+        // AltGr+Q (@) meldet Windows als Strg+Alt: kein Steuercode, der Text kommt über WM_CHAR.
+        assert_eq!(keys("ctrl-alt-q", false), None);
+        assert_eq!(keys("a", false), None);
+        assert_eq!(keys("shift-a", false), None);
+    }
+
+    #[test]
+    fn plattform_taste_bleibt_der_app() {
+        assert_eq!(keys("cmd-c", false), None);
+    }
+
+    #[test]
+    fn regex_wird_maskiert() {
+        assert_eq!(escape_regex("a.b*c"), "a\\.b\\*c");
+        assert_eq!(escape_regex("(x)[y]"), "\\(x\\)\\[y\\]");
+        assert_eq!(escape_regex("plain äö"), "plain äö");
+        assert!(RegexSearch::new(&escape_regex("a+b|c{1}$^#&-~")).is_ok());
+    }
+
+    #[test]
+    fn farbwuerfel_ecken() {
+        let t = Term::new(Config::default(), &Grid { cols: 4, lines: 2 }, Listener(async_channel::unbounded().0));
+        let theme = crate::theme::Theme::mocha();
+        let same = |i: usize, r: u8, g: u8, b: u8| {
+            assert_eq!(indexed(&t, i, &theme).to_rgb(), rgb_hsla(Rgb { r, g, b }).to_rgb(), "Index {i}");
+        };
+        same(16, 0, 0, 0);
+        same(231, 255, 255, 255);
+        same(196, 255, 0, 0);
+        same(232, 8, 8, 8);
+        same(255, 238, 238, 238);
+        assert_eq!(indexed(&t, 1, &theme).to_rgb(), theme.ansi[1].to_rgb());
     }
 }
