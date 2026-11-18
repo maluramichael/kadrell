@@ -20,8 +20,12 @@ pub const WAITING_NOTIFICATIONS: [&str; 3] = ["permission_prompt", "agent_needs_
 /// `--settings <json>` für den Start jedes Claude-Prozesses: die Hooks gelten nur für diesen Prozess, ohne Eintrag in
 /// `~/.claude/settings.json`. serde_json sortiert die Schlüssel (BTreeMap), wie `.sortedKeys` in Swift.
 pub fn launch_args() -> Vec<String> {
-    let hook = json!({"type": "command", "command": COMMAND, "timeout": 5});
-    let hooks: Map<String, Value> = EVENTS.iter().map(|e| (e.to_string(), json!([{"matcher": "", "hooks": [hook.clone()]}]))).collect();
+    // Schlüssel in sortierter Reihenfolge einfügen wie Swift (.sortedKeys): gpui-pre schaltet im Workspace
+    // serde_json/preserve_order ein, dann gilt die Einfügereihenfolge.
+    let hook = json!({"command": COMMAND, "timeout": 5, "type": "command"});
+    let mut events = EVENTS.to_vec();
+    events.sort_unstable();
+    let hooks: Map<String, Value> = events.iter().map(|e| (e.to_string(), json!([{"hooks": [hook.clone()], "matcher": ""}]))).collect();
     vec!["--settings".into(), json!({ "hooks": hooks }).to_string()]
 }
 

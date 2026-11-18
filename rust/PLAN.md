@@ -17,6 +17,9 @@ Spike `spike/gpui`. Nichts davon geht nach `master`, kein Release, keine Version
 - Testen an der laufenden App nur mit `--profile tmp`, nie mit dem Standardprofil.
 - Vor dem Commit im Workspace `rust/`: `cargo clippy --workspace --all-targets -- -D warnings` und
   `cargo test --workspace` ohne Fehler. Commit nur eigene Pfade (`git add <pfade>`).
+- Abhängigkeiten: keine exakten Pins (`=x.y.z`) unter dem Stand in `rust/Cargo.lock` (gpui-pre braucht z. B.
+  serde_json ≥ 1.0.144). gpui-pre schaltet `serde_json/preserve_order` für den ganzen Workspace ein: nie auf eine
+  sortierte Reihenfolge von `serde_json::Map` verlassen, sortierte Ausgabe ausdrücklich bauen.
 - Was sich auf Windows nicht bauen lässt (macOS-Zweige), sauber hinter `cfg(target_os = "macos")` halten; die Mac-Session
   `gpui-mac` auf ragasa baut und testet es (Inbox `~/tmp/kadrell-spike/inbox/`).
 
@@ -71,4 +74,6 @@ Fortschritt und Abweichungen trägt die Planungs-Session hier unten ein.
 
 ## Fortschritt
 
-- Welle 0 gestartet.
+- Welle 0 fertig: Workspace, `kadrell-core` (113 Tests), Spike nach `kadrell-term`/`kadrell-app`/`kadrell`.
+- Welle 1: `kadrell-accounts` (102), `kadrell-claude` (163) gemergt; `ext`, `control` laufen. Welle 2 gestartet mit
+  Einstellungen-Dialog und Suche (⌘P).
