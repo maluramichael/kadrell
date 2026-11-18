@@ -216,6 +216,7 @@ impl Focusable for ExtraWindow {
 
 impl Render for ExtraWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::appearance::window_color::ensure_native(window);
         let t = crate::ui::theme(cx);
         let a = crate::appearance::current(cx);
         self.layout.gap = a.gap;
