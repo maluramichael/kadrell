@@ -282,6 +282,9 @@ impl Shell {
 
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
+        if std::env::var_os("KADRELL_SPIKE_KEYLOG").is_some() {
+            eprintln!("key {:?}", ev.keystroke);
+        }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
         if self.overlay.is_some() && m.alt {
             cx.stop_propagation();

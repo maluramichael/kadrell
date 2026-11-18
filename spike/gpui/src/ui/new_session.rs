@@ -312,6 +312,9 @@ impl Focusable for NewSession {
 impl Shell {
     /// Aktion `NewSession` (Menü, Strg+N / ⌘N): öffnet den Dialog, solange er nicht schon offen ist.
     pub fn new_session_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if std::env::var_os("KADRELL_SPIKE_KEYLOG").is_some() {
+            eprintln!("action NewSession (Dialog offen: {})", self.overlay.is_some());
+        }
         if self.overlay.is_none() {
             self.open_new_session(None, window, cx);
         }
