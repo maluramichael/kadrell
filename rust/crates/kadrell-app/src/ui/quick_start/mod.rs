@@ -379,8 +379,7 @@ impl Shell {
 
     /// Neue Claude-Session im Ordner des Projekts mit der Idee als erstem Prompt (`startNewSession(…, prompt:)`).
     fn start_quick(&mut self, path: &str, group_id: Option<&str>, prompt: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let home = self.state.home();
-        FolderIndex::load(&self.state.profile.dir.to_string_lossy().replace('\\', "/"), &home).record_use(path, now_secs());
+        // Der Ordner wird beim Anlegen der Session als benutzt gemerkt (`AppState::add_session`).
         let prompt = (!prompt.is_empty()).then(|| prompt.to_string());
         self.start_new_session(group_id.map(String::from), path, prompt, window, cx);
     }

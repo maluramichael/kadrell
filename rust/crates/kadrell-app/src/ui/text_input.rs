@@ -87,6 +87,8 @@ pub struct TextInput {
     compact: bool,
     /// Suchfeld der Palette: 15 pt, nie ein Akzentring (die Mulde bleibt beim Tippen unverändert).
     large: bool,
+    /// Pfadfeld wie `PathField` der Mac-App: Innenabstand 8, 13 pt, eingefügte Zeilenumbrüche fallen weg.
+    path: bool,
 }
 
 // Zeichengrenzen und Wortsprünge als reine Funktionen, damit sie testbar bleiben.
@@ -134,6 +136,7 @@ impl TextInput {
             selecting: false,
             compact: false,
             large: false,
+            path: false,
         }
     }
 
@@ -146,6 +149,12 @@ impl TextInput {
     /// Schmale Variante für Tabellenzeilen.
     pub fn compact(mut self) -> Self {
         self.compact = true;
+        self
+    }
+
+    /// Pfadfeld des Dialogs „Neue Session“: Innenabstand 8 statt 6, Zeilenumbrüche beim Einfügen weglassen.
+    pub fn path_field(mut self) -> Self {
+        self.path = true;
         self
     }
 
@@ -277,7 +286,8 @@ impl TextInput {
 
     fn paste(&mut self, _: &Paste, w: &mut Window, cx: &mut Context<Self>) {
         if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-            self.replace_text_in_range(None, &text.replace(['\r', '\n'], " "), w, cx);
+            let glue = if self.path { "" } else { " " };
+            self.replace_text_in_range(None, &text.replace(['\r', '\n'], glue), w, cx);
         }
     }
 
@@ -549,7 +559,12 @@ impl Render for TextInput {
         // Schmal: 1 px Fuge, mit Fokus 2 px Akzentring; der Innenabstand gleicht den Unterschied aus.
         let thick = focused || !self.compact;
         let text_size = if self.large { 15. } else { 13. };
-        let (height, text, pad) = if self.compact { (22., 12., if focused { 6. } else { 7. }) } else { (32., text_size, 6.) };
+        let (height, text, pad) = match (self.compact, self.path) {
+            (true, _) => (22., 12., if focused { 6. } else { 7. }),
+            // Pfadfeld: Innenabstand h 8, v 3 um einen 13-pt-Text (Swift: `instrumentWell`).
+            (false, true) => (26., 13., 8.),
+            (false, false) => (32., text_size, 6.),
+        };
         div()
             .flex()
             .items_center()

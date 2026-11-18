@@ -20,10 +20,23 @@ pub struct FolderRow {
     pub right: Vec<String>,
 }
 
+/// Zeile mit Titel in `fg`.
 pub fn folder_row(
     id: impl Into<ElementId>,
     row: FolderRow,
     on: bool,
+    t: &Theme,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> gpui::Stateful<gpui::Div> {
+    folder_row_titled(id, row, on, t.fg, t, on_click)
+}
+
+/// Zeile mit frei wählbarer Titelfarbe (Akzent bei „Ordner anlegen“, Swift: `accentTextColor`).
+pub fn folder_row_titled(
+    id: impl Into<ElementId>,
+    row: FolderRow,
+    on: bool,
+    title_color: gpui::Hsla,
     t: &Theme,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> gpui::Stateful<gpui::Div> {
@@ -54,7 +67,7 @@ pub fn folder_row(
                 .flex_1()
                 .min_w_0()
                 .gap(px(2.))
-                .child(div().text_size(px(13.)).text_color(t.fg).overflow_hidden().whitespace_nowrap().child(row.name))
+                .child(div().text_size(px(12.)).text_color(title_color).overflow_hidden().whitespace_nowrap().child(row.name))
                 .child(div().text_size(px(11.)).text_color(t.muted).overflow_hidden().whitespace_nowrap().text_ellipsis().child(row.path)),
         )
         .child(right);

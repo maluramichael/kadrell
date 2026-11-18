@@ -19,6 +19,7 @@ pub struct Use {
 pub const USES_MAX_AGE_SECS: f64 = 90.0 * 86_400.0;
 pub const USES_LIMIT: usize = 500;
 
+#[derive(Clone)]
 pub struct FolderIndex {
     pub repos: Vec<String>,
     pub uses: HashMap<String, Use>,
@@ -313,9 +314,78 @@ pub fn folder_for(path: &str, home: &str) -> Option<String> {
     Some(if is_directory(path) { normalize(path, false, home) } else { paths::parent(path) })
 }
 
+// Kontext
+
+/// Ordner aus dem Text der Zwischenablage: ein Pfad ohne Zeilenumbruch und unter 1024 Zeichen, der einen Ordner (oder eine
+/// Datei darin) bezeichnet (Swift: `clipboardFolder`, Textzweig). Dateien aus dem Dateimanager liefert das Fenstersystem
+/// als Pfadliste, dafür `folder_for`.
+pub fn clipboard_folder(text: &str, home: &str) -> Option<String> {
+    if text.contains('\n') || text.chars().count() >= 1024 {
+        return None;
+    }
+    folder_for(&normalize(&text.replace('\\', "/"), false, home), home)
+}
+
+/// Ordner des vordersten Dateimanager-Fensters (Swift: `finderFolder`), mit `/`. macOS: Finder per `osascript` (fragt beim
+/// ersten Mal nach der Erlaubnis, deshalb ohne Zeitlimit), Windows: das oberste Explorer-Fenster der Fensterfolge per
+/// PowerShell. Blockiert, auf einem Hintergrund-Thread aufrufen.
+pub fn finder_folder(home: &str) -> Option<String> {
+    let out = file_manager_output()?;
+    folder_for(&normalize(&out.trim().replace('\\', "/"), false, home), home)
+}
+
+#[cfg(target_os = "macos")]
+fn file_manager_output() -> Option<String> {
+    let script = "tell application \"Finder\" to if (count of Finder windows) > 0 then POSIX path of (target of front Finder window as alias)";
+    let out = std::process::Command::new("/usr/bin/osascript").args(["-e", script]).output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Explorer-Fenster (Shell.Application) in der Reihenfolge der Fenster von oben nach unten (user32 `GetTopWindow`,
+/// `GetWindow(GW_HWNDNEXT)`): das erste mit einem Dateisystempfad gewinnt.
+#[cfg(windows)]
+const EXPLORER_SCRIPT: &str = r#"
+$sig = '[DllImport("user32.dll")] public static extern IntPtr GetTopWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint c);'
+Add-Type -MemberDefinition $sig -Name Z -Namespace Kadrell
+$map = @{}
+foreach ($w in (New-Object -ComObject Shell.Application).Windows()) { try { $map[[int64]$w.HWND] = $w.Document.Folder.Self.Path } catch {} }
+$h = [Kadrell.Z]::GetTopWindow([IntPtr]::Zero)
+while ($h -ne [IntPtr]::Zero) { if ($map.ContainsKey([int64]$h)) { $map[[int64]$h]; break }; $h = [Kadrell.Z]::GetWindow($h, 2) }
+"#;
+
+#[cfg(windows)]
+fn file_manager_output() -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", EXPLORER_SCRIPT])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+fn file_manager_output() -> Option<String> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clipboard_folder_takes_one_line_paths_to_existing_folders() {
+        let t = TempDir::new("clip");
+        let file = t.write("a/b.txt", "x");
+        assert_eq!(clipboard_folder(&format!("  {}  ", t.sub("a")), &t.path()), Some(t.sub("a")));
+        assert_eq!(clipboard_folder(&file, &t.path()), Some(t.sub("a")), "bei einer Datei ihr Ordner");
+        assert_eq!(clipboard_folder(&format!("{}\n{}", t.sub("a"), t.sub("a")), &t.path()), None, "mehrere Zeilen");
+        assert_eq!(clipboard_folder(&t.sub("fehlt"), &t.path()), None);
+        assert_eq!(clipboard_folder("kein pfad", &t.path()), None);
+        assert_eq!(clipboard_folder(&"a".repeat(1024), &t.path()), None);
+    }
+
     use crate::paths::testdir::TempDir;
 
     const NOW: f64 = 1_800_000_000.0;
