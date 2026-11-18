@@ -23,11 +23,50 @@ pub struct OverlayState {
     /// Der vorgemerkte Dialog; ein neuerer ersetzt einen älteren (`SheetPresenter.pending`).
     pending: Option<Opener>,
     /// Fensterfüllendes Overlay, das noch hinausfährt.
-    closing: Option<AnyView>,
-    /// Zählt Ausfahrten, damit eine alte Uhr keine neuere beendet.
-    generation: u64,
+    closing: Hold<AnyView>,
     /// Die Extensions laufen (`ExtensionManager::start` ist gerufen); vorher piept das Panel (`togglePanel(.extensions)`).
     pub ext_started: bool,
+}
+
+/// Hält ein geschlossenes Overlay bis zum Ende seiner Ausfahrt. Jede Ausfahrt bekommt eine Nummer, damit die Uhr einer
+/// alten keine neuere beendet.
+pub struct Hold<T> {
+    item: Option<T>,
+    generation: u64,
+}
+
+impl<T> Default for Hold<T> {
+    fn default() -> Self {
+        Hold { item: None, generation: 0 }
+    }
+}
+
+impl<T> Hold<T> {
+    /// Hält `item`; gibt die Nummer der Ausfahrt zurück. Eine noch laufende wird dadurch abgelöst.
+    pub fn hold(&mut self, item: T) -> u64 {
+        self.generation += 1;
+        self.item = Some(item);
+        self.generation
+    }
+
+    /// Das Ende der Ausfahrt `generation`: lässt los, aber nur, wenn keine neuere läuft. `true`: losgelassen.
+    pub fn release(&mut self, generation: u64) -> bool {
+        let current = self.generation == generation && self.item.is_some();
+        if current {
+            self.item = None;
+        }
+        current
+    }
+
+    /// Lässt sofort los (neues Overlay, Ende der Zeit).
+    pub fn clear(&mut self) {
+        self.item = None;
+    }
+
+    /// Das gehaltene Stück, solange es hinausfährt. Danach folgt nichts mehr dem Fenster.
+    pub fn get(&self) -> Option<&T> {
+        self.item.as_ref()
+    }
 }
 
 /// Darf ein neuer Dialog sofort erscheinen? Nicht, solange ein Panel offen ist.
@@ -95,15 +134,13 @@ impl Shell {
     /// Hält ein geschlossenes fensterfüllendes Overlay, bis es hinausgefahren ist. Die Tastatur ist da schon zurück.
     pub(crate) fn begin_slide_out(&mut self, view: AnyView, window: &mut Window, cx: &mut Context<Self>) {
         let reduce = crate::appearance::breathing::reduce_motion();
-        self.overlays.generation += 1;
-        let generation = self.overlays.generation;
-        self.overlays.closing = Some(view);
+        let generation = self.overlays.closing.hold(view);
         set_leaving(true);
         let wait = Duration::from_secs_f32(out_secs(reduce));
         cx.spawn_in(window, async move |this, cx| {
             cx.background_executor().timer(wait).await;
             this.update(cx, |shell, cx| {
-                if shell.overlays.generation == generation {
+                if shell.overlays.closing.release(generation) {
                     shell.finish_slide_out();
                     cx.notify();
                 }
@@ -116,14 +153,14 @@ impl Shell {
 
     /// Beendet eine laufende Ausfahrt sofort (neues Overlay, Ende der Zeit).
     pub(crate) fn finish_slide_out(&mut self) {
-        self.overlays.closing = None;
+        self.overlays.closing.clear();
         set_leaving(false);
     }
 
     /// Das ausfahrende Overlay, gezeichnet über dem Fenster. Seine Abdunklung fängt keine Klicks mehr ab
     /// (`backdrop_full` liest `leaving`), sie gehen ans Hauptfenster.
     pub(crate) fn closing_layer(&self) -> Option<Div> {
-        let view = self.overlays.closing.clone()?;
+        let view = self.overlays.closing.get()?.clone();
         Some(div().absolute().top_0().left_0().size_full().child(view))
     }
 
@@ -230,6 +267,43 @@ mod tests {
         assert!(state.take_pending().is_some());
         assert!(!state.has_pending());
         assert!(state.take_pending().is_none());
+    }
+
+    /// `testFullWindowSlidesOutBeforeClosing`: nach dem Schließen wird das Overlay noch gehalten (es fährt hinaus), nach
+    /// der Ausfahrt ist es weg.
+    #[test]
+    fn a_closed_overlay_is_held_until_it_has_slid_out() {
+        let mut hold: Hold<&str> = Hold::default();
+        assert!(hold.get().is_none());
+        let slide = hold.hold("Einstellungen");
+        assert_eq!(hold.get(), Some(&"Einstellungen"), "fährt noch hinaus");
+        assert!(hold.release(slide));
+        assert!(hold.get().is_none(), "nach der Ausfahrt weg");
+    }
+
+    /// Die Uhr einer alten Ausfahrt beendet keine neuere: wer schnell wieder öffnet und schließt, sieht die ganze Ausfahrt.
+    #[test]
+    fn an_old_clock_does_not_end_a_newer_slide_out() {
+        let mut hold: Hold<&str> = Hold::default();
+        let old = hold.hold("Statistik");
+        let newer = hold.hold("Einstellungen");
+        assert!(!hold.release(old));
+        assert_eq!(hold.get(), Some(&"Einstellungen"));
+        assert!(hold.release(newer));
+        assert!(!hold.release(newer), "ein zweites Ende ändert nichts");
+    }
+
+    /// `testDismissedOverlayNoLongerFollows`: ein geschlossenes Overlay hängt nicht mehr am Fenster. Gezeichnet wird nur,
+    /// was die Shell hält; nach dem Loslassen kann eine Größenänderung nichts mehr bewegen, weil nichts mehr zu bewegen ist.
+    #[test]
+    fn a_dismissed_overlay_no_longer_follows_the_window() {
+        let mut hold: Hold<&str> = Hold::default();
+        let slide = hold.hold("Einstellungen");
+        hold.clear();
+        let before = hold.get().copied();
+        super::super::overlay::set_area(super::super::overlay::Area { width: 900., height: 600., ..Default::default() });
+        assert_eq!(hold.get().copied(), before);
+        assert!(!hold.release(slide), "ein später Ablauf der Uhr findet nichts mehr");
     }
 
     #[test]

@@ -2,6 +2,8 @@
 //! Tasten mit Rolle, gesperrtes Versal-Label, Tastaturring, eingelassenes Feld, Listenauswahl. Alle Maße in logischen
 //! Punkten mal UI-Größe (`overlay::scale`).
 
+use std::rc::Rc;
+
 use gpui::{
     App, ClickEvent, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement, Stateful,
     StatefulInteractiveElement, Styled, Window, div, px, transparent_black,
@@ -115,6 +117,24 @@ pub fn key_button_with(
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
     key_pressable(id, content, role, compact, true, t).on_click(on_click)
+}
+
+/// Taste mit Tastaturfokus: ein Tab-Stopp (`dialog_keys::control`), Enter und Leertaste lösen sie aus, mit Tastaturfokus
+/// zeichnet sie den Ring (`kbdFocusRing`). `id` muss im Dialog eindeutig sein.
+#[allow(clippy::too_many_arguments)]
+pub fn key_focusable(
+    id: &'static str,
+    content: impl IntoElement,
+    role: KeyRole,
+    compact: bool,
+    t: &Theme,
+    window: &mut Window,
+    cx: &mut App,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    let key = key_pressable(id, content, role, compact, true, t).relative();
+    let (key, ring) = super::dialog_keys::control(key, id, window, cx, Rc::new(on_click));
+    if ring { key.child(focus_ring(t)) } else { key }
 }
 
 /// Gesperrtes Versal-Label (`capsLabel`): 11, Sperrung 0,8, in `color` (gedämpft, mit Akzent `accent_text`). GPUI kennt

@@ -2,24 +2,24 @@
 //! bei einer Session wieder den Titel von Claude Code (wie `rename` im Steuerkanal).
 
 use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
-    Styled, Window, actions, div, prelude::*, px,
+    App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, Styled, Window,
+    div, prelude::*, px,
 };
 
 use kadrell_i18n::trd;
 use super::chrome::h_seam;
-use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
+use super::dialog_keys;
+use super::instrument::KeyRole;
+use super::overlay::{backdrop, dialog_foot_in, dialog_frame, dialog_title, overlay_width};
 use super::text_input::TextInput;
 use super::theme;
 use crate::Shell;
 
-actions!(kadrell_rename, [Confirm, Cancel]);
-
 const CONTEXT: &str = "KadrellRename";
 
+/// Enter, Esc und Tab laufen über die gemeinsame Dialogtastatur (`dialog_keys`).
 pub fn bind_keys(cx: &mut App) {
-    let c = Some(CONTEXT);
-    cx.bind_keys([KeyBinding::new("enter", Confirm, c), KeyBinding::new("escape", Cancel, c)]);
+    dialog_keys::bind_keys(cx);
 }
 
 /// Was umbenannt wird.
@@ -60,31 +60,29 @@ impl Rename {
         Self { input, target, heading: heading.to_string(), auto_title }
     }
 
-    fn confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
+    fn confirm(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let name = self.input.read(cx).text().trim().to_string();
         cx.emit(RenameEvent::Apply(self.target.clone(), name));
     }
 }
 
 impl Render for Rename {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let s = super::overlay::scale();
-        let foot = dialog_foot(trd!("Esc abbrechen"), trd!("Speichern"), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let save = cx.listener(|this, _, w, cx| this.confirm(w, cx));
+        let foot = dialog_foot_in(trd!("Esc abbrechen"), trd!("Speichern"), KeyRole::Primary, &t, window, cx, save);
         let help = self.auto_title.as_deref().map(|auto| {
             div().flex_none().w_full().px(px(16. * s)).pb(px(12. * s)).text_size(px(11. * s)).text_color(t.muted).child(help_line(auto))
         });
-        let dialog = overlay_width(dialog_frame(&t), 640.)
-            .key_context(CONTEXT)
-            .text_color(t.fg)
-            .on_action(cx.listener(Self::confirm))
-            .on_action(cx.listener(|_, _: &Cancel, _, cx| cx.emit(RenameEvent::Close)))
+        let dialog = overlay_width(dialog_frame(&t), 640.).key_context(dialog_keys::context(CONTEXT)).text_color(t.fg);
+        let dialog = dialog_keys::keys(dialog, true, cx, Self::confirm, |_, _, cx| cx.emit(RenameEvent::Close))
             .child(dialog_title(self.heading.to_uppercase(), &t))
             .child(div().flex_none().p(px(14. * s)).child(self.input.clone()))
             .children(help)
             .child(h_seam(&t))
             .child(foot);
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(RenameEvent::Close))).child(dialog)
+        dialog_keys::nav(backdrop(cx.listener(|_, _, _, cx| cx.emit(RenameEvent::Close)))).child(dialog)
     }
 }
 
