@@ -381,34 +381,47 @@ impl Grid {
 
 // ---------- Zeichnen ----------
 
-fn pt(origin: Point<Pixels>, x: f32, y: f32) -> Point<Pixels> {
-    point(origin.x + px(x), origin.y + px(y))
+/// Punkt in Gerätepixeln (Zellursprung + Offset) zurück in logische Pixel.
+fn pt(origin: (f32, f32), x: f32, y: f32, sf: f32) -> Point<Pixels> {
+    point(px((origin.0 + x) / sf), px((origin.1 + y) / sf))
 }
 
-/// Zeichnet die Formen eines Zeichens in die Zelle mit der linken oberen Ecke `origin`.
-pub fn paint(window: &mut Window, shapes: &[Shape], origin: Point<Pixels>, color: Hsla) {
+/// Rechteck in Gerätepixeln, an ganzen Gerätepixeln ausgerichtet: Nachbarzellen teilen exakt dieselbe Kante,
+/// es entstehen weder Haarlinien noch Überlappungen durch Anti-Aliasing. Mindestens ein Pixel dick.
+pub fn snap_rect(origin: (f32, f32), x0: f32, y0: f32, x1: f32, y1: f32) -> (f32, f32, f32, f32) {
+    let (l, t) = ((origin.0 + x0).round(), (origin.1 + y0).round());
+    let r = (origin.0 + x1).round().max(l + 1.);
+    let b = (origin.1 + y1).round().max(t + 1.);
+    (l, t, r, b)
+}
+
+/// Zeichnet die Formen eines Zeichens in die Zelle mit der linken oberen Ecke `origin` (Gerätepixel).
+/// Die Formen selbst stehen ebenfalls in Gerätepixeln (`shapes` bekommt die Zellgröße in Gerätepixeln),
+/// `sf` ist der Skalierungsfaktor des Fensters.
+pub fn paint(window: &mut Window, shapes: &[Shape], origin: (f32, f32), sf: f32, color: Hsla) {
     for shape in shapes {
         match shape {
             Shape::Rect { x0, y0, x1, y1, alpha } => {
-                let b = Bounds::new(pt(origin, *x0, *y0), size(px(x1 - x0), px(y1 - y0)));
-                window.paint_quad(fill(b, color.opacity(*alpha)));
+                let (l, t, r, b) = snap_rect(origin, *x0, *y0, *x1, *y1);
+                let bounds = Bounds::new(point(px(l / sf), px(t / sf)), size(px((r - l) / sf), px((b - t) / sf)));
+                window.paint_quad(fill(bounds, color.opacity(*alpha)));
             }
-            Shape::Path { cmds, stroke } => paint_path(window, cmds, *stroke, origin, color),
+            Shape::Path { cmds, stroke } => paint_path(window, cmds, *stroke, origin, sf, color),
         }
     }
 }
 
-fn paint_path(window: &mut Window, cmds: &[Cmd], stroke: Option<f32>, origin: Point<Pixels>, color: Hsla) {
+fn paint_path(window: &mut Window, cmds: &[Cmd], stroke: Option<f32>, origin: (f32, f32), sf: f32, color: Hsla) {
     let mut builder = match stroke {
-        Some(width) => PathBuilder::stroke(px(width)),
+        Some(width) => PathBuilder::stroke(px(width / sf)),
         None => PathBuilder::fill(),
     };
     for cmd in cmds {
         match *cmd {
-            Cmd::Move(x, y) => builder.move_to(pt(origin, x, y)),
-            Cmd::Line(x, y) => builder.line_to(pt(origin, x, y)),
+            Cmd::Move(x, y) => builder.move_to(pt(origin, x, y, sf)),
+            Cmd::Line(x, y) => builder.line_to(pt(origin, x, y, sf)),
             Cmd::Cubic { c1, c2, to } => {
-                builder.cubic_bezier_to(pt(origin, to.0, to.1), pt(origin, c1.0, c1.1), pt(origin, c2.0, c2.1))
+                builder.cubic_bezier_to(pt(origin, to.0, to.1, sf), pt(origin, c1.0, c1.1, sf), pt(origin, c2.0, c2.1, sf))
             }
             Cmd::Close => builder.close(),
         }
@@ -421,6 +434,18 @@ fn paint_path(window: &mut Window, cmds: &[Cmd], stroke: Option<f32>, origin: Po
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snap_rect_liegt_auf_ganzen_pixeln_und_nachbarn_teilen_kanten() {
+        // Zwei Nachbarzellen, Zellbreite 11 Gerätepixel: rechte Kante der ersten = linke der zweiten.
+        let (_, _, r1, _) = snap_rect((100., 20.), 0., 0., 11., 16.);
+        let (l2, _, _, _) = snap_rect((111., 20.), 0., 0., 11., 16.);
+        assert_eq!(r1, l2);
+        let (l, t, r, b) = snap_rect((10.4, 3.6), 0.3, 7.5, 3.2, 8.2);
+        assert_eq!((l, t), (11., 11.));
+        assert!(r - l >= 1. && b - t >= 1.);
+        assert_eq!((l.fract(), r.fract(), t.fract(), b.fract()), (0., 0., 0., 0.));
+    }
 
     const W: f32 = 8.;
     const H: f32 = 16.;

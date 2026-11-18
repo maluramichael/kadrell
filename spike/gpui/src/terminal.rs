@@ -643,9 +643,78 @@ impl Run {
     }
 }
 
+/// Zellraster in ganzen Gerätepixeln. Zellbreite und -höhe sind ganzzahlig und der Ursprung liegt auf einem
+/// Gerätepixel, damit Nachbarzellen exakt dieselbe Kante teilen: Ein gebrochener Zellabstand (7,8 px) lässt
+/// Hintergrundflächen und Linienzeichen an den Nahtstellen per Anti-Aliasing als Haarlinien aufblitzen.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DevGrid {
+    sf: f32,
+    cw: f32,
+    ch: f32,
+    ox: f32,
+    oy: f32,
+}
+
+impl DevGrid {
+    /// Raster aus der Zeichenbreite (logische Pixel), der Zeilenhöhe und dem Ursprung des Bereichs.
+    fn new(sf: f32, advance: f32, line_h: f32, origin: (f32, f32)) -> Self {
+        Self {
+            sf,
+            cw: (advance * sf).round().max(1.),
+            ch: (line_h * sf).round().max(1.),
+            ox: (origin.0 * sf).round(),
+            oy: (origin.1 * sf).round(),
+        }
+    }
+
+    /// Zellgröße in logischen Pixeln (ganze Gerätepixel geteilt durch den Skalierungsfaktor).
+    fn cell(&self) -> gpui::Size<Pixels> {
+        size(px(self.cw / self.sf), px(self.ch / self.sf))
+    }
+
+    fn origin(&self) -> Point<Pixels> {
+        point(px(self.ox / self.sf), px(self.oy / self.sf))
+    }
+
+    /// Obere linke Ecke einer Zelle in Gerätepixeln.
+    fn cell_dev(&self, col: usize, row: usize) -> (f32, f32) {
+        (self.ox + self.cw * col as f32, self.oy + self.ch * row as f32)
+    }
+
+    /// Fläche über `cells` Zellen ab (`row`, `col`) in logischen Pixeln.
+    fn bounds(&self, row: usize, col: usize, cells: usize) -> Bounds<Pixels> {
+        let (x, y) = self.cell_dev(col, row);
+        Bounds::new(
+            point(px(x / self.sf), px(y / self.sf)),
+            size(px(self.cw * cells as f32 / self.sf), px(self.ch / self.sf)),
+        )
+    }
+}
+
+/// Waagerechte Fläche gleicher Farbe in einer Zeile.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Span {
+    row: usize,
+    col: usize,
+    cells: usize,
+    color: Hsla,
+}
+
+/// Fügt `span` an, verschmolzen mit dem letzten Eintrag, wenn der in derselben Zeile lückenlos davor endet
+/// und dieselbe Farbe hat. Eine Fläche statt vieler Zellen: keine Nähte zwischen Nachbarzellen.
+fn push_span(spans: &mut Vec<Span>, span: Span) {
+    match spans.last_mut() {
+        Some(l) if l.row == span.row && l.col + l.cells == span.col && l.color == span.color => {
+            l.cells += span.cells;
+        }
+        _ => spans.push(span),
+    }
+}
+
 /// Selbst gezeichnetes Zeichen (Box-Drawing, Blöcke, Powerline) an seiner Zellposition.
 struct Glyph {
-    origin: Point<Pixels>,
+    /// Linke obere Zellecke in Gerätepixeln.
+    origin: (f32, f32),
     shapes: Vec<boxdraw::Shape>,
     color: Hsla,
 }
@@ -653,6 +722,7 @@ struct Glyph {
 #[derive(Default)]
 pub struct Frame {
     rects: Vec<(Bounds<Pixels>, Hsla)>,
+    sf: f32,
     glyphs: Vec<Glyph>,
     /// Ein Eintrag pro sichtbarer Zeile.
     rows: Vec<Vec<Run>>,
@@ -702,9 +772,17 @@ impl Element for TerminalElement {
         let base = font(FONT);
         let ts = window.text_system();
         let font_id = ts.resolve_font(&base);
-        let cell_w = ts.advance(font_id, font_size, 'm').map(|s| s.width).unwrap_or(px(8.));
-        let cell = size(cell_w, (font_size * LINE_HEIGHT).round());
-        let origin = point(bounds.origin.x + px(PAD), bounds.origin.y + px(PAD / 2.));
+        let advance = ts.advance(font_id, font_size, 'm').map(|s| s.width).unwrap_or(px(8.));
+        let sf = window.scale_factor();
+        let line_h = (font_size * LINE_HEIGHT).round();
+        let dev = DevGrid::new(
+            sf,
+            f32::from(advance),
+            f32::from(line_h),
+            (f32::from(bounds.origin.x) + PAD, f32::from(bounds.origin.y) + PAD / 2.),
+        );
+        let cell = dev.cell();
+        let origin = dev.origin();
         let cols = ((bounds.size.width - px(2. * PAD)) / cell.width).floor().max(2.) as usize;
         let lines = ((bounds.size.height - px(PAD)) / cell.height).floor().max(1.) as usize;
 
@@ -719,7 +797,8 @@ impl Element for TerminalElement {
         let content = term.renderable_content();
         let offset = content.display_offset;
         let selection = content.selection;
-        let mut frame = Frame { bg: theme.bg, fg: theme.fg, focused, ..Default::default() };
+        let mut frame = Frame { bg: theme.bg, fg: theme.fg, focused, sf, ..Default::default() };
+        let (mut bg_spans, mut sel_spans): (Vec<Span>, Vec<Span>) = (Vec::new(), Vec::new());
         let mut row_of: Vec<Vec<Run>> = (0..lines).map(|_| Vec::new()).collect();
         // Unter einem gefüllten Block-Cursor steht das Zeichen in Hintergrundfarbe, sonst wäre es unlesbar.
         let block_cursor = (focused && content.cursor.shape == CursorShape::Block)
@@ -743,21 +822,20 @@ impl Element for TerminalElement {
                 fg = theme.bg;
             }
             let wide = flags.contains(Flags::WIDE_CHAR);
-            let at = point(origin.x + cell.width * col as f32, origin.y + cell.height * row as f32);
-            let cell_box = Bounds::new(at, size(if wide { cell.width * 2. } else { cell.width }, cell.height));
+            let cells = if wide { 2 } else { 1 };
             if bg != theme.bg {
-                frame.rects.push((cell_box, bg));
+                push_span(&mut bg_spans, Span { row, col, cells, color: bg });
             }
             // Auswahl liegt halbtransparent über dem eigenen Hintergrund der Zelle.
             if selected {
-                frame.rects.push((cell_box, theme.accent.opacity(0.35)));
+                push_span(&mut sel_spans, Span { row, col, cells, color: theme.accent.opacity(0.35) });
             }
             if flags.contains(Flags::HIDDEN) {
                 continue;
             }
             if boxdraw::is_builtin(item.c) {
-                let shapes = boxdraw::shapes(item.c, f32::from(cell.width), f32::from(cell.height));
-                frame.glyphs.push(Glyph { origin: at, shapes, color: fg });
+                let shapes = boxdraw::shapes(item.c, dev.cw, dev.ch);
+                frame.glyphs.push(Glyph { origin: dev.cell_dev(col, row), shapes, color: fg });
                 continue;
             }
             let style = CellStyle {
@@ -778,17 +856,18 @@ impl Element for TerminalElement {
         if c.shape != CursorShape::Hidden
             && let Some(vp) = alacritty_terminal::term::point_to_viewport(offset, c.point)
         {
-            let at = point(origin.x + cell.width * vp.column.0 as f32, origin.y + cell.height * vp.line as f32);
+            let at = dev.bounds(vp.line, vp.column.0, 1).origin;
             // Über einem breiten Zeichen (日本) deckt der Cursor beide Zellen ab.
             let wide = term.grid()[c.point].flags.contains(Flags::WIDE_CHAR);
-            let cursor_cell = if wide { size(cell.width * 2., cell.height) } else { cell };
-            frame.cursor = Some((Bounds::new(at, cursor_cell), c.shape));
+            frame.cursor = Some((dev.bounds(vp.line, vp.column.0, if wide { 2 } else { 1 }), c.shape));
             if let Some(m) = &pane.marked {
                 frame.marked = Some((at, m.clone()));
             }
         }
-        frame.rects.insert(0, (bounds, theme.bg));
-        let _ = cols;
+        frame.rects.push((bounds, theme.bg));
+        for s in bg_spans.iter().chain(&sel_spans) {
+            frame.rects.push((dev.bounds(s.row, s.col, s.cells), s.color));
+        }
         frame
     }
 
@@ -828,7 +907,7 @@ impl Element for TerminalElement {
                 window.paint_quad(quad);
             }
             for g in &frame.glyphs {
-                boxdraw::paint(window, &g.shapes, g.origin, g.color);
+                boxdraw::paint(window, &g.shapes, g.origin, frame.sf, g.color);
             }
             for (row, runs) in frame.rows.iter().enumerate() {
                 let y = origin.y + line_h * row as f32;
@@ -963,6 +1042,39 @@ fn indexed(term: &Term<Listener>, i: usize, t: &Theme) -> Hsla {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn span(row: usize, col: usize, cells: usize, color: Hsla) -> Span {
+        Span { row, col, cells, color }
+    }
+
+    #[test]
+    fn flaechen_gleicher_farbe_werden_verschmolzen() {
+        let (a, b) = (rgb(0xff0000).into(), rgb(0x00ff00).into());
+        let mut v = Vec::new();
+        for col in [3, 4, 5] {
+            push_span(&mut v, span(0, col, 1, a));
+        }
+        push_span(&mut v, span(0, 6, 2, b)); // andere Farbe
+        push_span(&mut v, span(0, 9, 1, b)); // Lücke
+        push_span(&mut v, span(1, 10, 1, b)); // andere Zeile
+        assert_eq!(v, vec![span(0, 3, 3, a), span(0, 6, 2, b), span(0, 9, 1, b), span(1, 10, 1, b)]);
+    }
+
+    #[test]
+    fn raster_liegt_auf_ganzen_geraetepixeln() {
+        // Skalierung 1,25 und eine gebrochene Zeichenbreite wie bei 13 px Schrift.
+        let g = DevGrid::new(1.25, 7.8, 16., (10.3, 4.1));
+        assert_eq!((g.cw, g.ch, g.ox, g.oy), (10., 20., 13., 5.));
+        let (x0, _) = g.cell_dev(29, 0);
+        let (x1, _) = g.cell_dev(30, 0);
+        assert_eq!(x1 - x0, g.cw);
+        let b = g.bounds(2, 30, 2);
+        assert_eq!(f32::from(b.size.width) * g.sf, 2. * g.cw);
+        assert_eq!(f32::from(b.size.height) * g.sf, g.ch);
+        // Eine zweizellige Fläche endet exakt dort, wo die nächste Zelle beginnt.
+        let right = f32::from(b.origin.x + b.size.width) * g.sf;
+        assert!((right - g.cell_dev(32, 2).0).abs() < 1e-3);
+    }
 
     fn keys(s: &'static str, app_cursor: bool) -> Option<Vec<u8>> {
         key_bytes(&Keystroke::parse(s).expect("gültiger Tastenname"), app_cursor)
