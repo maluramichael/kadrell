@@ -17,6 +17,7 @@ pub mod new_session;
 pub mod overlay;
 pub mod text_input;
 pub mod pill;
+pub mod settings;
 pub mod sidebar;
 pub mod tile;
 
