@@ -204,16 +204,20 @@ struct RowState {
     selected: bool,
     focused: bool,
     grouped: bool,
+    /// Der Baum hat die Tastatur (⌘1): die Fokus-Session trägt die Akzentfarbe.
+    keys: bool,
 }
 
 fn session_row(g: usize, s: usize, group: &Group, st: RowState, a: &Appearance, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let RowState { selected, focused, grouped } = st;
+    let RowState { selected, focused, grouped, keys } = st;
     let t = theme(cx);
     let session = &group.sessions[s];
     let mut face = session_face(session, selected, &t, a).hover(move |st| st.bg(t.bg).text_color(t.fg));
     // Der Rand steht immer, nur seine Farbe wechselt: Inhalt springt bei der Auswahl nicht.
-    // Fokus-Session in `fg`, die übrigen markierten in `muted`.
+    // Fokus-Session in `fg`, die übrigen markierten in `muted`. Hat der Baum die Tastatur (⌘1), trägt die Fokus-Session
+    // die Akzentfarbe.
     let edge = match (focused, selected) {
+        (true, _) if keys => t.accent,
         (true, _) => t.fg,
         (false, true) => t.muted,
         _ => gpui::transparent_black(),
@@ -241,7 +245,7 @@ fn session_row(g: usize, s: usize, group: &Group, st: RowState, a: &Appearance, 
         .child(face)
 }
 
-fn group_block(g: usize, group: &Group, sel: &Selection, grouped: bool, a: &Appearance, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+fn group_block(g: usize, group: &Group, sel: &Selection, grouped: bool, keys: bool, a: &Appearance, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let m = a.rows();
     // Klassisch: Luft vor jeder Gruppe außer der ersten.
     let gap = if g > 0 { a.s(m.group_gap) } else { 0. };
@@ -250,12 +254,13 @@ fn group_block(g: usize, group: &Group, sel: &Selection, grouped: bool, a: &Appe
         return block;
     }
     for s in 0..group.sessions.len() {
-        block = block.child(session_row(g, s, group, RowState { selected: sel.contains((g, s)), focused: sel.focus == (g, s), grouped }, a, cx));
+        block = block.child(session_row(g, s, group, RowState { selected: sel.contains((g, s)), focused: sel.focus == (g, s), grouped, keys }, a, cx));
     }
     block
 }
 
-pub fn sidebar(groups: &[Group], sel: &Selection, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+/// `keys`: die Tastatur gehört dem Baum (⌘1).
+pub fn sidebar(groups: &[Group], sel: &Selection, keys: bool, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let t = theme(cx);
     let a = crate::appearance::current(cx);
     let grouped = groups.len() != 1 || !groups[0].id.is_empty();
@@ -274,7 +279,7 @@ pub fn sidebar(groups: &[Group], sel: &Selection, cx: &mut Context<Shell>) -> im
         .bg(a.panel_fill(t.panel))
         .text_size(px(a.s(12.)));
     for (g, group) in groups.iter().enumerate() {
-        col = col.child(group_block(g, group, sel, grouped, &a, cx));
+        col = col.child(group_block(g, group, sel, grouped, keys, &a, cx));
     }
     div().flex().flex_none().h_full().child(col).child(v_seam(&t))
 }

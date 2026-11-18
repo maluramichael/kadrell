@@ -4,10 +4,12 @@
 mod boxdraw;
 pub mod fonts;
 pub mod links;
+mod forward;
 mod terminal;
 mod textsearch;
 mod theme;
 
+pub use forward::{Forward, forward_of};
 pub use terminal::{LINE_HEIGHT, PtyParts, TermHandle, TermSpec, TerminalEvent, TerminalPane, start_pty, strip_inherited_env};
 pub use textsearch::{find_byte_ranges, find_char_ranges};
 pub use theme::{FONT, TermStyle, TermStyleGlobal, TermTheme, TermThemeGlobal};

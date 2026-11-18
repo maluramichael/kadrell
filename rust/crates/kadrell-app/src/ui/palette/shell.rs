@@ -201,8 +201,7 @@ impl Shell {
             }
             PaletteEvent::Layout(mode) => {
                 self.close_palette(window, cx);
-                self.layout.mode = *mode;
-                cx.notify();
+                self.set_mode(*mode, cx);
             }
             PaletteEvent::Menu(action) => {
                 self.close_palette(window, cx);

@@ -16,10 +16,67 @@ use super::pill::{Pill, PillKind};
 use super::usage_bar::{self, BarCtl};
 use super::theme;
 use kadrell_core::SidebarSort;
-
-const LEFT: [&str; 9] = ["▦", "‹", "AUTO COL", "›", "AUTO", "SYNC", "GRP", "A-Z", "STATUS"];
+use kadrell_i18n::trd;
 
 const LEFT_INSET: f32 = 8.;
+
+/// Eine Taste der linken Seite. Welche da sind, hängt vom Layout ab (Spalten im Grid und Scrollen, TEILT in Frei)
+/// und vom Zustand (ZOOM nur bei Zoom).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Key {
+    Layout,
+    Less,
+    Cols,
+    More,
+    Split,
+    Auto,
+    Sync,
+    Group,
+    Alpha,
+    Status,
+    Zoom,
+}
+
+fn left_keys(ctl: &LayoutCtl) -> Vec<Key> {
+    let mut keys = vec![Key::Layout];
+    if ctl.cols_label.is_some() {
+        keys.extend([Key::Less, Key::Cols, Key::More]);
+    }
+    if ctl.split.is_some() {
+        keys.push(Key::Split);
+    }
+    keys.extend([Key::Auto, Key::Sync, Key::Group, Key::Alpha, Key::Status]);
+    if ctl.zoom {
+        keys.push(Key::Zoom);
+    }
+    keys
+}
+
+/// Text der Taste (die Pfeile und das Layout-Symbol sind gezeichnet).
+fn key_label(key: Key, ctl: &LayoutCtl) -> String {
+    match key {
+        Key::Layout => "▦".into(),
+        Key::Less => "‹".into(),
+        Key::More => "›".into(),
+        Key::Cols => ctl.cols_label.clone().unwrap_or_default(),
+        Key::Split => split_label(ctl.split.unwrap_or('a')),
+        Key::Auto => "AUTO".into(),
+        Key::Sync => "SYNC".into(),
+        Key::Group => "GRP".into(),
+        Key::Alpha => "A-Z".into(),
+        Key::Status => "STATUS".into(),
+        Key::Zoom => "ZOOM".into(),
+    }
+}
+
+/// TEILT: wohin die nächste Kachel im Layout Frei entsteht (rechts, unten, entlang der längeren Seite).
+fn split_label(dir: char) -> String {
+    match dir {
+        'r' => trd!("TEILT →"),
+        'd' => trd!("TEILT ↓"),
+        _ => trd!("TEILT AUTO"),
+    }
+}
 
 pub type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -27,10 +84,21 @@ pub type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 #[derive(Clone)]
 pub struct LayoutCtl {
     pub mode: LayoutMode,
-    pub cols_label: String,
+    /// Beschriftung der Spaltentaste im Grid und beim Scrollen, sonst keine Spaltentasten.
+    pub cols_label: Option<String>,
     pub cycle: Handler,
     pub dec: Handler,
     pub inc: Handler,
+    /// Frei: Teilrichtung an der Fokus-Kachel (`r`, `d`, `a`), sonst keine TEILT-Taste.
+    pub split: Option<char>,
+    pub cycle_split: Handler,
+    /// AUTO (gelb), SYNC (rot) und ZOOM (gelb) sind an, wenn sie leuchten; ein Klick schaltet um.
+    pub auto: bool,
+    pub sync: bool,
+    pub zoom: bool,
+    pub toggle_auto: Handler,
+    pub toggle_sync: Handler,
+    pub toggle_zoom: Handler,
     /// Gruppierung des Baums (GRP) und seine Sortierung (A-Z, STATUS).
     pub grouped: bool,
     pub sort: SidebarSort,
@@ -63,17 +131,20 @@ fn with_click(pill: Pill, h: &Handler) -> Pill {
 }
 
 /// Eine Taste der linken Leiste: Layout-Symbol und Pfeile sind gezeichnet, der Rest Text.
-fn left_pill(i: usize, label: &'static str, ink: Hsla, ctl: &LayoutCtl) -> Pill {
-    let pill = Pill::new(("bar", i), label);
-    match label {
-        "▦" => with_click(pill.icon(icons::layout(ctl.mode, ink)).min_width(26.), &ctl.cycle),
-        "‹" => with_click(pill.icon(icons::arrow(true, ink)).min_width(22.), &ctl.dec),
-        "›" => with_click(pill.icon(icons::arrow(false, ink)).min_width(22.), &ctl.inc),
-        "AUTO COL" => Pill::new(("bar", i), ctl.cols_label.clone()),
-        "GRP" => with_click(toggled(pill, ctl.grouped), &ctl.toggle_grouped),
-        "A-Z" => with_click(toggled(pill, ctl.sort == SidebarSort::Alpha), &ctl.toggle_alpha),
-        "STATUS" => with_click(toggled(pill, ctl.sort == SidebarSort::Status), &ctl.toggle_status),
-        _ => pill,
+fn left_pill(i: usize, key: Key, ink: Hsla, ctl: &LayoutCtl, t: &crate::theme::Theme) -> Pill {
+    let pill = Pill::new(("bar", i), key_label(key, ctl));
+    match key {
+        Key::Layout => with_click(pill.icon(icons::layout(ctl.mode, ink)).min_width(26.), &ctl.cycle).tooltip_text(trd!("Nächstes Layout")),
+        Key::Less => with_click(pill.icon(icons::arrow(true, ink)).min_width(22.), &ctl.dec).tooltip_text(trd!("Weniger Spalten")),
+        Key::More => with_click(pill.icon(icons::arrow(false, ink)).min_width(22.), &ctl.inc).tooltip_text(trd!("Mehr Spalten")),
+        Key::Cols => pill,
+        Key::Split => with_click(pill, &ctl.cycle_split).tooltip_text(trd!("Nächste Kachel teilt")),
+        Key::Auto => with_click(lit(pill, ctl.auto, t.waiting), &ctl.toggle_auto).tooltip_text(trd!("Auto-Modus")),
+        Key::Sync => with_click(lit(pill, ctl.sync, t.error), &ctl.toggle_sync).tooltip_text("Sync"),
+        Key::Group => with_click(toggled(pill, ctl.grouped), &ctl.toggle_grouped),
+        Key::Alpha => with_click(toggled(pill, ctl.sort == SidebarSort::Alpha), &ctl.toggle_alpha),
+        Key::Status => with_click(toggled(pill, ctl.sort == SidebarSort::Status), &ctl.toggle_status),
+        Key::Zoom => with_click(pill.fill(t.waiting), &ctl.toggle_zoom).tooltip_text(trd!("Zoom aufheben")),
     }
 }
 
@@ -81,20 +152,24 @@ fn toggled(pill: Pill, on: bool) -> Pill {
     if on { pill.kind(PillKind::Active) } else { pill }
 }
 
-fn left_pills(ink: Hsla, ctl: &LayoutCtl) -> impl IntoElement + use<> {
-    let pills = LEFT.iter().enumerate().map(|(i, l)| left_pill(i, l, ink, ctl));
+/// Schalter, der in `face` leuchtet, solange er an ist.
+fn lit(pill: Pill, on: bool, face: Hsla) -> Pill {
+    if on { pill.fill(face) } else { pill }
+}
+
+fn left_pills(ink: Hsla, ctl: &LayoutCtl, t: &crate::theme::Theme) -> impl IntoElement + use<> {
+    let pills = left_keys(ctl).into_iter().enumerate().map(|(i, k)| left_pill(i, k, ink, ctl, t));
     div().flex().flex_none().items_center().gap(px(4.)).children(pills)
 }
 
 /// Geschätzte Breite der linken Tasten samt Rand (Schrift 10 px fett, dicktengleich: 6 px je Zeichen, Kappe 18 px mehr).
 fn left_width(ctl: &LayoutCtl) -> f32 {
-    let key = |label: &str| match label {
-        "▦" => 26.,
-        "‹" | "›" => 22.,
-        "AUTO COL" => ctl.cols_label.chars().count() as f32 * 6. + 18.,
-        other => other.chars().count() as f32 * 6. + 18.,
+    let width = |key: Key| match key {
+        Key::Layout => 26.,
+        Key::Less | Key::More => 22.,
+        other => key_label(other, ctl).chars().count() as f32 * 6. + 18.,
     };
-    LEFT_INSET + LEFT.iter().map(|l| key(l) + 4.).sum::<f32>()
+    LEFT_INSET + left_keys(ctl).into_iter().map(|k| width(k) + 4.).sum::<f32>()
 }
 
 /// Rechts: Konto, „N trennen“, „N warten“, Nutzung und das Status-Display (`usage_bar`). Ohne Anbindung (nur Tests)
@@ -146,7 +221,7 @@ pub fn bar(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
         .h(px(crate::appearance::current(cx).s(BAR_HEIGHT - 2.)))
         .w_full()
         .pl(px(LEFT_INSET))
-        .child(left_pills(t.sub, ctl))
+        .child(left_pills(t.sub, ctl, &t))
         .child(div().flex_1().min_w(px(24.)))
         .child(right_side(clock, ctl, cx));
     div().flex().flex_col().flex_none().bg(t.panel).child(row).child(h_seam(&t))

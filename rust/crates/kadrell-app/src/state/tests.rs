@@ -419,3 +419,43 @@ fn effects_are_handed_over_once_in_tracker_order() {
     assert!(effects.contains(&Effect::Play(TrackerSound::Waiting)));
     assert!(state.take_effects().is_empty());
 }
+
+#[test]
+fn focus_any_moves_the_focus_outside_the_selection_and_remembers_the_old_one() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let keys: Vec<String> = ["a", "b", "c"].iter().map(|n| state.new_claude_session(&cwd(&dir, n), None, false)).collect();
+    state.show_only(&keys[0]);
+    state.focus_any(&keys[2]);
+    assert_eq!(state.focused.as_deref(), Some(keys[2].as_str()));
+    assert_eq!(state.selected, vec![keys[0].clone()], "die Auswahl bleibt");
+    assert_eq!(state.last_focused.as_deref(), Some(keys[0].as_str()));
+    state.focus_any("gibt-es-nicht");
+    assert_eq!(state.focused.as_deref(), Some(keys[2].as_str()));
+}
+
+#[test]
+fn set_selection_remembers_the_previous_focus() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let keys: Vec<String> = ["a", "b"].iter().map(|n| state.new_claude_session(&cwd(&dir, n), None, false)).collect();
+    state.show_only(&keys[0]);
+    state.show_only(&keys[1]);
+    assert_eq!(state.last_focused.as_deref(), Some(keys[0].as_str()));
+    state.show_only(&keys[1]);
+    assert_eq!(state.last_focused.as_deref(), Some(keys[0].as_str()), "gleicher Fokus ändert nichts");
+}
+
+#[test]
+fn workspace_settings_are_written_one_key_at_a_time_and_removed_with_none() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    state.save_workspace_setting("layout.main.cols", Some(serde_json::json!([0.6, 0.4])));
+    state.save_workspace_setting("workspace.custom.splits", Some(serde_json::json!("dr")));
+    let saved = kadrell_core::Settings::load(&state.profile.settings_path());
+    assert_eq!(saved.string_or("workspace.custom.splits", ""), "dr");
+    assert!(saved.get("layout.main.cols").is_some());
+    state.save_workspace_setting("layout.main.cols", None);
+    assert!(kadrell_core::Settings::load(&state.profile.settings_path()).get("layout.main.cols").is_none());
+    assert!(state.settings.get("layout.main.cols").is_none());
+}

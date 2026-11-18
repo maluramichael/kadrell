@@ -215,7 +215,8 @@ impl Render for ExtraWindow {
                 let (group, session) = (&groups[g], &groups[g].sessions[s]);
                 let focused = Some((g, s)) == focus_id;
                 let elsewhere = sh.owners.elsewhere(index, &session.key);
-                let el = tile::tile(group, session, style, focused, !stacked || focused, elsewhere, cx);
+                let marks = tile::Marks { active: focused, ring: focused, ..Default::default() };
+                let el = tile::tile(group, session, style, marks, !stacked || focused, elsewhere, cx);
                 placed(frames[i], &session.key, el, cx)
             })
             .collect();

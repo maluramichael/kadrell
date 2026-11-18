@@ -9,6 +9,7 @@ pub mod stats;
 pub mod launch;
 pub mod mapping;
 mod tiles;
+mod workspace;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -63,6 +64,8 @@ pub struct AppState {
     wanted: Vec<String>,
     pub selected: Vec<String>,
     pub focused: Option<String>,
+    /// Die Kachel, die vor dem letzten Fokuswechsel den Fokus hatte (⌥⇥).
+    pub last_focused: Option<String>,
     pub anchor: Option<String>,
     pub layout: LayoutMode,
     pub zoom: bool,
@@ -106,6 +109,7 @@ impl AppState {
             wanted: Vec::new(),
             selected: Vec::new(),
             focused: None,
+            last_focused: None,
             anchor: None,
             layout: LayoutMode::Grid,
             zoom: false,
@@ -163,6 +167,9 @@ impl AppState {
         let focus = focus.filter(|f| keys.contains(f)).or_else(|| keys.last().cloned());
         let changed = self.selected != keys || self.focused != focus;
         self.count_focus_switch(&self.focused.clone(), &focus);
+        if self.focused.is_some() && self.focused != focus {
+            self.last_focused = self.focused.clone();
+        }
         self.selected = keys;
         self.focused = focus;
         if self.anchor.as_ref().is_none_or(|a| !self.selected.contains(a)) {

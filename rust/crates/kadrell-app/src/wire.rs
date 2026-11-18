@@ -100,7 +100,8 @@ impl Shell {
     pub(crate) fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reconcile(window, cx);
         self.rebuild();
-        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() && !self.misc.overlay_open() {
+        self.refresh_auto();
+        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() && !self.misc.overlay_open() && !self.ws.keeps_focus() {
             let focus = self.selected.and_then(|(g, s)| self.groups[g].sessions[s].pane.as_ref().map(|p| p.read(cx).focus.clone()));
             if let Some(focus) = focus {
                 focus.focus(window, cx);
