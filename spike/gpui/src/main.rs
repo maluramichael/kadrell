@@ -2,6 +2,7 @@
 #![allow(dead_code)] // Spike: nicht alle Theme-Felder werden benutzt.
 
 mod fonts;
+mod boxdraw;
 mod terminal;
 mod theme;
 mod ui;
@@ -182,6 +183,7 @@ fn start_theme() -> Theme {
 }
 
 fn main() {
+    terminal::strip_inherited_env();
     application().run(|cx: &mut App| {
         fonts::load(cx);
         cx.set_global(ThemeGlobal(start_theme()));

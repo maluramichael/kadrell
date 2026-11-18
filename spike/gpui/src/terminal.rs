@@ -9,11 +9,11 @@ use std::sync::Arc;
 
 use alacritty_terminal::event::{Event, EventListener, Notify, OnResize, WindowSize};
 use alacritty_terminal::event_loop::{EventLoop, Notifier};
-use alacritty_terminal::grid::{Dimensions, Scroll};
+use alacritty_terminal::grid::{Dimensions, Indexed, Scroll};
 use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point as TPoint, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
-use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::search::{Match, RegexSearch};
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
@@ -23,15 +23,47 @@ use gpui::{
     EntityInputHandler, FocusHandle, Font, FontStyle, FontWeight, GlobalElementId, Hsla,
     InspectorElementId, IntoElement, KeyDownEvent, Keystroke, LayoutId, MouseButton,
     MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollEvent, SharedString, Style,
-    TextRun, UTF16Selection, UnderlineStyle, Window, div, fill, font, point, prelude::*, px,
-    relative, rgb, size,
+    StrikethroughStyle, TextRun, UTF16Selection, UnderlineStyle, Window, div, fill, font, point,
+    prelude::*, px, relative, rgb, size,
 };
 
+use crate::boxdraw;
 use crate::theme::{FONT, Theme};
 
 pub const FONT_SIZE: f32 = 13.0;
 pub const LINE_HEIGHT: f32 = 1.25;
 const PAD: f32 = 8.0;
+
+/// Namen von Umgebungsvariablen, die Kinder nicht erben sollen: die Marker einer umgebenden Claude-Code-Session
+/// (sonst meldet Claude Code in der Kachel "inherited CLAUDE_CODE_CHILD_SESSION marker") und `AI_AGENT`.
+/// Ist `CLAUDECODE` gesetzt, setzt Claude Code für seine Werkzeug-Prozesse auch `NO_COLOR=1`; das erbte
+/// jede Shell und jedes Programm in der Kachel und schaltete deren Farben ab. Es fliegt dann ebenfalls raus.
+pub fn inherited_env_to_strip(names: &[String]) -> Vec<String> {
+    let upper = |n: &str| n.to_ascii_uppercase();
+    let in_claude_session = names.iter().any(|n| upper(n) == "CLAUDECODE");
+    names
+        .iter()
+        .filter(|n| {
+            let u = upper(n);
+            u == "CLAUDECODE"
+                || u.starts_with("CLAUDE_CODE_")
+                || u == "AI_AGENT"
+                || (in_claude_session && u == "NO_COLOR")
+        })
+        .cloned()
+        .collect()
+}
+
+/// Entfernt die Variablen aus `inherited_env_to_strip` aus der Umgebung des Prozesses.
+/// Nur beim Start aufrufen, bevor Threads laufen.
+pub fn strip_inherited_env() {
+    let names: Vec<String> = std::env::vars_os().filter_map(|(k, _)| k.into_string().ok()).collect();
+    for name in inherited_env_to_strip(&names) {
+        // SAFETY: Aufruf am Anfang von `main`, bevor GPUI, der Tokio-/Event-Loop oder eigene Threads
+        // starten; in dem Moment liest oder schreibt niemand sonst die Umgebung.
+        unsafe { std::env::remove_var(&name) };
+    }
+}
 
 #[derive(Clone)]
 struct Listener(async_channel::Sender<Event>);
@@ -585,23 +617,43 @@ struct Run {
     bold: bool,
     italic: bool,
     underline: bool,
+    strike: bool,
     wide: bool,
 }
 
+/// Stilmerkmale einer Zelle, die einen Lauf bestimmen.
+#[derive(Clone, Copy, PartialEq)]
+struct CellStyle {
+    fg: Hsla,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    strike: bool,
+}
+
 impl Run {
-    fn continues(&self, col: usize, fg: Hsla, bold: bool, italic: bool, underline: bool) -> bool {
+    fn continues(&self, col: usize, s: &CellStyle) -> bool {
         !self.wide
             && self.col + self.cells == col
-            && self.fg == fg
-            && self.bold == bold
-            && self.italic == italic
-            && self.underline == underline
+            && self.fg == s.fg
+            && self.bold == s.bold
+            && self.italic == s.italic
+            && self.underline == s.underline
+            && self.strike == s.strike
     }
+}
+
+/// Selbst gezeichnetes Zeichen (Box-Drawing, Blöcke, Powerline) an seiner Zellposition.
+struct Glyph {
+    origin: Point<Pixels>,
+    shapes: Vec<boxdraw::Shape>,
+    color: Hsla,
 }
 
 #[derive(Default)]
 pub struct Frame {
     rects: Vec<(Bounds<Pixels>, Hsla)>,
+    glyphs: Vec<Glyph>,
     /// Ein Eintrag pro sichtbarer Zeile.
     rows: Vec<Vec<Run>>,
     cursor: Option<(Bounds<Pixels>, CursorShape)>,
@@ -685,54 +737,40 @@ impl Element for TerminalElement {
             if row >= lines {
                 continue;
             }
-            let mut fg = color(&term, item.fg, &theme);
-            let mut bg = color(&term, item.bg, &theme);
-            if flags.contains(Flags::INVERSE) {
-                std::mem::swap(&mut fg, &mut bg);
-            }
-            if flags.contains(Flags::DIM) {
-                fg.a *= 0.66;
-            }
             let selected = selection.is_some_and(|s| s.contains(item.point));
-            if selected {
-                bg = theme.accent.opacity(0.35);
-            }
+            let (mut fg, bg) = cell_colors(&term, &item, &theme);
             if block_cursor == Some((row, col)) && !selected {
                 fg = theme.bg;
             }
             let wide = flags.contains(Flags::WIDE_CHAR);
+            let at = point(origin.x + cell.width * col as f32, origin.y + cell.height * row as f32);
+            let cell_box = Bounds::new(at, size(if wide { cell.width * 2. } else { cell.width }, cell.height));
             if bg != theme.bg {
-                let w = if wide { cell.width * 2. } else { cell.width };
-                let at = point(origin.x + cell.width * col as f32, origin.y + cell.height * row as f32);
-                frame.rects.push((Bounds::new(at, size(w, cell.height)), bg));
+                frame.rects.push((cell_box, bg));
             }
-            if item.c == ' ' && !flags.contains(Flags::UNDERLINE) || flags.contains(Flags::HIDDEN) {
+            // Auswahl liegt halbtransparent über dem eigenen Hintergrund der Zelle.
+            if selected {
+                frame.rects.push((cell_box, theme.accent.opacity(0.35)));
+            }
+            if flags.contains(Flags::HIDDEN) {
                 continue;
             }
-            let bold = flags.contains(Flags::BOLD);
-            let italic = flags.contains(Flags::ITALIC);
-            let underline = flags.intersects(Flags::ALL_UNDERLINES);
-            let runs = &mut row_of[row];
-            let mut text = item.c.to_string();
-            if let Some(zw) = item.zerowidth() {
-                text.extend(zw);
+            if boxdraw::is_builtin(item.c) {
+                let shapes = boxdraw::shapes(item.c, f32::from(cell.width), f32::from(cell.height));
+                frame.glyphs.push(Glyph { origin: at, shapes, color: fg });
+                continue;
             }
-            match runs.last_mut() {
-                Some(r) if !wide && r.continues(col, fg, bold, italic, underline) => {
-                    r.text.push_str(&text);
-                    r.cells += 1;
-                }
-                _ => runs.push(Run {
-                    col,
-                    cells: if wide { 2 } else { 1 },
-                    text,
-                    fg,
-                    bold,
-                    italic,
-                    underline,
-                    wide,
-                }),
+            let style = CellStyle {
+                fg,
+                bold: flags.contains(Flags::BOLD),
+                italic: flags.contains(Flags::ITALIC),
+                underline: flags.intersects(Flags::ALL_UNDERLINES),
+                strike: flags.contains(Flags::STRIKEOUT),
+            };
+            if item.c == ' ' && !style.underline && !style.strike {
+                continue;
             }
+            push_char(&mut row_of[row], &item, col, wide, style);
         }
         frame.rows = row_of;
 
@@ -741,7 +779,10 @@ impl Element for TerminalElement {
             && let Some(vp) = alacritty_terminal::term::point_to_viewport(offset, c.point)
         {
             let at = point(origin.x + cell.width * vp.column.0 as f32, origin.y + cell.height * vp.line as f32);
-            frame.cursor = Some((Bounds::new(at, cell), c.shape));
+            // Über einem breiten Zeichen (日本) deckt der Cursor beide Zellen ab.
+            let wide = term.grid()[c.point].flags.contains(Flags::WIDE_CHAR);
+            let cursor_cell = if wide { size(cell.width * 2., cell.height) } else { cell };
+            frame.cursor = Some((Bounds::new(at, cursor_cell), c.shape));
             if let Some(m) = &pane.marked {
                 frame.marked = Some((at, m.clone()));
             }
@@ -786,6 +827,9 @@ impl Element for TerminalElement {
                 };
                 window.paint_quad(quad);
             }
+            for g in &frame.glyphs {
+                boxdraw::paint(window, &g.shapes, g.origin, g.color);
+            }
             for (row, runs) in frame.rows.iter().enumerate() {
                 let y = origin.y + line_h * row as f32;
                 for run in runs {
@@ -804,7 +848,7 @@ impl Element for TerminalElement {
                             thickness: px(1.),
                             wavy: false,
                         }),
-                        strikethrough: None,
+                        strikethrough: run.strike.then_some(StrikethroughStyle { color: Some(run.fg), thickness: px(1.) }),
                     };
                     let text: SharedString = run.text.clone().into();
                     let advance = if run.wide { cell_w * 2. } else { cell_w };
@@ -827,6 +871,44 @@ impl Element for TerminalElement {
                 let _ = line.paint(*at, line_h, gpui::TextAlign::Left, None, window, cx);
             }
         });
+    }
+}
+
+/// Vorder- und Hintergrundfarbe einer Zelle nach INVERSE und DIM.
+fn cell_colors(term: &Term<Listener>, item: &Indexed<&Cell>, t: &Theme) -> (Hsla, Hsla) {
+    let mut fg = color(term, item.fg, t);
+    let mut bg = color(term, item.bg, t);
+    if item.flags.contains(Flags::INVERSE) {
+        std::mem::swap(&mut fg, &mut bg);
+    }
+    if item.flags.contains(Flags::DIM) {
+        fg.a *= 0.66;
+    }
+    (fg, bg)
+}
+
+/// Hängt das Zeichen an den letzten Lauf der Zeile oder beginnt einen neuen.
+fn push_char(runs: &mut Vec<Run>, item: &Indexed<&Cell>, col: usize, wide: bool, style: CellStyle) {
+    let mut text = item.c.to_string();
+    if let Some(zw) = item.zerowidth() {
+        text.extend(zw);
+    }
+    match runs.last_mut() {
+        Some(r) if !wide && r.continues(col, &style) => {
+            r.text.push_str(&text);
+            r.cells += 1;
+        }
+        _ => runs.push(Run {
+            col,
+            cells: if wide { 2 } else { 1 },
+            text,
+            fg: style.fg,
+            bold: style.bold,
+            italic: style.italic,
+            underline: style.underline,
+            strike: style.strike,
+            wide,
+        }),
     }
 }
 
@@ -929,6 +1011,50 @@ mod tests {
         assert_eq!(escape_regex("(x)[y]"), "\\(x\\)\\[y\\]");
         assert_eq!(escape_regex("plain äö"), "plain äö");
         assert!(RegexSearch::new(&escape_regex("a+b|c{1}$^#&-~")).is_ok());
+    }
+
+    fn feed(input: &str) -> Term<Listener> {
+        let mut t = Term::new(Config::default(), &Grid { cols: 20, lines: 2 }, Listener(async_channel::unbounded().0));
+        let mut parser = alacritty_terminal::vte::ansi::Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::new();
+        parser.advance(&mut t, input.as_bytes());
+        t
+    }
+
+    fn cell_at(t: &Term<Listener>, col: usize) -> alacritty_terminal::term::cell::Cell {
+        t.grid()[TPoint::new(Line(0), Column(col))].clone()
+    }
+
+    #[test]
+    fn escape_farben_landen_in_den_zellen() {
+        let t = feed("\x1b[31mr\x1b[0m\x1b[38;2;215;119;87mt\x1b[0m\x1b[48;5;24mb");
+        let theme = crate::theme::Theme::mocha();
+        let (r, tc, b) = (cell_at(&t, 0), cell_at(&t, 1), cell_at(&t, 2));
+        println!("{:?} {:?} {:?}", r.fg, tc.fg, b.bg);
+        assert_eq!(color(&t, r.fg, &theme).to_rgb(), theme.ansi[1].to_rgb());
+        assert_eq!(color(&t, tc.fg, &theme).to_rgb(), rgb_hsla(Rgb { r: 215, g: 119, b: 87 }).to_rgb());
+        assert_eq!(color(&t, b.bg, &theme).to_rgb(), rgb_hsla(Rgb { r: 0, g: 95, b: 135 }).to_rgb());
+    }
+
+    #[test]
+    fn claude_marker_und_no_color_werden_entfernt() {
+        let names = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let in_claude = names(&["PATH", "CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "claude_code_entrypoint", "NO_COLOR", "AI_AGENT", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"]);
+        assert_eq!(
+            inherited_env_to_strip(&in_claude),
+            names(&["CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "claude_code_entrypoint", "NO_COLOR", "AI_AGENT"])
+        );
+        // Ein NO_COLOR, das der Nutzer selbst gesetzt hat (keine Claude-Session), bleibt.
+        assert_eq!(inherited_env_to_strip(&names(&["NO_COLOR", "PATH"])), Vec::<String>::new());
+    }
+
+    #[test]
+    fn strich_dim_inverse_und_breite_zeichen() {
+        let t = feed("\x1b[9ma\x1b[0m\x1b[2mb\x1b[0m\x1b[4mc\x1b[0m日");
+        assert!(cell_at(&t, 0).flags.contains(Flags::STRIKEOUT));
+        assert!(cell_at(&t, 1).flags.contains(Flags::DIM));
+        assert!(cell_at(&t, 2).flags.contains(Flags::UNDERLINE));
+        assert!(cell_at(&t, 3).flags.contains(Flags::WIDE_CHAR));
+        assert!(cell_at(&t, 4).flags.contains(Flags::WIDE_CHAR_SPACER));
     }
 
     #[test]
