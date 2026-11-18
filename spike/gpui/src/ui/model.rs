@@ -34,11 +34,16 @@ pub struct Launch {
     pub program: &'static str,
     pub args: &'static [&'static str],
     pub in_spike: bool,
+    /// Eigener Startordner (Sessions aus „Neue Session“); sonst gilt `in_spike`.
+    pub dir: Option<PathBuf>,
 }
 
 impl Launch {
-    /// Ordner des Spikes (`spike/gpui`) oder die Repo-Wurzel.
+    /// Eigener Ordner, sonst der des Spikes (`spike/gpui`) oder die Repo-Wurzel.
     pub fn cwd(&self) -> PathBuf {
+        if let Some(dir) = &self.dir {
+            return dir.clone();
+        }
         let spike = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         if self.in_spike {
             return spike;
@@ -76,8 +81,16 @@ const SHELL: Command = ("/bin/zsh", &["-l"]);
 const SHELL: Command = ("pwsh.exe", &[]);
 
 fn session(title: &'static str, status: Status, age: &'static str, cmd: Command) -> Session {
-    let launch = Launch { program: cmd.0, args: cmd.1, in_spike: false };
+    let launch = Launch { program: cmd.0, args: cmd.1, in_spike: false, dir: None };
     Session { title, status, is_new: false, age, branch: None, launch, pane: None }
+}
+
+/// Neue Claude-Session in einem beliebigen Ordner („Neue Session“).
+pub fn claude_session_in(title: &'static str, dir: PathBuf) -> Session {
+    let mut s = session(title, Status::Running, "jetzt", CLAUDE);
+    s.is_new = true;
+    s.launch.dir = Some(dir);
+    s
 }
 
 fn in_spike(mut s: Session) -> Session {

@@ -149,8 +149,8 @@ pub fn init(cx: &mut App) {
 
 /// Aktionen des Fensters: wirken auf die Shell und laufen über den Fokuspfad (Menü, Tastatur).
 pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
-    // TODO: NewSession gehört dem Overlay-Zweig (Strg+N / Cmd+N öffnet den Dialog), hier bewusst nicht belegt.
-    root.on_action(cx.listener(|this, _: &NextSession, window, cx| this.step(1, window, cx)))
+    root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
+        .on_action(cx.listener(|this, _: &NextSession, window, cx| this.step(1, window, cx)))
         .on_action(cx.listener(|this, _: &PrevSession, window, cx| this.step(-1, window, cx)))
         .on_action(cx.listener(|this, _: &NextLayout, _, cx| this.cycle_layout(cx)))
         .on_action(cx.listener(|this, _: &MoreColumns, _, cx| this.step_cols(1, cx)))

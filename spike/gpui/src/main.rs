@@ -31,6 +31,7 @@ pub struct Shell {
     layout: LayoutState,
     clock: String,
     menubar: Entity<ui::menubar::MenuBar>,
+    overlay: Option<Entity<ui::new_session::NewSession>>,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_SPIKE_SELECT="0,0;0,1;1,0"`.
@@ -83,10 +84,12 @@ impl Shell {
             layout: LayoutState::new(start_layout()),
             clock: now_hhmm(),
             menubar,
+            overlay: None,
         };
         shell.apply_selection(window, cx);
         shell.start_clock(cx);
         shell.open_menu_from_env(window, cx);
+        shell.open_overlay_from_env(window, cx);
         shell
     }
 
@@ -279,6 +282,11 @@ impl Shell {
 
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
+        // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
+        if self.overlay.is_some() && m.alt {
+            cx.stop_propagation();
+            return;
+        }
         // Strg+L (Cmd+L auf dem Mac) schaltet das Layout reihum.
         if m.secondary(cx) && !m.alt && !m.shift && ev.keystroke.key == "l" {
             self.cycle_layout(cx);
@@ -333,6 +341,7 @@ impl Render for Shell {
                     .child(workspace),
             )
             .child(ui::footer::footer(cx))
+            .children(self.overlay.clone())
     }
 }
 
@@ -358,9 +367,11 @@ fn main() {
     terminal::strip_inherited_env();
     application().run(|cx: &mut App| {
         fonts::load(cx);
+        ui::text_input::bind_keys(cx);
+        ui::new_session::bind_keys(cx);
         cx.set_global(ThemeGlobal(start_theme()));
         menus::init(cx);
-        let bounds = Bounds::centered(None, size(px(1400.), px(900.)), cx);
+        let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(titlebar_options()),
