@@ -45,10 +45,13 @@ pub fn os_text(text: &str) -> String {
     tx(&text)
 }
 
+/// Einmal-Aktion auf der Shell, z. B. was bei „Ja“ geschieht.
+type ShellAction = Box<dyn FnOnce(&mut Shell, &mut Window, &mut Context<Shell>)>;
+
 /// Eine Rückfrage, die auf ihren Platz wartet, mit dem, was bei „Ja“ geschieht.
 struct Pending {
     spec: Spec,
-    on_confirm: Option<Box<dyn FnOnce(&mut Shell, &mut Window, &mut Context<Shell>)>>,
+    on_confirm: Option<ShellAction>,
 }
 
 /// Zustand der restlichen Funktionen, ein Feld der Shell.
@@ -56,7 +59,7 @@ pub struct Misc {
     pub help: Option<Entity<HelpView>>,
     pub confirm: Option<Entity<ConfirmDialog>>,
     queue: VecDeque<Pending>,
-    action: Option<Box<dyn FnOnce(&mut Shell, &mut Window, &mut Context<Shell>)>>,
+    action: Option<ShellAction>,
     /// Neuere Version laut `latest.json`, Pille in der Leiste.
     pub update: Option<UpdateManifest>,
     /// Claude-Sessions, die interaktiv in anderen Terminals laufen (Hinweis im Leerzustand).
@@ -160,7 +163,7 @@ impl Shell {
     // MARK: Rückfragen
 
     /// Zeigt die Rückfrage, sobald keine andere offen ist; `on_confirm` läuft bei Bestätigung.
-    pub(crate) fn ask(&mut self, spec: Spec, on_confirm: Option<Box<dyn FnOnce(&mut Shell, &mut Window, &mut Context<Shell>)>>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn ask(&mut self, spec: Spec, on_confirm: Option<ShellAction>, window: &mut Window, cx: &mut Context<Self>) {
         self.misc.queue.push_back(Pending { spec, on_confirm });
         self.show_next_confirm(window, cx);
     }
@@ -300,7 +303,7 @@ impl Shell {
         let Some(offer) = adopt::offer(&plan) else { return };
         let spec = Spec { title: offer.title, text: offer.text, button: trd!("Übernehmen"), destructive: offer.destructive, notice: false };
         // Ohne `cli` (Ansicht mit `KADRELL_DEV_OVERLAY=adopt`) bleibt die Bestätigung folgenlos.
-        let run = cli.map(|cli| -> Box<dyn FnOnce(&mut Shell, &mut Window, &mut Context<Shell>)> { Box::new(move |shell, window, cx| shell.adopt_now(cli, plan, window, cx)) });
+        let run = cli.map(|cli| -> ShellAction { Box::new(move |shell, window, cx| shell.adopt_now(cli, plan, window, cx)) });
         self.ask(spec, run, window, cx);
     }
 
