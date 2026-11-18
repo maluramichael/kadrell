@@ -35,6 +35,7 @@ pub struct Shell {
     clock: String,
     menubar: Entity<ui::menubar::MenuBar>,
     overlay: Option<Entity<ui::new_session::NewSession>>,
+    palette: Option<Entity<ui::palette::Palette>>,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"`.
@@ -88,11 +89,13 @@ impl Shell {
             clock: now_hhmm(),
             menubar,
             overlay: None,
+            palette: None,
         };
         shell.apply_selection(window, cx);
         shell.start_clock(cx);
         shell.open_menu_from_env(window, cx);
         shell.open_overlay_from_env(window, cx);
+        shell.open_palette_from_env(window, cx);
         shell
     }
 
@@ -289,7 +292,7 @@ impl Shell {
             eprintln!("key {:?}", ev.keystroke);
         }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if self.overlay.is_some() && m.alt {
+        if (self.overlay.is_some() || self.palette.is_some()) && m.alt {
             cx.stop_propagation();
             return;
         }
@@ -348,6 +351,7 @@ impl Render for Shell {
             )
             .child(ui::footer::footer(cx))
             .children(self.overlay.clone())
+            .children(self.palette.clone())
     }
 }
 
@@ -375,6 +379,7 @@ pub fn run() {
         kadrell_term::fonts::load(cx);
         ui::text_input::bind_keys(cx);
         ui::new_session::bind_keys(cx);
+        ui::palette::bind_keys(cx);
         set_theme(cx, start_theme());
         menus::init(cx);
         let bounds = Bounds::centered(None, ui::overlay::window_size(), cx);
