@@ -406,7 +406,7 @@ fn display_part(b: &BarCtl, plan: &BarPlan, clock: &str, t: &Theme) -> Part {
         .rounded(px(5.))
         .bg(screen_face(t))
         .text_size(px(10.5))
-        .child(div().absolute().top_0().left_0().right_0().h(px(super::overlay::hairline())).bg(hsla(0., 0., 1., 0.06)))
+        .child(div().absolute().top_0().left_0().right_0().h(px(super::overlay::seam())).bg(hsla(0., 0., 1., 0.06)))
         .child(div().size(px(7.)).flex_none().rounded_full().bg(lamp).mr(px(6.)))
         .child(label)
         .child(div().flex_1().min_w(px(if text_w > 0. { 8. } else { 0. })))

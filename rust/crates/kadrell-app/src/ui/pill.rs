@@ -156,7 +156,7 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
 /// Display: dunkle Fläche mit heller Schrift, in allen Schemata gleich.
 fn display(pill: Pill, face: Hsla, a: &Appearance) -> impl IntoElement {
     // Feine helle Haarlinie am oberen Rand, durch den Radius beschnitten (Swift: `Instrument.screen`).
-    let hairline = div().absolute().top_0().left_0().right_0().h(px(super::overlay::hairline())).bg(gpui::hsla(0., 0., 1., 0.06));
+    let hairline = div().absolute().top_0().left_0().right_0().h(px(super::overlay::seam())).bg(gpui::hsla(0., 0., 1., 0.06));
     let mut el = div()
         .id(pill.id)
         .relative()

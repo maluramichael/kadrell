@@ -101,11 +101,16 @@ impl Area {
         Frame { left: ((self.width - width) / 2.).max(0.), top: top.max(0.), width, height }
     }
 
-    /// Feinste Linie (`Instrument.hairline`). Swift rechnet `1 / Theme.scale` in den mit `scale` vergrößerten
-    /// Koordinaten, das ist am Mac immer 1 pt (auf Retina 2 Gerätepixel, gemessen an Fugen von Leiste und Dialogen).
-    /// Andere Systeme nehmen ein Gerätepixel.
+    /// Ein Gerätepixel in Punkten: Dicke der Rahmen und Ringe, die das Layout mitrechnen (`border_px`).
     pub fn hairline(&self) -> f32 {
-        if cfg!(target_os = "macos") { 1. } else { 1. / self.device.max(0.01) }
+        1. / self.device.max(0.01)
+    }
+
+    /// Dicke der gezeichneten Fugen und Haarlinien (`Instrument.hairline`). Swift rechnet `1 / Theme.scale` in den mit
+    /// `scale` vergrößerten Koordinaten, das ist am Mac immer 1 pt (auf Retina 2 Gerätepixel, gemessen an den Fugen von
+    /// Leiste und Dialogen). Andere Systeme nehmen ein Gerätepixel.
+    pub fn seam(&self) -> f32 {
+        if cfg!(target_os = "macos") { 1. } else { self.hairline() }
     }
 
     /// Rastet eine Position aufs Gerätepixel ein (`Instrument.snapped`).
@@ -130,6 +135,11 @@ pub fn area() -> Area {
 /// UI-Größe der Overlays (`Theme.scale`).
 pub fn scale() -> f32 {
     area().scale
+}
+
+/// Dicke der gezeichneten Fugen (`Area::seam`).
+pub fn seam() -> f32 {
+    area().seam()
 }
 
 /// Ein Gerätepixel in Punkten.
@@ -470,9 +480,10 @@ mod tests {
     }
 
     #[test]
-    fn hairline_is_one_point_on_mac_and_one_device_pixel_elsewhere() {
+    fn hairline_is_one_device_pixel_and_seam_one_point_on_mac() {
         let a = Area { device: 2., ..window(100., 100.) };
-        assert_eq!(a.hairline(), if cfg!(target_os = "macos") { 1. } else { 0.5 });
+        assert_eq!(a.hairline(), 0.5);
+        assert_eq!(a.seam(), if cfg!(target_os = "macos") { 1. } else { 0.5 });
         assert_eq!(a.snapped(10.3), 10.5);
         assert_eq!(window(100., 100.).snapped(10.4), 10.);
     }

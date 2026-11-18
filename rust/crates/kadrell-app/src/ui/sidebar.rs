@@ -559,7 +559,8 @@ fn group_block(place: Place, group: &Group, sel: &Selection, ctx: &SidebarCtx, a
                 g,
                 s,
                 selected: sel.contains((g, s)),
-                focused: sel.focus == (g, s),
+                // Ohne gezeigte Session hat keine Zeile den Fokus (Swift: `focusedKey == nil`).
+                focused: !sel.items.is_empty() && sel.focus == (g, s),
                 order: head_order + 1 + s,
                 grouped,
                 keys: ctx.keys,
