@@ -47,6 +47,12 @@ fn t(s: &str) -> String {
     s.to_string()
 }
 
+/// Text mit „Finder“, unter Windows mit „Explorer“.
+fn file_manager_text(source: &str) -> String {
+    let text = tx(source);
+    if cfg!(target_os = "macos") { text } else { text.replace("Finder", crate::lang::file_manager()) }
+}
+
 fn setter<T: 'static>(f: impl Fn(&mut Settings, T) + 'static) -> Setter<T> {
     Rc::new(f)
 }
@@ -107,7 +113,8 @@ fn sessions(c: &Context) -> Block {
     let s = c.settings;
     let home = super::super::folders::home_dir();
     let folder = super::super::folders::short_path(&s.start_folder(std::path::Path::new(&home)), &home);
-    let browse = vec![Btn::icon(Icon::Folder, Msg::Browse { row: t("startFolder"), files: false })];
+    let pick = Btn::icon(Icon::Folder, Msg::Browse { row: t("startFolder"), files: false }).tip(file_manager_text(de!("Im Finder wählen")));
+    let browse = vec![pick];
     let start_folder = setter(|s: &mut Settings, v: String| {
         let v = v.trim();
         if !v.is_empty() {
@@ -257,15 +264,14 @@ fn terminal_rows(c: &Context) -> Vec<Row> {
 
 fn customize(c: &Context) -> Block {
     let s = c.settings;
-    let buttons = vec![Btn::icon(Icon::Image, Msg::Browse { row: t("backgroundImage"), files: true }), Btn::icon(Icon::Cross, Msg::Clear(t("backgroundImage")))];
-    let image = text_field(
-        "backgroundImage",
-        de!("Hintergrundbild"),
-        de!("kein Bild · Datei hineinziehen"),
-        s.background_image(),
-        Some(setter(|s, v: String| s.set_background_image(&v))),
-        buttons,
-    );
+    let buttons = vec![
+        Btn::icon(Icon::Image, Msg::Browse { row: t("backgroundImage"), files: true }).tip(tx(de!("Bild wählen"))),
+        Btn::icon(Icon::Cross, Msg::Clear(t("backgroundImage"))).tip(tx(de!("Kein Bild"))),
+    ];
+    let home = super::super::folders::home_dir();
+    let shown = super::super::folders::short_path(&s.background_image(), &home);
+    let store = setter(move |s: &mut Settings, v: String| s.set_background_image(&super::super::folders::normalize(&v, &home)));
+    let image = text_field("backgroundImage", de!("Hintergrundbild"), de!("kein Bild · Datei hineinziehen"), shown, Some(store), buttons);
     let opacity = slider("tileOpacity", de!("Deckkraft von Baum und Kacheln"), s.tile_opacity() * 100., (0., 100.), 1., "%", true, |s, v| s.set_tile_opacity(v / 100.));
     block(de!("Anpassen"), de!("Bild hinter Baum und Kacheln"), vec![image, opacity])
 }
@@ -348,14 +354,32 @@ fn asks(c: &Context) -> Block {
 }
 
 fn status_row(provider: Provider, c: &Context) -> Row {
-    let (text, tone) = match c.backend.status(provider) {
+    let status = c.backend.status(provider);
+    let tip = status_tip(provider, &status);
+    let busy = matches!(status, ProviderStatus::Checking);
+    let (text, tone) = match status {
         ProviderStatus::Off => (tx(de!("aus")), Tone::Muted),
         ProviderStatus::Checking => (tx(de!("prüft …")), Tone::Muted),
         ProviderStatus::Ready(v) => (v, Tone::Accent),
         ProviderStatus::Failed(e) => (e, Tone::Error),
     };
     let buttons = vec![Btn::text(de!("Neu laden"), Msg::Reload(provider))];
-    Row::new(&format!("status.{provider:?}"), de!("Status"), Control::Info { text, tone, buttons })
+    let row = Row::new(&format!("status.{provider:?}"), de!("Status"), Control::Info { text, tone, buttons });
+    let row = tip.into_iter().fold(row, Row::with_tip);
+    if busy { row.busy() } else { row }
+}
+
+/// Hilfetext der Statuszeile (`LocalStatusRow`): bereit zeigt die Version, ein Fehler dazu, was zu tun ist.
+fn status_tip(provider: Provider, status: &ProviderStatus) -> Option<String> {
+    let hint = match provider {
+        Provider::Ollama => de!("Ollama starten (App oder ollama serve), Kadrell bringt keinen eigenen Dienst mit"),
+        Provider::LlamaCpp => de!("llama.cpp installieren (brew install llama.cpp) oder den Pfad setzen"),
+    };
+    match status {
+        ProviderStatus::Ready(v) => Some(v.clone()),
+        ProviderStatus::Failed(e) => Some(format!("{e}\n{}", tx(hint))),
+        ProviderStatus::Off | ProviderStatus::Checking => None,
+    }
 }
 
 /// Installierte Modelle eines Anbieters. „Keine Modelle installiert“ nur, wenn der Anbieter bereit ist und nichts meldet
@@ -412,7 +436,7 @@ fn search_rows(c: &Context) -> Vec<Row> {
 
 /// Taste mit dem Tag („4b“) als Beschriftung; sie ist ein Name aus der Bibliothek, kein übersetzbarer Text.
 fn tag_button(tag: &str, full: &str) -> Btn {
-    Btn { label: tag.to_string(), icon: None, msg: Msg::PickPull(full.to_string()), destructive: false }
+    Btn { label: tag.to_string(), icon: None, msg: Msg::PickPull(full.to_string()), destructive: false, tip: None }
 }
 
 fn model_row(m: &super::backend::ModelInfo, armed: Option<&str>) -> Row {
@@ -515,7 +539,7 @@ fn suggestion_row(f: &Feature, c: &Context) -> Option<Row> {
     }
     let label = trd!("%@ laden und einschalten", wanted.name.as_str());
     let msg = Msg::UseSuggested { feature: f.key.to_string(), model: wanted.name };
-    let button = Btn { label, icon: None, msg, destructive: false };
+    let button = Btn { label, icon: None, msg, destructive: false, tip: None };
     Some(Row::new(&format!("feature.{}.suggestion", f.key), de!("Empfohlenes Modell"), Control::Info { text: String::new(), tone: Tone::Normal, buttons: vec![button] }))
 }
 
@@ -631,6 +655,40 @@ mod tests {
         let blocks = built();
         let row = blocks[12].rows.iter().find(|r| r.id == "nextWaiting").unwrap();
         assert!(row.search.iter().any(|t| t.contains("wartet")), "{:?}", row.search);
+    }
+
+    #[test]
+    fn status_tip_shows_the_version_or_the_error_with_a_hint() {
+        let ready = ProviderStatus::Ready("0.9.1".into());
+        assert_eq!(status_tip(Provider::Ollama, &ready).as_deref(), Some("0.9.1"));
+        let failed = ProviderStatus::Failed("Connection refused".into());
+        let tip = status_tip(Provider::LlamaCpp, &failed).unwrap();
+        assert!(tip.starts_with("Connection refused\n") && tip.contains("brew install llama.cpp"), "{tip}");
+        let tip = status_tip(Provider::Ollama, &failed).unwrap();
+        assert!(tip.contains("ollama serve"), "{tip}");
+        assert_eq!(status_tip(Provider::Ollama, &ProviderStatus::Off), None);
+        assert_eq!(status_tip(Provider::Ollama, &ProviderStatus::Checking), None);
+    }
+
+    #[test]
+    fn checking_status_shows_a_spinner() {
+        let settings = Settings::default();
+        let backend = MockBackend::new();
+        let c = Context { settings: &settings, backend: &backend, theme_id: "mocha", platform: Platform::Windows };
+        let row = status_row(Provider::Ollama, &c);
+        assert_eq!(row.busy, matches!(backend.status(Provider::Ollama), ProviderStatus::Checking));
+    }
+
+    #[test]
+    fn path_buttons_carry_a_tooltip() {
+        let blocks = built();
+        let tips = |id: &str| -> Vec<Option<String>> {
+            let row = blocks.iter().flat_map(|b| &b.rows).find(|r| r.id == id).unwrap();
+            let Control::Text { buttons, .. } = &row.control else { panic!("kein Textfeld") };
+            buttons.iter().map(|b| b.tip.clone()).collect()
+        };
+        assert_eq!(tips("startFolder"), vec![Some(file_manager_text(de!("Im Finder wählen")))]);
+        assert_eq!(tips("backgroundImage"), vec![Some("Bild wählen".to_string()), Some("Kein Bild".to_string())]);
     }
 
     #[test]

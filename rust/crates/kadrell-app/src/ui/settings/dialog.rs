@@ -16,6 +16,7 @@ use super::backend::Backend;
 use super::controls::Geometry;
 use super::filter::Filter;
 use super::model::{Block, Btn, Control, Msg, Provider, Row, Setter};
+use super::paths;
 use super::sections::{self, Context as BuildContext};
 use super::shortcut::{self, KeyInput, Recorded};
 use super::store::{self, AppSettings};
@@ -62,6 +63,8 @@ pub struct SettingsDialog {
     pub(super) filter_input: Entity<TextInput>,
     pub(super) inputs: HashMap<String, Entity<TextInput>>,
     pub(super) geometry: Geometry,
+    /// Breite und Abschnittshöhen, mit denen der letzte Frame die Spalten verteilt hat.
+    pub(super) layout_basis: (f32, Vec<f32>),
     pub(super) scroll: ScrollHandle,
     pub(super) pop_scroll: ScrollHandle,
     pub(super) popover: Option<Popover>,
@@ -98,6 +101,7 @@ impl SettingsDialog {
             filter_input,
             inputs: HashMap::new(),
             geometry: Geometry::default(),
+            layout_basis: (0., Vec::new()),
             scroll: ScrollHandle::new(),
             pop_scroll: ScrollHandle::new(),
             popover: None,
@@ -426,7 +430,8 @@ impl SettingsDialog {
         let Some(action) = self.recording else { return };
         let input = KeyInput { control: m.control, alt: m.alt, shift: m.shift, platform: m.platform, key: key.to_string() };
         match shortcut::classify(&input, shortcut::current()) {
-            Recorded::Reject => return,
+            // Swift: `guard let k = Hotkey(event:), k.isUsable else { NSSound.beep(); return nil }`, die Aufnahme läuft weiter.
+            Recorded::Reject => return crate::ui::overlay_queue::beep(),
             Recorded::Cancel => {}
             Recorded::Clear => self.change(|s| shortcut::assign(s, action, None), cx),
             Recorded::Set(h) => self.change(|s| shortcut::assign(s, action, Some(h)), cx),
@@ -481,6 +486,26 @@ impl SettingsDialog {
         self.focus.focus(window, cx);
         self.ensure_visible(cx);
         cx.notify();
+    }
+
+    /// Tab: in einem Pfadfeld das Kürzel ausschreiben (das Feld behält Tab, auch ohne Treffer), sonst zur nächsten Zeile.
+    pub(super) fn next_row(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let focused = self.inputs.iter().find(|(id, i)| paths::kind_of(id).is_some() && i.read(cx).focus.is_focused(window)).map(|(id, _)| id.clone());
+        let Some(id) = focused else { return self.move_cursor(1, window, cx) };
+        if paths::kind_of(&id) == Some(paths::PathKind::Folder) {
+            let typed = self.input_text(&id, cx);
+            if let Some(full) = paths::tab_expansion(&typed, &folders::home_dir(), &folders::list_dirs) {
+                self.set_input_text(&id, &full, window, cx);
+            }
+        }
+    }
+
+    /// Datei oder Ordner auf ein Pfadfeld gezogen: passt er zur Art des Feldes, steht er im Feld (und gilt sofort).
+    pub(super) fn drop_on_path(&mut self, row: &str, dropped: &[std::path::PathBuf], window: &mut Window, cx: &mut Context<Self>) {
+        let Some(kind) = paths::kind_of(row) else { return };
+        if let Some(text) = paths::dropped(kind, dropped, &folders::home_dir()) {
+            self.set_input_text(row, &text, window, cx);
+        }
     }
 
     /// Scrollt die Zeile mit der Tastatur ins Bild (Rechtecke aus dem letzten Frame).

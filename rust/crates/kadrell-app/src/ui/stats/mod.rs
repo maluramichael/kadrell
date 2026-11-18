@@ -26,6 +26,7 @@ use kadrell_i18n::trd;
 use super::chrome::h_seam;
 use super::overlay::{backdrop_full, dialog_frame};
 use super::overlay_anim::slide;
+use super::settings::controls::Geometry;
 use super::theme;
 use crate::state::now_secs;
 use crate::usage::hub::Hub;
@@ -114,6 +115,9 @@ pub struct StatsView {
     hover: Option<Hover>,
     generation: u64,
     list_scroll: ScrollHandle,
+    /// Gemessene Breiten der Zähler (eine Reihe oder zwei Spalten wie `ViewThatFits`).
+    geometry: Geometry,
+    counters_basis: Option<(f32, f32)>,
     _task: Option<Task<()>>,
 }
 
@@ -136,6 +140,8 @@ impl StatsView {
             hover: None,
             generation: 0,
             list_scroll: ScrollHandle::new(),
+            geometry: Geometry::default(),
+            counters_basis: None,
             _task: None,
         };
         view._task = Some(view.start(cx));
@@ -292,6 +298,7 @@ impl Render for StatsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let lang = ui_lang();
+        let one_row = self.counters_in_one_row(window);
         let body = div()
             .id("stats-body")
             .flex()
@@ -303,7 +310,7 @@ impl Render for StatsView {
             .gap(px(20.))
             .children(self.snapshot.clone().map(|s| self.limits_section(&s, window, cx)))
             .children(self.snapshot.clone().map(|s| self.prompts_section(&s, window, cx)))
-            .child(self.counters_section(lang, cx));
+            .child(self.counters_section(lang, one_row, cx));
         let dialog = dialog_frame(&t)
             .key_context(CONTEXT)
             .track_focus(&self.focus)

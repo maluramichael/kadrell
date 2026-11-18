@@ -3,9 +3,9 @@
 //! kommt aus dem aktuellen Fenster (Overlays folgen der Fenstergröße).
 
 use gpui::{
-    Anchor, AnyElement, ClickEvent, Context, Div, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
-    MouseMoveEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, anchored, deferred,
-    div, point, prelude::*, px,
+    Anchor, AnyElement, ClickEvent, Context, Div, ExternalPaths, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    MouseMoveEvent, ParentElement, Render, SharedString, Stateful, StatefulInteractiveElement, Styled, Window, anchored,
+    deferred, div, point, prelude::*, px,
 };
 
 use kadrell_i18n::trd;
@@ -52,8 +52,10 @@ impl SettingsDialog {
         let color = if btn.destructive { t.pill_text_on(t.error) } else { t.key_label() };
         let content = key_content(&btn.label, btn.icon, color);
         let btn = btn.clone();
+        let tip = btn.tip.clone();
         key_cap(content, btn.destructive, t)
             .id(id(&format!("btn{index}"), row))
+            .when_some(tip, |d, tip| d.tooltip(crate::ui::tooltip::text(tip)))
             .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.press(&btn, window, cx)))
             .into_any_element()
     }
@@ -71,11 +73,11 @@ impl SettingsDialog {
             .into_any_element()
     }
 
-    fn slider_view(&self, row: &Row, shown: f64, bounds: (f64, f64, &str), t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        let (min, max, unit) = bounds;
+    fn slider_view(&self, row: &Row, shown: f64, bounds: (f64, f64, f64, &str), t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let (min, max, step, unit) = bounds;
         let text = format!("{} {unit}", shown.round() as i64);
         let frac = if max > min { ((shown - min) / (max - min)) as f32 } else { 0. };
-        let (track, value) = controls::slider(frac, &text, &self.geometry, format!("track:{}", row.id), t);
+        let (track, value) = controls::slider(frac, &text, (&self.geometry, format!("track:{}", row.id)), ((max - min) / step.max(f64::EPSILON)).round() as usize, t);
         let target = row.clone();
         let track = track.id(id("trk", &row.id)).on_mouse_down(MouseButton::Left, cx.listener(move |this, ev: &MouseDownEvent, _, cx| this.begin_drag(&target, ev.position.x, cx)));
         div().flex().items_center().gap(px(10.)).child(track).child(value).into_any_element()
@@ -84,15 +86,29 @@ impl SettingsDialog {
     fn text_view(&self, row: &Row, buttons: &[Btn], t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let input = self.inputs.get(&row.id).cloned();
         let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(&row.id, i, b, t, cx)).collect();
-        div().flex().items_center().gap(px(4.)).child(div().flex_1().min_w_0().children(input)).children(keys).into_any_element()
+        let field = div().id(id("field", &row.id)).flex_1().min_w_0().children(input);
+        let field = if super::paths::kind_of(&row.id).is_some() { self.drop_target(field, &row.id, t, cx) } else { field };
+        div().flex().items_center().gap(px(4.)).child(field).children(keys).into_any_element()
+    }
+
+    /// Pfadfeld nimmt Dateien und Ordner aus dem Explorer an, beim Darüberziehen mit Akzentrand.
+    fn drop_target(&self, field: Stateful<Div>, row: &str, t: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
+        let (row, ring) = (row.to_string(), t.accent);
+        field
+            .on_drop(cx.listener(move |this, paths: &ExternalPaths, window, cx| this.drop_on_path(&row, paths.paths(), window, cx)))
+            .drag_over::<ExternalPaths>(move |s, _, _, _| s.border_2().border_color(ring))
     }
 
     /// Text links, Tasten rechts: alle Tasten bis auf die letzte stehen links neben dem Text, die letzte rechts außen.
     fn info_view(&self, row: &Row, text: &str, tone: Tone, buttons: &[Btn], t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let last = buttons.len().saturating_sub(1);
         let mut left = div().flex().items_center().gap(px(10.)).flex_1().min_w_0();
+        if row.busy {
+            left = left.child(crate::ui::ext::spinner::spinner(t.muted));
+        }
         if !text.is_empty() {
-            let label = div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(tone_color(tone, t)).child(text.to_string());
+            let label = div().id(id("info", &row.id)).min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(tone_color(tone, t)).child(text.to_string());
+            let label = label.when_some(row.tip.clone(), |d, tip| d.tooltip(crate::ui::tooltip::text(tip)));
             left = left.child(label);
         }
         for (i, b) in buttons.iter().enumerate().take(last) {
@@ -108,9 +124,9 @@ impl SettingsDialog {
                 let label = options.iter().find(|(v, _)| v == value).map_or("–", |(_, l)| l.as_str());
                 self.select_view(row, label, focused, t, cx)
             }
-            Control::Slider { value, min, max, unit, .. } => {
+            Control::Slider { value, min, max, step, unit, .. } => {
                 let shown = self.draft.as_ref().filter(|(r, _)| *r == row.id).map_or(*value, |(_, v)| *v);
-                self.slider_view(row, shown, (*min, *max, unit), t, cx)
+                self.slider_view(row, shown, (*min, *max, *step, unit), t, cx)
             }
             Control::Text { buttons, .. } => self.text_view(row, buttons, t, cx),
             Control::Info { text, tone, buttons } => self.info_view(row, text, *tone, buttons, t, cx),
@@ -129,7 +145,8 @@ impl SettingsDialog {
             (None, false) => ("–".to_string(), t.fg),
         };
         let reset = (key.as_ref() != Some(&default) && !recording).then(|| {
-            let cap = key_cap(div().child(trd!("Standard")), false, t).id(id("reset", &row.id));
+            let tip = trd!("Zurück auf %@", shortcut::format(&default, shortcut::current()));
+            let cap = key_cap(div().child(trd!("Standard")), false, t).id(id("reset", &row.id)).tooltip(crate::ui::tooltip::text(tip));
             cap.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.reset_hotkey(action, cx)))
         });
         let face = div()
@@ -194,8 +211,9 @@ impl SettingsDialog {
 
     // MARK: Abschnitte und Spalten
 
-    fn block_view(&self, block: &Block, rows: &[usize], ctl_w: f32, t: &Theme, cx: &mut Context<Self>) -> Div {
-        let mut view = div().flex().flex_col().w_full();
+    fn block_view(&self, (index, block): (usize, &Block), rows: &[usize], ctl_w: f32, t: &Theme, cx: &mut Context<Self>) -> Div {
+        // Der Abschnitt meldet seine Höhe für die Teilung in Spalten (`SettingsColumns`: Höhe je Abschnitt).
+        let mut view = div().relative().flex().flex_col().w_full().child(measure(&self.geometry, format!("block:{index}")));
         if let Some((title, note)) = &block.heading {
             view = view.child(section_heading(title, note, t));
         }
@@ -206,21 +224,40 @@ impl SettingsDialog {
         view.child(table(rows, t))
     }
 
-    fn columns(&self, blocks: &[Block], shown: &[(usize, Vec<usize>)], width: f32, t: &Theme, cx: &mut Context<Self>) -> Div {
+    /// Breite des Inhalts und Höhe je sichtbarem Abschnitt aus dem letzten Frame (gemessen, wie `SettingsColumns`), ohne
+    /// Messung die Schätzung aus der Zeilenzahl. Ändert sich etwas gegenüber dem Frame davor, folgt noch ein Frame.
+    pub(super) fn layout_inputs(&mut self, blocks: &[Block], shown: &[(usize, Vec<usize>)], window: &mut Window) -> (f32, Vec<f32>) {
+        let (width, measured) = {
+            let geo = self.geometry.borrow();
+            let width = geo.get("body").map(|b| f32::from(b.size.width));
+            let measured: Vec<Option<f32>> = shown.iter().map(|(b, _)| geo.get(&format!("block:{b}")).map(|r| f32::from(r.size.height))).collect();
+            (width.unwrap_or_else(|| overlay::area().full_window().width), measured)
+        };
+        let estimated: Vec<f32> = shown.iter().map(|(b, rows)| blocks[*b].estimated_height(rows.len())).collect();
+        let heights = layout::heights(&measured, &estimated);
+        let basis = (width, heights.clone());
+        if layout::basis_changed(&self.layout_basis, &basis) {
+            window.request_animation_frame();
+        }
+        self.layout_basis = basis;
+        (width, heights)
+    }
+
+    fn columns(&self, blocks: &[Block], shown: &[(usize, Vec<usize>)], inputs: (f32, &[f32]), t: &Theme, cx: &mut Context<Self>) -> Div {
+        let (width, heights) = inputs;
         let count = layout::count(width);
         let ctl_w = layout::control_width(width / count as f32);
-        let heights: Vec<f32> = shown.iter().map(|(b, rows)| blocks[*b].estimated_height(rows.len())).collect();
-        let left = layout::left_count(&heights, count);
+        let left = layout::left_count(heights, count);
         let mut column = |part: &[(usize, Vec<usize>)]| {
-            let views: Vec<Div> = part.iter().map(|(b, rows)| self.block_view(&blocks[*b], rows, ctl_w, t, cx)).collect();
+            let views: Vec<Div> = part.iter().map(|(b, rows)| self.block_view((*b, &blocks[*b]), rows, ctl_w, t, cx)).collect();
             div().flex().flex_col().gap(px(layout::SECTION_SPACING)).flex_1().min_w_0().children(views)
         };
         let first = column(&shown[..left]);
-        let mut body = div().flex().items_start().w_full().child(first);
+        let mut body = div().relative().flex().items_start().w_full().child(first);
         if count == 2 {
             body = body.child(column(&shown[left..]));
         }
-        body
+        body.child(measure(&self.geometry, "body".to_string()))
     }
 
     // MARK: Kopf, Filter, Liste
@@ -270,9 +307,9 @@ impl Render for SettingsDialog {
         self.ensure_inputs(&blocks, window, cx);
         let shown = model::visible(&blocks, &self.filter);
         let hits = model::hit_count(&blocks, &self.filter);
-        // Jeden Frame aus dem Fenster gerechnet, nie einmal beim Öffnen.
-        let width = overlay::area().full_window().width;
-        let body = self.columns(&blocks, &shown, width, &t, cx);
+        // Jeden Frame gerechnet, nie einmal beim Öffnen: Breite und Höhen aus dem letzten Frame.
+        let (width, heights) = self.layout_inputs(&blocks, &shown, window);
+        let body = self.columns(&blocks, &shown, (width, &heights), &t, cx);
         let scroll = div()
             .id("settings-scroll")
             .flex_1()

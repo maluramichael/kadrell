@@ -15,6 +15,7 @@ use super::draw::{self, END_PAD, Hover, OnHover, Style};
 use super::format::{self, count_ticks};
 use super::{Counters, StatsView, ui_lang};
 use crate::theme::Theme;
+use crate::ui::settings::controls::measure;
 use crate::ui::theme;
 
 const LIMIT_HEIGHT: f32 = 110.;
@@ -134,8 +135,9 @@ impl StatsView {
             .child(div().flex_none().pl(px(12.)).child(self.loader.close_hint.clone()))
     }
 
+    /// Höchstbreite des Panels (`overlayMaxWidth` im fensterfüllenden Dialog), nicht die Breite nach dem Innenabstand.
     fn avail_width(_window: &Window) -> f32 {
-        crate::ui::overlay::area().full_window().width - 32.
+        crate::ui::overlay::area().full_window().width
     }
 
     // MARK: Limits
@@ -152,7 +154,7 @@ impl StatsView {
             .child(section_title(trd!("LIMITS"), &t))
             .child(muted(trd!("Verbraucht in Prozent"), 11., &t))
             .children(legend);
-        let columns = ((Self::avail_width(window) / 380.) as usize).clamp(1, snap.limits.len().max(1));
+        let columns = limit_columns(Self::avail_width(window), crate::ui::overlay::scale(), snap.limits.len());
         let cards: Vec<AnyElement> = (0..snap.limits.len()).map(|i| self.limit_card(snap, i, cx)).collect();
         let mut grid: Vec<AnyElement> = Vec::new();
         for chunk in cards.chunks_mut_vec(columns) {
@@ -203,7 +205,7 @@ impl StatsView {
         let body = if snap.bars.is_empty() {
             let text = if self.reading { trd!("Transcripts werden gelesen …") } else { trd!("Keine Prompts in diesem Zeitraum.") };
             div().flex().items_center().justify_center().h(px(PROMPT_HEIGHT)).text_size(px(12.)).text_color(t.muted).child(text).into_any_element()
-        } else if Self::avail_width(window) >= SIDE_BY_SIDE {
+        } else if side_by_side(Self::avail_width(window), crate::ui::overlay::scale()) {
             div().flex().gap(px(16.)).child(div().flex_1().min_w_0().child(self.prompt_chart(snap, cx))).child(div().w(px(240.)).flex_none().child(self.project_list(snap, cx))).into_any_element()
         } else {
             div().flex().flex_col().gap(px(8.)).child(self.prompt_chart(snap, cx)).child(self.project_list(snap, cx)).into_any_element()
@@ -260,29 +262,86 @@ impl StatsView {
 
     // MARK: Zähler
 
-    pub(super) fn counters_section(&self, lang: kadrell_accounts::Lang, cx: &mut Context<Self>) -> AnyElement {
-        let t = theme(cx);
+    fn counter_tiles(&self, lang: kadrell_accounts::Lang, t: &Theme) -> Vec<AnyElement> {
         let c: &Counters = &self.counters;
-        let since = match c.since {
+        vec![
+            tile(c.messages, trd!("Nachrichten geschickt"), None, lang, t),
+            tile(c.sessions, trd!("Sessions geöffnet"), None, lang, t),
+            tile(c.terminals, trd!("Terminals geöffnet"), None, lang, t),
+            tile(c.switches, trd!("Kachelwechsel"), None, lang, t),
+            tile(c.record, trd!("Meiste Sessions gleichzeitig"), c.record_date.map(|d| format::long_date(d, lang)), lang, t),
+        ]
+    }
+
+    /// `ViewThatFits(in: .horizontal)`: passt die Reihe in voller Breite in den Platz, steht sie in einer Reihe, sonst
+    /// in zwei Spalten. Breiten aus dem letzten Frame; ändern sie sich, folgt noch ein Frame.
+    pub(super) fn counters_in_one_row(&mut self, window: &mut Window) -> bool {
+        let (natural, offered) = {
+            let geo = self.geometry.borrow();
+            (geo.get(ROW_KEY).map(|b| f32::from(b.size.width)), geo.get(AREA_KEY).map(|b| f32::from(b.size.width)))
+        };
+        let basis = (natural.unwrap_or(0.), offered.unwrap_or(0.));
+        if self.counters_basis.is_none_or(|old| (old.0 - basis.0).abs() >= 0.5 || (old.1 - basis.1).abs() >= 0.5) {
+            window.request_animation_frame();
+        }
+        self.counters_basis = Some(basis);
+        fits_one_row(natural, offered)
+    }
+
+    pub(super) fn counters_section(&self, lang: kadrell_accounts::Lang, one_row: bool, cx: &mut Context<Self>) -> AnyElement {
+        let t = theme(cx);
+        let since = match self.counters.since {
             Some(s) => format!("{} {}", trd!("Seit"), format::long_date(s, lang)),
             None => trd!("Noch nichts gezählt."),
         };
-        let tiles = [
-            tile(c.messages, trd!("Nachrichten geschickt"), None, lang, &t),
-            tile(c.sessions, trd!("Sessions geöffnet"), None, lang, &t),
-            tile(c.terminals, trd!("Terminals geöffnet"), None, lang, &t),
-            tile(c.switches, trd!("Kachelwechsel"), None, lang, &t),
-            tile(c.record, trd!("Meiste Sessions gleichzeitig"), c.record_date.map(|d| format::long_date(d, lang)), lang, &t),
-        ];
+        let layout = if one_row {
+            div().flex().items_start().gap_x(px(24.)).children(self.counter_tiles(lang, &t))
+        } else {
+            two_columns(self.counter_tiles(lang, &t))
+        };
+        // Die unsichtbare Reihe in natürlicher Breite misst, ob sie in den angebotenen Platz passt.
+        // Breiter Rahmen, damit die Reihe darin nicht auf den Platz schrumpft; gemessen wird die Reihe selbst.
+        let row = div().relative().flex_none().flex().items_start().gap_x(px(24.)).children(self.counter_tiles(lang, &t)).child(measure(&self.geometry, ROW_KEY.to_string()));
+        let probe = div().absolute().top_0().left_0().w(px(4000.)).invisible().flex().child(row);
+        let area = div().relative().w_full().child(layout).child(probe).child(measure(&self.geometry, AREA_KEY.to_string()));
         div()
             .flex()
             .flex_col()
             .gap(px(8.))
             .child(div().flex().items_baseline().gap(px(8.)).child(section_title(trd!("GESAMT"), &t)).child(muted(since, 11., &t)))
-            .child(div().flex().flex_wrap().gap_x(px(24.)).gap_y(px(10.)).children(tiles))
+            .child(area)
             .child(muted(trd!("Gezählt wird, solange Kadrell läuft."), 11., &t))
             .into_any_element()
     }
+}
+
+const ROW_KEY: &str = "counters-row";
+const AREA_KEY: &str = "counters-area";
+
+/// Passt die Reihe in natürlicher Breite in den angebotenen Platz? Ohne Messung zwei Spalten (die Reihe kann nicht überlaufen).
+pub fn fits_one_row(natural: Option<f32>, offered: Option<f32>) -> bool {
+    matches!((natural, offered), (Some(n), Some(o)) if n > 0. && n <= o)
+}
+
+/// Zwei Spalten wie das `Grid` der Mac-App: Kacheln 1, 3, 5 links, 2 und 4 rechts, Abstand 24 und 10.
+fn two_columns(tiles: Vec<AnyElement>) -> gpui::Div {
+    let (mut left, mut right): (Vec<AnyElement>, Vec<AnyElement>) = (Vec::new(), Vec::new());
+    for (i, tile) in tiles.into_iter().enumerate() {
+        if i % 2 == 0 { left.push(tile) } else { right.push(tile) }
+    }
+    let column = |tiles: Vec<AnyElement>| div().flex().flex_col().items_start().gap_y(px(10.)).children(tiles);
+    div().flex().items_start().gap_x(px(24.)).child(column(left)).child(column(right))
+}
+
+/// So viele Spalten, wie breit genug sind (380 je Spalte, mit der UI-Größe skaliert), nie mehr als Konten und mindestens eine.
+pub fn limit_columns(width: f32, scale: f32, accounts: usize) -> usize {
+    let fit = (width / (380. * scale)).max(0.) as usize;
+    fit.min(accounts).max(1)
+}
+
+/// Chart und Liste nebeneinander, sobald die Breite reicht (`sideBySideWidth * Theme.scale`).
+pub fn side_by_side(width: f32, scale: f32) -> bool {
+    width >= SIDE_BY_SIDE * scale
 }
 
 fn tile(value: i64, label: String, date: Option<String>, lang: kadrell_accounts::Lang, t: &Theme) -> AnyElement {
@@ -420,6 +479,35 @@ mod tests {
         assert_eq!(number(12, Lang::De), "12");
         assert_eq!(number(1000, Lang::En), "1,000");
         assert_eq!(number(0, Lang::De), "0");
+    }
+
+    #[test]
+    fn counters_stay_in_one_row_only_when_the_measured_row_fits() {
+        assert!(fits_one_row(Some(900.), Some(900.)));
+        assert!(fits_one_row(Some(600.), Some(900.)));
+        assert!(!fits_one_row(Some(901.), Some(900.)));
+        assert!(!fits_one_row(None, Some(900.)));
+        assert!(!fits_one_row(Some(600.), None));
+        assert!(!fits_one_row(Some(0.), Some(900.)));
+    }
+
+    /// `StatsCharts.swift`: `max(1, min(Int(maxWidth / (380 * scale)), accounts))`.
+    #[test]
+    fn limit_columns_follow_the_width_but_never_exceed_the_accounts() {
+        assert_eq!(limit_columns(1000., 1., 5), 2);
+        assert_eq!(limit_columns(1140., 1., 5), 3);
+        assert_eq!(limit_columns(1140., 1., 2), 2);
+        assert_eq!(limit_columns(300., 1., 5), 1);
+        assert_eq!(limit_columns(1000., 1.3, 5), 2);
+        assert_eq!(limit_columns(1000., 1., 0), 1);
+    }
+
+    #[test]
+    fn prompts_go_side_by_side_from_720_scaled() {
+        assert!(side_by_side(720., 1.));
+        assert!(!side_by_side(719., 1.));
+        assert!(!side_by_side(800., 1.3));
+        assert!(side_by_side(936., 1.3));
     }
 
     #[test]
