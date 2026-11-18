@@ -73,7 +73,8 @@ impl Shell {
         let folder = folder.trim_end_matches(['/', '\\']).replace('\\', "/");
         let draft = self.state.store.groups.make_group(&folder, None);
         let others = self.state.store.groups.groups.clone();
-        self.show_group_dialog(EditGroupModel::new(draft, others, true, &self.state.home()), window, cx);
+        let model = EditGroupModel::new(draft, others, true, &self.state.home());
+        self.present_overlay(Box::new(move |shell, window, cx| shell.show_group_dialog(model, window, cx)), window, cx);
     }
 
     pub fn open_edit_group(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
@@ -82,7 +83,8 @@ impl Shell {
         }
         let Some(group) = self.state.store.groups.group(id).cloned() else { return };
         let others = self.state.store.groups.groups.iter().filter(|g| g.id != id).cloned().collect();
-        self.show_group_dialog(EditGroupModel::new(group, others, false, &self.state.home()), window, cx);
+        let model = EditGroupModel::new(group, others, false, &self.state.home());
+        self.present_overlay(Box::new(move |shell, window, cx| shell.show_group_dialog(model, window, cx)), window, cx);
     }
 
     /// Ein anderer Dialog ist schon offen.

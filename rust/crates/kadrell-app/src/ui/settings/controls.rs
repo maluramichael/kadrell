@@ -13,8 +13,9 @@ use gpui::{
 
 use super::model::Icon;
 use crate::theme::Theme;
-use crate::ui::chrome::{h_seam, key_edge, seam_dark, seam_light};
-use crate::ui::overlay::raised;
+use crate::ui::chrome::{h_seam, seam_dark, seam_light};
+use crate::ui::instrument::{self, KEY_RADIUS, KeyRole, OUTLINE_WIDTH, RING_WIDTH, section_label};
+use crate::ui::overlay::{SHADOW_DEPTH, border_px, hairline, raised, scale, shadow_color};
 
 /// Gemessene Rechtecke (Fensterkoordinaten) von Feldern, Reglern und Zeilen aus dem letzten Frame.
 pub type Geometry = Rc<RefCell<HashMap<String, Bounds<Pixels>>>>;
@@ -27,15 +28,17 @@ pub fn measure(geometry: &Geometry, key: String) -> impl IntoElement + use<> {
 
 /// Fläche mit Fugenring: außen eine dunkle, innen eine helle Haarlinie (`Instrument.seamRing`).
 pub fn seam_ring(t: &Theme, radius: f32, fill: Hsla, inner: Div) -> Div {
-    let inner = inner.flex_1().min_w_0().rounded(px(radius - 1.)).border_1().border_color(seam_light(t));
-    div().flex().flex_col().rounded(px(radius)).border_1().border_color(seam_dark(t)).bg(fill).child(inner)
+    let h = hairline();
+    let inner = border_px(inner.flex_1().min_w_0().rounded(px(radius - h)), h).border_color(seam_light(t));
+    border_px(div().flex().flex_col().rounded(px(radius)), h).border_color(seam_dark(t)).bg(fill).child(inner)
 }
 
 // MARK: Abschnitt und Tabelle
 
 /// Bereichsüberschrift: gesperrte Versalien in Akzent-Textfarbe, optional ein Hinweis daneben.
 pub fn section_heading(title: &str, note: &str, t: &Theme) -> Div {
-    let label = div().flex_none().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.accent_text).child(title.to_uppercase());
+    // Gesperrt wie `sectionTitle()`: bold, Akzent-Textfarbe, Sperrung 0,8.
+    let label = section_label(&title.to_uppercase(), t);
     let note = (!note.is_empty()).then(|| div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(11.)).text_color(t.muted).child(note.to_string()));
     div().flex().items_baseline().gap(px(8.)).px(px(16.)).pt(px(14.)).pb(px(6.)).child(label).children(note)
 }
@@ -74,12 +77,15 @@ pub fn wide_row(content: Div) -> Div {
 
 /// Eingelassenes Feld, 22 px hoch. Mit Fokus trägt es 2 px Akzentring statt der Fuge.
 pub fn well(t: &Theme, focused: bool, content: Div) -> Div {
-    let content = content.flex().items_center().h_full().px(px(7.)).text_size(px(12.));
+    // Abstand 8 seitlich wie `instrumentWell`; der Rand (Fuge oder Akzentring) liegt innerhalb davon.
+    let s = scale();
+    let edge = if focused { RING_WIDTH * s } else { hairline() * 2. };
+    let content = content.flex().items_center().h_full().px(px(8. * s - edge)).text_size(px(12. * s));
     if focused {
-        let inner = content.px(px(0.)).rounded(px(3.));
-        return div().h(px(22.)).flex().flex_col().rounded(px(5.)).border_2().border_color(t.accent).bg(t.well()).child(inner.flex_1());
+        let inner = content.rounded(px((KEY_RADIUS - RING_WIDTH).max(0.) * s));
+        return border_px(div().h(px(22. * s)).flex().flex_col().rounded(px(KEY_RADIUS * s)), edge).border_color(t.accent).bg(t.well()).child(inner.flex_1());
     }
-    seam_ring(t, 5., t.well(), content).h(px(22.))
+    seam_ring(t, KEY_RADIUS * s, t.well(), content).h(px(22. * s))
 }
 
 /// Dropdown-Fläche: Text links, Auf-Ab-Pfeile rechts.
@@ -98,9 +104,8 @@ pub fn value_face(text: &str, color: Hsla, bold: bool, focused: bool, t: &Theme)
 
 /// Taste im Instrument-Look: Kante als Dicke (unten 2 px), darauf die Kappe. Klein: 11 pt.
 pub fn key_cap(content: impl IntoElement, destructive: bool, t: &Theme) -> Div {
-    let (fill, label) = if destructive { (t.error, t.pill_text_on(t.error)) } else { (t.surface, t.key_label()) };
-    let cap = div().flex().items_center().px(px(5.)).py(px(1.)).rounded(px(4.)).bg(fill).text_color(label).text_size(px(11.)).whitespace_nowrap().child(content);
-    div().flex_none().p(px(1.)).pb(px(2.)).rounded(px(5.)).bg(key_edge(t)).cursor_pointer().child(cap)
+    let role = if destructive { KeyRole::Destructive } else { KeyRole::Neutral };
+    instrument::key(content, role, true, true, t)
 }
 
 /// Inhalt einer kleinen Taste: Text oder Symbol.
@@ -113,7 +118,8 @@ pub fn key_content(label: &str, icon: Option<Icon>, color: Hsla) -> AnyElement {
 
 /// Akzentring um ein Steuerelement, das die Tastatur hat (liegt außen, verschiebt nichts).
 pub fn keyboard_ring(t: &Theme) -> Div {
-    div().absolute().top(px(-3.)).bottom(px(-3.)).left(px(-3.)).right(px(-3.)).rounded(px(8.)).border_2().border_color(t.accent)
+    // 2 pt Akzent, Linienmitte mit Radius 5 + 2, 2 pt außerhalb der Fläche (`kbdFocusRing`): außen Radius 8, Rand -3.
+    instrument::focus_ring(t)
 }
 
 // MARK: Schieberegler
@@ -134,14 +140,15 @@ pub fn slider(frac: f32, value_text: &str, geometry: &Geometry, key: String, t: 
 
 /// Liste des Dropdowns: erhabene Fläche mit Fuge und festem Schatten, höchstens 280 px hoch.
 pub fn popover(width: f32, t: &Theme) -> Div {
-    let shadow = BoxShadow { color: hsla(0., 0., 0., if t.dark { 0.5 } else { 0.22 }), offset: point(px(0.), px(3.)), blur_radius: px(0.), spread_radius: px(0.), inset: false };
-    div().flex().flex_col().w(px(width)).max_h(px(280.)).py(px(4.)).rounded(px(7.)).bg(raised(t)).border_1().border_color(seam_dark(t)).shadow(vec![shadow]).text_size(px(12.)).text_color(t.fg)
+    let shadow = BoxShadow { color: shadow_color(t), offset: point(px(0.), px(SHADOW_DEPTH * scale())), blur_radius: px(0.), spread_radius: px(0.), inset: false };
+    border_px(div().flex().flex_col().w(px(width)).max_h(px(280.)).py(px(4.)).rounded(px(7.)).bg(raised(t)), hairline()).border_color(seam_dark(t)).shadow(vec![shadow]).text_size(px(12.)).text_color(t.fg)
 }
 
 /// Zeile der Popover-Liste: gewählt mit Fläche `bg` und 1,5-px-Umriss in `fg`, die Zeile unter dem Zeiger heller.
 pub fn popover_item(label: &str, current: bool, hovered: bool, t: &Theme) -> Div {
     let outline = if current { t.fg } else { gpui::transparent_black() };
-    let face = div().flex().items_center().h(px(24.)).px(px(8.)).mx(px(4.)).rounded(px(6.)).border_2().border_color(outline).when(current || hovered, |d| d.bg(t.bg)).child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label.to_string()));
+    // Umriss 1,5 pt in `fg` (`instrumentRow(selected:)`), ohne Akzentring.
+    let face = border_px(div().flex().items_center().h(px(24.)).px(px(8.)).mx(px(4.)).rounded(px(6.)), OUTLINE_WIDTH).border_color(outline).when(current || hovered, |d| d.bg(t.bg)).child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label.to_string()));
     div().flex_none().child(face)
 }
 

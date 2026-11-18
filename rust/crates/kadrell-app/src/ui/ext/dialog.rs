@@ -593,7 +593,7 @@ impl Render for ExtensionsDialog {
             .child(div().pt(px(12.)).child(h_seam(&t)))
             .child(scroll)
             .child(foot);
-        backdrop(cx.listener(|this, _, _, cx| this.close(cx))).pt(px(48.)).items_start().child(frame)
+        backdrop(cx.listener(|this, _, _, cx| this.close(cx))).child(frame)
     }
 }
 

@@ -18,7 +18,8 @@ use crate::lang::{file_manager, tx};
 use crate::theme::Theme;
 use crate::ui::chrome::h_seam;
 use crate::ui::model::parse_color;
-use crate::ui::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
+use crate::ui::instrument::{KeyRole, key_button_with};
+use crate::ui::overlay::{backdrop, border_px, dialog_foot, dialog_frame, dialog_title, overlay_width};
 use crate::ui::text_input::{TextInput, TextInputEvent};
 use crate::ui::theme;
 
@@ -61,7 +62,7 @@ fn fm(source: &str) -> String {
 
 impl EditGroup {
     pub fn new(model: EditGroupModel, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let name = cx.new(|cx| TextInput::new(&trd!("Name"), cx));
+        let name = cx.new(|cx| TextInput::new(&trd!("Name"), cx).size(15.));
         let folder = cx.new(|cx| TextInput::new(&trd!("Ordner (~/d/p/kad kürzt ab)"), cx));
         name.update(cx, |i, cx| i.set_text(&model.name, window, cx));
         folder.update(cx, |i, cx| i.set_text(model.folder(), window, cx));
@@ -130,6 +131,9 @@ impl EditGroup {
         if self.model.is_remote() {
             return;
         }
+        if crate::ui::overlay_queue::warn_if_replaced(window, cx) {
+            return;
+        }
         let options = PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some(trd!("Wählen").into()) };
         let picked = cx.prompt_for_paths(options);
         cx.spawn_in(window, async move |this, cx| {
@@ -156,20 +160,13 @@ impl EditGroup {
     }
 
     fn folder_row(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let button = div()
-            .id("edit-group-browse")
-            .flex()
-            .flex_none()
-            .items_center()
-            .justify_center()
-            .w(px(34.))
-            .h(px(32.))
-            .rounded(px(5.))
-            .bg(t.surface)
-            .cursor_pointer()
-            .on_click(cx.listener(|this, _, window, cx| this.browse(&Browse, window, cx)))
-            .child(tool_icons::folder(t.fg));
-        div().flex().items_center().gap(px(6.)).px(px(14.)).pt(px(10.)).child(div().flex_1().child(self.folder.clone())).child(button)
+        let s = crate::ui::overlay::scale();
+        // Kompakte neutrale Taste mit Ordnersymbol in 22 x 16 (`InstrumentKeyStyle(.neutral, compact: true)`).
+        let icon = div().flex().items_center().justify_center().w(px(22. * s)).h(px(16. * s)).child(tool_icons::folder(t.key_label()));
+        let tip = fm("Im Finder wählen (⌘O)");
+        let button = key_button_with("edit-group-browse", icon, KeyRole::Neutral, true, t, cx.listener(|this, _, window, cx| this.browse(&Browse, window, cx)))
+            .tooltip(crate::ui::tooltip::text(crate::lang::shortcut(&tip)));
+        div().flex().items_center().gap(px(6. * s)).px(px(14. * s)).pt(px(10. * s)).child(div().flex_1().child(self.folder.clone())).child(button)
     }
 
     fn name_row(&self, t: &Theme) -> gpui::Div {
@@ -181,12 +178,13 @@ impl EditGroup {
     fn swatch(&self, p: usize, i: usize, hex: &'static str, t: &Theme, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let on = hex.eq_ignore_ascii_case(&self.model.color);
         let ring = if on { t.fg } else { gpui::transparent_black() };
-        div()
+        let s = crate::ui::overlay::scale();
+        // Auswahlring 1,5 pt in `fg`; Bedienhilfe-Beschriftung „<Palette> <Hex>“ gibt GPUI nicht her (keine Accessibility-API).
+        border_px(div(), 1.5 * s)
             .id(("swatch", p * 100 + i))
-            .size(px(SWATCH))
+            .size(px(SWATCH * s))
             .flex_none()
-            .rounded(px(3.))
-            .border_2()
+            .rounded(px(3. * s))
             .border_color(ring)
             .bg(rgb(parse_color(hex)))
             .cursor_pointer()
@@ -194,9 +192,10 @@ impl EditGroup {
     }
 
     fn palettes(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let mut col = div().flex().flex_col().gap(px(8.)).px(px(16.)).pb(px(12.));
+        let s = crate::ui::overlay::scale();
+        let mut col = div().flex().flex_col().gap(px(8. * s)).px(px(16. * s)).pb(px(12. * s));
         for (p, (name, colors)) in PALETTES.iter().enumerate() {
-            let mut row = div().flex().items_center().gap(px(4.)).child(div().w(px(110.)).flex_none().text_color(t.sub).child(*name));
+            let mut row = div().flex().items_center().gap(px(4. * s)).child(div().w(px(110. * s)).flex_none().text_color(t.sub).child(*name));
             for (i, hex) in colors.iter().enumerate() {
                 row = row.child(self.swatch(p, i, hex, t, cx));
             }
@@ -246,7 +245,8 @@ impl Render for EditGroup {
                 }
             }))
             .can_drop(move |_, _, _| !remote)
-            .drag_over::<ExternalPaths>(move |s, _, _, _| s.border_color(ring))
+            // Beim Darüberziehen ein 2-pt-Akzentrand um den ganzen Dialog (Radius 14), nicht nur die Fuge.
+            .drag_over::<ExternalPaths>(move |s, _, _, _| s.border_2().border_color(ring))
             .child(dialog_title(title, &t))
             .child(self.name_row(&t));
         if !remote {

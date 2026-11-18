@@ -168,8 +168,8 @@ impl Shell {
         self.show_next_confirm(window, cx);
     }
 
-    fn show_next_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.misc.confirm.is_some() {
+    pub(crate) fn show_next_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.misc.confirm.is_some() || self.panel_open() {
             return;
         }
         let Some(Pending { spec, on_confirm }) = self.misc.queue.pop_front() else { return };

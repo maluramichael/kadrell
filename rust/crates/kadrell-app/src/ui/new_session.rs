@@ -289,13 +289,26 @@ impl Shell {
 
     /// Für Screenshots ohne Eingabe: `KADRELL_DEV_OVERLAY=new`, Suchtext aus `KADRELL_DEV_QUERY`.
     pub fn open_overlay_from_env(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // `KADRELL_DEV_OVERLAY=rename`: Umbenennen der ersten Session; `confirm1`: Rückfrage des Presenters.
+        if std::env::var("KADRELL_DEV_OVERLAY").as_deref() == Ok("rename") {
+            let key = self.groups.first().and_then(|g| g.sessions.first()).map(|s| s.key.clone());
+            if let Some(key) = key {
+                self.open_rename(super::rename::Target::Session(key), window, cx);
+            }
+        }
         if std::env::var("KADRELL_DEV_OVERLAY").as_deref() == Ok("new") {
             let query = std::env::var("KADRELL_DEV_QUERY").ok();
             self.open_new_session(query.as_deref(), window, cx);
         }
     }
 
+    /// Öffnet den Dialog; bei offenem Panel erst nach dessen Schließen (`SheetPresenter.present`).
     pub fn open_new_session(&mut self, query: Option<&str>, window: &mut Window, cx: &mut Context<Self>) {
+        let query = query.map(str::to_string);
+        self.present_overlay(Box::new(move |shell, window, cx| shell.show_new_session(query.as_deref(), window, cx)), window, cx);
+    }
+
+    fn show_new_session(&mut self, query: Option<&str>, window: &mut Window, cx: &mut Context<Self>) {
         let dialog = cx.new(|cx| NewSession::new(&self.groups, query, window, cx));
         cx.subscribe_in(&dialog, window, |this, _, ev: &NewSessionEvent, window, cx| match ev {
             NewSessionEvent::Close => this.close_overlay(window, cx),

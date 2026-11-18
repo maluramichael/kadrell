@@ -16,7 +16,7 @@ use std::time::Duration;
 use gpui::{
     App, Context, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, HighlightStyle, Hsla, InteractiveElement,
     IntoElement, KeyBinding, ParentElement, Render, ScrollHandle, StatefulInteractiveElement, Styled, StyledText,
-    Subscription, Window, actions, div, prelude::*, px, relative,
+    Subscription, Window, actions, div, prelude::*, px,
 };
 
 use kadrell_term::TerminalPane;
@@ -29,7 +29,7 @@ pub use self::model::{Command, Run};
 use self::model::{Item, Mode, SessionHits, Snapshot, Target};
 use super::chrome::h_seam;
 use super::layout::{Id, LayoutMode};
-use super::overlay::{backdrop, dialog_frame, overlay_height, overlay_width};
+use super::overlay::{self, backdrop, dialog_frame};
 use super::text_input::{TextInput, TextInputEvent};
 use super::theme;
 use crate::theme::Theme;
@@ -37,10 +37,6 @@ use crate::theme::Theme;
 actions!(kadrell_palette, [MoveUp, MoveDown, Confirm, Cancel]);
 
 const CONTEXT: &str = "KadrellPalette";
-const WIDTH: f32 = 640.;
-const HEIGHT: f32 = 420.;
-/// Oberkante bei 12 % der Fensterhöhe (`PaletteWindow.follow`).
-const TOP: f32 = 0.12;
 const ROW_HEIGHT: f32 = 44.;
 const COMPACT_ROW_HEIGHT: f32 = 30.;
 /// Wartezeit nach dem letzten Tastendruck, bevor die Textsuche über alle Terminals läuft.
@@ -273,7 +269,6 @@ impl Palette {
 
     fn row(&self, i: usize, item: &Item, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let on = i == self.selected;
-        let outline = if on { t.fg } else { gpui::transparent_black() };
         let height = if item.compact { COMPACT_ROW_HEIGHT } else { ROW_HEIGHT };
         let mut text = div().flex().flex_col().flex_1().min_w_0().gap(px(2.)).child(self.label(item, t));
         if !item.sub.is_empty() {
@@ -282,17 +277,11 @@ impl Palette {
             );
         }
         let right = item.right.clone().map(|r| div().flex_none().text_size(px(11.)).text_color(t.muted).child(r));
-        let inner = div()
-            .flex()
-            .items_center()
-            .gap(px(10.))
-            .size_full()
-            .pl(px(10. + 16. * f32::from(item.indent)))
-            .pr(px(10.))
-            .rounded(px(6.))
-            .border_2()
-            .border_color(outline)
-            .when(on, |d| d.bg(t.bg))
+        let inner = super::instrument::selected_row(
+            div().flex().items_center().gap(px(10.)).size_full().pl(px(10. + 16. * f32::from(item.indent))).pr(px(10.)),
+            on,
+            t,
+        )
             .children(self.dot(item, t))
             .child(text)
             .children(right);
@@ -350,7 +339,13 @@ fn foot(t: &Theme) -> impl IntoElement + use<> {
 impl Render for Palette {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let dialog = overlay_height(overlay_width(dialog_frame(&t), WIDTH), HEIGHT)
+        // Größe und Lage aus der Fläche, jeden Frame neu (`PaletteWindow.follow`): oben bei 12 %, mittig, im kleinen
+        // Fenster Fläche minus Rand. Die Fensterhöhe enthält die Schattentiefe unter der Fläche.
+        let frame = overlay::area().palette();
+        let surface = frame.height - (overlay::SHADOW_DEPTH * overlay::scale()).round();
+        let dialog = dialog_frame(&t)
+            .w(px(frame.width))
+            .h(px(surface))
             .flex_none()
             .key_context(CONTEXT)
             .text_color(t.fg)
@@ -366,7 +361,7 @@ impl Render for Palette {
         backdrop(cx.listener(|_, _, _, cx| cx.emit(PaletteEvent::Close)))
             .flex_col()
             .justify_start()
-            .child(div().flex_none().h(relative(TOP)))
+            .child(div().flex_none().h(px(frame.top)))
             .child(dialog)
     }
 }

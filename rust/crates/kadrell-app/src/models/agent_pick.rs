@@ -16,6 +16,7 @@ use crate::lang::tx;
 use crate::state::AppState;
 use crate::theme::Theme;
 use crate::ui::chrome::h_seam;
+use crate::ui::instrument::selected_row;
 use crate::ui::folders::{fuzzy, short_path};
 use crate::ui::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
 use crate::ui::text_input::{TextInput, TextInputEvent};
@@ -25,6 +26,21 @@ actions!(kadrell_agent_pick, [MoveUp, MoveDown, Confirm, Cancel]);
 
 const CONTEXT: &str = "KadrellAgentPick";
 const ROW_HEIGHT: f32 = 36.;
+
+/// Wie viele Zeichen einer Festbreiten-Schrift (Vorschub 0,6 em) in `width` Pixel passen.
+pub fn max_chars(width: f32, font_px: f32) -> usize {
+    (width / (font_px * 0.6)).floor().max(0.) as usize
+}
+
+/// Kürzt am Anfang mit „…“, wenn der Text nicht in `max` Zeichen passt (`truncationMode(.head)`).
+pub fn truncate_head(text: &str, max: usize) -> String {
+    let count = text.chars().count();
+    if count <= max || max == 0 {
+        return text.to_string();
+    }
+    let keep: String = text.chars().skip(count - (max - 1)).collect();
+    format!("…{keep}")
+}
 
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
@@ -167,37 +183,24 @@ impl AgentPick {
 
     fn row(&self, i: usize, o: &PickOption, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let on = i == self.state.selected;
-        let outline = if on { t.fg } else { gpui::transparent_black() };
-        let inner = div()
-            .flex()
-            .items_center()
-            .gap(px(10.))
-            .size_full()
-            .px(px(10.))
-            .rounded(px(6.))
-            .border_2()
-            .border_color(outline)
-            .when(on, |d| d.bg(t.bg))
-            .child(div().flex_none().text_size(px(13.)).text_color(t.fg).child(o.kind.display_name()))
-            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(11.)).text_color(t.muted).child(o.detail.clone()));
+        let s = crate::ui::overlay::scale();
+        // Name 12, Detail 11 gedämpft rechts; Auswahl als Instrument-Zeile (Fläche `bg`, 1,5-pt-Umriss in `fg`, kein Ring).
+        let inner = selected_row(div().flex().items_center().gap(px(10. * s)).size_full().px(px(8.5 * s)), on, t)
+            .child(div().flex_none().text_size(px(12. * s)).text_color(t.fg).child(o.kind.display_name()))
+            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_align(gpui::TextAlign::Right).text_size(px(11. * s)).text_color(t.muted).child(o.detail.clone()));
         let kind = o.kind;
-        div().id(("agent-row", i)).flex_none().h(px(ROW_HEIGHT)).px(px(6.)).cursor_pointer().child(inner).on_click(cx.listener(move |_, _: &ClickEvent, _, cx| cx.emit(AgentPickEvent::Start(kind))))
+        div().id(("agent-row", i)).flex_none().h(px(ROW_HEIGHT * s)).px(px(6. * s)).py(px(s)).cursor_pointer().child(inner).on_click(cx.listener(move |_, _: &ClickEvent, _, cx| cx.emit(AgentPickEvent::Start(kind))))
     }
 }
 
 impl Render for AgentPick {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let folder = div()
-            .flex_none()
-            .px(px(16.))
-            .pt(px(4.))
-            .text_size(px(11.))
-            .text_color(t.muted)
-            .overflow_hidden()
-            .whitespace_nowrap()
-            .text_ellipsis()
-            .child(short_path(&self.state.folder, &self.home));
+        let s = crate::ui::overlay::scale();
+        // Eine Zeile, Kürzung am Anfang (`truncationMode(.head)`): GPUI kürzt nur am Ende, deshalb nach Zeichenzahl.
+        let room = crate::ui::overlay::area().dialog_width(440.) - 32. * s;
+        let path = truncate_head(&short_path(&self.state.folder, &self.home), max_chars(room, 11. * s));
+        let folder = div().flex_none().px(px(16. * s)).pt(px(4. * s)).text_size(px(11. * s)).text_color(t.muted).overflow_hidden().whitespace_nowrap().child(path);
         let rows: Vec<_> = self.state.list.iter().enumerate().map(|(i, o)| self.row(i, o, &t, cx)).collect();
         let empty = self.state.list.is_empty().then(|| div().px(px(16.)).py(px(16.)).text_color(t.muted).child(tx(&trd!("Nichts gefunden."))));
         let hint = trd!("⏎ starten · ↑↓ wählt · Esc abbrechen");
@@ -295,6 +298,14 @@ impl Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn long_folder_lines_are_cut_at_the_head() {
+        assert_eq!(truncate_head("~/a/b", 10), "~/a/b");
+        assert_eq!(truncate_head("~/development/projects/kadrell", 12), "…cts/kadrell");
+        assert_eq!(truncate_head("abc", 0), "abc");
+        assert_eq!(max_chars(400., 10.), 66);
+    }
 
     fn options() -> Vec<PickOption> {
         vec![PickOption { kind: AgentKind::Claude, detail: "sonnet · bypassPermissions · high".into() }, PickOption { kind: AgentKind::Pi, detail: "qwen3:4b".into() }]

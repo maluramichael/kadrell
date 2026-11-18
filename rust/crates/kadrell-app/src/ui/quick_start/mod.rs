@@ -342,7 +342,7 @@ impl Shell {
         if self.quick_start.is_some() || self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() {
             return;
         }
-        self.show_quick_start(None, window, cx);
+        self.present_overlay(Box::new(|shell, window, cx| shell.show_quick_start(None, window, cx)), window, cx);
     }
 
     /// Für Screenshots ohne Eingabe: `KADRELL_DEV_OVERLAY=quickstart`, Idee aus `KADRELL_DEV_QUERY`, mit `KADRELL_DEV_SUBMIT`

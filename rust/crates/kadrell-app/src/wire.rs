@@ -108,6 +108,7 @@ impl Shell {
             }
         }
         self.refresh_tray(window, cx);
+        self.run_pending_overlay(window, cx);
         cx.notify();
     }
 

@@ -105,6 +105,8 @@ pub struct Shell {
     main_window: Option<gpui::AnyWindowHandle>,
     /// Zoom-, Sync-, Vorschau-, Auto- und Baum-Zustand der Arbeitsfläche samt Tabelle der Kürzel (`workspace`).
     ws: workspace::Ws,
+    /// Overlay-Verwaltung: vorgemerkter Dialog, ausfahrendes Overlay (`ui::overlay_queue`).
+    overlays: ui::overlay_queue::OverlayState,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -146,6 +148,7 @@ impl Shell {
             groups: Vec::new(),
             panes: HashMap::new(),
             selected: None,
+            overlays: Default::default(),
             selection: Selection { items: Vec::new(), focus: (0, 0), anchor: (0, 0) },
             layout,
             clock: now_hhmm(),
@@ -207,8 +210,9 @@ impl Shell {
     /// `KADRELL_DEV_SELECT`, `KADRELL_DEV_SESSION` und `KADRELL_DEV_LAYOUT` setzen Auswahl und Layout beim Start,
     /// gegen den echten Zustand (Positionen im Baum, die es geben muss).
     /// Startet die Extensions (Katalog einlesen, eingeschaltete Helper starten) und meldet `app.ready`.
-    fn start_extensions(&self) {
+    fn start_extensions(&mut self) {
         self.ext.start();
+        self.overlays.ext_started = true;
         self.ext_dev_enable();
         self.ext.emit("app.ready", serde_json::json!({}));
     }
@@ -393,6 +397,10 @@ impl Shell {
         if std::env::var_os("KADRELL_DEV_KEYLOG").is_some() {
             eprintln!("key {:?}", ev.keystroke);
         }
+        if ev.keystroke.key == "escape" && self.cancel_visible(window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.usage_key(ev, window, cx) {
             return;
         }
@@ -439,6 +447,7 @@ impl Focusable for Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_language(cx);
+        ui::overlay::sync_area(window, cx);
         let t = ui::theme(cx);
         if self.window_dark != Some(t.dark) {
             self.window_dark = Some(t.dark);
@@ -493,6 +502,7 @@ impl Render for Shell {
             .children(self.groups_ui.edit.clone())
             .children(self.groups_ui.confirm.clone())
             .children(self.usage.stats.clone())
+            .children(self.closing_layer())
             .children(self.context_layer(window, cx))
             .children(self.usage.notice.clone())
     }

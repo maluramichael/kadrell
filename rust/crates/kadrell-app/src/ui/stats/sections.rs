@@ -77,7 +77,11 @@ fn muted(text: impl Into<gpui::SharedString>, size: f32, t: &Theme) -> gpui::Div
 
 /// Eingelassene Gruppe wie `instrumentGroup()`.
 fn group(t: &Theme) -> gpui::Div {
-    div().rounded(px(6.)).border_1().border_color(t.line).bg(t.panel)
+    // Fläche `bg`, Radius 9, geschlossener Fugenring (außen dunkel, innen hell).
+    let r = crate::ui::instrument::GROUP_RADIUS * crate::ui::overlay::scale();
+    crate::ui::overlay::border_px(div().relative().rounded(px(r)).bg(t.bg), crate::ui::overlay::hairline())
+        .border_color(crate::ui::chrome::seam_dark(t))
+        .child(crate::ui::overlay::inner_ring(t, r))
 }
 
 impl StatsView {
@@ -128,8 +132,8 @@ impl StatsView {
             .child(div().flex_none().pl(px(12.)).child(close_hint()))
     }
 
-    fn avail_width(window: &Window) -> f32 {
-        window.viewport_size().width.as_f32() * 0.94 - 32.
+    fn avail_width(_window: &Window) -> f32 {
+        crate::ui::overlay::area().full_window().width - 32.
     }
 
     // MARK: Limits

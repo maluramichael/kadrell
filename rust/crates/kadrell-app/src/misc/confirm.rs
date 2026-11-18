@@ -9,7 +9,8 @@ use gpui::{
 use kadrell_i18n::trd;
 
 use crate::ui::chrome::h_seam;
-use crate::ui::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
+use crate::ui::instrument::KeyRole;
+use crate::ui::overlay::{backdrop, dialog_foot_with, dialog_frame, dialog_title, overlay_width};
 use crate::ui::theme;
 
 actions!(kadrell_confirm, [Confirm, ConfirmForce, Cancel]);
@@ -87,8 +88,10 @@ impl Focusable for ConfirmDialog {
 impl Render for ConfirmDialog {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let key = if self.destructive { super::os_text("⌘⏎") } else { "⏎".to_string() };
-        let foot = dialog_foot(self.hint(), format!("{} {key}", self.button), &t, cx.listener(|this, _, _, cx| this.confirm(cx)));
+        // „<Taste>  ⌘⏎“ in der destruktiven Rolle, sonst „<Taste>  ⏎“ (die Fußzeile hängt es an).
+        let label = if self.destructive { format!("{}  {}", self.button, super::os_text("⌘⏎")) } else { self.button.to_string() };
+        let role = if self.destructive { KeyRole::Destructive } else { KeyRole::Primary };
+        let foot = dialog_foot_with(self.hint(), label, role, &t, cx.listener(|this, _, _, cx| this.confirm(cx)));
         let body = div().flex_none().p(px(16.)).text_size(px(12.)).line_height(px(18.)).child(self.text.clone());
         let dialog = overlay_width(dialog_frame(&t), 480.)
             .key_context(CONTEXT)

@@ -85,6 +85,8 @@ pub struct TextInput {
     selecting: bool,
     /// Schmale Variante für Tabellenzeilen (Einstellungen): 22 px hoch, 12 pt, Fuge statt dicker Rand.
     compact: bool,
+    /// Schriftgröße in logischen Punkten, 0 = Standard der Variante (13, schmal 12).
+    size: f32,
 }
 
 // Zeichengrenzen und Wortsprünge als reine Funktionen, damit sie testbar bleiben.
@@ -117,7 +119,21 @@ pub fn next_word(text: &str, offset: usize) -> usize {
     text.len() - after_word.len()
 }
 
+/// Höhe und Schriftgröße eines Feldes in logischen Punkten: schmal 22 hoch bei 12, sonst aus der Schrift (13 gibt 32,
+/// 15 gibt 35). `size` 0 nimmt den Standard der Variante.
+pub fn field_metrics(compact: bool, size: f32) -> (f32, f32) {
+    if compact {
+        return (22., if size > 0. { size } else { 12. });
+    }
+    let text = if size > 0. { size } else { 13. };
+    ((text * 1.62 + 11.).round(), text)
+}
+
 impl TextInput {
+    fn metrics(&self) -> (f32, f32) {
+        field_metrics(self.compact, self.size)
+    }
+
     pub fn new(placeholder: &str, cx: &mut Context<Self>) -> Self {
         Self {
             focus: cx.focus_handle(),
@@ -131,6 +147,7 @@ impl TextInput {
             scroll_x: px(0.),
             selecting: false,
             compact: false,
+            size: 0.,
         }
     }
 
@@ -138,6 +155,17 @@ impl TextInput {
     pub fn compact(mut self) -> Self {
         self.compact = true;
         self
+    }
+
+    /// Eigene Schriftgröße (die Mac-App nimmt in Umbenennen und Gruppe bearbeiten 15).
+    pub fn size(mut self, points: f32) -> Self {
+        self.size = points;
+        self
+    }
+
+    /// Ändert den Platzhalter (Umbenennen zeigt den Titel von Claude Code).
+    pub fn set_placeholder(&mut self, text: &str) {
+        self.placeholder = text.to_string().into();
     }
 
     pub fn text(&self) -> &str {
@@ -537,22 +565,25 @@ impl Render for TextInput {
         let t = theme(cx);
         let focused = self.focus.is_focused(window);
         let ring = if focused { t.accent } else { seam_dark(&t) };
-        // Schmal: 1 px Fuge, mit Fokus 2 px Akzentring; der Innenabstand gleicht den Unterschied aus.
-        let thick = focused || !self.compact;
-        let (height, text, pad) = if self.compact { (22., 12., if focused { 6. } else { 7. }) } else { (32., 13., 6.) };
-        div()
+        let s = super::overlay::scale();
+        // Wie `instrumentWell`: Radius 5, Abstand 8 seitlich. Fokus: 2 pt Akzentring innen statt der Fuge; ungefokussiert
+        // eine Haarlinie außen dunkel und direkt innen hell (`seamRing`).
+        let edge = if focused { super::instrument::RING_WIDTH * s } else { super::overlay::hairline() };
+        let (height, text) = self.metrics();
+        let el = super::overlay::border_px(div(), edge)
+            .relative()
             .flex()
             .items_center()
             .w_full()
-            .h(px(height))
-            .px(px(pad))
-            .rounded(px(5.))
-            .when(thick, |d| d.border_2())
-            .when(!thick, |d| d.border_1())
+            .h(px(height * s))
+            .px(px(8. * s - edge))
+            .rounded(px(super::instrument::KEY_RADIUS * s))
             .border_color(ring)
             .bg(super::overlay::well(&t))
             .text_color(t.fg)
-            .text_size(px(text))
+            .text_size(px(text * s));
+        let el = if focused { el } else { el.child(super::overlay::inner_ring(&t, super::instrument::KEY_RADIUS * s)) };
+        el
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .cursor(CursorStyle::IBeam)
@@ -612,6 +643,13 @@ mod tests {
         assert_eq!(next_word(s, 5), 14);
         assert_eq!(next_word(s, s.len()), s.len());
         assert_eq!(prev_word(s, 0), 0);
+    }
+
+    #[test]
+    fn field_size_follows_the_font() {
+        assert_eq!(field_metrics(false, 0.), (32., 13.));
+        assert_eq!(field_metrics(false, 15.), (35., 15.));
+        assert_eq!(field_metrics(true, 0.), (22., 12.));
     }
 
     #[test]
