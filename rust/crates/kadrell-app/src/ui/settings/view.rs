@@ -212,7 +212,7 @@ impl SettingsDialog {
         let count = layout::count(width);
         let ctl_w = layout::control_width(width / count as f32);
         let heights: Vec<f32> = shown.iter().map(|(b, rows)| blocks[*b].estimated_height(rows.len())).collect();
-        let left = if count == 2 { layout::split(&heights, layout::SECTION_SPACING) } else { shown.len() };
+        let left = layout::left_count(&heights, count);
         let mut column = |part: &[(usize, Vec<usize>)]| {
             let views: Vec<Div> = part.iter().map(|(b, rows)| self.block_view(&blocks[*b], rows, ctl_w, t, cx)).collect();
             div().flex().flex_col().gap(px(layout::SECTION_SPACING)).flex_1().min_w_0().children(views)

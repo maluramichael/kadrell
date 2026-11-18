@@ -75,6 +75,8 @@ pub struct Loader {
     pub cache_file: String,
     pub settings_path: PathBuf,
     pub history: Arc<Mutex<SessionHistory>>,
+    /// Fußhinweis zum Schließen, aus dem Kürzel der Statistik (`Hotkeys.closeHint(.showStats)`).
+    pub close_hint: String,
 }
 
 impl Loader {
@@ -318,14 +320,26 @@ impl Render for StatsView {
     }
 }
 
-/// Kürzel zum Schließen, so beschriftet wie im Menü.
-pub fn close_hint() -> String {
-    trd!("Esc oder %@ schließen", if cfg!(target_os = "macos") { "⌥F3" } else { "Alt+F3" })
+/// Hinweis zum Schließen mit dem gebundenen Kürzel der Statistik, ohne Belegung nur „Esc schließt“.
+pub fn close_hint(settings: &Settings, mac: bool) -> String {
+    match crate::ui::ext::keys::binding(settings, kadrell_core::hotkeys::HotkeyAction::ShowStats, mac) {
+        Some(k) => trd!("Esc oder %@ schließen", crate::ui::ext::keys::label(&k, mac)),
+        None => trd!("Esc schließt"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn close_hint_names_the_bound_shortcut_or_none() {
+        let mut s = Settings::default();
+        assert!(close_hint(&s, false).contains("Alt+F3"));
+        assert!(close_hint(&s, true).contains("F3"));
+        crate::ui::settings::shortcut::assign(&mut s, kadrell_core::hotkeys::HotkeyAction::ShowStats, None);
+        assert_eq!(close_hint(&s, false), trd!("Esc schließt"));
+    }
 
     #[test]
     fn keys_map_to_inputs() {

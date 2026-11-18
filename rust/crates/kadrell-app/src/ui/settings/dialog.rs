@@ -24,6 +24,9 @@ use crate::theme::Theme;
 use crate::ui::folders;
 use crate::ui::text_input::{TextInput, TextInputEvent};
 
+/// Pause nach der letzten Eingabe in einem Adressfeld, bevor der Anbieter neu geprüft wird.
+const RECHECK_DELAY: std::time::Duration = std::time::Duration::from_millis(700);
+
 pub enum SettingsEvent {
     Close,
     /// Die Kopie der Einstellungen (`store`) hat sich geändert.
@@ -75,6 +78,8 @@ pub struct SettingsDialog {
     record_sub: Option<Subscription>,
     /// Zählt mit jedem Tippen im Suchfeld der Modelle hoch: nur die letzte Eingabe sucht (nach kurzer Pause).
     pub(super) search_token: u64,
+    /// Wie `search_token` für die Neuprüfung der lokalen Anbieter nach einer Eingabe in Adressfeldern.
+    reload_token: u64,
     _subs: Vec<Subscription>,
 }
 
@@ -104,6 +109,7 @@ impl SettingsDialog {
             just_closed: None,
             record_sub: None,
             search_token: 0,
+            reload_token: 0,
             _subs: vec![filter_sub],
         };
         this.focus.focus(window, cx);
@@ -174,6 +180,25 @@ impl SettingsDialog {
         if let Some(Row { control: Control::Text { set: Some(set), .. }, .. }) = self.find_row(id, cx) {
             self.change(|s| set(s, text), cx);
         }
+        self.recheck_later(id, cx);
+    }
+
+    /// Adresse oder Pfad eines lokalen Anbieters geändert: nach 0,7 s ohne weitere Eingabe neu prüfen.
+    fn recheck_later(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(provider) = sections::provider_of(id) else { return };
+        self.reload_token += 1;
+        let token = self.reload_token;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(RECHECK_DELAY).await;
+            this.update(cx, |this, cx| {
+                if this.reload_token == token {
+                    this.backend.reload(provider);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// Modellsuche auf ollama.com, eine halbe Sekunde nach dem letzten Tastendruck.
@@ -314,6 +339,10 @@ impl SettingsDialog {
         if let Some((value, _)) = p.options.get(index) {
             let value = value.clone();
             self.change(|s| (p.set)(s, value), cx);
+            // An- und Ausschalten eines Anbieters prüft sofort neu.
+            if let Some(provider) = sections::provider_of(&p.row) {
+                self.backend.reload(provider);
+            }
         }
         cx.notify();
     }
