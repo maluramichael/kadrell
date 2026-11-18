@@ -22,6 +22,7 @@ use self::edit::{EditEvent, EditGroup};
 use self::model::EditGroupModel;
 use crate::Shell;
 use crate::state::Run;
+use crate::ui::context_menu::Cmd;
 use crate::ui::sidebar::SidebarCtx;
 
 /// Taste für ⇧F10 und alle Tasten der Dialoge dieses Pakets.
@@ -65,7 +66,7 @@ impl Shell {
     /// ⌘⌥N: leere Gruppe mit Name, Ordner und Farbe, Vorschlag ist der Projektordner. Sie bleibt ohne Session stehen
     /// (Herz); Sessions kommen über „Neue Session in dieser Gruppe“, ⌘N oder Verschieben hinein.
     pub fn open_new_group(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.groups_ui.open() || self.blocking_dialog() {
+        if self.groups_ui.open() || self.blocking_dialog() || self.context.is_some() {
             return;
         }
         let folder = self.state.settings.start_folder(&self.state.paths.home);
@@ -326,6 +327,67 @@ impl Shell {
 
     // MARK: Tastatur
 
+    /// Befehle des Baums (Session- und Gruppenmenü): führt aus und gleicht ab; was einen Dialog öffnet, gleicht selbst ab.
+    pub fn run_tree_cmd(&mut self, cmd: Cmd, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(cmd) = self.run_group_cmd(cmd, window, cx) else { return };
+        if let Some(cmd) = self.run_session_cmd(cmd, window, cx) {
+            debug_assert!(false, "Befehl ohne Zuständigen: {cmd:?}");
+        }
+    }
+
+    /// Befehle der Gruppe; `Some` gibt zurück, was nicht dazugehört.
+    fn run_group_cmd(&mut self, cmd: Cmd, window: &mut Window, cx: &mut Context<Self>) -> Option<Cmd> {
+        match cmd {
+            Cmd::ToggleFavorite(id) => self.state.store.groups.toggle_favorite(&id),
+            Cmd::NewSessionIn(id) => self.new_session_in_group(&id),
+            Cmd::NewTerminalIn(id) => self.new_terminal_in_group(&id),
+            Cmd::ShowGroup(id) => self.show_group_sessions(&id),
+            Cmd::OpenEditor(path) => self.open_editor_in(&path),
+            Cmd::CloseGroup(id) => {
+                self.request_close_group(&id, false, window, cx);
+                return None;
+            }
+            Cmd::EditGroup(id) => {
+                self.open_edit_group(&id, window, cx);
+                return None;
+            }
+            other => return Some(other),
+        }
+        self.sync(window, cx);
+        None
+    }
+
+    /// Befehle der Session; `Some` gibt zurück, was nicht dazugehört.
+    fn run_session_cmd(&mut self, cmd: Cmd, window: &mut Window, cx: &mut Context<Self>) -> Option<Cmd> {
+        match cmd {
+            Cmd::Resume(key) => {
+                let _ = self.state.request_start(&key);
+            }
+            Cmd::Stop(key) => {
+                self.request_stop(&key, window, cx);
+                return None;
+            }
+            Cmd::Remove(key) => {
+                self.request_close_session(&key, false, window, cx);
+                return None;
+            }
+            Cmd::ShowOnly(key) => self.state.show_only(&key),
+            Cmd::HideFromView(key) => self.state.select_keys(&[key], true),
+            Cmd::MoveTo { key, group } => {
+                self.state.move_sessions(&[key], &group);
+            }
+            Cmd::MoveMany { keys, group } => {
+                self.state.move_sessions(&keys, &group);
+            }
+            Cmd::CopyPath(path) => cx.write_to_clipboard(gpui::ClipboardItem::new_string(path)),
+            Cmd::Reveal(path) => cx.open_with_system(std::path::Path::new(&path)),
+            Cmd::NewSessionHere(key) => self.new_session_beside(&key),
+            other => return Some(other),
+        }
+        self.sync(window, cx);
+        None
+    }
+
     /// Palette `> Gruppe bearbeiten` und Menü: Gruppe der fokussierten Session.
     pub fn edit_focused_group(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let group = self.state.focused.as_deref().and_then(|k| self.state.store.groups.group_for_session(k)).map(|g| g.id.clone());
@@ -337,6 +399,9 @@ impl Shell {
     /// ⇧F10: Kontextmenü der Fokus-Session an ihrer Zeile im Baum (bei zugeklappter Gruppe das der Gruppe).
     pub fn show_context_menu_for_focus(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         use crate::ui::sidebar::{GROUP_ROW, SESSION_ROW, TOP_PAD};
+        if self.groups_ui.open() || self.blocking_dialog() || self.context.is_some() {
+            return;
+        }
         let Some(key) = self.state.focused.clone() else { return };
         let Some((top, group_row)) = rows::focus_row_top(&self.groups, &key, TOP_PAD, GROUP_ROW, SESSION_ROW) else { return };
         let bounds = self.groups_ui.scroll.bounds();

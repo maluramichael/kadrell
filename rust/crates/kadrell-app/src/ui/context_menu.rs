@@ -3,7 +3,7 @@
 //! Datenmodell (mit Untermenüs, Häkchen, ausgegrauten Einträgen), die Tastaturführung und das Zeichnen.
 
 use gpui::{
-    App, ClipboardItem, Context, FocusHandle, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
+    App, Context, FocusHandle, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, Pixels, Point,
     StatefulInteractiveElement, Styled, Window, actions, div, px, rgb,
 };
 
@@ -99,6 +99,8 @@ pub struct ContextMenu {
     /// Gibt dem Menü die Tastatur (Pfeile, Enter, Esc).
     focus: FocusHandle,
     focus_pending: bool,
+    /// Wer die Tastatur hatte, bevor das Menü aufging (Terminal, Panel einer Extension): dorthin geht sie zurück.
+    prev_focus: Option<FocusHandle>,
 }
 
 impl std::ops::Deref for ContextMenu {
@@ -145,7 +147,7 @@ fn seek(items: &[Item], from: isize, step: isize) -> Option<usize> {
 
 impl ContextMenu {
     pub fn new(pos: Point<Pixels>, items: Vec<Item>, focus: FocusHandle) -> Self {
-        Self { pos, nav: MenuNav::new(items), focus, focus_pending: true }
+        Self { pos, nav: MenuNav::new(items), focus, focus_pending: true, prev_focus: None }
     }
 }
 
@@ -306,45 +308,34 @@ impl Shell {
         }
     }
 
-    /// Schließt das Menü und gibt die Tastatur an die Fokus-Kachel zurück.
+    /// Nimmt das Menü weg und gibt die Tastatur zurück, die es beim Öffnen bekommen hat.
+    fn take_context(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(menu) = self.context.take() else { return false };
+        if let Some(prev) = menu.prev_focus {
+            window.focus(&prev, cx);
+        }
+        true
+    }
+
+    /// Schließt das Menü und gibt die Tastatur an die zurück, die sie vorher hatte (Fokus-Kachel, Panel).
     pub fn dismiss_context(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.context.take().is_some() {
+        if self.take_context(window, cx) {
             self.sync(window, cx);
         }
     }
 
     /// Führt einen Eintrag aus und schließt das Menü.
     pub fn run_cmd(&mut self, cmd: Cmd, window: &mut Window, cx: &mut Context<Self>) {
-        self.context = None;
+        self.take_context(window, cx);
         match cmd {
-            Cmd::Resume(key) => {
-                let _ = self.state.request_start(&key);
+            Cmd::Rename(target) => self.open_rename(target, window, cx),
+            Cmd::Account(cmd) => self.run_account_cmd(cmd, window, cx),
+            Cmd::Ext { tab, id } => {
+                self.ext_action(&tab, &id);
+                self.sync(window, cx);
             }
-            Cmd::Stop(key) => return self.request_stop(&key, window, cx),
-            Cmd::Remove(key) => return self.request_close_session(&key, false, window, cx),
-            Cmd::ShowOnly(key) => self.state.show_only(&key),
-            Cmd::HideFromView(key) => self.state.select_keys(&[key], true),
-            Cmd::MoveTo { key, group } => {
-                self.state.move_sessions(&[key], &group);
-            }
-            Cmd::MoveMany { keys, group } => {
-                self.state.move_sessions(&keys, &group);
-            }
-            Cmd::Rename(target) => return self.open_rename(target, window, cx),
-            Cmd::CopyPath(path) => cx.write_to_clipboard(ClipboardItem::new_string(path)),
-            Cmd::ToggleFavorite(id) => self.state.store.groups.toggle_favorite(&id),
-            Cmd::CloseGroup(id) => return self.request_close_group(&id, false, window, cx),
-            Cmd::NewSessionIn(id) => self.new_session_in_group(&id),
-            Cmd::NewTerminalIn(id) => self.new_terminal_in_group(&id),
-            Cmd::NewSessionHere(key) => self.new_session_beside(&key),
-            Cmd::ShowGroup(id) => self.show_group_sessions(&id),
-            Cmd::EditGroup(id) => return self.open_edit_group(&id, window, cx),
-            Cmd::Reveal(path) => cx.open_with_system(std::path::Path::new(&path)),
-            Cmd::OpenEditor(path) => self.open_editor_in(&path),
-            Cmd::Ext { tab, id } => self.ext_action(&tab, &id),
-            Cmd::Account(cmd) => return self.run_account_cmd(cmd, window, cx),
+            other => self.run_tree_cmd(other, window, cx),
         }
-        self.sync(window, cx);
     }
 
     // MARK: Aktionen für die fokussierte Session (Menü, Palette, Tastatur)
@@ -401,6 +392,7 @@ impl Shell {
     pub fn context_layer(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
         let menu = self.context.as_mut()?;
         if std::mem::take(&mut menu.focus_pending) {
+            menu.prev_focus = window.focused(cx);
             menu.focus.focus(window, cx);
         }
         let menu = self.context.as_ref()?;

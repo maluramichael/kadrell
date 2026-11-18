@@ -274,6 +274,62 @@ mod tests {
         assert_eq!((saved.name.as_str(), saved.cwd.as_str()), ("Server", HOME));
     }
 
+    /// `EditGroupFolderTests` der Mac-App: Ordner mit Geschwister-Präfix (`beta`, `betamax`).
+    struct Siblings;
+
+    impl Fs for Siblings {
+        fn is_dir(&self, path: &str) -> bool {
+            ["R:/x", "R:/x/alpha", "R:/x/beta", "R:/x/betamax"].contains(&path)
+        }
+        fn list_dirs(&self, dir: &str) -> Vec<String> {
+            match dir {
+                "R:/" => vec!["x".into()],
+                "R:/x" => vec!["alpha".into(), "beta".into(), "betamax".into()],
+                _ => Vec::new(),
+            }
+        }
+    }
+
+    #[test]
+    fn new_folder_is_saved_keeps_sessions_and_default_name_follows() {
+        let g = Group::new("g", "alpha", "#89b4fa", "R:/x/alpha", &["s"]);
+        let mut m = EditGroupModel::new(g, vec![], false, "R:/home");
+        m.set_folder("R:/x/betamax", &Siblings);
+        assert!(m.folder_moved());
+        assert_eq!(m.name, "betamax", "der automatische Name zieht mit");
+        let saved = m.save().unwrap();
+        assert_eq!((saved.cwd.as_str(), saved.id.as_str()), ("R:/x/betamax", "g"));
+        assert_eq!(saved.session_ids, ["s"], "Sessions bleiben in der Gruppe");
+    }
+
+    #[test]
+    fn own_name_stays_and_ambiguous_abbreviation_needs_tab() {
+        let g = Group::new("g", "Mein Projekt", "#89b4fa", "R:/x/alpha", &[]);
+        let mut m = EditGroupModel::new(g, vec![], false, "R:/home");
+        m.set_folder("R:/x/betam", &Siblings);
+        assert_eq!(m.resolved(), Some("R:/x/betamax"), "eindeutiges Kürzel");
+        assert_eq!(m.name, "Mein Projekt");
+        m.set_folder("R:/x/b", &Siblings);
+        assert_eq!(m.resolved(), None, "mehrdeutig: beta und betamax");
+        let tab = m.completion(&Siblings).expect("Tab schreibt den ersten Treffer aus");
+        m.set_folder(&tab, &Siblings);
+        assert_eq!(m.resolved(), Some("R:/x/beta"));
+    }
+
+    #[test]
+    fn missing_folder_blocks_save_and_shared_folder_is_only_a_hint() {
+        let other = Group::new("o", "Beta", "#f38ba8", "R:/x/beta", &[]);
+        let g = Group::new("g", "alpha", "#89b4fa", "R:/x/alpha", &[]);
+        let mut m = EditGroupModel::new(g, vec![other], false, "R:/home");
+        m.set_folder("R:/x/gibt-es-nicht", &Siblings);
+        assert_eq!(m.hint(), Hint::NotFound);
+        assert!(m.save().is_none(), "ohne gültigen Ordner kein Speichern");
+        m.set_folder("R:/x/beta", &Siblings);
+        assert_eq!(m.shared_with().map(|g| g.id.as_str()), Some("o"));
+        assert_ne!(m.hint(), Hint::NotFound);
+        assert_eq!(m.save().unwrap().cwd, "R:/x/beta", "zwei Gruppen im selben Ordner sind erlaubt");
+    }
+
     #[test]
     fn completion_and_dropped_folder() {
         let fs = Fake;

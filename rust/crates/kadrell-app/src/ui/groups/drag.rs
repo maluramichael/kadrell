@@ -215,6 +215,20 @@ mod tests {
         assert_eq!(plan(&s, Over::Head { group: "" }, FLAT), None);
     }
 
+    /// `testFlatReorderReportsFullOrderAndLeavesGroupsAlone` der Mac-App.
+    #[test]
+    fn flat_reorder_reports_the_full_order_and_leaves_groups_alone() {
+        let (s, dir) = store([&["alt", "neu"], &["fertig", "wartet"], &[]]);
+        let order: Vec<String> = ["alt", "neu", "fertig", "wartet"].iter().map(|s| s.to_string()).collect();
+        let mut tree_order = order.clone();
+        let flat = plan(&session("wartet", ""), Over::Session { key: "neu", group: "" }, FLAT);
+        let Some(Plan::ReorderFlat { id, target }) = flat else { panic!("{flat:?}") };
+        tree_order = flat_reordered(&tree_order, &id, &target).unwrap();
+        assert_eq!(tree_order, ["alt", "wartet", "neu", "fertig"]);
+        assert_eq!(s.ordered_keys(), order, "groups.json bleibt unberührt");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn flat_reorder_takes_the_place_of_the_target() {
         let order: Vec<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
@@ -225,7 +239,8 @@ mod tests {
     }
 
     fn store(ids: [&[&str]; 3]) -> (GroupStore, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!("kadrell-drag-{}-{}", std::process::id(), ids.iter().map(|g| g.len()).sum::<usize>()));
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!("kadrell-drag-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         std::fs::create_dir_all(&dir).unwrap();
         let mut s = GroupStore::open(dir.join("groups.json"));
         for (i, members) in ids.iter().enumerate() {

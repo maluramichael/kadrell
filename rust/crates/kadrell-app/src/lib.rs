@@ -378,6 +378,12 @@ impl Shell {
         true
     }
 
+    /// Ein Dialog, die Suche oder ein Menü hat die Tastatur: Alt-Kürzel gehören dann nicht der Shell.
+    fn dialog_open(&self) -> bool {
+        let overlays = self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some();
+        overlays || self.ext_ui.dialog.is_some() || self.usage.overlay_open() || self.groups_ui.open() || self.context.is_some()
+    }
+
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
         if std::env::var_os("KADRELL_DEV_KEYLOG").is_some() {
@@ -387,7 +393,7 @@ impl Shell {
             return;
         }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some() || self.usage.overlay_open() || self.groups_ui.open() || self.context.is_some()) && m.alt {
+        if self.dialog_open() && m.alt {
             cx.stop_propagation();
             return;
         }
