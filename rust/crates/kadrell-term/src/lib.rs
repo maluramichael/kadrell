@@ -4,7 +4,9 @@
 mod boxdraw;
 pub mod fonts;
 mod terminal;
+mod textsearch;
 mod theme;
 
 pub use terminal::{FONT_SIZE, TerminalPane, strip_inherited_env};
+pub use textsearch::{find_byte_ranges, find_char_ranges};
 pub use theme::{FONT, TermTheme, TermThemeGlobal};

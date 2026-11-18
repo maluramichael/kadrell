@@ -15,6 +15,7 @@ pub mod model;
 pub mod folders;
 pub mod new_session;
 pub mod overlay;
+pub mod palette;
 pub mod text_input;
 pub mod pill;
 pub mod sidebar;

@@ -6,7 +6,7 @@ use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
 
 use crate::Shell;
 
-actions!(kadrell, [NewSession, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit]);
+actions!(kadrell, [NewSession, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll]);
 
 pub enum Entry {
     Separator,
@@ -76,7 +76,7 @@ fn edit_menu() -> MenuDef {
             off("Alle Sessions auswählen", keys("⇧⌘A", "Strg+Umschalt+A")),
             Entry::Separator,
             off("Im Terminal suchen …", keys("⌘F", "Strg+F")),
-            off("In allen Terminals suchen …", keys("⇧⌘F", "Strg+Umschalt+F")),
+            item("In allen Terminals suchen …", keys("⇧⌘F", "Strg+Umschalt+F"), FindAll),
         ],
     }
 }
@@ -97,7 +97,7 @@ fn view_menu() -> MenuDef {
             item("Vorherige Session", "Alt+P", PrevSession),
             item("Farbschema wechseln", "Alt+T", ToggleTheme),
             Entry::Separator,
-            off("Suche", keys("⌘P", "Strg+P")),
+            item("Suche", keys("⌘P", "Strg+P"), OpenPalette),
         ],
     }
 }
@@ -139,6 +139,8 @@ pub fn menus() -> Vec<MenuDef> {
 pub fn init(cx: &mut App) {
     let new_key = if cfg!(target_os = "macos") { "cmd-n" } else { "ctrl-n" };
     cx.bind_keys([KeyBinding::new(new_key, NewSession, None)]);
+    let (search_key, find_all_key) = if cfg!(target_os = "macos") { ("cmd-p", "cmd-shift-f") } else { ("ctrl-p", "ctrl-shift-f") };
+    cx.bind_keys([KeyBinding::new(search_key, OpenPalette, None), KeyBinding::new(find_all_key, FindAll, None)]);
     if cfg!(target_os = "macos") {
         cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
     }
@@ -150,6 +152,8 @@ pub fn init(cx: &mut App) {
 /// Aktionen des Fensters: wirken auf die Shell und laufen über den Fokuspfad (Menü, Tastatur).
 pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
+        .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
+        .on_action(cx.listener(|this, _: &FindAll, window, cx| this.open_palette("/", window, cx)))
         .on_action(cx.listener(|this, _: &NextSession, window, cx| this.step(1, window, cx)))
         .on_action(cx.listener(|this, _: &PrevSession, window, cx| this.step(-1, window, cx)))
         .on_action(cx.listener(|this, _: &NextLayout, _, cx| this.cycle_layout(cx)))

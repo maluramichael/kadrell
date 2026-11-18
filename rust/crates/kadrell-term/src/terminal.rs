@@ -106,6 +106,9 @@ pub struct TerminalPane {
     origin: Point<Pixels>,
     marked: Option<String>,
     search: Option<Search>,
+    /// Zuletzt angezeigter Treffer (Begriff, Gridzeile): wird nach einer Größenänderung neu markiert, denn die
+    /// Auswahl geht dabei verloren. Endet mit der nächsten Eingabe.
+    reveal: Option<(String, i32)>,
     selecting: bool,
     scroll_rest: f32,
     pub exited: bool,
@@ -152,6 +155,7 @@ impl TerminalPane {
             origin: point(px(0.), px(0.)),
             marked: None,
             search: None,
+            reveal: None,
             selecting: false,
             scroll_rest: 0.,
             exited: false,
@@ -185,6 +189,7 @@ impl TerminalPane {
 
     /// Eingabe an den Prozess, springt dabei ans Ende des Verlaufs.
     fn write(&mut self, bytes: impl Into<Cow<'static, [u8]>>) {
+        self.reveal = None;
         self.term.lock().scroll_display(Scroll::Bottom);
         self.notifier.notify(bytes);
     }
@@ -197,6 +202,7 @@ impl TerminalPane {
         self.cell = cell;
         self.term.lock().resize(grid);
         self.notifier.on_resize(window_size(grid, cell));
+        self.apply_reveal();
     }
 
     pub fn paste(&mut self, cx: &mut Context<Self>) {
@@ -257,6 +263,7 @@ impl TerminalPane {
         match ks.key.as_str() {
             "escape" => {
                 self.search = None;
+                self.reveal = None;
                 let mut term = self.term.lock();
                 term.selection = None;
                 term.scroll_display(Scroll::Bottom);
@@ -299,6 +306,71 @@ impl TerminalPane {
         search.hit = hit;
     }
 
+    /// Text einer Gridzeile ohne Leerraum am Ende, dazu die Spalte jedes Zeichens (breite Zeichen belegen zwei).
+    fn line_text(term: &Term<Listener>, line: Line) -> (String, Vec<usize>) {
+        let row = &term.grid()[line];
+        let (mut text, mut cols) = (String::new(), Vec::new());
+        for col in 0..term.columns() {
+            let cell = &row[Column(col)];
+            if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+                continue;
+            }
+            text.push(cell.c);
+            cols.push(col);
+        }
+        let keep = text.trim_end().chars().count();
+        text.truncate(text.trim_end().len());
+        cols.truncate(keep);
+        (text, cols)
+    }
+
+    fn matching_lines(term: &Term<Listener>, query: &str, limit: usize) -> Vec<(i32, String)> {
+        let mut out = Vec::new();
+        for l in term.topmost_line().0..=term.bottommost_line().0 {
+            let (text, _) = Self::line_text(term, Line(l));
+            if !crate::textsearch::find_char_ranges(&text, query).is_empty() {
+                out.push((l, text));
+                if out.len() >= limit {
+                    break;
+                }
+            }
+        }
+        out
+    }
+
+    /// Alle Zeilen samt Verlauf, die `query` enthalten (ohne Groß-/Kleinschreibung), als (Gridzeile, Text), älteste
+    /// zuerst, höchstens `limit`. Für die Suche in allen Terminals; `reveal_line` springt zu einer solchen Zeile.
+    pub fn search_lines(&self, query: &str, limit: usize) -> Vec<(i32, String)> {
+        Self::matching_lines(&self.term.lock(), query, limit)
+    }
+
+    /// Zeigt den ersten Treffer von `query` in der Gridzeile `line`: markiert ihn, scrollt hin und öffnet die
+    /// Suchleiste mit dem Begriff, Enter blättert von dort weiter. Ändert sich danach die Größe der Kachel,
+    /// wird der Treffer (die nächstliegende Zeile) neu markiert.
+    pub fn reveal_line(&mut self, query: &str, line: i32, cx: &mut Context<Self>) {
+        self.reveal = Some((query.to_string(), line));
+        self.apply_reveal();
+        cx.notify();
+    }
+
+    fn apply_reveal(&mut self) {
+        let Some((query, wanted)) = self.reveal.clone() else { return };
+        let mut term = self.term.lock();
+        let lines = Self::matching_lines(&term, &query, usize::MAX);
+        let Some((line, _)) = lines.into_iter().min_by_key(|(l, _)| l.abs_diff(wanted)) else { return };
+        let (text, cols) = Self::line_text(&term, Line(line));
+        let Some(hit) = crate::textsearch::find_char_ranges(&text, &query).into_iter().next() else { return };
+        let start = TPoint::new(Line(line), Column(cols[hit.start]));
+        let end = TPoint::new(Line(line), Column(cols[hit.end - 1]));
+        let mut sel = Selection::new(SelectionType::Simple, start, Side::Left);
+        sel.update(end, Side::Right);
+        term.selection = Some(sel);
+        term.scroll_to_point(start);
+        drop(term);
+        self.search = Some(Search { query: query.clone(), hit: Some(start..=end) });
+        self.reveal = Some((query, line));
+    }
+
     fn cell_at(&self, pos: Point<Pixels>) -> (TPoint, Side) {
         let term = self.term.lock();
         let x = ((pos.x - self.origin.x) / self.cell.width).max(0.);
@@ -312,6 +384,7 @@ impl TerminalPane {
 
     fn mouse_down(&mut self, e: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
+        self.reveal = None;
         let (p, side) = self.cell_at(e.position);
         let ty = match e.click_count {
             2 => SelectionType::Semantic,
