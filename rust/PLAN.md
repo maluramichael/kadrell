@@ -94,6 +94,10 @@ Fortschritt und Abweichungen trägt die Planungs-Session hier unten ein.
 - Welle 3 läuft: A Arbeitsfläche (Zoom, Sync, Vorschau, Frei/Scrollen/Reihe, Kürzel aus Settings), B Gruppen
   (Dialoge, Kontextmenüs, Drag), C lokale Modelle (`kadrell-models`), Pi, Remote, D Fenster/Darstellung,
   E Hilfe/About/Übernahme/Worktrees/Links, F wackelnde Tests. Mac-Session: ganze App als Bündel prüfen.
+- Welle 3 fertig (156b3a9, 1147 Tests). Danach Paritätsabgleich Swift gegen Rust (vier Audits, rund 540 Lücken),
+  verteilt auf 13 Pakete nach Dateien (`rw4-<paket>`): look, overlay, tiles, tree, bar, shell, windows, newsession,
+  palette, models, settings, extensions, crates. Exklusiv: theme/chrome/icons nur look, overlay/text_input/pill nur
+  overlay. Sichtprüfpunkte nach Screenshots (Paket rest) folgen mit der Mac-Session.
 - Feinschliff-Liste: Einstellungstexte zeigen „⌘N“ auch unter Windows; unterste Listenzeile im Dialog „Neue Session“
   angeschnitten; Fensterfokus beim Start auf dem Mac; Layout-Menüeinträge auf dem Mac ausgegraut; Buchstabenabstand
   der Gruppennamen; Blur hinter Dialogen; Konten/lokale Modelle im Einstellungen-Dialog noch Mock.
