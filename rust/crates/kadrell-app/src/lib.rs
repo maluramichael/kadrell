@@ -2,6 +2,7 @@
 #![allow(dead_code)] // Mock-Daten und Theme: nicht alle Felder werden schon benutzt.
 
 mod menus;
+mod state;
 mod theme;
 mod ui;
 

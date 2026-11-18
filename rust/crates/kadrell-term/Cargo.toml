@@ -14,3 +14,6 @@ gpui-pre-platform = "=0.3.13"
 # Ohne `font-kit` nimmt GPUI auf dem Mac das NoopTextSystem: kein einziger Text.
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui-pre-platform = { version = "=0.3.13", features = ["font-kit"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"
