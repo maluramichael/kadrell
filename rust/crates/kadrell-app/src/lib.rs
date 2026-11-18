@@ -2,6 +2,7 @@
 //! Steuerkanal, Status. Der Einstieg ist [`run`].
 #![allow(dead_code)] // Theme: nicht alle Felder werden schon benutzt.
 
+mod appearance;
 mod ext;
 mod lang;
 #[cfg(test)]
@@ -77,6 +78,8 @@ pub struct Shell {
     tray: tray_wire::TrayWire,
     /// Stand der Sprache, für die Menüs und die Ansicht zuletzt gebaut wurden (`lang::sync_language`).
     language_generation: u64,
+    /// Farbschema, das die Titelleiste zuletzt bekam (`appearance::apply`); `None` vor dem ersten Zeichnen.
+    window_dark: Option<bool>,
     /// Oberfläche der Extensions: Seitenleisten, Statusleisten, Dialog (`ui::ext`).
     ext_ui: ui::ext::ExtUi,
     /// Konten, Nutzung, Meldungen und die Statistik (`usage`).
@@ -135,6 +138,7 @@ impl Shell {
             ext,
             tray: tray_wire::TrayWire::new(),
             language_generation: kadrell_i18n::global().generation(),
+            window_dark: None,
             ext_ui,
             usage,
         };
@@ -423,6 +427,10 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_language(cx);
         let t = ui::theme(cx);
+        if self.window_dark != Some(t.dark) {
+            self.window_dark = Some(t.dark);
+            appearance::apply(window, t.dark);
+        }
         let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, cx);
         let sidebar = self.ext_left_column(sidebar, cx);
         let mut ctl = self.layout_ctl(cx);
@@ -539,7 +547,9 @@ pub fn run(profile_name: Option<String>) -> i32 {
     };
     let title_profile = state.profile.clone();
     lang::apply_at_start(&state.settings);
-    application().run(move |cx: &mut App| {
+    let app = application();
+    let window_slot = tray_wire::install_reopen(&app);
+    app.run(move |cx: &mut App| {
         kadrell_term::fonts::load(cx);
         ui::text_input::bind_keys(cx);
         ui::new_session::bind_keys(cx);
@@ -559,7 +569,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
             ..Default::default()
         };
         let handle = cx.open_window(options, |window, cx| cx.new(|cx| Shell::new(window, cx, state, jobs, server, ext))).unwrap();
-        tray_wire::install_reopen(cx, handle);
+        window_slot.set(Some(handle));
         cx.on_app_quit(move |cx| {
             let _ = handle.update(cx, |shell, _, _| {
                 if !shell.down {
