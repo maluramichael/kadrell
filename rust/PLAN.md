@@ -75,5 +75,10 @@ Fortschritt und Abweichungen trägt die Planungs-Session hier unten ein.
 ## Fortschritt
 
 - Welle 0 fertig: Workspace, `kadrell-core` (113 Tests), Spike nach `kadrell-term`/`kadrell-app`/`kadrell`.
-- Welle 1: `kadrell-accounts` (102), `kadrell-claude` (163) gemergt; `ext`, `control` laufen. Welle 2 gestartet mit
-  Einstellungen-Dialog und Suche (⌘P).
+- Welle 1 fertig: `kadrell-accounts`, `kadrell-claude`, `kadrell-control`, `kadrell-ext` (Lua 5.5 über mlua) gemergt.
+- Welle 2: Suche (⌘P) und Einstellungen-Dialog gemergt (704 Tests, a6c69e7). Laufen: Verdrahtung mit echten Sessions
+  (`rw-wire`), `kadrell-i18n` (Fluent aus Localizable.xcstrings), `kadrell-tray` (Tray, Benachrichtigungen, Badge).
+  Mac-Session: `.app`-Bündel, danach Unix-Teile von control/accounts/claude.
+- Feinschliff-Liste: Einstellungstexte zeigen „⌘N“ auch unter Windows; unterste Listenzeile im Dialog „Neue Session“
+  angeschnitten; Fensterfokus beim Start auf dem Mac; Layout-Menüeinträge auf dem Mac ausgegraut; Buchstabenabstand
+  der Gruppennamen; Blur hinter Dialogen; Konten/lokale Modelle im Einstellungen-Dialog noch Mock.
