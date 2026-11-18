@@ -18,7 +18,7 @@ use objc2_app_kit::{
     NSApplication, NSImage, NSMenu, NSMenuItem, NSSound, NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
     NSWorkspace,
 };
-use objc2_foundation::{NSDictionary, NSError, NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{NSBundle, NSDictionary, NSError, NSObject, NSObjectProtocol, NSString};
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNMutableNotificationContent, UNNotification, UNNotificationPresentationOptions,
     UNNotificationRequest, UNNotificationResponse, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
@@ -82,7 +82,7 @@ define_class!(
             let key = info
                 .objectForKey(&NSString::from_str(KEY))
                 .and_then(|o| o.downcast::<NSString>().ok())
-            .map(|s| s.to_string());
+                .map(|s| s.to_string());
             if let Some(key) = key {
                 let _ = self.ivars().events.send(TrayEvent::NotificationClicked(key));
             }
@@ -100,6 +100,14 @@ define_class!(
         }
     }
 );
+
+/// Das Mitteilungscenter, nur wenn der Prozess ein App-Bündel ist: `currentNotificationCenter` wirft sonst eine
+/// Ausnahme (`cargo run`, Tests).
+fn notification_center() -> Option<Retained<UNUserNotificationCenter>> {
+    let bundle = NSBundle::mainBundle();
+    let in_app = bundle.bundleIdentifier().is_some() && bundle.bundlePath().to_string().ends_with(".app");
+    in_app.then(UNUserNotificationCenter::currentNotificationCenter)
+}
 
 pub struct Backend {
     mtm: MainThreadMarker,
@@ -127,6 +135,7 @@ impl Backend {
         }
         let backend = Backend { mtm, item, target, delegate, authorized: false.into() };
         backend.set_menu(model::build_menu(&[], &[], model::Lang::default()));
+        backend.start_notifications();
         backend
     }
 
@@ -177,15 +186,22 @@ impl Backend {
         item
     }
 
+    /// Delegate setzen und die Berechtigung gleich beim Start abfragen, nicht erst bei der ersten Mitteilung: dann
+    /// kommt die Abfrage, solange der Nutzer vor der App sitzt, und ein Klick auf eine Mitteilung erreicht die App
+    /// auch dann, wenn sie dadurch gestartet wurde.
+    fn start_notifications(&self) {
+        let Some(center) = notification_center() else { return };
+        center.setDelegate(Some(ProtocolObject::from_ref(&*self.delegate)));
+        if !self.authorized.replace(true) {
+            let options = UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound | UNAuthorizationOptions::Badge;
+            center.requestAuthorizationWithOptions_completionHandler(options, &RcBlock::new(|_granted, _err: *mut NSError| {}));
+        }
+    }
+
     pub fn notify(&self, n: Notification) {
-        // SAFETY: UserNotifications-Aufrufe auf dem Hauptthread; Blöcke leben bis zum Aufruf.
+        let Some(center) = notification_center() else { return };
+        // SAFETY: `userInfo` ist ein NSDictionary aus NSString-Paaren, wie es UserNotifications erwartet.
         unsafe {
-            let center = UNUserNotificationCenter::currentNotificationCenter();
-            center.setDelegate(Some(ProtocolObject::from_ref(&*self.delegate)));
-            if !self.authorized.replace(true) {
-                let options = UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound;
-                center.requestAuthorizationWithOptions_completionHandler(options, &RcBlock::new(|_granted, _err: *mut NSError| {}));
-            }
             let content = UNMutableNotificationContent::new();
             content.setTitle(&NSString::from_str(&n.title));
             content.setBody(&NSString::from_str(&n.body));
