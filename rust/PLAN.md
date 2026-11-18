@@ -27,6 +27,8 @@ Spike `spike/gpui`. Nichts davon geht nach `master`, kein Release, keine Version
 - Abhängigkeiten: keine exakten Pins (`=x.y.z`) unter dem Stand in `rust/Cargo.lock` (gpui-pre braucht z. B.
   serde_json ≥ 1.0.144). gpui-pre schaltet `serde_json/preserve_order` für den ganzen Workspace ein: nie auf eine
   sortierte Reihenfolge von `serde_json::Map` verlassen, sortierte Ausgabe ausdrücklich bauen.
+- Speicher: jeder Worktree baut ein eigenes `rust/target` (mehrere GB). Die Planungs-Session löscht es, sobald der
+  Agent fertig und gemergt ist; Agenten selbst löschen nichts außerhalb ihres Worktrees.
 - Was sich auf Windows nicht bauen lässt (macOS-Zweige), sauber hinter `cfg(target_os = "macos")` halten; die Mac-Session
   `gpui-mac` auf ragasa baut und testet es (Inbox `~/tmp/kadrell-spike/inbox/`).
 
