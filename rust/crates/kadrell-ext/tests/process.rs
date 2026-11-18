@@ -326,9 +326,16 @@ fn stderr_lines_are_forwarded_and_clipped() {
 #[test]
 fn stderr_flood_is_throttled_not_killed() {
     let l = launch_ready(
-        r#"kadrell.on("app.ready", function() for i = 1, 100000 do io.write(i, "\n") end end)"#,
+        r#"kadrell.on("app.ready", function() for i = 1, 100000 do io.write(i, "\n") end end)
+        kadrell.on("done", function() kadrell.panel.set{title = "done", children = {}} end)"#,
     );
-    // Auf die Sammelzeile warten statt feste Zeit: sie kommt erst, wenn die Drosselung den Rest verworfen hat.
+    // Lua arbeitet nacheinander: Das Panel als Antwort auf `done` kommt erst, wenn die ganze Schleife durch ist. Danach
+    // hat die Überwachung die gesamte Flut gesehen und nicht getötet (statt fester Wartezeit).
+    l.p.send(HostMessage::Event {
+        name: "done".into(),
+        data: json!({}),
+    });
+    assert!(wait_until(WAIT, || has_panel(&l, "done")), "{:?}", l.log.exits());
     assert!(
         wait_until(WAIT, || l.log.stderr().iter().any(|s| is_skipped_summary(s))),
         "keine Sammelzeile"
@@ -439,8 +446,10 @@ fn kill_ends_immediately_as_expected() {
     l.p.kill();
     assert!(l.p.is_stopping());
     assert!(wait_until(3.0, || !l.log.exits().is_empty()));
-    // Kill ist sofort; die Grenze liegt weit unter der Eskalationszeit des sanften Stopps und trägt auch Last.
-    assert!(begin.elapsed() < Duration::from_millis(1900), "{:?}", begin.elapsed());
+    // Kill ist sofort. Die Grenze liegt vor der Eskalation des sanften Stopps (Unix 1 s, Windows 2 s), dem einzigen
+    // Unterschied zu `stop()`: der Helper in der Endlosschleife liest `shutdown` nie.
+    let latest = if cfg!(unix) { 900 } else { 1900 };
+    assert!(begin.elapsed() < Duration::from_millis(latest), "{:?}", begin.elapsed());
     assert!(l.log.exits()[0].0);
 }
 
