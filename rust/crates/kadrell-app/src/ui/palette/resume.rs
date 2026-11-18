@@ -59,7 +59,7 @@ mod tests {
     use super::*;
 
     fn pick() -> Pick {
-        kadrell_i18n::global().set_language(kadrell_i18n::Language::De);
+        kadrell_i18n::set_thread_language(kadrell_i18n::Language::De);
         Pick { session_id: "abc".into(), cwd: "C:/dev/kadrell".into(), title: "Palette".into() }
     }
 

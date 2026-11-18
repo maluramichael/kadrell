@@ -326,9 +326,20 @@ fn stderr_lines_are_forwarded_and_clipped() {
 #[test]
 fn stderr_flood_is_throttled_not_killed() {
     let l = launch_ready(
-        r#"kadrell.on("app.ready", function() for i = 1, 100000 do io.write(i, "\n") end end)"#,
+        r#"kadrell.on("app.ready", function() for i = 1, 100000 do io.write(i, "\n") end end)
+        kadrell.on("done", function() kadrell.panel.set{title = "done", children = {}} end)"#,
     );
-    std::thread::sleep(Duration::from_secs(2));
+    // Lua arbeitet nacheinander: Das Panel als Antwort auf `done` kommt erst, wenn die ganze Schleife durch ist. Danach
+    // hat die Überwachung die gesamte Flut gesehen und nicht getötet (statt fester Wartezeit).
+    l.p.send(HostMessage::Event {
+        name: "done".into(),
+        data: json!({}),
+    });
+    assert!(wait_until(WAIT, || has_panel(&l, "done")), "{:?}", l.log.exits());
+    assert!(
+        wait_until(WAIT, || l.log.stderr().iter().any(|s| is_skipped_summary(s))),
+        "keine Sammelzeile"
+    );
     let stderr = l.log.stderr();
     assert!(stderr.len() < 200, "{}", stderr.len());
     assert!(
@@ -395,9 +406,11 @@ fn stop_of_idle_helper_uses_shutdown() {
     let begin = Instant::now();
     l.p.stop();
     assert!(wait_until(3.0, || !l.log.exits().is_empty()));
+    // Eskaliert wird unter Unix nach 1 s (SIGTERM), unter Windows nach 2 s (Kill); davor muss der Helper von selbst enden.
+    let latest = if cfg!(unix) { 900 } else { 1900 };
     assert!(
-        begin.elapsed() < Duration::from_millis(900),
-        "vor dem Eskalieren nach 1 s: {:?}",
+        begin.elapsed() < Duration::from_millis(latest),
+        "vor dem Eskalieren: {:?}",
         begin.elapsed()
     );
     assert!(l.log.exits()[0].0);
@@ -433,7 +446,10 @@ fn kill_ends_immediately_as_expected() {
     l.p.kill();
     assert!(l.p.is_stopping());
     assert!(wait_until(3.0, || !l.log.exits().is_empty()));
-    assert!(begin.elapsed() < Duration::from_secs(1));
+    // Kill ist sofort. Die Grenze liegt vor der Eskalation des sanften Stopps (Unix 1 s, Windows 2 s), dem einzigen
+    // Unterschied zu `stop()`: der Helper in der Endlosschleife liest `shutdown` nie.
+    let latest = if cfg!(unix) { 900 } else { 1900 };
+    assert!(begin.elapsed() < Duration::from_millis(latest), "{:?}", begin.elapsed());
     assert!(l.log.exits()[0].0);
 }
 
@@ -461,7 +477,7 @@ fn parent_gone_kills_looping_helper() {
         HostPipe::start_ready(r#"kadrell.on("app.ready", function() while true do end end)"#);
     std::thread::sleep(Duration::from_millis(200));
     p.close_stdin();
-    assert!(p.wait_for_exit(2.0).is_some());
+    assert!(p.wait_for_exit(WAIT).is_some());
 }
 
 #[test]

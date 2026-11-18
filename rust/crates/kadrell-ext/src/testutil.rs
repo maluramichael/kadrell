@@ -51,9 +51,14 @@ pub fn make_extension(
     dir
 }
 
-/// Wartet bis zu `seconds`, bis `condition` gilt.
+/// Untergrenze für jede Wartezeit auf eine Bedingung. Das Warten endet, sobald die Bedingung gilt, ein großzügiges Limit
+/// kostet also nichts; unter Last (viele Prozesse, Virenscanner) sind knappe Fristen dagegen die Hauptquelle für
+/// Zufallsfehler. Die Zahl in den Tests sagt, was als normal gilt, nicht wie lange höchstens gewartet wird.
+pub const MIN_WAIT: f64 = 20.0;
+
+/// Wartet bis zu `seconds` (mindestens `MIN_WAIT`), bis `condition` gilt.
 pub fn wait_until(seconds: f64, mut condition: impl FnMut() -> bool) -> bool {
-    let deadline = Instant::now() + Duration::from_secs_f64(seconds);
+    let deadline = Instant::now() + Duration::from_secs_f64(seconds.max(MIN_WAIT));
     while !condition() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));
     }

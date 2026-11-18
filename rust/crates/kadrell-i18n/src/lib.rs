@@ -191,6 +191,18 @@ fn extra_source(lang: Lang) -> &'static str {
     }
 }
 
+thread_local! {
+    /// Sprache nur für diesen Thread, siehe `set_thread_language`.
+    static THREAD_LANG: std::cell::Cell<Option<Lang>> = const { std::cell::Cell::new(None) };
+}
+
+/// Legt die Sprache fest, in der Aufrufe dieses Threads übersetzen, ohne die globale Einstellung anzufassen. Gedacht
+/// für Tests: Die Testfäden eines Prozesses laufen parallel, und ein globales `set_language` des einen Tests kippt
+/// sonst die Texte des anderen (zufällige Fehler je nach Reihenfolge).
+pub fn set_thread_language(language: Language) {
+    THREAD_LANG.with(|l| l.set(Some(language.resolve())));
+}
+
 /// Übersetzer. Thread-sicher; `set_language` wirkt sofort für alle folgenden Aufrufe.
 pub struct I18n {
     de: Bundle,
@@ -239,6 +251,9 @@ impl I18n {
 
     /// Die tatsächlich verwendete Sprache.
     pub fn lang(&self) -> Lang {
+        if let Some(lang) = THREAD_LANG.with(std::cell::Cell::get) {
+            return lang;
+        }
         Lang::from_u8(self.resolved.load(Ordering::SeqCst))
     }
 

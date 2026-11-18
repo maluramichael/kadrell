@@ -82,7 +82,10 @@ fn fingerprint(path: &Path) -> u64 {
             if seen > FINGERPRINT_LIMIT {
                 return hasher.finish();
             }
-            let meta = entry.metadata().ok();
+            // Nicht `entry.metadata()`: unter Windows stammen Größe und Zeit dort aus dem Verzeichniseintrag, den NTFS
+            // erst verzögert nachzieht. Ein frisch geschriebener Ordner liefert dann beim ersten Lesen alte und beim
+            // zweiten neue Werte, der Abdruck wechselt ohne jede Änderung. Das Öffnen der Datei gibt den echten Stand.
+            let meta = std::fs::symlink_metadata(entry.path()).ok();
             entry.file_name().hash(&mut hasher);
             meta.as_ref().map(|m| (m.len(), m.modified().ok())).hash(&mut hasher);
             if meta.is_some_and(|m| m.is_dir()) {

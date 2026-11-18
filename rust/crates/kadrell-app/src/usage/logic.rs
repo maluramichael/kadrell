@@ -247,16 +247,11 @@ impl BarPlan {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kadrell_i18n::{Language, global};
-    use std::sync::{Mutex, MutexGuard, PoisonError};
+    use kadrell_i18n::{Language, set_thread_language};
 
-    /// Die Sprache ist global: Tests, die sie setzen, laufen nacheinander.
-    static LANG: Mutex<()> = Mutex::new(());
-
-    fn lang(language: Language) -> MutexGuard<'static, ()> {
-        let guard = LANG.lock().unwrap_or_else(PoisonError::into_inner);
-        global().set_language(language);
-        guard
+    /// Die Sprache gilt nur für den Testthread, andere Tests des Prozesses bleiben unberührt.
+    fn lang(language: Language) {
+        set_thread_language(language);
     }
 
     fn counts(running: usize, waiting: usize, idle: usize, error: usize, detached: usize) -> StatusCounts {
@@ -265,7 +260,7 @@ mod tests {
 
     #[test]
     fn only_non_zero_states_in_order() {
-        let _g = lang(Language::De);
+        lang(Language::De);
         assert_eq!(status_text(&counts(2, 1, 3, 0, 1), false), "2 ARBEITEN · 1 WARTET");
         assert_eq!(status_text(&counts(1, 0, 0, 2, 0), false), "1 ARBEITET · 2 FEHLER");
         assert_eq!(status_text(&counts(0, 0, 0, 0, 0), false), "");
@@ -275,23 +270,23 @@ mod tests {
     #[test]
     fn display_switches_language() {
         let c = counts(2, 1, 0, 1, 0);
-        let _g = lang(Language::En);
+        lang(Language::En);
         assert_eq!(status_text(&c, false), "2 RUNNING · 1 WAITING · 1 ERROR");
         assert_eq!(status_text(&c, true), "2R · 1W · 1E");
-        global().set_language(Language::De);
+        set_thread_language(Language::De);
         assert_eq!(status_text(&c, false), "2 ARBEITEN · 1 WARTET · 1 FEHLER");
         assert_eq!(status_text(&c, true), "2A · 1W · 1F");
     }
 
     #[test]
     fn english_plural() {
-        let _g = lang(Language::En);
+        lang(Language::En);
         assert_eq!(status_text(&counts(1, 2, 0, 2, 0), false), "1 RUNNING · 2 WAITING · 2 ERRORS");
     }
 
     #[test]
     fn spoken_lists_everything() {
-        let _g = lang(Language::De);
+        lang(Language::De);
         assert_eq!(status_spoken(&counts(2, 1, 3, 0, 1)), "2 arbeiten, 1 warten, 3 fertig, 1 getrennt · 7 Sessions");
         assert_eq!(status_spoken(&counts(0, 0, 1, 2, 0)), "0 arbeiten, 0 warten, 1 fertig, 2 mit Fehler, 0 getrennt · 3 Sessions");
     }
@@ -369,7 +364,7 @@ mod tests {
     /// Ein falscher Schlüssel fiele still auf den deutschen Text zurück: jeder Text muss in beiden Sprachen auflösen.
     #[test]
     fn every_key_resolves() {
-        let _g = lang(Language::En);
+        lang(Language::En);
         assert_eq!(trd!("%lld trennen", 2), "detach 2");
         assert_eq!(trd!("%lld warten", 2), "2 waiting");
         assert_eq!(trd!("Aktives Konto"), "Active account");

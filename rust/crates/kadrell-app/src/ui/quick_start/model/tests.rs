@@ -6,7 +6,7 @@ const HOME: &str = "/home/m";
 
 /// Die Texte gelten deutsch, egal in welcher Sprache der Rechner läuft.
 fn de() {
-    kadrell_i18n::global().set_language(kadrell_i18n::Language::De);
+    kadrell_i18n::set_thread_language(kadrell_i18n::Language::De);
 }
 
 /// Wegwerfordner mit echten Unterordnern, beim Drop gelöscht.

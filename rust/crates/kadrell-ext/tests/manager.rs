@@ -90,6 +90,9 @@ impl Drop for Fx {
     fn drop(&mut self) {
         self.manager.shutdown_all();
         let gone = wait_until(5.0, || self.helpers() == 0);
+        if !gone {
+            kill_helpers_in(&self.catalog);
+        }
         if !std::thread::panicking() {
             assert!(gone, "kein Helper bleibt nach shutdown_all übrig");
         }
