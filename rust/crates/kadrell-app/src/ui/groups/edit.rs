@@ -231,7 +231,7 @@ impl Render for EditGroup {
         let foot = dialog_foot(trd!("Esc abbrechen"), format!("{button} ⏎"), &t, cx.listener(|this, _, w, cx| this.save(&Save, w, cx)));
         let ring = t.accent;
         let remote = self.model.is_remote();
-        let mut dialog = overlay_width(dialog_frame(&t), 640.)
+        let dialog = overlay_width(dialog_frame(&t), 640.)
             .key_context(CONTEXT)
             .text_color(t.fg)
             .text_size(px(12.))
@@ -247,12 +247,14 @@ impl Render for EditGroup {
             .can_drop(move |_, _, _| !remote)
             // Beim Darüberziehen ein 2-pt-Akzentrand um den ganzen Dialog (Radius 14), nicht nur die Fuge.
             .drag_over::<ExternalPaths>(move |s, _, _, _| s.border_2().border_color(ring))
-            .child(dialog_title(title, &t))
-            .child(self.name_row(&t));
+            .child(dialog_title(title, &t));
+        // Der Inhalt scrollt, die Fußzeile steht fest darunter (`OverlayScroll`): im kleinen Fenster bleibt sie sichtbar.
+        let mut body = div().id("edit-group-body").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().child(self.name_row(&t));
         if !remote {
-            dialog = dialog.child(self.folder_row(&t, cx));
+            body = body.child(self.folder_row(&t, cx));
         }
-        let dialog = dialog.child(self.hint_line(&t)).child(self.palettes(&t, cx)).child(h_seam(&t)).child(foot);
+        let body = body.child(self.hint_line(&t)).child(self.palettes(&t, cx));
+        let dialog = dialog.child(body).child(h_seam(&t)).child(foot);
         backdrop(cx.listener(|_, _, _, cx| cx.emit(EditEvent::Close))).child(dialog)
     }
 }

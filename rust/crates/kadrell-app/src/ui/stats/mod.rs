@@ -312,7 +312,7 @@ impl Render for StatsView {
             .child(body)
             .child(h_seam(&t))
             .child(self.footer(cx));
-        let travel = super::overlay::area().full_window().height;
+        let travel = super::overlay::area().slide_travel();
         let reduce = crate::appearance::breathing::reduce_motion();
         backdrop_full(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(slide(dialog, "stats-slide", travel, reduce))
     }

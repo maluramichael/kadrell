@@ -83,6 +83,11 @@ impl Area {
         Frame { left: inset, top: 0., width: (self.width - 2. * inset).max(0.), height: (self.height - inset).max(0.) }
     }
 
+    /// Weg der Einfahrt in Pixeln: Höhe des Panels samt Luft oben und unten (`maxHeight + 2 * topInset`).
+    pub fn slide_travel(&self) -> f32 {
+        self.full_window().height + 2. * self.inset()
+    }
+
     /// Palette: volle Größe 640 x 420 plus Schattentiefe, im kleinen Fenster auf Fläche minus Rand verkleinert.
     pub fn palette(&self) -> Frame {
         let s = self.scale;
@@ -206,20 +211,27 @@ pub fn backdrop(on_close: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'sta
 pub fn backdrop_full(on_close: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static) -> Div {
     let a = area();
     let f = a.full_window();
-    div()
+    // Das Panel liegt bündig unter der Titelleiste und schneidet ab, was über seiner Oberkante steht; die Luft oben
+    // (`topInset`) liegt als Abstand im Inneren, so kommt die Fläche beim Einfahren unter der Titelleiste hervor.
+    let panel = div()
         .absolute()
         .top(px(a.top))
         .left_0()
         .right_0()
         .bottom_0()
+        .overflow_hidden()
         .flex()
         .flex_col()
         .pl(px(f.left))
         .pr(px(f.left))
+        .pt(px(a.inset()))
         .pb(px(a.inset()))
-        .bg(dim())
-        .occlude()
-        .on_mouse_down(MouseButton::Left, on_close)
+        .bg(dim());
+    if super::overlay_anim::leaving() {
+        // Fährt hinaus: keine Klicks mehr im Dialog, sie gehen ans Hauptfenster (`ignoresMouseEvents`).
+        return panel;
+    }
+    panel.occlude().on_mouse_down(MouseButton::Left, on_close)
 }
 
 /// Farbe des festen Schattens: Schwarz, in dunklen Schemata 0,5, in hellen 0,16 (`Instrument.dropShadow`).
@@ -253,6 +265,7 @@ pub fn dialog_frame(t: &Theme) -> Div {
         .relative()
         .flex()
         .flex_col()
+        .overflow_hidden()
         .max_h(px((a.max_height() - SHADOW_DEPTH * a.scale).max(0.)))
         .rounded(px(radius))
         .bg(raised(t))
@@ -401,6 +414,12 @@ mod tests {
         let narrow = window(900., 600.);
         assert_eq!(narrow.inset(), 6., "mindestens 6");
         assert_eq!(narrow.full_window().width, 900. - 12.);
+    }
+
+    #[test]
+    fn slide_travel_covers_the_panel_and_its_gaps() {
+        let a = window(1400., 900.);
+        assert_eq!(a.slide_travel(), 900. - 7. + 14.);
     }
 
     /// `testSettingsShrinkWithWindow`: die Fläche schrumpft mit dem Fenster, nie breiter als die Fläche.

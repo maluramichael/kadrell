@@ -299,7 +299,7 @@ impl Render for SettingsDialog {
             .child(foot)
             .children(self.popover_view(&t, cx));
         let frame = super::attach_handlers(frame, cx);
-        let travel = overlay::area().full_window().height;
+        let travel = overlay::area().slide_travel();
         let reduce = crate::appearance::breathing::reduce_motion();
         backdrop_full(cx.listener(|_, _, _, cx| cx.emit(super::dialog::SettingsEvent::Close))).child(slide(frame, "settings-slide", travel, reduce))
     }

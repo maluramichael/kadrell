@@ -120,7 +120,8 @@ impl Shell {
         set_leaving(false);
     }
 
-    /// Das ausfahrende Overlay, gezeichnet über dem Fenster. Klicks gehen hindurch ans Hauptfenster.
+    /// Das ausfahrende Overlay, gezeichnet über dem Fenster. Seine Abdunklung fängt keine Klicks mehr ab
+    /// (`backdrop_full` liest `leaving`), sie gehen ans Hauptfenster.
     pub(crate) fn closing_layer(&self) -> Option<Div> {
         let view = self.overlays.closing.clone()?;
         Some(div().absolute().top_0().left_0().size_full().child(view))
@@ -131,7 +132,7 @@ impl Shell {
     /// Ein Dialog ist offen, hat aber nicht mehr den Fokus (nach Dropdown, Klick daneben, App-Wechsel): Esc landet dann am
     /// Hauptfenster. Ohne das schlösse nichts den Dialog und die Abdunklung blockte alle Klicks. `true`: geschlossen.
     pub(crate) fn cancel_visible(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        if !self.plain_overlay_open() || self.overlay_has_focus(window, cx) {
+        if !self.plain_overlay_open() || !self.main_window_has_focus(window, cx) {
             return false;
         }
         self.close_plain_dialogs();
@@ -152,18 +153,12 @@ impl Shell {
             || self.groups_ui.edit.is_some()
     }
 
-    /// Steht der Fokus in einem der offenen Dialoge (oder in einem Panel, das seine Tasten selbst behandelt)?
-    fn overlay_has_focus(&self, window: &Window, cx: &gpui::App) -> bool {
-        use gpui::Focusable;
-        let inside = |h: gpui::FocusHandle| h.contains_focused(window, cx);
-        self.overlay.as_ref().is_some_and(|e| inside(e.focus_handle(cx)))
-            || self.rename.as_ref().is_some_and(|e| inside(e.focus_handle(cx)))
-            || self.quick_start.as_ref().is_some_and(|e| inside(e.focus_handle(cx)))
-            || self.agent_pick.as_ref().is_some_and(|e| inside(e.focus_handle(cx)))
-            || self.remote.as_ref().is_some_and(|e| inside(e.focus_handle(cx)))
-            || self.settings.as_ref().is_some_and(|e| inside(e.focus_handle(cx)))
-            || self.palette.as_ref().is_some_and(|e| inside(e.focus_handle(cx)))
-            || self.groups_ui.edit.as_ref().is_some_and(|e| inside(e.focus_handle(cx)))
+    /// Hat das Hauptfenster die Tastatur: kein Fokus, die Leerlauf-Fläche der Shell oder ein Terminal? Genau dann kam Esc
+    /// am Hauptfenster an (`cancelVisible`); jeder Fokus in einem Dialog (auch in dessen zweitem Feld) gehört dem Dialog.
+    fn main_window_has_focus(&self, window: &Window, cx: &gpui::App) -> bool {
+        let Some(focused) = window.focused(cx) else { return true };
+        focused == self.idle_focus
+            || self.groups.iter().flat_map(|g| g.sessions.iter()).filter_map(|s| s.pane.as_ref()).any(|p| p.read(cx).focus == focused)
     }
 
     // MARK: Meldungen
