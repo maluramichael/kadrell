@@ -99,6 +99,7 @@ impl Shell {
     /// Fokus-Kachel (solange kein Dialog offen ist), neu zeichnen.
     pub(crate) fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reconcile(window, cx);
+        self.emit_ext_events();
         self.rebuild();
         self.refresh_auto();
         if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && self.agent_pick.is_none() && self.remote.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() && !self.misc.overlay_open() && !self.ws.keeps_focus() {
@@ -199,6 +200,7 @@ impl Shell {
     /// Pollt Session-Dateien und Transcripts im Hintergrund, solange die App läuft.
     pub(crate) fn start_poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
+            let mut first = true;
             loop {
                 let Ok(job) = this.update(cx, |shell, _| shell.state.poll_job()) else { break };
                 let (change, messages) = cx.background_executor().spawn(async move { job.run_counted() }).await;
@@ -206,6 +208,9 @@ impl Shell {
                     shell.state.count_stat(kadrell_core::stats::StatKey::Messages, messages as i64);
                     shell.state.apply_registry(change);
                     shell.sync(window, cx);
+                    if std::mem::take(&mut first) {
+                        shell.ext.emit("app.ready", serde_json::json!({}));
+                    }
                     shell.state.poll_interval()
                 });
                 let Ok(wait) = wait else { break };

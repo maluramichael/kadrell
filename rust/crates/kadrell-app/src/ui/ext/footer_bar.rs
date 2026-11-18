@@ -3,9 +3,10 @@
 //! Platzverteilung steht in `footer_model`.
 
 use gpui::{
-    AnyView, App, AppContext, Context, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Render, SharedString, Stateful,
-    StatefulInteractiveElement, Styled, TextRun, Window, div, px,
+    AnyView, App, AppContext, Context, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Render, Role, SharedString,
+    Stateful, StatefulInteractiveElement, Styled, TextRun, Window, div, px,
 };
+use kadrell_i18n::trd;
 
 use super::footer_model::{
     BAR_GAP, BAR_HEIGHT, BAR_WIDTH, FooterEntry, GAUGE_HEIGHT, GAUGE_WIDTH, HEIGHT, PAD, PART_GAP, Part, Placed, layout, parts,
@@ -18,6 +19,26 @@ use crate::ui::overlay::{dialog_frame, raised};
 use crate::ui::theme as app_theme;
 
 const TEXT_SIZE: f32 = 11.;
+
+/// Was ein Bildschirmleser zu einem Modul hört: Einträge mit Aktion sind Tasten, die übrigen Text mit dem Tooltip als Wert
+/// (`FooterBarView.accessibilityChildren`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Access {
+    pub button: bool,
+    pub label: String,
+    pub value: Option<String>,
+}
+
+pub fn access(entry: &FooterEntry) -> Access {
+    let item = &entry.1;
+    let tip = item.tip.clone().filter(|t| !t.is_empty());
+    Access { button: item.action.is_some(), label: item.spoken(), value: if item.action.is_some() { None } else { tip } }
+}
+
+/// Beschriftung der ganzen Leiste.
+pub fn bar_label() -> String {
+    trd!("Statusleiste der Extensions")
+}
 
 /// Breite eines Textes in der Schrift der Leiste, in px.
 fn measure(window: &Window, text: &str) -> f32 {
@@ -94,6 +115,11 @@ fn module(i: usize, entry: &FooterEntry, at: &Placed, t: &Theme, cx: &mut Contex
         .text_size(px(TEXT_SIZE))
         .children(children)
         .tooltip(tip_view(entry.1.tip.clone().unwrap_or_else(|| format!("{}: {}", entry.0, entry.1.spoken()))));
+    let a = access(entry);
+    el = el.role(if a.button { Role::Button } else { Role::Label }).aria_label(a.label);
+    if let Some(value) = a.value {
+        el = el.aria_value(value);
+    }
     if let Some(action) = entry.1.action.clone() {
         let name = entry.0.clone();
         el = el.cursor_pointer().on_click(cx.listener(move |this, _, _, _| this.ext_action(&name, &action)));
@@ -118,11 +144,56 @@ pub fn footer_bar(entries: &[FooterEntry], window: &Window, cx: &mut Context<She
     for p in &right {
         body = body.child(seam_at(p.x - 0., &t)).child(module(p.index, &entries[p.index], p, &t, cx));
     }
-    div().flex().flex_col().flex_none().w_full().bg(t.panel).child(h_seam(&t)).child(body)
+    div().id("ext-footer").role(Role::Group).aria_label(bar_label()).flex().flex_col().flex_none().w_full().bg(t.panel).child(h_seam(&t)).child(body)
 }
 
 /// Eine leere Leiste: für die Schonfrist, in der die Leiste nach dem letzten Eintrag noch steht (kein Springen).
 pub fn empty_footer(cx: &App) -> impl IntoElement + use<> {
     let t = app_theme(cx);
     div().flex().flex_col().flex_none().w_full().bg(t.panel).child(h_seam(&t)).child(div().h(px(HEIGHT - 2.)))
+}
+
+#[cfg(test)]
+mod tests {
+    use kadrell_ext::footer::{Align, FooterItem};
+
+    use super::*;
+
+    fn entry(id: &str, align: Align, action: Option<&str>, tip: Option<&str>) -> FooterEntry {
+        let item = FooterItem {
+            id: id.into(),
+            align,
+            text: Some("23%".into()),
+            label: Some("CPU".into()),
+            action: action.map(str::to_string),
+            tip: tip.map(str::to_string),
+            ..FooterItem::default()
+        };
+        ("ext".into(), item)
+    }
+
+    /// `testClickSendsActionAndVoiceOverSeesEntries`: Aktionen sind Tasten, die übrigen Text mit dem Tooltip als Wert.
+    #[test]
+    fn entries_with_action_are_buttons_and_others_speak_their_tip() {
+        let button = access(&entry("a", Align::Left, Some("open"), Some("CPU 23 %")));
+        assert!(button.button);
+        assert_eq!(button.label, "CPU 23%");
+        assert_eq!(button.value, None);
+        let text = access(&entry("b", Align::Right, None, Some("CPU 23 %")));
+        assert!(!text.button);
+        assert_eq!(text.value.as_deref(), Some("CPU 23 %"));
+        assert_eq!(access(&entry("c", Align::Right, None, None)).value, None);
+    }
+
+    #[test]
+    fn bar_is_named_for_screen_readers() {
+        assert_eq!(bar_label(), "Statusleiste der Extensions");
+    }
+
+    #[test]
+    fn unchanged_entries_compare_equal() {
+        let a = vec![entry("a", Align::Left, None, None)];
+        assert_eq!(a, a.clone());
+        assert_ne!(a, vec![entry("b", Align::Left, None, None)]);
+    }
 }

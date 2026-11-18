@@ -295,8 +295,13 @@ impl Render for ExtPanel {
         let focused = self.focus.is_focused(window);
         let rows: Vec<_> = self.model.lines().iter().enumerate().map(|(i, l)| self.line_row(i, l, focused, &t, cx)).collect();
         let body = div().id((self.id, 9999usize)).flex().flex_col().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).pt(px(4.)).pb(px(6.)).children(rows);
-        div()
-            .id(self.id)
+        let label = self.model.a11y_label();
+        let value = self.model.a11y_value();
+        let mut root = div().id(self.id).role(gpui::Role::List).aria_label(label);
+        if let Some(value) = value {
+            root = root.aria_value(value);
+        }
+        root
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, ev, window, cx| this.on_key(ev, window, cx)))
             .flex()
