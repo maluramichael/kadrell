@@ -431,7 +431,7 @@ impl SettingsDialog {
         let input = KeyInput { control: m.control, alt: m.alt, shift: m.shift, platform: m.platform, key: key.to_string() };
         match shortcut::classify(&input, shortcut::current()) {
             // Swift: `guard let k = Hotkey(event:), k.isUsable else { NSSound.beep(); return nil }`, die Aufnahme läuft weiter.
-            Recorded::Reject => return crate::ui::overlay_queue::beep(),
+            Recorded::Reject => return kadrell_tray::beep(),
             Recorded::Cancel => {}
             Recorded::Clear => self.change(|s| shortcut::assign(s, action, None), cx),
             Recorded::Set(h) => self.change(|s| shortcut::assign(s, action, Some(h)), cx),
