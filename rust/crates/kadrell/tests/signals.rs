@@ -27,7 +27,11 @@ impl Sandbox {
         std::fs::create_dir_all(root.join("tmp")).unwrap();
         std::fs::create_dir_all(root.join("work")).unwrap();
         let fake = root.join("fake-claude");
-        std::fs::write(&fake, format!("#!/bin/sh\necho $$ > '{}'\nexec sleep 600\n", root.join("claude.pid").display())).unwrap();
+        // Die App ruft das Binary zuerst mit `--version` auf (Probe, ohne Terminal). Der echte claude endet dort sofort,
+        // der Fake muss das auch tun: sonst bleibt ein verwaister `sleep` zurück, der nicht zur Sitzung gehört, und
+        // `claude.pid` zeigt je nach Reihenfolge auf ihn statt auf den Kindprozess der Sitzung.
+        let script = format!("#!/bin/sh\n[ \"$1\" = \"--version\" ] && {{ echo fake; exit 0; }}\necho $$ > '{}'\nexec sleep 600\n", root.join("claude.pid").display());
+        std::fs::write(&fake, script).unwrap();
         run(&["/bin/chmod", "755", fake.to_str().unwrap()]);
         let settings = format!("{{\"claudeBinary\":{:?}}}", fake.to_str().unwrap());
         std::fs::write(settings_dir.join("settings.json"), settings).unwrap();
@@ -148,10 +152,9 @@ fn sigint_quits_like_quit() {
     quits_cleanly_on("-INT", false);
 }
 
-/// Offen: Auf dem zusammengeführten `rust-app` überlebt der Kindprozess das Beenden oft (er ignoriert dann sogar HUP und
-/// TERM von außen), auf `rw-mac-app` nicht. Ursache noch nicht gefunden, deshalb nur auf Zuruf.
+/// SIGTERM läuft durch denselben Abbau wie „Beenden“: SIGHUP an die Prozessgruppe des Kindes, 5 s warten, dann SIGKILL.
+/// Früher flackerte der Test, weil der Fake-claude auch beim `--version`-Probeaufruf blieb (siehe `Sandbox::new`).
 #[test]
-#[ignore = "Kindprozess bleibt auf rust-app häufig stehen, Ursache offen"]
 fn sigterm_ends_the_child_too() {
     quits_cleanly_on("-TERM", true);
 }
