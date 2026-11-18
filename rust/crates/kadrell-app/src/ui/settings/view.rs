@@ -17,15 +17,13 @@ use super::store::AppSettings;
 use super::{layout, model};
 use crate::theme::Theme;
 use crate::ui::chrome::h_seam;
-use crate::ui::overlay::{backdrop, dialog_foot, dialog_frame};
+use crate::ui::overlay::{self, backdrop_full, dialog_foot, dialog_frame};
+use crate::ui::overlay_anim::slide;
 use crate::ui::theme;
 use kadrell_core::hotkeys::{self, HotkeyAction};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Abstand des Dialogs zum Fensterrand; oben bleibt die Titelleiste frei.
-const MARGIN: f32 = 10.;
-const TOP_INSET: f32 = 40.;
 
 fn tone_color(tone: Tone, t: &Theme) -> gpui::Hsla {
     match tone {
@@ -273,7 +271,7 @@ impl Render for SettingsDialog {
         let shown = model::visible(&blocks, &self.filter);
         let hits = model::hit_count(&blocks, &self.filter);
         // Jeden Frame aus dem Fenster gerechnet, nie einmal beim Öffnen.
-        let width = f32::from(window.viewport_size().width) - 2. * MARGIN;
+        let width = overlay::area().full_window().width;
         let body = self.columns(&blocks, &shown, width, &t, cx);
         let scroll = div()
             .id("settings-scroll")
@@ -301,10 +299,8 @@ impl Render for SettingsDialog {
             .child(foot)
             .children(self.popover_view(&t, cx));
         let frame = super::attach_handlers(frame, cx);
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(super::dialog::SettingsEvent::Close)))
-            .pt(px(TOP_INSET))
-            .px(px(MARGIN))
-            .pb(px(MARGIN))
-            .child(frame)
+        let travel = overlay::area().slide_travel();
+        let reduce = crate::appearance::breathing::reduce_motion();
+        backdrop_full(cx.listener(|_, _, _, cx| cx.emit(super::dialog::SettingsEvent::Close))).child(slide(frame, "settings-slide", travel, reduce))
     }
 }

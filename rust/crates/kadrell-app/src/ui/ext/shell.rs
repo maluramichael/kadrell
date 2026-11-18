@@ -290,6 +290,10 @@ impl Shell {
     fn toggle_extensions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.ext_ui.dialog.is_some() {
             self.close_extensions(window, cx);
+        } else if !self.overlays.ext_started {
+            super::super::overlay_queue::beep();
+        } else if self.panel_open() {
+            self.overlays.defer(Box::new(|shell, window, cx| shell.open_extensions(window, cx)));
         } else if self.overlay.is_none() && self.palette.is_none() && self.settings.is_none() && self.rename.is_none() {
             self.open_extensions(window, cx);
         }

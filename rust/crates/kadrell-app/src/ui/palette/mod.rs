@@ -15,9 +15,9 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Render, Role, ScrollHandle, StatefulInteractiveElement, Styled, Subscription, Window, actions, div,
-    prelude::*, px, relative,
+    App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyBinding, ParentElement, Render, Role, ScrollHandle, StatefulInteractiveElement, Styled,
+    Subscription, Window, actions, div, prelude::*, px,
 };
 
 use kadrell_term::TerminalPane;
@@ -31,7 +31,7 @@ use self::remote::HostSource;
 use crate::remote::dialog::{Connect, RemoteState, Sessions};
 use super::chrome::h_seam;
 use super::layout::{Id, LayoutMode};
-use super::overlay::{backdrop, dialog_frame, overlay_height, overlay_width};
+use super::overlay::{self, backdrop, dialog_frame};
 use super::text_input::{TextInput, TextInputEvent};
 use super::theme;
 use crate::theme::Theme;
@@ -39,10 +39,6 @@ use crate::theme::Theme;
 actions!(kadrell_palette, [MoveUp, MoveDown, Confirm, Cancel]);
 
 const CONTEXT: &str = "KadrellPalette";
-const WIDTH: f32 = 640.;
-const HEIGHT: f32 = 420.;
-/// Oberkante bei 12 % der Fensterhöhe (`PaletteWindow.follow`).
-const TOP: f32 = 0.12;
 const ROW_HEIGHT: f32 = 44.;
 /// Wartezeit nach dem letzten Tastendruck, bevor die Textsuche über alle Terminals läuft.
 const TEXT_DEBOUNCE: Duration = Duration::from_millis(50);
@@ -446,7 +442,13 @@ fn foot(t: &Theme) -> impl IntoElement + use<> {
 impl Render for Palette {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let dialog = overlay_height(overlay_width(dialog_frame(&t), WIDTH), HEIGHT)
+        // Größe und Lage aus der Fläche, jeden Frame neu (`PaletteWindow.follow`): oben bei 12 %, mittig, im kleinen
+        // Fenster Fläche minus Rand. Die Fensterhöhe enthält die Schattentiefe unter der Fläche.
+        let frame = overlay::area().palette();
+        let surface = frame.height - (overlay::SHADOW_DEPTH * overlay::scale()).round();
+        let dialog = dialog_frame(&t)
+            .w(px(frame.width))
+            .h(px(surface))
             .flex_none()
             .key_context(CONTEXT)
             .text_color(t.fg)
@@ -462,7 +464,7 @@ impl Render for Palette {
         backdrop(cx.listener(|_, _, _, cx| cx.emit(PaletteEvent::Close)))
             .flex_col()
             .justify_start()
-            .child(div().flex_none().h(relative(TOP)))
+            .child(div().flex_none().h(px(frame.top)))
             .child(dialog)
     }
 }

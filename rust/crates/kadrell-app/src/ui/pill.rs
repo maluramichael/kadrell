@@ -31,11 +31,18 @@ pub struct Pill {
     on_click: Option<ClickFn>,
     fill: Option<Hsla>,
     tip: Option<SharedString>,
+    disabled: bool,
 }
 
 impl Pill {
     pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
-        Self { id: id.into(), label: label.into(), kind: PillKind::Normal, dot: None, icon: None, min_w: None, on_click: None, fill: None, tip: None }
+        Self { id: id.into(), label: label.into(), kind: PillKind::Normal, dot: None, icon: None, min_w: None, on_click: None, fill: None, tip: None, disabled: false }
+    }
+
+    /// Gesperrt: Schrift gedämpft, kein Zeiger, kein Druckzustand, kein Klick (`KeyBody` liest `isEnabled`).
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
 
     /// Tooltip beim Daraufzeigen.
@@ -88,8 +95,9 @@ impl RenderOnce for Pill {
             _ if self.fill.is_some() => self.fill.map_or((t.surface, t.fg), |f| (f, t.pill_text_on(f))),
             PillKind::Active => (t.sub, t.pill_text_on(t.sub)),
             PillKind::Green => (t.idle, t.pill_text_on(t.idle)),
-            _ => (t.surface, t.fg),
+            _ => (t.surface, t.key_label()),
         };
+        let ink = if self.disabled { t.muted } else { ink };
         key(self, face, ink, cx).into_any_element()
     }
 }
@@ -124,10 +132,11 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
         .px(px(a.s(1.)))
         .pb(px(a.s(if pill.kind == PillKind::Active { 2. } else { 3. })))
         .rounded(px(a.s(5.)))
-        .bg(key_edge(&t))
-        .cursor_pointer()
-        .active(|s| s.pt(px(a.s(2.))).pb(px(a.s(2.))));
-    if let Some(f) = pill.on_click {
+        .bg(key_edge(&t));
+    if !pill.disabled {
+        outer = outer.cursor_pointer().active(|s| s.pt(px(a.s(2.))).pb(px(a.s(2.))));
+    }
+    if let (Some(f), false) = (pill.on_click, pill.disabled) {
         outer = outer.on_click(move |e, w, c| f(e, w, c));
     }
     if let Some(tip) = pill.tip {

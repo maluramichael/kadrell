@@ -55,8 +55,8 @@ pub fn h_seam(t: &Theme) -> Div {
         .flex_col()
         .flex_none()
         .w_full()
-        .child(div().h(px(1.)).w_full().bg(seam_dark(t)))
-        .child(div().h(px(1.)).w_full().bg(seam_light(t)))
+        .child(div().h(px(super::overlay::hairline())).w_full().bg(seam_dark(t)))
+        .child(div().h(px(super::overlay::hairline())).w_full().bg(seam_light(t)))
 }
 
 /// Senkrechte Fuge: dunkle Linie links, helle direkt rechts.
@@ -65,8 +65,8 @@ pub fn v_seam(t: &Theme) -> Div {
         .flex()
         .flex_none()
         .h_full()
-        .child(div().w(px(1.)).h_full().bg(seam_dark(t)))
-        .child(div().w(px(1.)).h_full().bg(seam_light(t)))
+        .child(div().w(px(super::overlay::hairline())).h_full().bg(seam_dark(t)))
+        .child(div().w(px(super::overlay::hairline())).h_full().bg(seam_light(t)))
 }
 
 const CAPTION_WIDTH: f32 = 46.;

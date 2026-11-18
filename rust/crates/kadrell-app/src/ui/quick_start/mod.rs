@@ -407,7 +407,7 @@ impl Shell {
         if !self.state.ready {
             return beep();
         }
-        self.show_quick_start(None, window, cx);
+        self.present_overlay(Box::new(|shell, window, cx| shell.show_quick_start(None, window, cx)), window, cx);
     }
 
     /// Für Screenshots ohne Eingabe: `KADRELL_DEV_OVERLAY=quickstart`, Idee aus `KADRELL_DEV_QUERY`, mit `KADRELL_DEV_SUBMIT`

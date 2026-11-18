@@ -661,7 +661,7 @@ impl Render for ExtensionsDialog {
             .child(scroll)
             .child(foot)
             .children(self.choice_popover(&t, cx));
-        backdrop(cx.listener(|this, _, _, cx| this.close(cx))).pt(px(48.)).items_start().child(frame)
+        backdrop(cx.listener(|this, _, _, cx| this.close(cx))).child(frame)
     }
 }
 

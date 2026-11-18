@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Render,
-    ScrollHandle, Styled, Task, Window, div, prelude::*, px, relative,
+    ScrollHandle, Styled, Task, Window, div, prelude::*, px,
 };
 use kadrell_accounts::{PromptEvent, PromptSource, PromptStats, ProjectSort, StatsInput, StatsListAction, StatsRange, StatsSnapshot, StatsView as Keys, UsageSample};
 use kadrell_claude::history::SessionHistory;
@@ -24,7 +24,8 @@ use kadrell_core::stats::{self, StatKey};
 use kadrell_i18n::trd;
 
 use super::chrome::h_seam;
-use super::overlay::{backdrop, dialog_frame};
+use super::overlay::{backdrop_full, dialog_frame};
+use super::overlay_anim::slide;
 use super::theme;
 use crate::state::now_secs;
 use crate::usage::hub::Hub;
@@ -307,16 +308,15 @@ impl Render for StatsView {
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
-            .w(relative(0.94))
-            .max_w(px(1500.))
-            .h(relative(0.86))
             .text_color(t.fg)
             .child(self.header(cx))
             .child(h_seam(&t))
             .child(body)
             .child(h_seam(&t))
             .child(self.footer(cx));
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(dialog)
+        let travel = super::overlay::area().slide_travel();
+        let reduce = crate::appearance::breathing::reduce_motion();
+        backdrop_full(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(slide(dialog, "stats-slide", travel, reduce))
     }
 }
 

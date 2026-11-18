@@ -256,6 +256,11 @@ impl Shell {
         if self.usage.stats.is_some() || self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.rename.is_some() {
             return;
         }
+        if self.panel_open() {
+            // Ein anderes Panel ist offen: erst wenn es zu ist (`SheetPresenter.present`).
+            return self.overlays.defer(Box::new(|shell, window, cx| shell.open_stats(window, cx)));
+        }
+        self.finish_slide_out();
         let config_dir = self.state.env.config_dir();
         let loader = Loader {
             hub: self.usage.hub.clone(),
@@ -273,7 +278,8 @@ impl Shell {
     }
 
     pub fn close_stats(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.usage.stats.take().is_some() {
+        if let Some(view) = self.usage.stats.take() {
+            self.begin_slide_out(view.into(), window, cx);
             self.sync(window, cx);
         }
     }

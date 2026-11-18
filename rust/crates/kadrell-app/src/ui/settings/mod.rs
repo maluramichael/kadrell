@@ -141,7 +141,7 @@ impl Shell {
     /// Aktion „Einstellungen …“ (Menü, Strg+, / ⌘,): öffnet den Dialog, solange kein anderer offen ist.
     pub fn open_settings_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.settings.is_none() && self.overlay.is_none() {
-            self.open_settings(window, cx);
+            self.present_overlay(Box::new(|shell, window, cx| shell.open_settings(window, cx)), window, cx);
         }
     }
 
@@ -167,7 +167,10 @@ impl Shell {
 
     /// Schließt den Dialog; der Fokus geht zurück an das Terminal der gewählten Session.
     fn close_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.settings = None;
+        // Fensterfüllend fährt der Dialog erst hinaus; die Tastatur geht sofort zurück (`OverlayPanel.dismiss`).
+        if let Some(view) = self.settings.take() {
+            self.begin_slide_out(view.into(), window, cx);
+        }
         self.sync(window, cx);
     }
 }

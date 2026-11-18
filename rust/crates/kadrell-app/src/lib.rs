@@ -115,6 +115,8 @@ pub struct Shell {
     ws: workspace::Ws,
     /// Aufblitzen und Einfahren im Baum (`ui::tree_anim`).
     tree_anim: ui::tree_anim::TreeAnim,
+    /// Overlay-Verwaltung: vorgemerkter Dialog, ausfahrendes Overlay (`ui::overlay_queue`).
+    overlays: ui::overlay_queue::OverlayState,
 }
 
 /// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_DEV_SELECT="0,0;0,1;1,0"` (Positionen im Baum).
@@ -157,6 +159,7 @@ impl Shell {
             groups: Vec::new(),
             panes: HashMap::new(),
             selected: None,
+            overlays: Default::default(),
             selection: Selection { items: Vec::new(), focus: (0, 0), anchor: (0, 0) },
             layout,
             clock: now_hhmm(),
@@ -228,6 +231,7 @@ impl Shell {
     fn start_extensions(&mut self) {
         self.emit_ext_events();
         self.ext.start();
+        self.overlays.ext_started = true;
         self.ext_dev_enable();
     }
 
@@ -437,6 +441,10 @@ impl Shell {
         if std::env::var_os("KADRELL_DEV_KEYLOG").is_some() {
             eprintln!("key {:?}", ev.keystroke);
         }
+        if ev.keystroke.key == "escape" && self.cancel_visible(window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.usage_key(ev, window, cx) {
             return;
         }
@@ -483,6 +491,7 @@ impl Focusable for Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_language(cx);
+        ui::overlay::sync_area(window, cx);
         let t = ui::theme(cx);
         if self.window_dark != Some(t.dark) {
             self.window_dark = Some(t.dark);
@@ -534,6 +543,7 @@ impl Render for Shell {
             .children(self.groups_ui.edit.clone())
             .children(self.groups_ui.confirm.clone())
             .children(self.usage.stats.clone())
+            .children(self.closing_layer())
             .children(self.context_layer(window, cx))
             .children(self.usage.notice.clone())
     }

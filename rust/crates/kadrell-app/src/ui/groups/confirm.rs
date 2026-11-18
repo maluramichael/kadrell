@@ -3,7 +3,7 @@
 //! Rückfragen (Session schließen, Gruppe schließen, Session stoppen) aus `AppDelegate.swift`.
 
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
+    App, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
     StatefulInteractiveElement, Styled, Window, actions, div, px,
 };
 
@@ -13,7 +13,7 @@ use kadrell_i18n::trd;
 
 use crate::lang::shortcut;
 use crate::theme::Theme;
-use crate::ui::chrome::{h_seam, key_edge};
+use crate::ui::instrument::{KeyRole, key_button_with};
 use crate::ui::overlay::{backdrop, dialog_frame, overlay_width};
 use crate::ui::theme;
 
@@ -146,15 +146,15 @@ pub fn destructive_label(button: &str) -> String {
     format!("{button}  {key}")
 }
 
-/// Taste im Instrument-Look in beliebiger Farbe (`InstrumentKeyStyle`).
-fn cap(label: String, face: Hsla, ink: Hsla, t: &Theme) -> gpui::Div {
-    let cap = div().px(px(14.)).py(px(4.)).rounded(px(4.)).bg(face).text_color(ink).font_weight(gpui::FontWeight::BOLD).child(label);
-    div().flex_none().pb(px(2.)).rounded(px(5.)).bg(key_edge(t)).cursor_pointer().child(cap)
+/// Rolle der Bestätigen-Taste: destruktiv in `error`, sonst primär in Akzent (`InstrumentKeyStyle`).
+pub fn confirm_role(destructive: bool) -> KeyRole {
+    if destructive { KeyRole::Destructive } else { KeyRole::Primary }
 }
 
 fn checkbox(on: bool, t: &Theme) -> gpui::Div {
-    let mark = div().size(px(8.)).rounded(px(1.5)).bg(if on { t.accent } else { gpui::transparent_black() });
-    div().size(px(14.)).flex_none().flex().items_center().justify_center().rounded(px(3.)).border_1().border_color(t.line).bg(t.bg).child(mark)
+    let s = crate::ui::overlay::scale();
+    let mark = div().size(px(8. * s)).rounded(px(1.5 * s)).bg(if on { t.accent } else { gpui::transparent_black() });
+    div().size(px(14. * s)).flex_none().flex().items_center().justify_center().rounded(px(3. * s)).border_1().border_color(t.line).bg(t.bg).child(mark)
 }
 
 impl Confirm {
@@ -169,25 +169,23 @@ impl Confirm {
             .text_size(px(12.))
             .text_color(color)
             .on_click(cx.listener(|this, _, _, cx| this.toggle_dont_ask(cx)))
+            .tooltip(crate::ui::tooltip::text(shortcut(&trd!("Wieder einschalten: Einstellungen (⌘,) › Rückfragen"))))
             .child(checkbox(self.dont_ask, t))
             .child(trd!("Nicht mehr fragen"))
     }
 
     fn buttons(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let mut row = div().flex().items_center().gap(px(8.)).p(px(16.));
+        let s = crate::ui::overlay::scale();
+        let mut row = div().flex().items_center().gap(px(8. * s)).p(px(16. * s));
         if self.spec.ask.is_some() {
             row = row.child(self.ask_row(t, cx));
         }
         row = row.child(div().flex_1());
         if !self.spec.info_only {
-            row = row.child(cap(trd!("Abbrechen"), t.surface, t.fg, t).id("confirm-cancel").on_click(cx.listener(|this, _, _, cx| this.cancel(cx))));
+            row = row.child(key_button_with("confirm-cancel", trd!("Abbrechen"), KeyRole::Neutral, false, t, cx.listener(|this, _, _, cx| this.cancel(cx))));
         }
-        let (label, face, ink) = if self.spec.destructive {
-            (destructive_label(&self.spec.button), t.error, t.pill_text_on(t.error))
-        } else {
-            (self.spec.button.clone(), t.accent, t.pill_text())
-        };
-        row.child(cap(label, face, ink, t).id("confirm-ok").on_click(cx.listener(|this, _, _, cx| this.accept(cx))))
+        let label = if self.spec.destructive { destructive_label(&self.spec.button) } else { self.spec.button.clone() };
+        row.child(key_button_with("confirm-ok", label, confirm_role(self.spec.destructive), false, t, cx.listener(|this, _, _, cx| this.accept(cx))))
     }
 }
 
@@ -213,7 +211,6 @@ impl Render for Confirm {
             .on_action(cx.listener(|this, _: &AcceptForce, _, cx| this.accept(cx)))
             .on_action(cx.listener(|this, _: &Dismiss, _, cx| this.cancel(cx)))
             .child(body)
-            .child(h_seam(&t))
             .child(self.buttons(&t, cx));
         backdrop(cx.listener(|this, _, _, cx| this.cancel(cx))).child(dialog)
     }
@@ -228,6 +225,12 @@ impl Focusable for Confirm {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn destructive_confirmations_use_the_error_key() {
+        assert_eq!(confirm_role(true), KeyRole::Destructive);
+        assert_eq!(confirm_role(false), KeyRole::Primary);
+    }
 
     fn session(id: &str, host: Option<&str>) -> Session {
         let mut s = Session::new(id, "C:/p", 1.0, "claude-uuid", "Titel");
