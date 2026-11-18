@@ -271,6 +271,7 @@ impl Shell {
             config_dir,
             settings_path: self.state.profile.settings_path(),
             history: self.usage.history.clone(),
+            close_hint: crate::ui::stats::close_hint(&self.state.settings, cfg!(target_os = "macos")),
         };
         let counters = Counters::from_settings(&self.state.settings);
         let view = cx.new(|cx| StatsView::new(loader, counters, window, cx));

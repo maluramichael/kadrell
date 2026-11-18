@@ -19,6 +19,15 @@ use crate::lang::{de, tx};
 use kadrell_i18n::trd;
 use crate::theme::Theme;
 
+/// Anbieter, dessen Status eine Änderung dieser Zeile neu prüfen lässt (Schalter, Adresse, Pfade).
+pub fn provider_of(row: &str) -> Option<Provider> {
+    match row {
+        "ollamaEnabled" | "ollamaUrl" => Some(Provider::Ollama),
+        "llamaEnabled" | "llamaBinary" | "llamaModelsDir" | "llamaUrl" => Some(Provider::LlamaCpp),
+        _ => None,
+    }
+}
+
 /// Zeilen-Ids der Eingabefelder „Modell laden“ und „Auf ollama.com suchen“.
 pub const PULL_ROW: &str = "ollamaPull";
 pub const SEARCH_ROW: &str = "ollamaSearch";
@@ -187,8 +196,8 @@ fn accounts(c: &Context) -> Block {
 fn language_label(l: Language) -> &'static str {
     match l {
         Language::System => de!("🌐  Sprache des Systems"),
-        Language::De => "Deutsch",
-        Language::En => "English",
+        Language::De => "🇩🇪  Deutsch",
+        Language::En => "🇬🇧  English",
     }
 }
 
@@ -541,6 +550,8 @@ pub fn hotkey_title(action: HotkeyAction) -> String {
 
 fn hotkey_row(action: HotkeyAction, map: &hotkeys::HotkeyMap, platform: Platform) -> Row {
     let mut row = Row::new(action.raw(), &hotkey_title(action), Control::Hotkey(action));
+    // Gefunden wird auch über den Hilfetext der Aktion (`SettingsSections.swift` `shown`).
+    row.search.push(crate::misc::help::help_text(action));
     if let Some(k) = map.get(&action).filter(|k| !k.key.is_empty()) {
         row.search.push(shortcut::format(k, platform));
     }
@@ -613,6 +624,54 @@ mod tests {
         assert_eq!(&heads[..4], ["Sessions", "Claude", "Konten", "Darstellung"]);
         assert_eq!(heads[12], "Tastenkürzel");
         assert_eq!(heads[13], "");
+    }
+
+    #[test]
+    fn hotkey_rows_are_found_by_their_help_text() {
+        let blocks = built();
+        let row = blocks[12].rows.iter().find(|r| r.id == "nextWaiting").unwrap();
+        assert!(row.search.iter().any(|t| t.contains("wartet")), "{:?}", row.search);
+    }
+
+    #[test]
+    fn local_rows_know_their_provider() {
+        assert_eq!(provider_of("ollamaUrl"), Some(Provider::Ollama));
+        assert_eq!(provider_of("llamaEnabled"), Some(Provider::LlamaCpp));
+        assert_eq!(provider_of("startFolder"), None);
+    }
+
+    /// `SettingsModelTests.testChangesApplyImmediately`: der Setter wirkt ohne Speichern auf die Einstellungen.
+    #[test]
+    fn changes_apply_immediately_and_can_be_reverted() {
+        let blocks = built();
+        let row = blocks[5].rows.iter().find(|r| r.id == "stackShowPath").unwrap();
+        let Control::Select { set, value, .. } = &row.control else { panic!("kein Dropdown") };
+        let mut s = Settings::default();
+        let original = s.stack_show_path();
+        assert_eq!(value, if original { "on" } else { "off" });
+        set(&mut s, (if original { "off" } else { "on" }).to_string());
+        assert_eq!(s.stack_show_path(), !original);
+        set(&mut s, value.clone());
+        assert_eq!(s.stack_show_path(), original);
+    }
+
+    /// `SettingsModelTests.testStoredTintedFallsBackToClassic`
+    #[test]
+    fn stored_tinted_falls_back_to_classic() {
+        let s = Settings::from_bytes(br#"{"sidebar.style":"tinted"}"#);
+        let backend = MockBackend::new();
+        let blocks = build(&Context { settings: &s, backend: &backend, theme_id: "mocha", platform: Platform::Windows }, None);
+        let row = blocks[5].rows.iter().find(|r| r.id == "sidebarStyle").unwrap();
+        let Control::Select { options, value, .. } = &row.control else { panic!("kein Dropdown") };
+        assert_eq!(value, "classic");
+        assert_eq!(options.len(), 2);
+    }
+
+    #[test]
+    fn language_options_carry_flags() {
+        assert_eq!(language_label(Language::De), "🇩🇪  Deutsch");
+        assert_eq!(language_label(Language::En), "🇬🇧  English");
+        assert!(language_label(Language::System).starts_with('🌐'));
     }
 
     #[test]

@@ -53,10 +53,10 @@ impl Term for FakeTerm {
     }
 }
 
-struct Dir(PathBuf);
+pub(super) struct Dir(pub(super) PathBuf);
 
 impl Dir {
-    fn new() -> Dir {
+    pub(super) fn new() -> Dir {
         static N: AtomicU32 = AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!("kadrell-app-test-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
         std::fs::create_dir_all(dir.join("work")).unwrap();
@@ -70,7 +70,7 @@ impl Drop for Dir {
     }
 }
 
-fn state_in(dir: &Dir) -> AppState {
+pub(super) fn state_in(dir: &Dir) -> AppState {
     let profile_dir = dir.0.join("profile");
     std::fs::create_dir_all(&profile_dir).unwrap();
     let paths = Paths::new(dir.0.join("home"), dir.0.join("support"), dir.0.join("tmp"));
@@ -81,7 +81,7 @@ fn state_in(dir: &Dir) -> AppState {
     AppState::new(Parts { paths, profile, lock: None, env, endpoint: profile_dir.join("kadrell.endpoint") })
 }
 
-fn cwd(dir: &Dir, name: &str) -> String {
+pub(super) fn cwd(dir: &Dir, name: &str) -> String {
     let p = dir.0.join("work").join(name);
     std::fs::create_dir_all(&p).unwrap();
     p.to_string_lossy().replace('\\', "/")

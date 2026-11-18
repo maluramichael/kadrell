@@ -448,4 +448,41 @@ mod tests {
         assert_eq!(flat_prompt("[Image #12] a [Image #x] b", 50).as_deref(), Some("a [Image #x] b"));
         assert_eq!(flat_answer("`  `").as_deref(), None);
     }
+
+    // StatsTranscriptWiringTests und TranscriptCountTests.testEmptyDataCountsNothing
+
+    #[test]
+    fn empty_data_counts_nothing() {
+        assert_eq!(user_messages(&[]), 0);
+    }
+
+    const MESSAGE: &str = "{\"type\":\"user\",\"message\":{\"content\":\"eine Nachricht\"}}
+";
+
+    fn refresh_once(reader: &mut TranscriptReader, dir: &TempDir, cache: &HashMap<String, Entry>) -> HashMap<String, Entry> {
+        reader.refresh(&["11111111-2222-3333-4444-555555555555".to_string()], &dir.path(), cache, false, 0)
+    }
+
+    /// Ein Transcript zum ersten Mal zu lesen rechnet den alten Verlauf nicht nachträglich ein.
+    #[test]
+    fn first_read_counts_nothing() {
+        let dir = TempDir::new("firstread");
+        dir.write("projects/proj/11111111-2222-3333-4444-555555555555.jsonl", &MESSAGE.repeat(3));
+        let mut reader = TranscriptReader::default();
+        refresh_once(&mut reader, &dir, &HashMap::new());
+        assert_eq!(reader.take_new_messages(), 0);
+    }
+
+    /// Nach `/clear` schrumpft die Datei: das ist kein Zuwachs und zählt nicht.
+    #[test]
+    fn shrunk_transcript_counts_nothing() {
+        let dir = TempDir::new("shrunk");
+        let file = "projects/proj/11111111-2222-3333-4444-555555555555.jsonl";
+        dir.write(file, &MESSAGE.repeat(3));
+        let mut reader = TranscriptReader::default();
+        let cache = refresh_once(&mut reader, &dir, &HashMap::new());
+        dir.write(file, MESSAGE);
+        refresh_once(&mut reader, &dir, &cache);
+        assert_eq!(reader.take_new_messages(), 0);
+    }
 }

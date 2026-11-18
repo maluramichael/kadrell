@@ -29,6 +29,12 @@ pub fn split(heights: &[f32], spacing: f32) -> usize {
     best
 }
 
+/// Anzahl der Abschnitte in der linken Spalte: bei einer Spalte alle, bei zwei die ausgewogene Teilung. Die Spalten
+/// sind zusammenhängende Teile der Reihenfolge, Tab läuft also erst die linke hinunter, dann die rechte.
+pub fn left_count(heights: &[f32], columns: usize) -> usize {
+    if columns == 2 { split(heights, SECTION_SPACING) } else { heights.len() }
+}
+
 /// Rund 45 % der Spalte nach Abzug der Ränder, höchstens 300, mindestens 120. Ohne gemessene Breite die volle.
 pub fn control_width(column: f32) -> f32 {
     if column <= 0. {
@@ -71,6 +77,36 @@ mod tests {
         assert_eq!(split(&[50.], 0.), 1);
         // Gleich hoch bei k = 1 und k = 2: die linke Spalte bekommt mehr.
         assert_eq!(split(&[50., 0.], 0.), 2);
+    }
+
+    /// `SettingsLayoutTests.testSplitKeepsOrderAndBalancesColumns`
+    #[test]
+    fn split_keeps_order_and_balances_columns() {
+        assert_eq!(split(&[100., 100., 100., 100.], 0.), 2);
+        assert_eq!(split(&[300., 100., 100., 100.], 0.), 1);
+        assert_eq!(split(&[100., 100., 100., 300.], 0.), 3);
+        assert_eq!(split(&[50.], 0.), 1, "ein Abschnitt bleibt links");
+        assert_eq!(split(&[], 0.), 0);
+        // Abstände zählen mit: drei kleine Abschnitte links wiegen einen großen rechts auf.
+        assert_eq!(split(&[100., 100., 100., 330.], 20.), 3);
+    }
+
+    /// `SettingsLayoutTests.testTabRunsDownLeftColumnThenRight`: die Spalten sind Teile der Reihenfolge, Tab läuft
+    /// A, B (links), dann C, D (rechts), nie quer.
+    #[test]
+    fn tab_runs_down_the_left_column_then_the_right() {
+        let sections = ["A", "B", "C", "D"];
+        let left = left_count(&[100.; 4], 2);
+        let (first, second) = sections.split_at(left);
+        assert_eq!((first, second), (&["A", "B"][..], &["C", "D"][..]));
+        assert_eq!(first.iter().chain(second).copied().collect::<Vec<_>>(), sections);
+    }
+
+    /// `SettingsLayoutTests.testSettingsUseTwoColumnsWhenWide`: breit zwei Spalten, schmal eine.
+    #[test]
+    fn settings_use_two_columns_when_wide() {
+        assert_eq!(left_count(&[100.; 4], count(1400.)), 2);
+        assert_eq!(left_count(&[100.; 4], count(900.)), 4, "eine Spalte: alle Abschnitte untereinander");
     }
 
     #[test]

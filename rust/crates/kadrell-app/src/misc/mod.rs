@@ -138,11 +138,9 @@ impl Shell {
     // MARK: Hilfe und Über
 
     pub(crate) fn toggle_help(&mut self, kind: Kind, window: &mut Window, cx: &mut Context<Self>) {
-        if self.misc.help.as_ref().is_some_and(|h| h.read(cx).kind() == kind) {
-            return self.close_help(window, cx);
-        }
+        // Eine Ansicht für Hilfe und Über: derselbe Kürzel schließt sie wieder (`togglePanel` der Mac-App).
         if self.misc.help.is_some() {
-            self.close_help(window, cx);
+            return self.close_help(window, cx);
         }
         self.open_help_view(kind, window, cx);
     }

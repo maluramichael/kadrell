@@ -13,7 +13,7 @@ use kadrell_i18n::trd;
 
 use super::draw::{self, END_PAD, Hover, OnHover, Style};
 use super::format::{self, count_ticks};
-use super::{Counters, StatsView, close_hint, ui_lang};
+use super::{Counters, StatsView, ui_lang};
 use crate::theme::Theme;
 use crate::ui::theme;
 
@@ -64,7 +64,7 @@ pub fn number(n: i64, lang: kadrell_accounts::Lang) -> String {
 }
 
 fn section_title(text: String, t: &Theme) -> impl IntoElement {
-    div().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.sub).child(text)
+    div().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.accent_text).child(text)
 }
 
 fn swatch(color: Hsla) -> impl IntoElement {
@@ -97,7 +97,9 @@ impl StatsView {
                 .rounded(px(5.))
                 .text_size(px(12.))
                 .cursor_pointer()
-                .when(selected, |d| d.bg(t.line))
+                .border(px(1.5))
+                .border_color(gpui::transparent_black())
+                .when(selected, |d| d.bg(t.line).border_color(t.fg))
                 .child(range_label(range))
                 .on_click(cx.listener(move |this, _, _, cx| this.set_range(range, cx)))
         });
@@ -125,7 +127,7 @@ impl StatsView {
             .text_size(px(11.))
             .text_color(t.muted)
             .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(trd!("1 bis 4 oder ←/→ Zeitraum · ↑/↓ Projekt · Leertaste filtert · ⌫ alle · s sortiert")))
-            .child(div().flex_none().pl(px(12.)).child(close_hint()))
+            .child(div().flex_none().pl(px(12.)).child(self.loader.close_hint.clone()))
     }
 
     fn avail_width(window: &Window) -> f32 {
@@ -236,7 +238,9 @@ impl StatsView {
                 .rounded(px(5.))
                 .cursor_pointer()
                 .text_color(color)
-                .when(self.cursor.as_deref() == Some(p.name.as_str()), |d| d.bg(t.surface))
+                .border(px(1.5))
+                .border_color(gpui::transparent_black())
+                .when(self.cursor.as_deref() == Some(p.name.as_str()), |d| d.bg(t.surface).border_color(t.fg))
                 .child(swatch(chip))
                 .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(12.)).child(p.name.clone()))
                 .child(div().flex_none().text_size(px(12.)).font_weight(FontWeight::BOLD).child(number(p.count as i64, lang)))

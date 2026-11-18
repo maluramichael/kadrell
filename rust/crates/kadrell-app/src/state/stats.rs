@@ -85,6 +85,8 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::tests::{Dir, cwd, state_in};
+    use kadrell_core::Session;
 
     #[test]
     fn dialog_copy_never_reverts_counters_or_accounts() {
@@ -105,5 +107,68 @@ mod tests {
     fn live_keys_are_recognised() {
         assert!(is_live_key("stats.recordDate") && is_live_key("accounts.active"));
         assert!(!is_live_key("autoswitch.enabled") && !is_live_key("sidebar.sort"));
+    }
+
+    // StatsWiringTests
+
+    fn claude(dir: &Dir, id: &str) -> Session {
+        Session::new(id, &cwd(dir, "p"), 0., id, "")
+    }
+
+    #[test]
+    fn adding_session_counts_as_session() {
+        let dir = Dir::new();
+        let mut state = state_in(&dir);
+        state.add_session(claude(&dir, "abc"), None, false, None);
+        assert_eq!(stats::count(&state.settings, StatKey::Sessions), 1);
+        assert_eq!(stats::count(&state.settings, StatKey::Terminals), 0);
+    }
+
+    #[test]
+    fn adding_shell_counts_as_terminal() {
+        let dir = Dir::new();
+        let mut state = state_in(&dir);
+        state.new_shell_session(&cwd(&dir, "p"), false);
+        assert_eq!(stats::count(&state.settings, StatKey::Terminals), 1);
+        assert_eq!(stats::count(&state.settings, StatKey::Sessions), 0);
+    }
+
+    /// Eine Id, die es schon gibt, wird verworfen und darf auch nicht mitzählen.
+    #[test]
+    fn duplicate_is_not_counted() {
+        let dir = Dir::new();
+        let mut state = state_in(&dir);
+        assert!(state.add_session(claude(&dir, "abc"), None, false, None));
+        assert!(!state.add_session(claude(&dir, "abc"), None, false, None));
+        assert_eq!(stats::count(&state.settings, StatKey::Sessions), 1);
+    }
+
+    #[test]
+    fn record_follows_number_of_open_sessions() {
+        let dir = Dir::new();
+        let mut state = state_in(&dir);
+        state.add_session(claude(&dir, "a"), None, false, None);
+        state.add_session(claude(&dir, "b"), None, false, None);
+        assert_eq!(stats::record(&state.settings).0, 2);
+        state.remove_sessions(&["a".to_string(), "b".to_string()]);
+        state.add_session(claude(&dir, "c"), None, false, None);
+        assert_eq!(stats::record(&state.settings).0, 2);
+    }
+
+    // StatsFocusWiringTests
+
+    #[test]
+    fn switching_tiles_counts_once_per_switch() {
+        let dir = Dir::new();
+        let mut state = state_in(&dir);
+        let (a, b) = (state.new_shell_session(&cwd(&dir, "p"), false), state.new_shell_session(&cwd(&dir, "p"), false));
+        state.set_selection(vec![a.clone(), b.clone()], Some(a.clone()));
+        let before = stats::count(&state.settings, StatKey::FocusSwitches);
+        state.set_selection(vec![a.clone(), b.clone()], Some(b.clone()));
+        assert_eq!(stats::count(&state.settings, StatKey::FocusSwitches), before + 1, "Wechsel auf eine andere Kachel zählt");
+        state.set_selection(vec![a.clone(), b.clone()], Some(b.clone()));
+        assert_eq!(stats::count(&state.settings, StatKey::FocusSwitches), before + 1, "derselbe Fokus noch einmal zählt nicht");
+        state.set_selection(vec![a.clone()], Some(a));
+        assert_eq!(stats::count(&state.settings, StatKey::FocusSwitches), before + 2, "Auswahl im Baum zählt auch");
     }
 }
