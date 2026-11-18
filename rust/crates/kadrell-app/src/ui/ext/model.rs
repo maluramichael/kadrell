@@ -102,6 +102,17 @@ impl PanelModel {
         self.selected_tab.as_deref()
     }
 
+    /// Beschriftung für Bildschirmleser: „Extensions: <Tab>“ (`accessibilityLabel`).
+    pub fn a11y_label(&self) -> String {
+        let tab = self.selected_tab().and_then(|n| self.panels.iter().find(|p| p.0 == n)).map(tab_label).unwrap_or_default();
+        kadrell_i18n::trd!("Extensions: %@", tab)
+    }
+
+    /// Wert für Bildschirmleser: die vorgelesene Zeile unter dem Cursor (`accessibilityValue`).
+    pub fn a11y_value(&self) -> Option<String> {
+        self.cursor.and_then(|i| self.lines().get(i)).map(Line::spoken)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.panels.is_empty()
     }
@@ -373,5 +384,19 @@ mod tests {
         assert_eq!(m.cursor(), None);
         m.set_cursor(Some(2));
         assert_eq!(m.cursor(), Some(2));
+    }
+
+    /// `accessibilityLabel` und `accessibilityValue` der Liste: Tab im Namen, Zeile unter dem Cursor im Wert.
+    #[test]
+    fn list_label_names_the_tab_and_value_speaks_the_cursor_row() {
+        let mut m = PanelModel::default();
+        m.set_panels(two_tabs());
+        assert_eq!(m.a11y_label(), "Extensions: Alpha");
+        m.set_cursor(None);
+        assert_eq!(m.a11y_value(), None);
+        m.step(1);
+        assert_eq!(m.a11y_value().as_deref(), Some("eins, d"), "Eintrag mit Detail");
+        m.switch_tab(1);
+        assert_eq!(m.a11y_label(), "Extensions: b", "ohne Titel gilt der Name der Extension");
     }
 }
