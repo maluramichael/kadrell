@@ -30,7 +30,7 @@ use self::row::{Row, row};
 use super::chrome::h_seam;
 use super::folder_row::ROW_HEIGHT;
 use super::folders;
-use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_height, overlay_width};
+use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
 use super::text_input::{TextInput, TextInputEvent};
 use super::theme;
 use crate::Shell;
@@ -345,7 +345,7 @@ impl Render for QuickStart {
         let phase = self.flow.phase;
         let foot = dialog_foot(model::hint(phase), model::button(phase), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
         let body = if phase == Phase::Pick { self.pick_phase(&t, cx) } else { self.idea_phase(&t) };
-        let dialog = overlay_height(overlay_width(dialog_frame(&t), WIDTH), 640.)
+        let dialog = overlay_width(dialog_frame(&t), WIDTH)
             .flex_none()
             .key_context(CONTEXT)
             .text_color(t.fg)
