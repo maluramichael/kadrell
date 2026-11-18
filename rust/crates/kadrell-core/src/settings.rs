@@ -790,7 +790,10 @@ mod tests {
         s.set("workspace.custom.splits", Value::from("r"));
         s.set_claude_model("opus");
         let t = s.for_temp_profile();
-        assert_eq!(t.keys().cloned().collect::<Vec<_>>(), ["claude.model", "workspace.custom.splits"]);
+        // Sortiert vergleichen: im Workspace schaltet eine Abhängigkeit serde_json/preserve_order ein.
+        let mut keys = t.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        assert_eq!(keys, ["claude.model", "workspace.custom.splits"]);
     }
 
     #[test]
