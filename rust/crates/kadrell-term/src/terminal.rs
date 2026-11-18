@@ -49,6 +49,8 @@ pub fn inherited_env_to_strip(names: &[String]) -> Vec<String> {
             u == "CLAUDECODE"
                 || u.starts_with("CLAUDE_CODE_")
                 || u == "AI_AGENT"
+                || u == "CLAUDE_PID"
+                || u == "CLAUDE_JOB_DIR"
                 || (in_claude_session && u == "NO_COLOR")
         })
         .cloned()
@@ -1366,7 +1368,7 @@ mod tests {
     }
 
     fn feed(input: &str) -> Term<Listener> {
-        let mut t = Term::new(Config::default(), &Grid { cols: 20, lines: 2 }, Listener(async_channel::unbounded().0));
+        let mut t = Term::new(Config::default(), &Grid { cols: 20, lines: 2 }, Listener { tx: async_channel::unbounded().0, exited: Arc::default() });
         let mut parser = alacritty_terminal::vte::ansi::Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::new();
         parser.advance(&mut t, input.as_bytes());
         t
@@ -1411,7 +1413,7 @@ mod tests {
 
     #[test]
     fn farbwuerfel_ecken() {
-        let t = Term::new(Config::default(), &Grid { cols: 4, lines: 2 }, Listener(async_channel::unbounded().0));
+        let t = Term::new(Config::default(), &Grid { cols: 4, lines: 2 }, Listener { tx: async_channel::unbounded().0, exited: Arc::default() });
         let theme = test_theme();
         let same = |i: usize, r: u8, g: u8, b: u8| {
             assert_eq!(indexed(&t, i, &theme).to_rgb(), rgb_hsla(Rgb { r, g, b }).to_rgb(), "Index {i}");
