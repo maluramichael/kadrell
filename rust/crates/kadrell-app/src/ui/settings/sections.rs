@@ -19,6 +19,12 @@ use crate::lang::{de, tx};
 use kadrell_i18n::trd;
 use crate::theme::Theme;
 
+/// Zeilen-Ids der Eingabefelder „Modell laden“ und „Auf ollama.com suchen“.
+pub const PULL_ROW: &str = "ollamaPull";
+pub const SEARCH_ROW: &str = "ollamaSearch";
+
+use kadrell_models::DEFAULT_OLLAMA_URL;
+
 /// Alles, was die Abschnitte zum Bauen brauchen.
 pub struct Context<'a> {
     pub settings: &'a Settings,
@@ -352,12 +358,61 @@ fn status_row(provider: Provider, c: &Context) -> Row {
     Row::new(&format!("status.{provider:?}"), de!("Status"), Control::Info { text, tone, buttons })
 }
 
+/// Installierte Modelle eines Anbieters. „Keine Modelle installiert“ nur, wenn der Anbieter bereit ist und nichts meldet
+/// (bei einem Fehler steht der schon in der Statuszeile), danach ein Fehler beim Löschen.
 fn model_rows(provider: Provider, c: &Context, armed: Option<&str>) -> Vec<Row> {
     let models = c.backend.models(provider);
-    if models.is_empty() {
-        return vec![Row::new(&format!("models.{provider:?}"), "", Control::Note(tx(de!("Keine Modelle installiert")))).unsearchable()];
+    let mut rows: Vec<Row> = models.iter().map(|m| model_row(m, armed)).collect();
+    if models.is_empty() && matches!(c.backend.status(provider), ProviderStatus::Ready(_)) {
+        rows.push(Row::new(&format!("models.{provider:?}"), "", Control::Note(tx(de!("Keine Modelle installiert")))).unsearchable());
     }
-    models.into_iter().map(|m| model_row(&m, armed)).collect()
+    if let Some(e) = c.backend.action_error() {
+        rows.push(Row::new(&format!("actionError.{provider:?}"), "", Control::Note(e)).unsearchable());
+    }
+    rows
+}
+
+/// Laufende und gescheiterte Downloads: Fortschritt mit „Abbrechen“, ein Fehler mit „OK“.
+fn pull_rows(c: &Context) -> Vec<Row> {
+    c.backend
+        .pulls()
+        .into_iter()
+        .map(|p| {
+            let (label, tone) = if p.failed { (de!("OK"), Tone::Error) } else { (de!("Abbrechen"), Tone::Muted) };
+            let buttons = vec![Btn::text(label, Msg::CancelPull(p.id.clone()))];
+            let control = Control::Pull { text: p.text, tone, fraction: (!p.failed).then_some(p.fraction).flatten(), buttons };
+            Row::new(&format!("pull.{}", p.id), &p.name, control).unsearchable()
+        })
+        .collect()
+}
+
+/// Suchtreffer von ollama.com (höchstens 8). Ein Größen-Tag setzt nur `name:tag` ins Feld „Modell laden“, geladen wird
+/// erst mit „Laden“, nach einem Blick auf die Größe.
+fn search_rows(c: &Context) -> Vec<Row> {
+    let state = c.backend.search_state();
+    let mut rows: Vec<Row> = state
+        .hits
+        .iter()
+        .take(8)
+        .map(|h| {
+            let mut buttons: Vec<Btn> = h.tags.iter().take(6).map(|tag| tag_button(tag, &format!("{}:{tag}", h.name))).collect();
+            if buttons.is_empty() {
+                buttons.push(Btn::text(de!("wählen"), Msg::PickPull(h.name.clone())));
+            }
+            Row::new(&format!("hit.{}", h.name), &h.name, Control::Model { detail: h.summary.clone(), buttons }).unsearchable()
+        })
+        .collect();
+    if rows.is_empty()
+        && let Some(note) = state.error
+    {
+        rows.push(Row::new("searchNote", "", Control::Note(note)).unsearchable());
+    }
+    rows
+}
+
+/// Taste mit dem Tag („4b“) als Beschriftung; sie ist ein Name aus der Bibliothek, kein übersetzbarer Text.
+fn tag_button(tag: &str, full: &str) -> Btn {
+    Btn { label: tag.to_string(), icon: None, msg: Msg::PickPull(full.to_string()), destructive: false }
 }
 
 fn model_row(m: &super::backend::ModelInfo, armed: Option<&str>) -> Row {
@@ -376,13 +431,15 @@ fn ollama(c: &Context, armed: Option<&str>) -> Block {
     let enabled = s.bool_or("local.ollama.enabled", true);
     let mut rows = vec![on_off("ollamaEnabled", de!("Ollama nutzen"), enabled, |s, v| s.set("local.ollama.enabled", Value::Bool(v)))];
     if enabled {
-        rows.push(string_field("ollamaUrl", de!("Adresse des Ollama-Dienstes"), "http://127.0.0.1:11434", "local.ollama.url", "http://127.0.0.1:11434", s));
+        rows.push(string_field("ollamaUrl", de!("Adresse des Ollama-Dienstes"), DEFAULT_OLLAMA_URL, "local.ollama.url", DEFAULT_OLLAMA_URL, s));
         rows.push(status_row(Provider::Ollama, c));
         rows.extend(model_rows(Provider::Ollama, c, armed));
-        let pull = vec![Btn::text(de!("Laden"), Msg::Pull(t("ollamaPull")))];
-        rows.push(text_field("ollamaPull", de!("Modell laden (Name aus der Bibliothek)"), "qwen3:0.6b", String::new(), None, pull));
+        let pull = vec![Btn::text(de!("Laden"), Msg::Pull(t(PULL_ROW)))];
+        rows.push(text_field(PULL_ROW, de!("Modell laden (Name aus der Bibliothek)"), "qwen3:0.6b", String::new(), None, pull));
+        rows.extend(pull_rows(c));
         let search = de!("Auf ollama.com suchen (Webseite, keine offizielle Schnittstelle)");
-        rows.push(text_field("ollamaSearch", search, de!("z. B. qwen3"), String::new(), None, vec![]));
+        rows.push(text_field(SEARCH_ROW, search, de!("z. B. qwen3"), String::new(), None, vec![]));
+        rows.extend(search_rows(c));
     }
     block(de!("Lokale Modelle: Ollama"), de!("gezeigt wird nur, was installiert ist"), rows)
 }
@@ -392,7 +449,8 @@ fn llama_cpp(c: &Context, armed: Option<&str>) -> Block {
     let enabled = s.bool_or("local.llama.enabled", false);
     let mut rows = vec![on_off("llamaEnabled", de!("llama.cpp nutzen"), enabled, |s, v| s.set("local.llama.enabled", Value::Bool(v)))];
     if enabled {
-        rows.push(string_field("llamaBinary", de!("Pfad zu llama-server (leer = automatisch)"), de!("automatisch"), "local.llama.binary", "", s));
+        let detected = c.backend.llama_detected().map_or_else(|| tx(de!("nicht gefunden")), |p| super::super::folders::short_path(&p, &super::super::folders::home_dir()));
+        rows.push(string_field("llamaBinary", de!("Pfad zu llama-server (leer = automatisch)"), &detected, "local.llama.binary", "", s));
         rows.push(string_field("llamaModelsDir", de!("Modellordner mit GGUF-Dateien (optional)"), de!("nur der Cache von llama.cpp"), "local.llama.modelsDir", "", s));
         rows.push(string_field("llamaUrl", de!("Adresse eines laufenden llama-server (optional)"), de!("leer = Kadrell startet ihn"), "local.llama.url", "", s));
         rows.push(status_row(Provider::LlamaCpp, c));
@@ -423,7 +481,8 @@ fn feature_rows(f: &Feature, c: &Context) -> Vec<Row> {
     let mut rows = vec![on_off(&format!("feature.{}.enabled", f.key), f.title, s.bool_or(&on_key, false), move |s, v| s.set(&enabled_key, Value::Bool(v)))];
     let mut options = vec![(t(""), tx(f.no_model))];
     if f.key == "piSession" {
-        options.push((t("pi-default"), tx(de!("Standard von Pi"))));
+        let label = tx(de!("Standard von Pi"));
+        options.push((t(kadrell_claude::pi::PI_DEFAULT_SETTING), c.backend.pi_default().map_or(label.clone(), |d| format!("{label} ({d})"))));
     }
     options.extend(c.backend.available_models());
     let current = s.string_or(&model_key, "");
@@ -443,7 +502,21 @@ fn feature_rows(f: &Feature, c: &Context) -> Vec<Row> {
         let title = de!("Projektverweis aus dem ersten Prompt entfernen, wenn sicher");
         rows.push(on_off("quickStartStrip", title, strip, |s, v| s.set("local.quickStart.stripReference", Value::Bool(v))));
     }
+    rows.extend(suggestion_row(f, c));
     rows
+}
+
+/// „Empfohlenes Modell“ einer Funktion, solange es nicht installiert ist und nicht gerade geladen wird.
+fn suggestion_row(f: &Feature, c: &Context) -> Option<Row> {
+    let wanted = kadrell_models::Feature::ALL.iter().find(|x| x.raw() == f.key)?.suggested_model()?;
+    let id = wanted.string();
+    if c.backend.available_models().iter().any(|(v, _)| *v == id) || c.backend.pulls().iter().any(|p| p.id == id) {
+        return None;
+    }
+    let label = trd!("%@ laden und einschalten", wanted.name.as_str());
+    let msg = Msg::UseSuggested { feature: f.key.to_string(), model: wanted.name };
+    let button = Btn { label, icon: None, msg, destructive: false };
+    Some(Row::new(&format!("feature.{}.suggestion", f.key), de!("Empfohlenes Modell"), Control::Info { text: String::new(), tone: Tone::Normal, buttons: vec![button] }))
 }
 
 fn features(c: &Context) -> Block {

@@ -2646,6 +2646,7 @@ dependencies = [
  "kadrell-core",
  "kadrell-ext",
  "kadrell-i18n",
+ "kadrell-models",
  "kadrell-term",
  "kadrell-tray",
  "libc",

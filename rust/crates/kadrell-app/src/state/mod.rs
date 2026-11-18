@@ -2,6 +2,7 @@
 //! Prozessen, Status und Marke „neu“. `Shell` hält genau einen `AppState`; der Steuerkanal (`handler`) arbeitet auf
 //! demselben Wert. Alles hier ist ohne GPUI testbar: Terminals stehen hinter [`Term`].
 
+pub mod agents;
 pub mod attention;
 mod handler;
 mod poll;
@@ -54,6 +55,10 @@ pub struct AppState {
     pub settings: Settings,
     pub env: LaunchEnv,
     pub endpoint: PathBuf,
+    /// Lokale Modelle (Ollama, llama.cpp) für Pi-Sessions, Schnellstart und Sessiontitel.
+    pub models: kadrell_models::LocalModels,
+    /// Hintergrundarbeit vor dem Start von Pi- und Remote-Kacheln (`agents`).
+    prep: agents::Preparations,
     pub registry: Arc<Mutex<SessionRegistry>>,
     pub attention: AttentionTracker<ProfileAttention>,
     tiles: HashMap<String, Tile>,
@@ -91,6 +96,14 @@ impl AppState {
         registry.lock().unwrap_or_else(PoisonError::into_inner).show_last_message = settings.show_last_message();
         store.assign();
         let attention = AttentionTracker::new(ProfileAttention { path: profile.settings_path() });
+        let models = kadrell_models::LocalModels::new(
+            Arc::new(kadrell_models::UreqHttp),
+            kadrell_models::LocalSettings::from_settings(&settings),
+            env.base.environment.clone(),
+            &home,
+            Some(profile.dir.clone()),
+        );
+        models.sweep_stale();
         let mut state = AppState {
             paths,
             profile,
@@ -99,6 +112,8 @@ impl AppState {
             settings,
             env,
             endpoint,
+            models,
+            prep: Default::default(),
             registry,
             attention,
             tiles: HashMap::new(),
@@ -342,6 +357,7 @@ impl AppState {
         let mut changes: Vec<(String, Option<serde_json::Value>)> = new.keys().filter(|k| new.get(k) != self.settings.get(k)).map(|k| (k.clone(), new.get(k).cloned())).collect();
         changes.extend(self.settings.keys().filter(|k| !new.contains(k)).map(|k| (k.clone(), None)));
         self.settings = new;
+        self.models.set_settings(kadrell_models::LocalSettings::from_settings(&self.settings));
         if !changes.is_empty() {
             patch_settings(&self.profile.settings_path(), changes);
         }

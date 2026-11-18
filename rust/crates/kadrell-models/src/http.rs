@@ -208,9 +208,8 @@ pub fn describe(e: &ModelError) -> String {
     }
 }
 
-#[cfg(test)]
 pub mod fake {
-    //! Attrappe: Antworten kommen aus einer Funktion, alle Anfragen werden mitgeschrieben.
+    //! Attrappe für Tests (auch die der App): Antworten kommen aus einer Funktion, alle Anfragen werden mitgeschrieben.
     use super::*;
     use std::sync::Mutex;
 

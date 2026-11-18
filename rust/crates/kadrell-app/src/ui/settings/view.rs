@@ -36,6 +36,13 @@ fn tone_color(tone: Tone, t: &Theme) -> gpui::Hsla {
     }
 }
 
+/// Balken eines Downloads: gefüllt nach `fraction`, ohne Gesamtgröße ein kurzes Stück als „läuft“-Anzeige.
+fn progress_bar(fraction: Option<f64>, t: &Theme) -> Div {
+    let filled = fraction.map_or(0.15, |f| f.clamp(0., 1.)) as f32;
+    let track = div().flex().h(px(3.)).rounded(px(2.)).bg(t.well()).child(div().h_full().rounded(px(2.)).bg(t.accent).w(gpui::relative(filled)));
+    div().px(px(10.)).pb(px(6.)).child(track)
+}
+
 fn id(prefix: &str, row: &str) -> SharedString {
     SharedString::from(format!("{prefix}-{row}"))
 }
@@ -109,7 +116,7 @@ impl SettingsDialog {
             }
             Control::Text { buttons, .. } => self.text_view(row, buttons, t, cx),
             Control::Info { text, tone, buttons } => self.info_view(row, text, *tone, buttons, t, cx),
-            Control::Hotkey(_) | Control::Model { .. } | Control::Note(_) => div().into_any_element(),
+            Control::Hotkey(_) | Control::Model { .. } | Control::Note(_) | Control::Pull { .. } => div().into_any_element(),
         }
     }
 
@@ -154,6 +161,18 @@ impl SettingsDialog {
         wide_row(div().child(name).child(detail).children(keys))
     }
 
+    /// Download: Name, Fortschritt (oder Fehler) und Taste in einer Zeile, darunter der Balken.
+    fn pull_row(&self, row: &Row, state: (&str, Tone, Option<f64>), buttons: &[Btn], t: &Theme, cx: &mut Context<Self>) -> Div {
+        let (text, tone, fraction) = state;
+        let name = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.fg).child(row.title.clone());
+        let detail = div().flex_none().max_w(px(260.)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(tone_color(tone, t)).child(text.to_string());
+        let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(&row.id, i, b, t, cx)).collect();
+        let line = wide_row(div().child(name).child(detail).children(keys));
+        let failed = tone == Tone::Error;
+        let bar = (!failed).then(|| progress_bar(fraction, t));
+        div().flex().flex_col().child(line).children(bar)
+    }
+
     fn note_row(text: &str, t: &Theme) -> Div {
         div().px(px(10.)).py(px(6.)).text_size(px(11.)).text_color(t.muted).child(text.to_string())
     }
@@ -163,6 +182,7 @@ impl SettingsDialog {
         let body = match &row.control {
             Control::Note(text) => Self::note_row(text, t),
             Control::Model { detail, buttons } => self.model_row(row, detail, buttons, t, cx),
+            Control::Pull { text, tone, fraction, buttons } => self.pull_row(row, (text, *tone, *fraction), buttons, t, cx),
             Control::Hotkey(action) => self.hotkey_row(row, *action, ctl_w, focused, t, cx),
             _ => {
                 let control = div().relative().child(self.control_view(row, focused, t, cx)).when(focused, |d| d.child(keyboard_ring(t)));

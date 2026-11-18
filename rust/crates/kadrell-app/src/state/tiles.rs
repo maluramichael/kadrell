@@ -6,7 +6,8 @@ use std::rc::Rc;
 
 use kadrell_claude::cli::LaunchSpec;
 
-use super::{AppState, launch};
+use super::agents::Start;
+use super::AppState;
 
 /// Zugriff auf den Prozess einer Kachel. `TermHandle` aus `kadrell-term` ist die echte Umsetzung, Tests nehmen eine
 /// Attrappe.
@@ -100,8 +101,15 @@ impl AppState {
             if self.session(&key).is_none() || self.run(&key) == Run::Running {
                 continue;
             }
-            let prompt = self.prompts.remove(&key);
-            let spec = self.session(&key).map(|s| launch::spec_for(s, &self.settings, &self.env, prompt.as_deref())).unwrap_or_else(|| Err("Session fehlt".into()));
+            let prompt = self.prompts.get(&key).cloned();
+            let spec = match self.start_spec(&key, prompt.as_deref()) {
+                Start::Ready(spec) => spec,
+                Start::Pending => {
+                    self.wanted.push(key); // der Hintergrund bereitet den Start noch vor
+                    continue;
+                }
+            };
+            self.prompts.remove(&key);
             if let Err(message) = &spec {
                 self.mark_ended(&key);
                 self.error = Some(message.clone());
@@ -188,6 +196,7 @@ impl AppState {
         for key in keys {
             self.shutdown_tile(&key);
         }
+        self.models.shutdown(); // der eigene llama-server endet mit Kadrell
     }
 
     /// Zeilen einer beendeten Kachel für `capture`.

@@ -36,6 +36,12 @@ pub enum Msg {
     Clear(String),
     /// Modell laden (Name aus dem Textfeld `row`).
     Pull(String),
+    /// Namen (`name:tag` aus einem Suchtreffer) ins Feld „Modell laden“ setzen.
+    PickPull(String),
+    /// Laufenden Download abbrechen bzw. Fehlermeldung wegnehmen (`provider|name`).
+    CancelPull(String),
+    /// Empfohlenes Modell einer Funktion wählen, einschalten und laden (`feature` ist der Schlüsselteil, `model` der Name).
+    UseSuggested { feature: String, model: String },
 }
 
 /// Anbieter lokaler Modelle.
@@ -89,6 +95,8 @@ pub enum Control {
     Model { detail: String, buttons: Vec<Btn> },
     /// Hinweistext über die ganze Breite.
     Note(String),
+    /// Download: Name links, Fortschritt oder Fehler und Taste rechts, darunter der Balken (nur ohne Fehler).
+    Pull { text: String, tone: Tone, fraction: Option<f64>, buttons: Vec<Btn> },
 }
 
 /// Eine Tabellenzeile.
@@ -119,7 +127,7 @@ impl Row {
     pub fn focusable(&self) -> bool {
         match &self.control {
             Control::Note(_) => false,
-            Control::Info { buttons, .. } | Control::Model { buttons, .. } => !buttons.is_empty(),
+            Control::Info { buttons, .. } | Control::Model { buttons, .. } | Control::Pull { buttons, .. } => !buttons.is_empty(),
             _ => true,
         }
     }

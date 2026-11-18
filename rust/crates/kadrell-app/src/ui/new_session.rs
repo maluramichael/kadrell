@@ -309,8 +309,7 @@ impl Shell {
 
     /// Neue Claude-Session in `path`: in die Gruppe mit diesem Ordner, sonst in eine neue Gruppe; dann wählen.
     fn start_in(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.state.new_claude_session(path, None, true);
-        self.sync(window, cx);
+        self.start_new_session(None, path, None, window, cx); // Claude, mit nutzbarem Pi erst „Starten mit“
     }
 
     /// Ordner der fokussierten Session (Strg+Enter, Strg+T): die Gruppe, sonst der Startordner der Einstellungen.
@@ -326,8 +325,7 @@ impl Shell {
     pub fn new_session_here(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let cwd = self.focused_folder();
         let group = self.state.focused.as_deref().and_then(|k| self.state.store.groups.group_for_session(k)).map(|g| g.id.clone());
-        self.state.new_claude_session(&cwd, group.as_deref(), true);
-        self.sync(window, cx);
+        self.start_new_session(group, &cwd, None, window, cx);
     }
 
     /// Strg+T / ⌘T: Terminal ohne Claude im Ordner der fokussierten Session.
