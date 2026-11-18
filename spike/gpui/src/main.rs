@@ -15,6 +15,7 @@ use gpui_platform::application;
 
 use terminal::TerminalPane;
 use theme::Theme;
+use ui::layout::{Direction, Id, LayoutMode, LayoutState, Selection};
 use ui::model::{Group, flat_index, mock_groups};
 
 pub struct ThemeGlobal(pub Theme);
@@ -22,8 +23,28 @@ impl Global for ThemeGlobal {}
 
 pub struct Shell {
     groups: Vec<Group>,
+    /// Fokus-Kachel (Tastaturziel), immer Teil der Auswahl.
     selected: (usize, usize),
+    /// Sichtbare Sessions (Kacheln), Anker für Shift-Klick.
+    selection: Selection,
+    layout: LayoutState,
     clock: String,
+}
+
+/// Start-Auswahl für Screenshots ohne Eingabe: `KADRELL_SPIKE_SELECT="0,0;0,1;1,0"`.
+fn start_selection(groups: &[Group]) -> Vec<Id> {
+    let Ok(v) = std::env::var("KADRELL_SPIKE_SELECT") else { return Vec::new() };
+    let valid = |id: &Id| groups.get(id.0).is_some_and(|g| id.1 < g.sessions.len());
+    let parse = |p: &str| -> Option<Id> {
+        let (g, s) = p.split_once(',')?;
+        Some((g.trim().parse().ok()?, s.trim().parse().ok()?))
+    };
+    v.split(';').filter_map(parse).filter(valid).collect()
+}
+
+/// Start-Layout: `KADRELL_SPIKE_LAYOUT=grid|main|spiral|stack`.
+fn start_layout() -> LayoutMode {
+    std::env::var("KADRELL_SPIKE_LAYOUT").ok().and_then(|v| LayoutMode::from_name(&v)).unwrap_or(LayoutMode::Grid)
 }
 
 /// Start-Session für Screenshots ohne Eingabe: `KADRELL_SPIKE_SESSION=1,0` (Gruppe, Session), sonst die erste.
@@ -44,9 +65,22 @@ fn now_hhmm() -> String {
 
 impl Shell {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let mut shell = Shell { groups: mock_groups(), selected: (0, 0), clock: now_hhmm() };
-        let (g, s) = start_session(&shell.groups);
-        shell.select(g, s, window, cx);
+        let groups = mock_groups();
+        let first = start_session(&groups);
+        let mut selection = Selection::single(first);
+        let flat = flat_index(&groups);
+        for id in start_selection(&groups) {
+            selection.toggle(id, &flat);
+        }
+        selection.focus_on(first);
+        let mut shell = Shell {
+            groups,
+            selected: first,
+            selection,
+            layout: LayoutState::new(start_layout()),
+            clock: now_hhmm(),
+        };
+        shell.apply_selection(window, cx);
         shell.start_clock(cx);
         shell
     }
@@ -96,14 +130,94 @@ impl Shell {
         .detach();
     }
 
+    /// Springt zu einer Session: ist sie schon sichtbar, wandert nur der Fokus, sonst zeigt sie allein.
     fn select(&mut self, g: usize, s: usize, window: &mut Window, cx: &mut Context<Self>) {
-        self.ensure_pane(g, s, cx);
+        if self.selection.contains((g, s)) {
+            self.selection.focus_on((g, s));
+        } else {
+            self.selection = Selection::single((g, s));
+        }
+        self.apply_selection(window, cx);
+    }
+
+    // --- Auswahl und Layout (Kacheln) ---
+
+    /// Sichtbare Kacheln in Anzeigereihenfolge.
+    fn visible(&self) -> Vec<Id> {
+        self.selection.items.clone()
+    }
+
+    /// Übernimmt `selection`: legt fehlende Terminals an und gibt der Fokus-Kachel die Tastatur.
+    fn apply_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        for (g, s) in self.selection.items.clone() {
+            self.ensure_pane(g, s, cx);
+        }
+        let (g, s) = self.selection.focus;
         self.selected = (g, s);
         let focus = self.groups[g].sessions[s].pane.as_ref().map(|p| p.read(cx).focus.clone());
         if let Some(focus) = focus {
             focus.focus(window, cx);
         }
         cx.notify();
+    }
+
+    /// Klick im Baum: nur diese Session, Strg/Cmd nimmt sie dazu oder weg, Shift markiert den Bereich.
+    fn click_session(&mut self, g: usize, s: usize, m: gpui::Modifiers, window: &mut Window, cx: &mut Context<Self>) {
+        let flat = flat_index(&self.groups);
+        if m.shift {
+            self.selection.range((g, s), &flat);
+        } else if m.secondary(cx) {
+            self.selection.toggle((g, s), &flat);
+        } else {
+            self.selection = Selection::single((g, s));
+        }
+        self.apply_selection(window, cx);
+    }
+
+    /// Klick auf eine Gruppe: alle ihre Sessions werden sichtbar.
+    fn select_group(&mut self, g: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let ids = (0..self.groups[g].sessions.len()).map(|s| (g, s)).collect();
+        self.selection.group(ids);
+        self.apply_selection(window, cx);
+    }
+
+    /// Klick in eine Kachel: sie wird Fokus, die Auswahl bleibt.
+    fn focus_tile(&mut self, g: usize, s: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if self.selection.focus != (g, s) {
+            self.selection.focus_on((g, s));
+            self.apply_selection(window, cx);
+        }
+    }
+
+    fn cycle_layout(&mut self, cx: &mut Context<Self>) {
+        self.layout.mode = self.layout.mode.next();
+        cx.notify();
+    }
+
+    fn step_cols(&mut self, delta: isize, cx: &mut Context<Self>) {
+        self.layout.cols = ui::layout::step_cols(self.layout.cols, self.visible().len(), delta);
+        cx.notify();
+    }
+
+    /// Alt+Pfeil: Fokus zur Nachbarkachel in dieser Richtung.
+    fn move_focus(&mut self, d: Direction, window: &mut Window, cx: &mut Context<Self>) {
+        let visible = self.visible();
+        let Some(i) = visible.iter().position(|id| *id == self.selected) else { return };
+        if let Some(j) = ui::layout::neighbor(i, &self.layout.frames, d) {
+            self.selection.focus_on(visible[j]);
+            self.apply_selection(window, cx);
+        }
+    }
+
+    fn layout_ctl(&self, cx: &mut Context<Self>) -> ui::bar::LayoutCtl {
+        use std::rc::Rc;
+        ui::bar::LayoutCtl {
+            mode: self.layout.mode,
+            cols_label: self.layout.label(),
+            cycle: Rc::new(cx.listener(|this, _, _, cx| this.cycle_layout(cx))),
+            dec: Rc::new(cx.listener(|this, _, _, cx| this.step_cols(-1, cx))),
+            inc: Rc::new(cx.listener(|this, _, _, cx| this.step_cols(1, cx))),
+        }
     }
 
     /// Springt um `delta` Sessions weiter (zyklisch).
@@ -132,6 +246,10 @@ impl Shell {
             "n" => self.step(1, window, cx),
             "p" => self.step(-1, window, cx),
             "t" => Self::toggle_theme(cx),
+            "left" => self.move_focus(Direction::Left, window, cx),
+            "right" => self.move_focus(Direction::Right, window, cx),
+            "up" => self.move_focus(Direction::Up, window, cx),
+            "down" => self.move_focus(Direction::Down, window, cx),
             k => match k.parse::<usize>() {
                 Ok(d) if (1..=9).contains(&d) => return self.jump(d - 1, window, cx),
                 _ => return false,
@@ -142,6 +260,12 @@ impl Shell {
 
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
+        // Strg+L (Cmd+L auf dem Mac) schaltet das Layout reihum.
+        if m.secondary(cx) && !m.alt && !m.shift && ev.keystroke.key == "l" {
+            self.cycle_layout(cx);
+            cx.stop_propagation();
+            return;
+        }
         // Strg+Alt ist AltGr unter Windows und gehört dem Terminal.
         if !m.alt || m.control || m.platform || m.shift {
             return;
@@ -165,9 +289,9 @@ impl Focusable for Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = ui::theme(cx);
-        let (g, s) = self.selected;
-        let tile = ui::tile::tile(&self.groups[g], &self.groups[g].sessions[s], ui::tile::TileStyle::for_count(1), window, cx);
-        let sidebar = ui::sidebar::sidebar(&self.groups, self.selected, cx);
+        let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, cx);
+        let ctl = self.layout_ctl(cx);
+        let workspace = ui::layout::workspace(self, cx);
         div()
             .flex()
             .flex_col()
@@ -177,14 +301,14 @@ impl Render for Shell {
             .font_family(theme::FONT)
             .text_size(px(12.))
             .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.on_key(ev, window, cx)))
-            .child(ui::bar::bar(&self.clock, window, cx))
+            .child(ui::bar::bar(&self.clock, &ctl, window, cx))
             .child(
                 div()
                     .flex()
                     .flex_1()
                     .min_h_0()
                     .child(sidebar)
-                    .child(ui::tile::tile_area(tile, ui::tile::TileStyle::for_count(1))),
+                    .child(workspace),
             )
             .child(ui::footer::footer(cx))
     }

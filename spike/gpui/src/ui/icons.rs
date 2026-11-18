@@ -1,5 +1,6 @@
 //! Gezeichnete Strichsymbole wie `app/Kadrell/UI/Icons.swift`: keine Schriftzeichen, sondern Pfade.
 
+use super::layout::LayoutMode;
 use gpui::{Bounds, Hsla, IntoElement, PathBuilder, Pixels, Point, Styled, canvas, point, px};
 
 /// Ein Linienzug in Symbolkoordinaten (Ursprung oben links), optional geschlossen.
@@ -66,12 +67,34 @@ pub fn arrow(left: bool, color: Hsla) -> impl IntoElement {
     icon(10., vec![stroke], color, 1.4)
 }
 
-/// Layout-Symbol Grid: vier Quadrate, 10 x 10, Strich 1,2 (`Icons.layout(.grid)`).
-pub fn layout_grid(color: Hsla) -> impl IntoElement {
+/// Grid: vier Quadrate.
+fn grid_strokes() -> Vec<Stroke> {
     let (i, w) = (1., (8. - 2.) / 2.);
-    let strokes = [(0., 0.), (1., 0.), (0., 1.), (1., 1.)]
-        .iter()
-        .map(|(c, r)| rect(i + c * (w + 2.), i + r * (w + 2.), w, w))
-        .collect();
+    [(0., 0.), (1., 0.), (0., 1.), (1., 1.)].iter().map(|(c, r)| rect(i + c * (w + 2.), i + r * (w + 2.), w, w)).collect()
+}
+
+/// Haupt + Spalte: links ein großes Feld, rechts zwei übereinander.
+fn main_strokes() -> Vec<Stroke> {
+    vec![rect(1., 1., 3.5, 8.), rect(6., 1., 3., 3.5), rect(6., 5.5, 3., 3.5)]
+}
+
+/// Spirale: großes Feld links, rechts oben, dann unten rechts und unten links kleiner.
+fn spiral_strokes() -> Vec<Stroke> {
+    vec![rect(1., 1., 4., 8.), rect(6., 1., 3., 4.), rect(6., 6., 1.5, 3.), rect(8., 6., 1., 3.)]
+}
+
+/// Stack: drei Zeilen, die mittlere hoch (aktive Kachel).
+fn stack_strokes() -> Vec<Stroke> {
+    vec![rect(1., 1., 8., 1.5), rect(1., 3.7, 8., 3.5), rect(1., 8.4, 8., 0.6)]
+}
+
+/// Layout-Symbol der Leiste, 10 x 10, Strich 1,2 (`Icons.layout`): zeigt das aktuelle Layout.
+pub fn layout(mode: LayoutMode, color: Hsla) -> impl IntoElement {
+    let strokes = match mode {
+        LayoutMode::Grid => grid_strokes(),
+        LayoutMode::Main => main_strokes(),
+        LayoutMode::Spiral => spiral_strokes(),
+        LayoutMode::Stack => stack_strokes(),
+    };
     icon(10., strokes, color, 1.2)
 }

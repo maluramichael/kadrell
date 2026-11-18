@@ -8,6 +8,7 @@ use gpui::{
 
 use super::chrome::v_seam;
 use super::icons;
+use super::layout::Selection;
 use super::model::{Group, Session, Status};
 use super::theme;
 use crate::Shell;
@@ -60,12 +61,24 @@ fn group_label(group: &Group, t: &Theme) -> impl IntoElement + use<> {
         .child(format!("{} · {}", group.name.to_uppercase(), group.sessions.len()))
 }
 
-fn group_head(group: &Group, t: &Theme) -> impl IntoElement + use<> {
+/// Chevron als eigene Klickfläche: klappt die Gruppe auf oder zu, ohne sie zu markieren.
+fn chevron_button(g: usize, group: &Group, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    div()
+        .id(("chevron", g))
+        .flex_none()
+        .child(chevron(group.collapsed, t))
+        .on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.toggle_group(g, cx);
+        }))
+}
+
+fn group_head(group: &Group, t: &Theme, chevron: gpui::AnyElement) -> impl IntoElement + use<> {
     div()
         .flex()
         .items_center()
         .h(px(if SHOW_GROUP_PATH { GROUP_ROW - 2. * ROW_INSET_Y - 14. } else { GROUP_ROW - 2. * ROW_INSET_Y }))
-        .child(chevron(group.collapsed, t))
+        .child(chevron)
         .child(div().ml(px(4.)).mr(px(5.)).size(px(6.)).flex_none().rounded(px(1.5)).bg(t.group(group.color)))
         .child(group_label(group, t))
 }
@@ -96,10 +109,10 @@ fn group_header(
         .flex()
         .flex_col()
         .hover(move |s| s.bg(t.bg))
-        .child(group_head(group, &t));
+        .child(group_head(group, &t, chevron_button(g, group, &t, cx).into_any_element()));
     let face = if SHOW_GROUP_PATH { face.child(group_path(group, &t)) } else { face };
     row_frame(("group", g), GROUP_ROW, bar)
-        .on_click(cx.listener(move |this, _, _, cx| this.toggle_group(g, cx)))
+        .on_click(cx.listener(move |this, _, window, cx| this.select_group(g, window, cx)))
         .child(face)
 }
 
@@ -144,40 +157,48 @@ fn session_row(
     s: usize,
     group: &Group,
     selected: bool,
+    focused: bool,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let t = theme(cx);
     let session = &group.sessions[s];
     let mut face = session_face(session, selected, &t).hover(move |st| st.bg(t.bg).text_color(t.fg));
     // Der Rand steht immer, nur seine Farbe wechselt: Inhalt springt bei der Auswahl nicht.
-    let edge = if selected { t.fg } else { gpui::transparent_black() };
+    // Fokus-Session in `fg`, die übrigen markierten in `muted`.
+    let edge = match (focused, selected) {
+        (true, _) => t.fg,
+        (false, true) => t.muted,
+        _ => gpui::transparent_black(),
+    };
     if selected {
         face = face.bg(t.bg);
     }
     face = outline(face, edge);
     let bar = selected.then(|| t.group(group.color));
     row_frame(("session", g * 100 + s), SESSION_ROW, bar)
-        .on_click(cx.listener(move |this, _, window, cx| this.select(g, s, window, cx)))
+        .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| {
+            this.click_session(g, s, ev.modifiers(), window, cx)
+        }))
         .child(face)
 }
 
 fn group_block(
     g: usize,
     group: &Group,
-    selected: (usize, usize),
+    sel: &Selection,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let mut block = div().flex().flex_col().flex_none().child(group_header(g, group, selected.0 == g, cx));
+    let mut block = div().flex().flex_col().flex_none().child(group_header(g, group, sel.focus.0 == g, cx));
     if group.collapsed {
         return block;
     }
     for s in 0..group.sessions.len() {
-        block = block.child(session_row(g, s, group, selected == (g, s), cx));
+        block = block.child(session_row(g, s, group, sel.contains((g, s)), sel.focus == (g, s), cx));
     }
     block
 }
 
-pub fn sidebar(groups: &[Group], selected: (usize, usize), cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+pub fn sidebar(groups: &[Group], sel: &Selection, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let t = theme(cx);
     let mut col = div()
         .id("sidebar")
@@ -192,7 +213,7 @@ pub fn sidebar(groups: &[Group], selected: (usize, usize), cx: &mut Context<Shel
         .bg(t.panel)
         .text_size(px(12.));
     for (g, group) in groups.iter().enumerate() {
-        col = col.child(group_block(g, group, selected, cx));
+        col = col.child(group_block(g, group, sel, cx));
     }
     div().flex().flex_none().h_full().bg(t.panel).child(col).child(v_seam(&t))
 }
