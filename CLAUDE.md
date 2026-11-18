@@ -1,6 +1,15 @@
 # Kadrell
 
-Mac-App, Aufbau und Build: `app/README.md`.
+Mac-App, Aufbau und Build: `app/README.md`. Windows-Version (Rust, Terminal-App): `windows/README.md`.
+
+## Mac und Windows
+
+Beide Seiten teilen keinen Code, nur den Vertrag in `docs/cli-contract.md` (Befehle, Flags, Meldungen,
+`ls --json` laut `docs/contract/ls.json`). Ändert sich ein `kadrell`-Befehl oder die `ls`-Ausgabe auf einer Seite,
+im selben Arbeitsgang die andere und den Vertrag nachziehen. Die Mac-App baut nur auf dem Mac, der Windows-Teil
+nur unter Windows: Was sich auf dem aktuellen Rechner nicht bauen und testen lässt, nicht anfassen. Für den
+Windows-Teil gelten dieselben Qualitätsregeln: `cargo clippy --all-targets -- -D warnings` und `cargo test` in
+`windows/` ohne Fehler.
 
 ## Positionierung (für Agenten, vor Feature-Entscheidungen lesen)
 
@@ -24,12 +33,13 @@ Soll eine Lua-Extension entstehen oder geändert werden, zuerst `docs/lua-extens
    - Eine Zeile pro Änderung, für normale Nutzer geschrieben: `- Feature: Sidebar kann jetzt maximal 900 px breit sein.`
    - Präfixe: `Feature:`, `Fix:`, `Änderung:`, `Entfernt:`.
    - Kein Code, keine Dateinamen, keine Klassen. Reine Interna (Refactor, Tests, Doku) nicht eintragen.
-2. Selbst entscheiden, wie groß der Sprung ist, dann `python3 tools/bump-version.py <teil>`:
+2. Selbst entscheiden, wie groß der Sprung ist, dann `python3 tools/bump-version.py <teil>` (unter Windows
+   `uv run --no-project python tools/bump-version.py <teil>`, dort gibt es kein `python3`):
    - `patch`: nur kleine Bugfixes.
    - `minor`: neue Features oder mehrere spürbare Änderungen, nichts bricht.
    - `major`: etwas richtig Großes oder Brechendes (Bedienung grundlegend anders, Daten/Einstellungen inkompatibel).
-3. Das Skript setzt die Version in `app/project.yml` und `app/Kadrell/Info.plist` und macht aus
-   `## Unreleased` die Versionsüberschrift. Die drei Dateien mit committen.
+3. Das Skript setzt die Version in `app/project.yml`, `app/Kadrell/Info.plist`, `windows/Cargo.toml` und
+   `windows/Cargo.lock` und macht aus `## Unreleased` die Versionsüberschrift. Die fünf Dateien mit committen.
 
 Die Version steht in der App unter Einstellungen (⌘,) und im About (F1).
 

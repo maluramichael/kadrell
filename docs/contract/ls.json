@@ -1,0 +1,26 @@
+{
+  "focused": "f45edac5-957e-4453-9dea-ff5728623427",
+  "groups": [
+    {
+      "color": "#fab387",
+      "cwd": "/Users/me/projects/kadrell",
+      "favorite": true,
+      "id": "2bcebb8b-95ac-46d2-8e2e-464dd37f2b86",
+      "name": "Kadrell",
+      "sessions": [
+        {
+          "branch": "master",
+          "cwd": "/Users/me/projects/kadrell",
+          "focused": true,
+          "key": "f45edac5-957e-4453-9dea-ff5728623427",
+          "running": true,
+          "sessionId": "f45edac5-957e-4453-9dea-ff5728623427",
+          "shown": true,
+          "status": "idle",
+          "title": "_MASTER_"
+        }
+      ]
+    }
+  ],
+  "layout": "grid"
+}

@@ -2,6 +2,10 @@
 
 Neueste Version oben.
 
+## 1.89.0 (2026-11-18)
+
+- Feature: Erste Vorabversion für Windows, noch nicht zum Download. Sie zeigt alle Claude-Code-Sessions in einem Terminalfenster, links der Baum mit Status, rechts die gewählte Session, bedient wie tmux. Sie versteht dieselben Kommandozeilenbefehle wie die Mac-App, damit Skripte auf beiden Systemen laufen.
+
 ## 1.88.0 (2026-11-09)
 
 - Feature: `kadrell new` kennt `--model` und `--effort`. Die neue Claude-Session startet damit mit dem gewünschten Modell (Alias wie `opus` oder Id wie `claude-opus-5-5`) und Effort (`low` bis `max`), ohne die Einstellung zu ändern. Das gilt auch mit `--resume` und bleibt nach einem Neustart der Session erhalten. Mit `--pi` oder `--host` gibt es eine Fehlermeldung. Ohne die Optionen bleibt alles wie bisher.
