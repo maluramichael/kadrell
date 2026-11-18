@@ -383,22 +383,75 @@ pub struct SessionHistory {
     /// nil bis der erste Lauf fertig ist.
     pub index: Option<HistoryIndex>,
     entries: HashMap<String, HistorySession>,
+    running: bool,
+    waiters: Vec<Waiter>,
+}
+
+/// Wird nach einem Lauf mit `changed` aufgerufen (true = der Index ist neu).
+pub type Waiter = Box<dyn FnOnce(bool) + Send>;
+
+/// Der schwere Teil eines Laufs (Dateien lesen, Cache schreiben, Index bauen), für einen Hintergrund-Thread.
+pub struct RefreshJob {
+    base: HashMap<String, HistorySession>,
+    config_dir: String,
+    cache_file: String,
+    first: bool,
+}
+
+/// Ergebnis von [`RefreshJob::run`], zurück an [`SessionHistory::finish`].
+pub struct RefreshDone {
+    fresh: HashMap<String, HistorySession>,
+    next: Option<HistoryIndex>,
+    changed: bool,
+}
+
+impl RefreshJob {
+    pub fn run(self) -> RefreshDone {
+        let (fresh, changed) = refresh(&self.base, &self.config_dir);
+        if changed {
+            save_cache(&fresh, &self.cache_file);
+        }
+        let next = (changed || self.first).then(|| HistoryIndex::new(fresh.values().cloned().collect()));
+        RefreshDone { fresh, next, changed: changed || self.first }
+    }
 }
 
 impl SessionHistory {
-    /// Nachlesen und Index neu bauen. Der erste Lauf startet vom Cache auf der Platte. true = der Index ist neu.
-    pub fn refresh(&mut self, config_dir: &str, cache_file: &str) -> bool {
+    /// Nachlesen anfordern (Swift: `refresh(configDir:then:)`). Läuft schon ein Lauf, wird die Anforderung eingereiht
+    /// (`then` kommt nach dem laufenden Lauf mit dessen Ergebnis) und es gibt keinen neuen Job. Sonst kommt der Job
+    /// zurück, den der Aufrufer auf einem Hintergrund-Thread ausführt und mit [`finish`](Self::finish) abschließt.
+    /// Der erste Lauf startet vom Cache auf der Platte.
+    pub fn request(&mut self, config_dir: &str, cache_file: &str, then: Option<Waiter>) -> Option<RefreshJob> {
+        self.waiters.extend(then);
+        if self.running {
+            return None;
+        }
+        self.running = true;
         let first = self.index.is_none();
-        let base = if first { load_cache(cache_file) } else { std::mem::take(&mut self.entries) };
-        let (fresh, changed) = refresh(&base, config_dir);
-        if changed {
-            save_cache(&fresh, cache_file);
+        let base = if first { load_cache(cache_file) } else { self.entries.clone() };
+        Some(RefreshJob { base, config_dir: config_dir.to_string(), cache_file: cache_file.to_string(), first })
+    }
+
+    /// Lauf übernehmen und alle wartenden Aufrufer mit `changed` benachrichtigen.
+    pub fn finish(&mut self, done: RefreshDone) {
+        self.entries = done.fresh;
+        if let Some(next) = done.next {
+            self.index = Some(next);
         }
-        if changed || first {
-            self.index = Some(HistoryIndex::new(fresh.values().cloned().collect()));
+        self.running = false;
+        for waiter in std::mem::take(&mut self.waiters) {
+            waiter(done.changed);
         }
-        self.entries = fresh;
-        changed || first
+    }
+
+    /// Nachlesen und Index neu bauen, auf dem aufrufenden Thread. true = der Index ist neu. Läuft schon ein Lauf
+    /// (Anforderung eingereiht), kehrt der Aufruf mit false zurück.
+    pub fn refresh(&mut self, config_dir: &str, cache_file: &str) -> bool {
+        let Some(job) = self.request(config_dir, cache_file, None) else { return false };
+        let done = job.run();
+        let changed = done.changed;
+        self.finish(done);
+        changed
     }
 
     /// Alle Sessions mit Eingaben oder Titel, neueste zuerst (für die Statistik).
@@ -599,5 +652,30 @@ mod tests {
         assert!(fresh.refresh(&dir.path(), &cache), "erster Lauf baut den Index immer");
         assert_eq!(fresh.sessions()[0].title(), "Titel");
         assert_eq!(fresh.index.unwrap().search_default("suche")[0].session.title(), "Titel");
+    }
+
+    /// Eine Anforderung während eines Laufs wird eingereiht und bekommt das Ergebnis dieses Laufs.
+    #[test]
+    fn refresh_requests_during_a_run_are_queued_and_notified() {
+        use std::sync::{Arc, Mutex};
+        let dir = TempDir::new("histqueue");
+        let cache = dir.sub("cache/h.json");
+        write_transcript(&dir, &[user("Suche etwas")], None);
+        let calls: Arc<Mutex<Vec<(&'static str, bool)>>> = Arc::default();
+        let waiter = |name: &'static str| -> Option<Waiter> {
+            let calls = calls.clone();
+            Some(Box::new(move |changed| calls.lock().unwrap().push((name, changed))))
+        };
+        let mut h = SessionHistory::default();
+        let job = h.request(&dir.path(), &cache, waiter("a")).expect("erster Aufruf startet den Lauf");
+        assert!(h.request(&dir.path(), &cache, waiter("b")).is_none(), "zweiter Aufruf wartet");
+        assert!(!h.refresh(&dir.path(), &cache), "ohne Waiter ebenfalls eingereiht");
+        assert!(calls.lock().unwrap().is_empty());
+        h.finish(job.run());
+        assert_eq!(*calls.lock().unwrap(), [("a", true), ("b", true)]);
+        assert_eq!(h.sessions().len(), 1);
+        let again = h.request(&dir.path(), &cache, waiter("c")).expect("danach wieder frei");
+        h.finish(again.run());
+        assert_eq!(calls.lock().unwrap().last(), Some(&("c", false)), "nichts geändert");
     }
 }

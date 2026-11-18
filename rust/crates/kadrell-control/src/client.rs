@@ -37,6 +37,7 @@ pub struct ClientOptions<'a> {
 /// Schickt die Anfrage, `Ok(None)`: niemand lauscht. Ein Fehler beim Verbinden heißt immer „niemand lauscht“ (kein
 /// Socket, abgelehnt, Rest eines Absturzes); danach ist jeder Fehler einer.
 pub fn send(path: &Path, req: &ControlRequest, timeout: Duration) -> Result<Option<ControlResponse>, String> {
+    crate::endpoint::check_socket_path(path)?;
     let Some((mut stream, req)) = connect(path, req) else { return Ok(None) };
     stream.set_timeout(timeout).map_err(|e| e.to_string())?;
     write_line(&mut stream, &req).map_err(|e| e.to_string())?;
@@ -174,10 +175,11 @@ impl SelfLauncher {
 }
 
 impl Launcher for SelfLauncher {
-    /// Ob schon eine Instanz läuft, ohne dass der Kanal antwortet, lässt sich hier nicht sagen; eine zweite Instanz
-    /// beendet sich am Profil-Lock selbst.
+    /// Die pid-Datei des Profils nennt eine noch lebende Instanz: dann läuft Kadrell, auch wenn der Kanal schweigt
+    /// (alte Version, Start noch nicht fertig).
     fn already_running(&self) -> bool {
-        false
+        use crate::caller::{ProcessTree, SystemProcessTree};
+        kadrell_core::profile::recorded_pid(&self.profile_dir).is_some_and(|pid| SystemProcessTree.parent(pid).is_some())
     }
 
     fn quit_recently(&self) -> bool {
@@ -252,4 +254,24 @@ pub fn main_cli(argv: &[String], profile: Option<String>, hook_map: &dyn Fn(&[u8
     let launcher = SelfLauncher::from_env(&Paths::from_env(), profile);
     let opts = ClientOptions { socket, caller: caller_from_env(), cwd: cwd_from_env(), launcher: &launcher, wait: WAIT_FOR_APP, poll: POLL };
     run(argv, &opts, &mut std::io::stdout(), &mut err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn launcher(dir: &Path) -> SelfLauncher {
+        SelfLauncher { exe: PathBuf::from("kadrell"), profile: None, profile_dir: dir.to_path_buf() }
+    }
+
+    /// Eine Instanz ohne Kanal erkennt die CLI an der pid-Datei des Profils: lebt die pid, wird keine zweite gestartet.
+    #[test]
+    fn already_running_follows_the_recorded_pid() {
+        let dir = crate::testing::TempDir::new();
+        assert!(!launcher(dir.path()).already_running(), "ohne pid-Datei läuft nichts");
+        std::fs::write(dir.path().join("kadrell.pid"), format!("{}\n", std::process::id())).unwrap();
+        assert!(launcher(dir.path()).already_running());
+        std::fs::write(dir.path().join("kadrell.pid"), "4294967290\n").unwrap();
+        assert!(!launcher(dir.path()).already_running(), "tote pid");
+    }
 }

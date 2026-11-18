@@ -81,12 +81,23 @@ fn raw_entries(value: Value) -> Option<Vec<Value>> {
 /// würden die Datei sonst leer überschreiben. Erst ein echter Formatwechsel (Version ab 2) schreibt den Umschlag.
 /// Der Fehler ist die Meldung für den Nutzer.
 pub fn save_array<T: Serialize>(items: &[T], path: &Path, version: i64) -> Result<(), String> {
-    let encoded = if version >= 2 {
-        serde_json::to_vec_pretty(&serde_json::json!({ "version": version, "items": items }))
-    } else {
-        serde_json::to_vec_pretty(items)
-    };
-    write(path, encoded)
+    let value = if version >= 2 { serde_json::to_value(serde_json::json!({ "version": version, "items": items })) } else { serde_json::to_value(items) };
+    // Sortierte Schlüssel wie `.sortedKeys` in Swift: gpui-pre schaltet `preserve_order` ein, die Reihenfolge der
+    // Strukturfelder würde sonst in die Datei wandern.
+    write(path, value.and_then(|v| serde_json::to_vec_pretty(&sorted_keys(v))))
+}
+
+/// Objekte rekursiv mit alphabetisch eingefügten Schlüsseln neu aufbauen (hält auch mit `preserve_order`).
+fn sorted_keys(value: Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut entries: Vec<(String, Value)> = map.into_iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Object(entries.into_iter().map(|(k, v)| (k, sorted_keys(v))).collect())
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(sorted_keys).collect()),
+        other => other,
+    }
 }
 
 /// Wie [`load_array`], aber für ein `{String: V}` (zum Beispiel `folders-uses.json`), ohne Versionierung. Die
@@ -179,6 +190,26 @@ mod tests {
 
     fn quarantined(dir: &Path, base: &str) -> bool {
         std::fs::read_dir(dir).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with(&format!("{base}.corrupt-")))
+    }
+
+    #[derive(Serialize)]
+    struct Unordered {
+        zebra: u8,
+        alpha: Vec<Item>,
+        mid: u8,
+    }
+
+    #[test]
+    fn saved_keys_are_sorted_at_every_level() {
+        let d = TempDir::new();
+        let p = d.path().join("x.json");
+        save_array(&[Unordered { zebra: 1, alpha: vec![item("a")], mid: 2 }], &p, 1).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        let (a, m, z) = (text.find("\"alpha\"").unwrap(), text.find("\"mid\"").unwrap(), text.find("\"zebra\"").unwrap());
+        assert!(a < m && m < z, "{text}");
+        save_array(&[Unordered { zebra: 1, alpha: vec![], mid: 2 }], &p, 2).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        assert!(text.find("\"items\"").unwrap() < text.find("\"version\"").unwrap(), "{text}");
     }
 
     #[test]
