@@ -202,13 +202,21 @@ fn switch(id: usize, label: String, on: bool, face: Hsla, t: &crate::theme::Them
     if on { pill.kind(PillKind::Active).fill(face) } else { pill.icon(colored(label, t.muted)) }
 }
 
+/// Breite der Pfeiltasten: Glyphe in 12 px fett plus 12 px Rand (Swift: `arrowKey`).
+const ARROW_WIDTH: f32 = 20.;
+
+/// Pfeil der Spaltentasten als Textglyphe „‹“ bzw. „›“, 12 px fett in `color` (Swift: `arrowKey`).
+fn arrow_glyph(glyph: &'static str, color: Hsla) -> impl IntoElement {
+    div().text_size(px(12.)).font_weight(gpui::FontWeight::BOLD).text_color(color).child(glyph)
+}
+
 /// Die Kappe einer Taste, noch ohne Trefferfläche.
 fn cap(i: usize, key: Key, ctl: &LayoutCtl, t: &crate::theme::Theme) -> Pill {
     let label = key_label(key, ctl);
     let pill = match key {
         Key::Layout => Pill::new(("bar", i), "").icon(icons::layout(ctl.mode, t.sub)).min_width(26.),
-        Key::Less => Pill::new(("bar", i), "").icon(icons::arrow(true, t.sub)).min_width(22.),
-        Key::More => Pill::new(("bar", i), "").icon(icons::arrow(false, t.sub)).min_width(22.),
+        Key::Less => Pill::new(("bar", i), "").icon(arrow_glyph("‹", t.sub)).min_width(ARROW_WIDTH),
+        Key::More => Pill::new(("bar", i), "").icon(arrow_glyph("›", t.sub)).min_width(ARROW_WIDTH),
         Key::Split => {
             let dir = ctl.split.unwrap_or('a');
             Pill::new(("bar", i), label.clone()).icon(colored(label, if dir == 'a' { t.muted } else { t.fg }))
@@ -251,7 +259,7 @@ fn left_pills(ctl: &LayoutCtl, t: &crate::theme::Theme) -> impl IntoElement + us
 fn left_width(ctl: &LayoutCtl) -> f32 {
     let width = |key: Key| match key {
         Key::Layout => 26.,
-        Key::Less | Key::More => 22.,
+        Key::Less | Key::More => ARROW_WIDTH,
         Key::Cols => key_label(key, ctl).chars().count() as f32 * 6. - 14.,
         other => key_label(other, ctl).chars().count() as f32 * 6. + 18.,
     };

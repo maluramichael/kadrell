@@ -26,6 +26,22 @@ pub(crate) fn dev_loading() -> bool {
     std::env::var("KADRELL_DEV_CLI").is_ok_and(|v| v == "loading")
 }
 
+/// Eingaben einer Prüfung von `claude` (`KADRELL_DEV_CLI` ersetzt sie durch einen festen Zustand).
+pub(crate) struct CheckInput {
+    dev: Option<Health>,
+    previous: crate::state::launch::LaunchEnv,
+    override_binary: String,
+}
+
+/// Die Prüfung selbst, blockiert: nur auf dem Hintergrund-Executor aufrufen.
+pub(crate) fn run_check(input: CheckInput) -> (Health, Option<crate::state::launch::LaunchEnv>) {
+    if let Some(health) = input.dev {
+        return (health, None);
+    }
+    let done = cli_check::recheck(&input.previous, &input.override_binary);
+    (done.health, Some(done.env))
+}
+
 impl Shell {
     /// Beim Start: erste Prüfung und die Neuprüfung beim Aktivieren des Fensters (installiert man `claude` nach dem
     /// Start, verschwindet der Fehler ohne Neustart).
@@ -39,25 +55,25 @@ impl Shell {
         if std::env::var_os("KADRELL_DEV_TIP").is_some() {
             self.state.attention.tip = Some(kadrell_claude::attention::TipText::WaitingMeansYellow);
         }
-        self.recheck_cli(cx);
+        // Die erste Prüfung gehört zur Startreihenfolge (`start_poll`), erst danach kommt der erste Poll.
+    }
+
+    /// Was die Prüfung braucht, auf dem GPUI-Thread eingesammelt.
+    pub(crate) fn check_input(&self) -> CheckInput {
+        CheckInput { dev: dev_health(), previous: self.state.env.clone(), override_binary: self.state.settings.claude_binary() }
     }
 
     /// `claude` neu suchen und prüfen (Hintergrund), dann Fehler und Warnung eintragen.
     pub(crate) fn recheck_cli(&mut self, cx: &mut Context<Self>) {
-        if let Some(health) = dev_health() {
-            self.apply_cli_health(health, None, cx);
-            return;
-        }
-        let previous = self.state.env.clone();
-        let override_binary = self.state.settings.claude_binary();
+        let input = self.check_input();
         cx.spawn(async move |this, cx| {
-            let done = cx.background_executor().spawn(async move { cli_check::recheck(&previous, &override_binary) }).await;
-            let _ = this.update(cx, |shell, cx| shell.apply_cli_health(done.health, Some(done.env), cx));
+            let (health, env) = cx.background_executor().spawn(async move { run_check(input) }).await;
+            let _ = this.update(cx, |shell, cx| shell.apply_cli_health(health, env, cx));
         })
         .detach();
     }
 
-    fn apply_cli_health(&mut self, health: Health, env: Option<crate::state::launch::LaunchEnv>, cx: &mut Context<Self>) {
+    pub(crate) fn apply_cli_health(&mut self, health: Health, env: Option<crate::state::launch::LaunchEnv>, cx: &mut Context<Self>) {
         if let Some(env) = env {
             self.state.env.claude = env.claude;
         }

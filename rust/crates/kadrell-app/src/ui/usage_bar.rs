@@ -1,9 +1,7 @@
 //! Rechte Seite der Leiste wie `StatusBarView.swift`: Konto-Taste, „N trennen“, „N warten“, Nutzungswerte als flache
 //! Module und das schwarze Status-Display mit Lampe und Uhr. Die Teile entstehen von rechts nach links mit geschätzter
 //! Breite (die Schrift ist dicktengleich: Zeichen mal 0,6 der Schriftgröße); `BarPlan::fit` lässt in fester Reihenfolge
-//! Teile weg, bis alles neben die linken Tasten passt.
-//!
-//! Nicht übernommen: das Hochzählen der Werte beim Wechsel (0,5 s).
+//! Teile weg, bis alles neben die linken Tasten passt. Neue Nutzungswerte zählen in 0,5 s hoch (`count_up`).
 
 use std::rc::Rc;
 
@@ -17,6 +15,7 @@ use kadrell_i18n::trd;
 use super::bar::ExtStatus;
 use super::bar_keys::{Flash, Press, Region, press_key};
 use super::chrome::{screen_face, screen_ink, screen_muted, v_seam};
+use super::count_up::{self, Fade};
 use super::pill::{Pill, PillKind};
 use super::tooltip;
 use crate::theme::Theme;
@@ -65,6 +64,8 @@ pub struct BarCtl {
     pub ext: Vec<ExtStatus>,
     /// Neuere Version bereit (`misc::update`): dezente Taste „<Version> verfügbar“.
     pub update: Option<UpdatePill>,
+    /// Läuft gerade das Hochzählen, der Stand davor und der Fortschritt.
+    pub fade: Option<Fade>,
 }
 
 /// Die Update-Taste: Versionsnummer und was ein Klick tut (Changelog und Download-Link zeigen).
@@ -97,6 +98,8 @@ fn tone_color(tone: Tone, t: &Theme) -> Hsla {
 struct UsageRow {
     key: UsageKey,
     pct: Option<i32>,
+    /// Stand vor dem letzten Wechsel, Ausgangswert fürs Hochzählen.
+    from: Option<i32>,
     plan: Option<i32>,
     reset: Option<f64>,
     label: String,
@@ -105,18 +108,24 @@ struct UsageRow {
 /// Nutzungswerte von rechts: Fable-Woche, 7 Tage, 5 Stunden, soweit die Einstellungen sie zeigen.
 fn usage_rows(b: &BarCtl) -> Vec<UsageRow> {
     let u = &b.view.usage;
+    let f = b.fade.as_ref().map(|f| f.from.clone()).unwrap_or_default();
     let rows = [
-        UsageRow { key: UsageKey::Fable, pct: u.fable, plan: None, reset: u.weekly_resets, label: trd!("Fable-Kontingent") },
-        UsageRow { key: UsageKey::Weekly, pct: u.weekly, plan: u.weekly_plan(b.now), reset: u.weekly_resets, label: trd!("Claude-Nutzung der letzten 7 Tage") },
-        UsageRow { key: UsageKey::Session, pct: u.session, plan: None, reset: u.session_resets, label: trd!("Claude-Nutzung der letzten 5 Stunden") },
+        UsageRow { key: UsageKey::Fable, pct: u.fable, from: f.fable, plan: None, reset: u.weekly_resets, label: trd!("Fable-Kontingent") },
+        UsageRow { key: UsageKey::Weekly, pct: u.weekly, from: f.weekly, plan: u.weekly_plan(b.now), reset: u.weekly_resets, label: trd!("Claude-Nutzung der letzten 7 Tage") },
+        UsageRow { key: UsageKey::Session, pct: u.session, from: f.session, plan: None, reset: u.session_resets, label: trd!("Claude-Nutzung der letzten 5 Stunden") },
     ];
     rows.into_iter().filter(|r| b.shown.allows(r.key, b.view.show_session)).collect()
 }
 
+/// Angezeigter Wert: beim Hochzählen der Zwischenstand, sonst der Stand selbst (`pctString`).
+fn shown_pct(row: &UsageRow, b: &BarCtl) -> Option<i32> {
+    row.pct.map(|target| count_up::shown(target, row.from, b.fade.as_ref().map(|f| f.progress)))
+}
+
 /// Wert des Moduls: Plan-Stand vorweg („25%/32%“), dann der Prozentwert.
-fn value_text(row: &UsageRow) -> (String, String) {
+fn value_text(row: &UsageRow, shown: Option<i32>) -> (String, String) {
     let plan = row.plan.filter(|_| row.pct.is_some()).map(|p| format!("{p}%/")).unwrap_or_default();
-    (plan, row.pct.map_or_else(|| "–%".to_string(), |v| format!("{v}%")))
+    (plan, shown.map_or_else(|| "–%".to_string(), |v| format!("{v}%")))
 }
 
 fn usage_tip(row: &UsageRow, b: &BarCtl) -> String {
@@ -225,8 +234,9 @@ fn usage_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
         .into_iter()
         .filter(|r| plan.shows(r.key))
         .map(|row| {
-            let (prefix, value) = value_text(&row);
-            let color = match row.pct {
+            let shown_pct = shown_pct(&row, b);
+            let (prefix, value) = value_text(&row, shown_pct);
+            let color = match shown_pct {
                 Some(v) if !stale => tone_color(logic::usage_tone(v, row.plan), t),
                 _ => t.muted,
             };
@@ -396,7 +406,7 @@ fn display_part(b: &BarCtl, plan: &BarPlan, clock: &str, t: &Theme) -> Part {
         .rounded(px(5.))
         .bg(screen_face(t))
         .text_size(px(10.5))
-        .child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(hsla(0., 0., 1., 0.06)))
+        .child(div().absolute().top_0().left_0().right_0().h(px(super::overlay::hairline())).bg(hsla(0., 0., 1., 0.06)))
         .child(div().size(px(7.)).flex_none().rounded_full().bg(lamp).mr(px(6.)))
         .child(label)
         .child(div().flex_1().min_w(px(if text_w > 0. { 8. } else { 0. })))
@@ -494,6 +504,7 @@ pub(crate) mod tests {
             flash: Rc::new(|_, _| {}),
             ext: Vec::new(),
             update: None,
+            fade: None,
         }
     }
 

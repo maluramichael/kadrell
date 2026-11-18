@@ -273,7 +273,7 @@ impl Shell {
 
     /// Beim Start: fremde Claude-Sessions erfassen. Hintergrund-Sessions bietet Kadrell zur Übernahme an (nur im
     /// Standardprofil), die anderen zählt der Leerzustand.
-    fn start_adopt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn start_adopt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if dev_overlay().as_deref() == Some("adopt") {
             return self.offer_adopt(dev_plan(), None, window, cx);
         }
@@ -374,7 +374,7 @@ impl Shell {
     /// Einmal nach dem Aufbau der Shell: Prüfungen und Schleifen starten, Dialoge für Screenshots öffnen.
     pub(crate) fn start_misc(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.start_update_check(window, cx);
-        self.start_adopt(window, cx);
+        // Die Übernahme-Suche läuft nach dem ersten Poll (`wire::after_first_poll`, Swift: `boot`).
         self.start_auto_detach(window, cx);
         match dev_overlay().as_deref() {
             Some("help") => self.open_help_view(Kind::Help, window, cx),

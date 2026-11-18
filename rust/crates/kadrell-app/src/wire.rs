@@ -211,32 +211,41 @@ impl Shell {
         .detach();
     }
 
-    // MARK: Statuspoll
+    // MARK: Start und Statuspoll
 
-    /// Pollt Session-Dateien und Transcripts im Hintergrund, solange die App läuft.
+    /// Startreihenfolge wie `AppDelegate.boot`: `claude` prüfen, erster Poll, `app.ready`, Verlauf aufwärmen,
+    /// Übernahme anbieten, erst danach das regelmäßige Pollen. Im Hintergrund (Fenster versteckt oder nicht aktiv)
+    /// pollt es seltener, beim Zurückkommen sofort (`SessionRegistry.setBackground`).
     pub(crate) fn start_poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
+            let Ok(input) = this.update(cx, |shell, _| shell.check_input()) else { return };
+            let (health, env) = cx.background_executor().spawn(async move { crate::cli_wire::run_check(input) }).await;
+            if this.update(cx, |shell, cx| shell.apply_cli_health(health, env, cx)).is_err() {
+                return;
+            }
             if crate::cli_wire::dev_loading() {
                 cx.background_executor().timer(Duration::from_secs(60)).await;
             }
-            let mut first = true;
-            loop {
-                let Ok(job) = this.update(cx, |shell, _| shell.state.poll_job()) else { break };
-                let (change, messages) = cx.background_executor().spawn(async move { job.run_counted() }).await;
-                let wait = this.update_in(cx, |shell, window, cx| {
-                    shell.state.count_stat(kadrell_core::stats::StatKey::Messages, messages as i64);
-                    shell.state.apply_registry(change);
-                    shell.sync(window, cx);
-                    if std::mem::take(&mut first) {
-                        shell.ext.emit("app.ready", serde_json::json!({}));
-                    }
-                    shell.state.poll_interval()
-                });
-                let Ok(wait) = wait else { break };
-                cx.background_executor().timer(Duration::from_secs_f64(wait)).await;
+            if !poll_once(&this, cx).await {
+                return;
             }
+            let _ = this.update_in(cx, |shell, window, cx| shell.after_first_poll(window, cx));
+            poll_loop(&this, cx).await;
         })
         .detach();
+    }
+
+    /// Nach dem ersten Poll: `app.ready`, Verlaufssuche vorwärmen, Hintergrund-Sessions zur Übernahme anbieten.
+    fn after_first_poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.ext.emit("app.ready", serde_json::json!({}));
+        self.refresh_history(cx);
+        self.start_adopt(window, cx);
+    }
+
+    fn apply_poll(&mut self, change: kadrell_claude::registry::Change, messages: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.state.count_stat(kadrell_core::stats::StatKey::Messages, messages as i64);
+        self.state.apply_registry(change);
+        self.sync(window, cx);
     }
 
     // MARK: Beenden
@@ -253,6 +262,33 @@ impl Shell {
         self.state.profile.clean_up();
     }
 }
+
+/// Ein Poll auf dem Hintergrund-Executor, Ergebnis in den Zustand. `false`: die Shell gibt es nicht mehr.
+async fn poll_once(this: &gpui::WeakEntity<Shell>, cx: &mut gpui::AsyncWindowContext) -> bool {
+    let Ok(job) = this.update(cx, |shell, _| shell.state.poll_job()) else { return false };
+    let (change, messages) = cx.background_executor().spawn(async move { job.run_counted() }).await;
+    this.update_in(cx, |shell, window, cx| shell.apply_poll(change, messages, window, cx)).is_ok()
+}
+
+/// Das regelmäßige Pollen: alle halbe Sekunde nachsehen, ob der Takt (2 s, im Hintergrund 5 s) abgelaufen ist oder
+/// das Fenster eben aus dem Hintergrund kam.
+async fn poll_loop(this: &gpui::WeakEntity<Shell>, cx: &mut gpui::AsyncWindowContext) {
+    let mut last = std::time::Instant::now();
+    loop {
+        cx.background_executor().timer(POLL_TICK).await;
+        let elapsed = last.elapsed().as_secs_f64();
+        let Ok(due) = this.update(cx, |shell, _| shell.state.poll_due(elapsed)) else { return };
+        if due {
+            if !poll_once(this, cx).await {
+                return;
+            }
+            last = std::time::Instant::now();
+        }
+    }
+}
+
+/// So oft prüft die Pollschleife, ob ein Poll fällig ist.
+const POLL_TICK: Duration = Duration::from_millis(500);
 
 /// Zeilen für `KADRELL_DEV_*`: Schlüssel der Sessions an den Positionen `g,s;g,s`.
 pub fn keys_at(groups: &[model::Group], spec: &str) -> Vec<String> {

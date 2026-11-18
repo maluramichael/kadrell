@@ -212,7 +212,6 @@ impl Shell {
         shell.open_quick_start_from_env(window, cx);
         shell.open_agent_pick_from_env(window, cx);
         shell.open_remote_from_env(window, cx);
-        shell.refresh_history(cx);
         shell.open_settings_from_env(window, cx);
         shell.open_groups_from_env(window, cx);
         shell.start_ext_ui(window, cx);
@@ -510,6 +509,7 @@ impl Render for Shell {
         let mut ctl = self.layout_ctl(cx);
         let mut bar = self.bar_ctl(window, cx);
         bar.update = self.update_pill(cx);
+        self.animate_usage(&mut bar, window);
         ctl.usage = Some(bar);
         self.note_main_shown();
         let workspace = ui::layout::workspace(self, cx);
