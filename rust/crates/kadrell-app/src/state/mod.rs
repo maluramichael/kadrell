@@ -12,6 +12,8 @@ mod poll;
 pub mod stats;
 pub mod launch;
 pub mod mapping;
+mod dev;
+pub mod lifecycle;
 mod tiles;
 mod titles;
 mod workspace;
@@ -73,6 +75,8 @@ pub struct AppState {
     prompts: HashMap<String, String>,
     /// Sessions, deren Prozess die Oberfläche als Nächstes starten soll.
     wanted: Vec<String>,
+    /// Lazy Start in Wellen und Verlauf der Terminals (`lifecycle`).
+    starts: lifecycle::Starts,
     pub selected: Vec<String>,
     pub focused: Option<String>,
     /// Die Kachel, die vor dem letzten Fokuswechsel den Fokus hatte (⌥⇥).
@@ -139,6 +143,7 @@ impl AppState {
             tiles: HashMap::new(),
             prompts: HashMap::new(),
             wanted: Vec::new(),
+            starts: lifecycle::Starts::default(),
             selected: Vec::new(),
             focused: None,
             last_focused: None,
@@ -175,7 +180,9 @@ impl AppState {
         self.layout = LayoutMode::from_raw(&self.settings.string_or("workspace.mode", "grid")).unwrap_or_default();
         let keys = if keys.is_empty() { self.ordered_keys().into_iter().take(1).collect() } else { keys };
         let focus = focus.or_else(|| keys.first().cloned());
+        self.starts.restoring = true; // beim Start warten die gespeicherten Kacheln auf ihre Welle
         self.set_selection(keys, focus);
+        self.starts.restoring = false;
     }
 
     fn save_view(&self) {
@@ -267,10 +274,9 @@ impl AppState {
     }
 
     fn queue_visible_starts(&mut self) {
-        for key in self.selected.clone() {
-            if self.run(&key) == Run::NotStarted && !self.wanted.contains(&key) {
-                self.wanted.push(key);
-            }
+        self.enqueue_visible();
+        if !self.starts.restoring {
+            self.start_selected_now();
         }
     }
 
@@ -340,6 +346,7 @@ impl AppState {
         }
         self.wanted.retain(|k| !ids.contains(k));
         self.queue_sound(kadrell_tray::Sound::Close);
+        self.starts.forget(&ids.iter().cloned().collect::<Vec<_>>());
         self.store.remove_sessions(&ids, now_secs());
         self.registry.lock().unwrap_or_else(PoisonError::into_inner).remove(&ids, now_ms());
         self.store.assign();

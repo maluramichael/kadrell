@@ -120,12 +120,27 @@ impl Shell {
                 Err(message) => eprintln!("kadrell: {message}"),
             }
         }
+        self.state.apply_scrollback();
+        self.arm_wave_timer(window, cx);
         let state = &self.state;
-        self.panes.retain(|key, _| state.session(key).is_some());
+        self.panes.retain(|key, _| state.session(key).is_some() && state.mounted(key));
+    }
+
+    /// Wartet noch eine Welle des Lazy Starts (4 Kacheln je 500 ms), kommt die Oberfläche dann wieder vorbei.
+    fn arm_wave_timer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(wait) = self.state.arm_wave_timer() else { return };
+        cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(wait).await;
+            let _ = this.update_in(cx, |shell, window, cx| {
+                shell.state.wave_timer_fired();
+                shell.sync(window, cx);
+            });
+        })
+        .detach();
     }
 
     fn start_pane(&mut self, key: String, spec: LaunchSpec, window: &mut Window, cx: &mut Context<Self>) {
-        let term = TermSpec { program: spec.program, args: spec.args, cwd: PathBuf::from(&spec.cwd), env: env_pairs(&spec.env) };
+        let term = TermSpec { program: spec.program, args: spec.args, cwd: PathBuf::from(&spec.cwd), env: env_pairs(&spec.env), scrollback: Some(self.state.scrollback()) };
         let parts = match kadrell_term::start_pty(term) {
             Ok(parts) => parts,
             Err(e) => {
@@ -227,7 +242,8 @@ impl Shell {
 
     /// Beim Beenden: Prozesse enden, der Kanal verschwindet, ein Wegwerfprofil räumt sich weg.
     pub(crate) fn shutdown(&mut self) {
-        self.state.shutdown_all();
+        let pids = self.state.shutdown_all();
+        kadrell_term::process::terminate_all(&pids, kadrell_term::process::SHUTDOWN_TIMEOUT);
         self.tray.close();
         self.server = None;
         if !self.state.profile.temporary {

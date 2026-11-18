@@ -70,6 +70,33 @@ pub struct Session {
     /// Ohne Gruppierung: Name und Farbe der Gruppe für das Präfix „projekt › “ vor dem Titel.
     pub project: Option<(String, u32)>,
     pub pane: Option<Entity<TerminalPane>>,
+    /// Wie die Kachel ihren Prozess zeigt (`ui::tile_look`).
+    pub look: SessionLook,
+}
+
+/// Prozessseite einer Kachel: was `CellView.State` zusätzlich zur Session kennt.
+#[derive(Clone, Default, Debug, PartialEq)]
+pub struct SessionLook {
+    /// Der Ordner der Session fehlt (kein Prozess gestartet).
+    pub missing_folder: bool,
+    /// Startfehler: Exit-Code eines Prozesses, der kurz nach dem Start gestorben ist.
+    pub exit_code: Option<i32>,
+    /// Ein Prozess hängt an der Session (auch wenn sein Terminal in einem anderen Fenster liegt).
+    pub attached: bool,
+    /// Letzte Zeilen für Kacheln ohne Terminal.
+    pub lines: Vec<String>,
+    /// Ort der Session für „ORDNER FEHLT · <Ordner>“, mit `~`.
+    pub short_cwd: String,
+}
+
+fn look_of(s: &CoreSession, state: &AppState) -> SessionLook {
+    SessionLook {
+        missing_folder: state.missing_folder(&s.id),
+        exit_code: state.exit_code(&s.id),
+        attached: state.mounted(&s.id),
+        lines: state.snapshot(&s.id),
+        short_cwd: folders::short_path(&s.cwd, &state.home()),
+    }
 }
 
 impl Session {
@@ -122,6 +149,7 @@ fn session_view(s: &CoreSession, state: &AppState, panes: &HashMap<String, Entit
         message: None,
         project: None,
         pane: panes.get(&s.id).cloned(),
+        look: look_of(s, state),
     }
 }
 
@@ -235,6 +263,7 @@ pub fn test_session(key: &str) -> Session {
         message: None,
         project: None,
         pane: None,
+        look: Default::default(),
     }
 }
 

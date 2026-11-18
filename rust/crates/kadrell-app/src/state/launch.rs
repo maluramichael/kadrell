@@ -92,11 +92,15 @@ pub fn shell_command() -> (String, Vec<String>) {
         let path = env.iter().find(|(k, _)| k.eq_ignore_ascii_case("PATH")).map(|(_, v)| v.clone()).unwrap_or_default();
         let found = ["pwsh", "powershell"].iter().find_map(|n| find_in_path(n, &path, &exts, &is_file));
         (found.unwrap_or_else(|| "powershell.exe".into()), Vec::new())
-    } else if cfg!(target_os = "macos") {
-        ("/bin/zsh".into(), vec!["-l".into()])
     } else {
-        (std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into()), Vec::new())
+        unix_shell(std::env::var("SHELL").ok())
     }
+}
+
+/// Login-Shell des Nutzers (`$SHELL`, sonst `/bin/zsh`) als Login-Shell gestartet. Swift setzt argv[0] auf `-<shell>`
+/// wie Terminal.app; die PTY-Schicht kann argv[0] nicht ändern, `-l` bewirkt dasselbe.
+fn unix_shell(shell: Option<String>) -> (String, Vec<String>) {
+    (shell.filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into()), vec!["-l".into()])
 }
 
 /// Startkommando für `session`. `prompt` ist die erste Nachricht einer neuen Konversation.
@@ -152,6 +156,13 @@ mod tests {
         assert_eq!(spec.env["KADRELL_SESSION_KEY"], "key-1");
         assert!(spec.env.contains_key("KADRELL_SOCKET") && spec.env.contains_key("KADRELL"));
         assert!(!spec.env.contains_key("CLAUDECODE"), "Marker der umgebenden Session fliegen raus");
+    }
+
+    #[test]
+    fn a_shell_tile_uses_the_users_shell_and_falls_back_to_zsh() {
+        assert_eq!(unix_shell(Some("/usr/bin/fish".into())), ("/usr/bin/fish".to_string(), vec!["-l".to_string()]));
+        assert_eq!(unix_shell(None).0, "/bin/zsh");
+        assert_eq!(unix_shell(Some(String::new())).0, "/bin/zsh");
     }
 
     #[test]

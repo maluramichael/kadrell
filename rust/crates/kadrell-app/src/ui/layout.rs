@@ -4,17 +4,20 @@
 use kadrell_core::Settings;
 use kadrell_i18n::trd;
 use std::cell::Cell;
+use std::time::Duration;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Bounds, Context, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement,
-    Pixels, ScrollEvent, Stateful, Styled, canvas, div, px,
+    Animation, AnimationExt, AnyElement, Bounds, Context, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement,
+    Pixels, ScrollEvent, Stateful, StatefulInteractiveElement, Styled, canvas, div, px,
 };
 
 use super::groups::drag::DragTile;
 use super::model::Group;
-use super::tile::{self, TileStyle};
+use super::tile;
+use super::tile_look;
+use super::{module_corner, stack_row};
 use super::theme;
 pub use super::tiling::*;
 use crate::Shell;
@@ -137,6 +140,13 @@ pub struct LayoutState {
     /// Abstand zwischen den Kacheln und zum Rand (`tiles.gap`) und UI-Größe, bei jedem Zeichnen aus `appearance` gesetzt.
     pub gap: f32,
     pub ui_scale: f32,
+    /// Die Kachel (Schlüssel), über der die Maus steht: Symbole im Kopf, Reserve rechts.
+    pub hover: Option<String>,
+    /// Kacheln des letzten Zeichnens und davon die, die erst danach dazukamen und noch einblenden (0,18 s).
+    seen: std::collections::HashSet<String>,
+    fading: std::collections::HashSet<String>,
+    /// Das erste Zeichnen ist vorbei: ab jetzt blenden neue Kacheln ein, beim allerersten Laden erscheint alles sofort.
+    loaded: bool,
 }
 
 impl LayoutState {
@@ -156,13 +166,37 @@ impl LayoutState {
             planned_width: 0.,
             gap: GAP,
             ui_scale: 1.,
+            hover: None,
+            seen: Default::default(),
+            fading: Default::default(),
+            loaded: false,
         }
+    }
+
+    /// Merkt die sichtbaren Kacheln: wer nach dem ersten Laden neu dazukommt, blendet ein.
+    fn note_visible(&mut self, keys: &[String]) {
+        for key in keys.iter().filter(|k| self.loaded && !self.seen.contains(*k)) {
+            self.fading.insert(key.clone());
+        }
+        self.seen = keys.iter().cloned().collect();
+        self.fading.retain(|k| self.seen.contains(k));
+        self.loaded = true;
+    }
+
+    /// Blendet die Kachel gerade ein?
+    fn is_fading(&self, key: &str) -> bool {
+        self.fading.contains(key)
+    }
+
+    /// Spaltenzahl steht auf „automatisch“ (Grid, 0): die Taste zeigt „AUTO SP“ gedämpft.
+    pub fn cols_auto(&self) -> bool {
+        self.mode == LayoutMode::Grid && self.cols == 0
     }
 
     /// Layout samt gespeicherten Spalten, Teilungen und Verhältnissen aus den Einstellungen des Profils.
     pub fn from_settings(mode: LayoutMode, settings: &Settings) -> Self {
         let mut state = Self::new(mode);
-        state.cols = settings.i64_or(GRID_COLUMNS_KEY, 0).clamp(0, 9) as usize;
+        state.cols = settings.i64_or(GRID_COLUMNS_KEY, 0).clamp(0, MAX_COLS as i64) as usize;
         state.scroll_cols = settings.i64_or(SCROLL_COLUMNS_KEY, 2).clamp(1, 12) as usize;
         state.splits = settings.string_or(SPLITS_KEY, "");
         for key in settings.keys().filter(|k| k.starts_with(RATIO_PREFIX) && *k != GRID_COLUMNS_KEY && *k != SCROLL_COLUMNS_KEY) {
@@ -187,7 +221,7 @@ impl LayoutState {
     /// Rahmen und Grenzen für `n` Kacheln mit Fokus `active`; die Rahmen der Stack-Zeilen enthalten beim aktiven den
     /// Körper. Merkt sich Rahmen und Grenzen und führt beim Scrollen den Versatz nach.
     pub fn plan(&mut self, n: usize, active: usize) -> (Vec<Rect>, Vec<SplitLine>) {
-        let area = if n > 1 { self.area().inset(self.gap) } else { self.area() };
+        let area = self.inset_area();
         if (area.w - self.planned_width).abs() > 0.5 {
             self.planned_width = area.w;
             self.reveal = true;
@@ -202,6 +236,22 @@ impl LayoutState {
         self.frames = frames.clone();
         self.dividers = dividers.clone();
         (frames, dividers)
+    }
+
+    /// Die Fläche mit dem Außenrand: der Abstand gilt rundherum, auch bei einer einzigen Kachel, Zoom und Vorschau
+    /// (`bounds.insetBy(gap, gap)`).
+    fn inset_area(&self) -> Rect {
+        self.area().inset(self.gap)
+    }
+
+    /// Stack (i3-Akkordeon): eine Zeile je Kachel und der Körper der aktiven direkt unter ihrer Zeile. Gilt schon für eine
+    /// einzige Kachel; Zoom und Vorschau planen ohne Stack. Gibt Zeilen und Körper getrennt zurück.
+    pub fn plan_stack(&mut self, n: usize, active: usize) -> (Vec<Rect>, Rect) {
+        let area = self.inset_area();
+        let (rows, body) = stack(n, active.min(n.saturating_sub(1)), area, tile_look::header_height(self.ui_scale));
+        self.frames = rows.clone();
+        self.dividers = Vec::new();
+        (rows, body)
     }
 
     fn template(&mut self, n: usize, area: Rect, active: usize) -> (Vec<Rect>, Vec<SplitLine>) {
@@ -299,33 +349,70 @@ fn grip(line: &SplitLine, i: usize, cx: &mut Context<Shell>) -> AnyElement {
     .into_any_element()
 }
 
-fn placed(r: Rect, g: usize, s: usize, key: &str, tile: AnyElement, cx: &mut Context<Shell>) -> AnyElement {
+/// Was unter dem Zeiger einer Kachel bei einem Klick liegt: ein Symbol der Kopfzeile oder einer Stack-Zeile (der Klick
+/// gehört dann dem Symbol und fokussiert die Kachel nicht), sonst die Kachel selbst.
+#[derive(Clone, Copy, PartialEq)]
+enum Spot {
+    Tile,
+    /// Körper einer Stack-Kachel: kein Kopf, keine Symbole.
+    Body,
+    Row,
+}
+
+/// Liegt der Klick auf einem Symbol? Punkte ab linker oberer Ecke der Kachel, Maße in logischen Punkten.
+fn on_icon(spot: Spot, local: (f32, f32), width: f32, header: bool) -> bool {
+    match spot {
+        Spot::Tile => header && tile_look::hit_icon(local, width).is_some(),
+        Spot::Body => false,
+        Spot::Row => tile_look::row_zone(width - local.0) != tile_look::RowZone::Row,
+    }
+}
+
+fn placed(r: Rect, g: usize, s: usize, key: &str, spot: Spot, tile: AnyElement, cx: &mut Context<Shell>) -> gpui::Stateful<gpui::Div> {
     let t = theme(cx);
+    let a = crate::appearance::current(cx);
     let host = format!("tile-{}", g * 100 + s);
-    let target = key.to_string();
-    let accent = t.accent;
-    // Rahmen in Akzentfarbe, solange eine Kachel darübergezogen wird.
+    let (target, hover_key) = (key.to_string(), key.to_string());
+    let (fg, corner) = (t.fg, tile_look::corner_radius((r.x, r.y), a.gap, a.scale));
+    // Rahmen in Vordergrundfarbe, 2 px, solange eine Kachel darübergezogen wird.
     let hot = div()
         .group(format!("{host}-hot"))
         .absolute()
         .size_full()
-        .rounded(px(6.))
+        .rounded_tl(px(corner))
         .border_2()
         .border_color(gpui::transparent_black())
-        .group_drag_over::<DragTile>(host.clone(), move |s| s.border_color(accent));
+        .group_drag_over::<DragTile>(host.clone(), move |s| s.border_color(fg));
+    let (width, scale, header) = (r.w / a.scale, a.scale, true);
     div()
         .id(("tile", g * 100 + s))
         .group(host)
         .on_drop(cx.listener(move |this, d: &DragTile, window, cx| this.drop_tile(d, &target, window, cx)))
+        .on_hover(cx.listener(move |this, hovering: &bool, _, cx| {
+            let was = this.layout.hover.clone();
+            if *hovering {
+                this.layout.hover = Some(hover_key.clone());
+            } else if this.layout.hover.as_deref() == Some(hover_key.as_str()) {
+                this.layout.hover = None;
+            }
+            if was != this.layout.hover {
+                cx.notify();
+            }
+        }))
         .absolute()
         .left(px(r.x))
         .top(px(r.y))
         .w(px(r.w))
         .h(px(r.h))
-        .capture_any_mouse_down(cx.listener(move |this, _, window, cx| this.focus_tile(g, s, window, cx)))
+        .capture_any_mouse_down(cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
+            let (ox, oy, _, _) = this.layout.measured.get().unwrap_or((0., 0., 0., 0.));
+            let local = ((ev.position.x.as_f32() - ox - r.x) / scale, (ev.position.y.as_f32() - oy - r.y) / scale);
+            if !on_icon(spot, local, width, header) {
+                this.focus_tile(g, s, window, cx);
+            }
+        }))
         .child(tile)
         .child(hot)
-        .into_any_element()
 }
 
 /// Sitzt die Fläche anders als zuletzt gemessen, neu zeichnen, damit die Rahmen stimmen. Fängt außerdem das
@@ -366,23 +453,92 @@ fn measure_with(measured: Measured, entity: gpui::EntityId, scroller: Option<gpu
     .size_full()
 }
 
+/// Klick auf ein Symbol einer Kachel oder Stack-Zeile: die Shell führt es aus (`tile_actions`).
+fn icon_click(cx: &mut Context<Shell>, key: &str) -> tile::IconClick {
+    let (entity, key) = (cx.entity(), key.to_string());
+    Rc::new(move |icon, ev, window, app| {
+        let force = ev.modifiers().alt;
+        entity.update(app, |this, cx| this.tile_icon(&key, icon, force, window, cx));
+    })
+}
+
+/// Eine Kachel mit ihrer Lage; neue blenden in 0,18 s ein.
+fn one_tile(shell: &Shell, i: usize, frame: Rect, stacked: bool, cx: &mut Context<Shell>) -> AnyElement {
+    let visible = shell.visible();
+    let (g, s) = visible[i];
+    let (group, session): (&Group, _) = (&shell.groups[g], &shell.groups[g].sessions[s]);
+    let marks = shell.tile_marks((g, s), visible.len());
+    let a = crate::appearance::current(cx);
+    let geo = tile::Geometry {
+        width: frame.w,
+        height: frame.h,
+        corner: tile_look::corner_radius((frame.x, frame.y), a.gap, a.scale),
+        hovered: shell.layout.hover.as_deref() == Some(session.key.as_str()),
+        header_hidden: stacked,
+        row_below: stacked && i + 1 != visible.len(),
+    };
+    let elsewhere = shell.owners.elsewhere(0, &session.key);
+    let el = tile::cell(&tile::Cell { group, session, marks, geo, body: true, elsewhere, on_icon: Some(icon_click(cx, &session.key)) }, cx);
+    let spot = if stacked { Spot::Body } else { Spot::Tile };
+    fade_in(shell, &session.key, placed(frame, g, s, &session.key, spot, el, cx))
+}
+
+/// Neue Kacheln blenden in 0,18 s ein (nicht beim ersten Laden).
+fn fade_in(shell: &Shell, key: &str, el: gpui::Stateful<gpui::Div>) -> AnyElement {
+    if !shell.layout.is_fading(key) {
+        return el.into_any_element();
+    }
+    el.with_animation(gpui::ElementId::Name(format!("tile-fade-{key}").into()), Animation::new(Duration::from_millis(180)), |el, delta| el.opacity(delta)).into_any_element()
+}
+
+/// Eine Stack-Zeile mit ihrer Lage.
+fn one_row(shell: &Shell, i: usize, frame: Rect, first: bool, body_above: bool, body_below: bool, cx: &mut Context<Shell>) -> AnyElement {
+    let visible = shell.visible();
+    let (g, s) = visible[i];
+    let (group, session): (&Group, _) = (&shell.groups[g], &shell.groups[g].sessions[s]);
+    let a = crate::appearance::current(cx);
+    let on = shell.tile_marks((g, s), visible.len()).active || shell.ws.sync;
+    let row = stack_row::RowCell {
+        group,
+        session,
+        width: frame.w,
+        height: frame.h,
+        on,
+        hovered: shell.layout.hover.as_deref() == Some(session.key.as_str()),
+        first,
+        body_above,
+        body_below,
+        corner: tile_look::corner_radius((frame.x, frame.y), a.gap, a.scale),
+        show_path: shell.state.settings.stack_show_path(),
+        on_icon: Some(icon_click(cx, &session.key)),
+    };
+    let el = stack_row::row(&row, cx);
+    fade_in(shell, &session.key, placed(frame, g, s, &session.key, Spot::Row, el, cx))
+}
+
+/// Stack: Zeilen aller Kacheln und der Körper der aktiven. Die Zeilen liegen auf ihrem Platz, der Körper direkt unter seiner.
+fn stack_tiles(shell: &Shell, rows: &[Rect], body: Rect, active: usize, cx: &mut Context<Shell>) -> Vec<AnyElement> {
+    let n = rows.len();
+    let mut out = Vec::new();
+    for (i, row) in rows.iter().enumerate() {
+        out.push(one_row(shell, i, *row, i == 0, i == active + 1, i == active, cx));
+    }
+    if n > 0 {
+        out.push(one_tile(shell, active, body, true, cx));
+    }
+    out
+}
+
 fn tiles(shell: &Shell, frames: &[Rect], cx: &mut Context<Shell>) -> Vec<AnyElement> {
     let visible = shell.visible();
-    let style = TileStyle::for_count(visible.len());
-    let stacked = shell.layout.mode == LayoutMode::Stack && visible.len() > 1;
     let area = shell.layout.area();
     let mut out = Vec::new();
-    for (i, &(g, s)) in visible.iter().enumerate() {
+    for (i, frame) in frames.iter().enumerate().take(visible.len()) {
         // Beim Scrollen liegen Spalten ganz außerhalb: nicht zeichnen, Nachbarn per Pfeil finden sie trotzdem.
-        if shell.layout.mode == LayoutMode::Scroll && visible.len() > 1 && !frames[i].intersects(area) {
+        if shell.layout.mode == LayoutMode::Scroll && visible.len() > 1 && !frame.intersects(area) {
             continue;
         }
-        let marks = shell.tile_marks((g, s), visible.len());
-        let body = !stacked || marks.active;
-        let group: &Group = &shell.groups[g];
-        let elsewhere = shell.owners.elsewhere(0, &group.sessions[s].key);
-        let el = tile::tile(group, &group.sessions[s], style, marks, body, elsewhere, cx);
-        out.push(placed(frames[i], g, s, &group.sessions[s].key, el, cx));
+        out.push(one_tile(shell, i, *frame, false, cx));
     }
     out
 }
@@ -407,23 +563,25 @@ pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::D
     shell.layout.gap = a.gap;
     shell.layout.ui_scale = a.scale;
     let visible = shell.visible();
+    let keys: Vec<String> = visible.iter().map(|&(g, s)| shell.groups[g].sessions[s].key.clone()).collect();
+    shell.layout.note_visible(&keys);
     let active = shell.selected.and_then(|sel| visible.iter().position(|id| *id == sel)).unwrap_or(0);
-    let (frames, dividers) = shell.layout.plan(visible.len(), active);
+    // Stack gilt auch für eine einzelne Kachel, nicht aber bei Zoom und Vorschau (dann füllt eine Kachel die Fläche).
+    let stacked = shell.layout.mode == LayoutMode::Stack && !shell.state.zoom && shell.preview_id().is_none();
+    let (children, dividers) = if stacked {
+        let (rows, body) = shell.layout.plan_stack(visible.len(), active);
+        (stack_tiles(shell, &rows, body, active, cx), Vec::new())
+    } else {
+        let (frames, dividers) = shell.layout.plan(visible.len(), active);
+        (tiles(shell, &frames, cx), dividers)
+    };
     let empty = visible.is_empty().then(|| crate::misc::empty::view(shell, &t, cx));
-    let mut area = div()
-        .id("workspace")
-        .relative()
-        .flex_1()
-        .min_w_0()
-        .min_h_0()
-        .overflow_hidden()
-        .bg(a.panel_fill(t.bg))
-        .child(measure_scrolling(shell.layout.measured.clone(), cx.entity()))
-        .children(tiles(shell, &frames, cx))
-        .children(empty);
+    // Die Kacheln liegen in einer beschnittenen Fläche, die Ecke darüber ragt 2 px über den Rand hinaus (auf die Fugen).
+    let mut clipped = div().absolute().size_full().overflow_hidden().child(measure_scrolling(shell.layout.measured.clone(), cx.entity())).children(children).children(empty);
     for (i, d) in dividers.iter().enumerate() {
-        area = area.child(grip(d, i, cx));
+        clipped = clipped.child(grip(d, i, cx));
     }
+    let area = div().id("workspace").relative().flex_1().min_w_0().min_h_0().bg(a.panel_fill(t.bg)).child(clipped).child(module_corner::view(&t, &a));
     area.on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| on_move(this, ev, cx)))
         .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.end_drag()))
         .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, _| this.end_drag()))
@@ -472,7 +630,35 @@ mod tests {
         assert!(d.is_empty());
         assert_eq!(f[0].h, ROW_HEIGHT);
         assert!(f[1].h > ROW_HEIGHT);
-        assert_eq!(st.plan(1, 0).0, vec![B]);
+        assert_eq!(st.plan(1, 0).0, vec![B.inset(GAP)], "der Außenrand gilt auch für eine einzige Kachel");
+    }
+
+    #[test]
+    fn stack_gives_rows_and_the_active_body_below_its_row_even_for_one_tile() {
+        let mut st = LayoutState::new(LayoutMode::Stack);
+        st.measured.set(Some((0., 0., 1000., 600.)));
+        let (rows, body) = st.plan_stack(3, 1);
+        assert_eq!(rows.len(), 3);
+        assert_eq!((rows[0].x, rows[0].y, rows[0].h), (GAP, GAP, 26.));
+        assert_eq!(body.y, rows[1].max_y(), "der Körper liegt direkt unter seiner Zeile");
+        assert_eq!(rows[2].y, body.max_y());
+        assert_eq!(body.h, 600. - 2. * GAP - 3. * 26.);
+        let (rows, body) = st.plan_stack(1, 0);
+        assert_eq!((rows.len(), body.y), (1, GAP + 26.));
+        st.ui_scale = 1.3;
+        assert_eq!(st.plan_stack(2, 0).0[0].h, 34., "26 mal UI-Größe, gerundet");
+    }
+
+    #[test]
+    fn new_tiles_fade_in_but_not_at_the_first_load() {
+        let mut st = LayoutState::new(LayoutMode::Grid);
+        st.note_visible(&["a".into(), "b".into()]);
+        assert!(!st.is_fading("a"), "beim ersten Laden erscheint alles sofort");
+        st.note_visible(&["a".into(), "b".into(), "c".into()]);
+        assert!(st.is_fading("c") && !st.is_fading("a"));
+        st.note_visible(&["a".into()]);
+        assert!(!st.is_fading("c"), "wer weg ist, blendet nicht mehr ein");
+        assert!(st.cols_auto() && { st.cols = 3; !st.cols_auto() });
     }
 
     fn measured(mode: LayoutMode) -> LayoutState {

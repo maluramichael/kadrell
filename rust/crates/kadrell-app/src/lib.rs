@@ -232,6 +232,9 @@ impl Shell {
     }
 
     fn apply_dev_view(&mut self) {
+        if self.state.apply_dev_tiles() {
+            self.rebuild();
+        }
         self.apply_workspace_dev();
         let keys = dev_selection(&self.groups);
         let focus = std::env::var("KADRELL_DEV_SESSION").ok().and_then(|v| wire::keys_at(&self.groups, &v).into_iter().next());
