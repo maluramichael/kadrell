@@ -1,6 +1,7 @@
 //! GPUI-Spike: Kadrell-Fenster mit Baum, Leiste und Terminal-Kachel.
 #![allow(dead_code)] // Spike: nicht alle Theme-Felder werden benutzt.
 
+mod fonts;
 mod terminal;
 mod theme;
 mod ui;
@@ -182,6 +183,7 @@ fn start_theme() -> Theme {
 
 fn main() {
     application().run(|cx: &mut App| {
+        fonts::load(cx);
         cx.set_global(ThemeGlobal(start_theme()));
         let bounds = Bounds::centered(None, size(px(1400.), px(900.)), cx);
         let options = WindowOptions {

@@ -77,4 +77,4 @@ impl Theme {
 }
 
 /// Terminal-Schrift: auf dem Mac die der App, unter Windows die mitgelieferte.
-pub const FONT: &str = if cfg!(target_os = "macos") { "JetBrainsMono NF" } else { "Cascadia Mono" };
+pub const FONT: &str = "JetBrainsMono Nerd Font Mono";
