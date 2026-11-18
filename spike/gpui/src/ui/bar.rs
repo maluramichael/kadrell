@@ -1,7 +1,8 @@
 //! Obere Leiste und Titelleiste in einem: Tasten links, Nutzung und Status rechts, freie Fläche zieht das Fenster.
 
-use gpui::{App, InteractiveElement, IntoElement, ParentElement, Styled, Window, WindowControlArea, div, px};
+use gpui::{App, Hsla, InteractiveElement, IntoElement, ParentElement, Styled, Window, WindowControlArea, div, px};
 
+use super::icons;
 use super::chrome::{BAR_HEIGHT, h_seam, window_controls};
 use super::model::Status;
 use super::pill::{Pill, PillKind};
@@ -12,11 +13,20 @@ const LEFT: [&str; 8] = ["▦", "‹", "AUTO COL", "›", "AUTO", "SYNC", "GRP",
 /// Links neben den Ampelknöpfen von macOS (inset) oder am Fensterrand.
 const LEFT_INSET: f32 = if cfg!(target_os = "macos") { 78. } else { 8. };
 
-fn left_pills() -> impl IntoElement + use<> {
-    let pills = LEFT.iter().enumerate().map(|(i, l)| {
-        let kind = if *l == "A-Z" { PillKind::Active } else { PillKind::Normal };
-        Pill::new(("bar", i), *l).kind(kind)
-    });
+/// Eine Taste der linken Leiste: Layout-Symbol und Pfeile sind gezeichnet, der Rest Text.
+fn left_pill(i: usize, label: &'static str, ink: Hsla) -> Pill {
+    let pill = Pill::new(("bar", i), label);
+    match label {
+        "▦" => pill.icon(icons::layout_grid(ink)).min_width(26.),
+        "‹" => pill.icon(icons::arrow(true, ink)).min_width(22.),
+        "›" => pill.icon(icons::arrow(false, ink)).min_width(22.),
+        "A-Z" => pill.kind(PillKind::Active),
+        _ => pill,
+    }
+}
+
+fn left_pills(ink: Hsla) -> impl IntoElement + use<> {
+    let pills = LEFT.iter().enumerate().map(|(i, l)| left_pill(i, l, ink));
     div().flex().flex_none().items_center().gap(px(4.)).children(pills)
 }
 
@@ -55,7 +65,7 @@ pub fn bar(clock: &str, window: &Window, cx: &App) -> impl IntoElement + use<> {
         .h(px(BAR_HEIGHT - 2.))
         .w_full()
         .pl(px(LEFT_INSET))
-        .child(left_pills())
+        .child(left_pills(t.sub))
         .child(drag_area())
         .child(right_side(clock, cx));
     if cfg!(target_os = "windows") {

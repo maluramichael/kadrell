@@ -52,7 +52,7 @@ pub struct Session {
     pub status: Status,
     pub is_new: bool,
     pub age: &'static str,
-    pub branch: &'static str,
+    pub branch: Option<String>,
     pub launch: Launch,
     pub pane: Option<Entity<TerminalPane>>,
 }
@@ -77,7 +77,7 @@ const SHELL: Command = ("pwsh.exe", &[]);
 
 fn session(title: &'static str, status: Status, age: &'static str, cmd: Command) -> Session {
     let launch = Launch { program: cmd.0, args: cmd.1, in_spike: false };
-    Session { title, status, is_new: false, age, branch: "spike-chrome", launch, pane: None }
+    Session { title, status, is_new: false, age, branch: None, launch, pane: None }
 }
 
 fn in_spike(mut s: Session) -> Session {
@@ -113,6 +113,18 @@ pub fn mock_groups() -> Vec<Group> {
             ],
         },
     ]
+}
+
+/// Aktueller Git-Zweig des Ordners, `None` außerhalb eines Repos (oder ohne Zweig, etwa bei `HEAD`).
+/// Blockiert, deshalb nur aus dem Hintergrund aufrufen.
+pub fn git_branch(cwd: &std::path::Path) -> Option<String> {
+    let mut cmd = std::process::Command::new("git");
+    cmd.args(["rev-parse", "--abbrev-ref", "HEAD"]).current_dir(cwd);
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
+    let out = cmd.output().ok().filter(|o| o.status.success())?;
+    let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!name.is_empty() && name != "HEAD").then_some(name)
 }
 
 /// Alle Sessions in Anzeigereihenfolge als (Gruppe, Session).
