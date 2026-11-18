@@ -59,6 +59,8 @@ pub struct Session {
     /// Ordner mit `/`.
     pub cwd: String,
     pub is_shell: bool,
+    /// Der Prozess ist beendet oder gestoppt (für den vorgelesenen Status).
+    pub ended: bool,
     pub pane: Option<Entity<TerminalPane>>,
 }
 
@@ -90,6 +92,7 @@ fn session_view(s: &CoreSession, state: &AppState, panes: &HashMap<String, Entit
         branch: s.branch.clone(),
         cwd: s.cwd.clone(),
         is_shell: s.is_shell(),
+        ended: matches!(state.run(&s.id), crate::state::Run::Ended | crate::state::Run::Stopped),
         pane: panes.get(&s.id).cloned(),
     }
 }

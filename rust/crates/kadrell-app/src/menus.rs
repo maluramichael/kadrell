@@ -12,7 +12,7 @@ use crate::lang::{de, shortcut, shortcut_mac_only, shortcut_os};
 use crate::misc::{OpenAbout, OpenWhatsNew};
 use crate::ui::ext::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar};
 
-actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow]);
+actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow, NewWindow]);
 
 pub enum Entry {
     Separator,
@@ -78,7 +78,7 @@ fn file_menu() -> MenuDef {
             off(de!("Remote verbinden …"), shortcut("⇧⌘N")),
             off(de!("Neue Gruppe …"), shortcut("⌥⌘N")),
             Entry::Separator,
-            off(de!("Neues Fenster"), shortcut("⇧⌘T")),
+            item(de!("Neues Fenster"), shortcut("⇧⌘T"), NewWindow),
             item(de!("Fenster schließen"), shortcut("⇧⌘W"), CloseWindow),
             Entry::Separator,
             item(de!("Session schließen"), shortcut_mac_only("⌘W"), CloseSession),
@@ -113,9 +113,9 @@ fn view_menu() -> MenuDef {
             item(de!("Rechte Sidebar: Tastatur hierher"), shortcut("⌘3"), FocusRightSidebar),
             off(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B")),
             Entry::Separator,
-            off(de!("Terminal-Schrift größer"), shortcut("⌘+")),
-            off(de!("Terminal-Schrift kleiner"), shortcut("⌘-")),
-            off(de!("Terminal-Schrift Standardgröße"), shortcut("⌘0")),
+            item(de!("Terminal-Schrift größer"), shortcut("⌘+"), crate::appearance::zoom::FontBigger),
+            item(de!("Terminal-Schrift kleiner"), shortcut("⌘-"), crate::appearance::zoom::FontSmaller),
+            item(de!("Terminal-Schrift Standardgröße"), shortcut("⌘0"), crate::appearance::zoom::FontReset),
             Entry::Separator,
             item(de!("Kachel zoomen"), shortcut("⌘⇧↩"), ZoomTile),
             item(de!("Nächste Session"), shortcut("⌥N"), NextSession),
@@ -180,7 +180,8 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new(if cfg!(target_os = "macos") { "cmd-," } else { "ctrl-," }, OpenSettings, None), KeyBinding::new("alt-f3", OpenStats, None)]);
     // Alt+F4 und der rote Knopf verstecken nur das Fenster (`tray_wire`), beendet wird mit Strg+Q, über das Menü oder das Tray.
     let (quit_key, close_key) = if cfg!(target_os = "macos") { ("cmd-q", "cmd-shift-w") } else { ("ctrl-q", "ctrl-shift-w") };
-    cx.bind_keys([KeyBinding::new(quit_key, Quit, None), KeyBinding::new(close_key, CloseWindow, None)]);
+    let new_window_key = if cfg!(target_os = "macos") { "cmd-shift-t" } else { "ctrl-shift-t" };
+    cx.bind_keys([KeyBinding::new(quit_key, Quit, None), KeyBinding::new(close_key, CloseWindow, None), KeyBinding::new(new_window_key, NewWindow, None)]);
     cx.on_action(|_: &Quit, cx| cx.quit());
     cx.on_action(|_: &ToggleTheme, cx| Shell::toggle_theme(cx));
     set_native_menus(cx);
@@ -188,6 +189,7 @@ pub fn init(cx: &mut App) {
 
 /// Aktionen des Fensters: wirken auf die Shell und laufen über den Fokuspfad (Menü, Tastatur).
 pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
+    let root = crate::appearance::zoom::attach_actions(root, cx);
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
         .on_action(cx.listener(|this, _: &FindAll, window, cx| this.open_palette("/", window, cx)))
@@ -208,6 +210,7 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
         .on_action(cx.listener(|this, _: &FewerColumns, _, cx| this.step_cols(-1, cx)))
         .on_action(cx.listener(|this, _: &OpenSettings, window, cx| this.open_settings_action(window, cx)))
         .on_action(cx.listener(|this, _: &CloseWindow, window, cx| this.hide_main_window(window, cx)))
+        .on_action(cx.listener(|this, _: &NewWindow, _, cx| this.new_window_action(cx)))
         .on_action(cx.listener(|this, _: &OpenStats, window, cx| this.toggle_stats(window, cx)))
         .on_action(cx.listener(|_, _: &Minimize, window, _| window.minimize_window()))
         .on_action(cx.listener(|_, _: &Zoom, window, _| window.zoom_window()))

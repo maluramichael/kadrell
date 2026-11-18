@@ -143,7 +143,7 @@ pub fn bar(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
     let row = div()
         .flex()
         .items_center()
-        .h(px(BAR_HEIGHT - 2.))
+        .h(px(crate::appearance::current(cx).s(BAR_HEIGHT - 2.)))
         .w_full()
         .pl(px(LEFT_INSET))
         .child(left_pills(t.sub, ctl))

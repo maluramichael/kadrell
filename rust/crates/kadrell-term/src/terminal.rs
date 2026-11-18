@@ -29,11 +29,10 @@ use gpui::{
 };
 
 use crate::boxdraw;
-use crate::theme::{FONT, TermTheme, TermThemeGlobal};
+use crate::theme::{TermStyle, TermTheme, TermThemeGlobal};
 
-pub const FONT_SIZE: f32 = 13.0;
+/// Grundhöhe einer Zeile als Vielfaches der Schriftgröße, davor kommt der Zeilenabstand aus `TermStyle`.
 pub const LINE_HEIGHT: f32 = 1.25;
-const PAD: f32 = 8.0;
 
 /// Namen von Umgebungsvariablen, die Kinder nicht erben sollen: die Marker einer umgebenden Claude-Code-Session
 /// (sonst meldet Claude Code in der Kachel "inherited CLAUDE_CODE_CHILD_SESSION marker") und `AI_AGENT`.
@@ -1061,23 +1060,25 @@ impl Element for TerminalElement {
         cx: &mut App,
     ) -> Frame {
         let theme = cx.global::<TermThemeGlobal>().0;
-        let font_size = px(FONT_SIZE);
-        let base = font(FONT);
+        let style = TermStyle::current(cx);
+        let pad = style.padding;
+        let font_size = px(style.size);
+        let base = font(style.family.clone());
         let ts = window.text_system();
         let font_id = ts.resolve_font(&base);
         let advance = ts.advance(font_id, font_size, 'm').map(|s| s.width).unwrap_or(px(8.));
         let sf = window.scale_factor();
-        let line_h = (font_size * LINE_HEIGHT).round();
+        let line_h = (font_size * LINE_HEIGHT * style.line_spacing).round().max(px(1.));
         let dev = DevGrid::new(
             sf,
             f32::from(advance),
             f32::from(line_h),
-            (f32::from(bounds.origin.x) + PAD, f32::from(bounds.origin.y) + PAD / 2.),
+            (f32::from(bounds.origin.x) + pad, f32::from(bounds.origin.y) + pad),
         );
         let cell = dev.cell();
         let origin = dev.origin();
-        let cols = ((bounds.size.width - px(2. * PAD)) / cell.width).floor().max(2.) as usize;
-        let lines = ((bounds.size.height - px(PAD)) / cell.height).floor().max(1.) as usize;
+        let cols = ((bounds.size.width - px(2. * pad)) / cell.width).floor().max(2.) as usize;
+        let lines = ((bounds.size.height - px(2. * pad)) / cell.height).floor().max(1.) as usize;
 
         let focused = self.pane.read(cx).focus.is_focused(window);
         self.pane.update(cx, |pane, _| {
@@ -1176,7 +1177,8 @@ impl Element for TerminalElement {
     ) {
         let focus = self.pane.read(cx).focus.clone();
         window.handle_input(&focus, ElementInputHandler::new(bounds, self.pane.clone()), cx);
-        let font_size = px(FONT_SIZE);
+        let style = TermStyle::current(cx);
+        let font_size = px(style.size);
         let cell_w = self.pane.read(cx).cell.width;
         let line_h = self.pane.read(cx).cell.height;
         let origin = self.pane.read(cx).origin;
@@ -1208,7 +1210,7 @@ impl Element for TerminalElement {
                     let f = Font {
                         weight: if run.bold { FontWeight::BOLD } else { FontWeight::NORMAL },
                         style: if run.italic { FontStyle::Italic } else { FontStyle::Normal },
-                        ..font(FONT)
+                        ..font(style.family.clone())
                     };
                     let tr = TextRun {
                         len: run.text.len(),
@@ -1233,7 +1235,7 @@ impl Element for TerminalElement {
             if let Some((at, text)) = &frame.marked {
                 let tr = TextRun {
                     len: text.len(),
-                    font: font(FONT),
+                    font: font(style.family.clone()),
                     color: frame.fg,
                     background_color: Some(frame.bg),
                     underline: Some(UnderlineStyle { color: Some(frame.fg), thickness: px(1.), wavy: false }),
