@@ -4,6 +4,7 @@
 
 pub mod agents;
 pub mod attention;
+mod folders;
 mod handler;
 mod poll;
 pub mod stats;
@@ -266,6 +267,9 @@ impl AppState {
             return false;
         }
         self.registry.lock().unwrap_or_else(PoisonError::into_inner).add(mapping::record_of(&session));
+        if !session.is_remote() {
+            self.record_folder_use(&session.cwd);
+        }
         self.count_opened(session.is_shell());
         if let Some(prompt) = prompt {
             self.prompts.insert(key.clone(), prompt);

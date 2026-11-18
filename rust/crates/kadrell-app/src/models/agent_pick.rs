@@ -288,6 +288,7 @@ impl Shell {
                 }
             }
         }
+        self.play_open_sound();
         self.sync(window, cx);
     }
 }
