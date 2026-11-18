@@ -389,19 +389,22 @@ impl ExtensionsDialog {
         if let Some(d) = ext.manifest.as_ref().map(|m| m.description.clone()).filter(|d| !d.is_empty()) {
             info = info.child(div().text_color(t.fg).child(d));
         }
+        let rights = ext.manifest.as_ref().is_some_and(|m| !m.permissions.is_empty());
         if let Some(p) = ext.manifest.as_ref().map(|m| m.permissions.clone()).filter(|p| !p.is_empty()) {
-            info = info.child(div().text_size(px(11.)).line_height(px(13.5)).text_color(t.muted).child(trd!("Rechte: %@", p.join(", "))));
+            info = info.child(div().text_size(px(11.)).line_height(px(14.)).text_color(t.muted).child(trd!("Rechte: %@", p.join(", "))));
         }
         let face = div()
             .flex()
             .items_start()
             .gap(px(10.))
-            .px(px(8.5))
-            .py(px(6.5))
+            .relative()
+            .px(px(10.))
+            .pt(px(7.))
+            .pb(px(if rights { 7. } else { 7.5 }))
             .rounded(px(6.))
-            .border(px(1.5))
-            .border_color(if selected { t.fg } else { gpui::transparent_black() })
-            .when(selected, |d| d.bg(t.bg))
+            // Zeile 16 pt seitlich, 8 pt oben und unten vom Zeilenrand, die Fläche liegt 6/1 pt darin (`instrumentRow`); der
+            // Umriss ist ein Overlay und verschiebt nichts.
+            .when(selected, |d| d.bg(t.bg).child(crate::ui::overlay::ring_inside(t.fg, 6., 1.5)))
             .child(div().mt(px(4.)).size(px(8.)).flex_none().rounded_full().bg(dot_color(dot, t)))
             .child(info);
         div().id(("ext", i)).cursor_pointer().px(px(6.)).py(px(1.)).child(face).on_click(cx.listener(move |this, _, window, cx| this.select(i, window, cx)))

@@ -496,6 +496,27 @@ struct TextElement {
     colors: Theme,
 }
 
+/// Ende (Byte-Index) der ersten Zeile eines Platzhalters, der nach Wörtern umbricht: das letzte Wort, das samt seiner
+/// Satzzeichen noch in `width` passt. `x_for` liefert die Breite des Textes bis zu einem Byte-Index. Passt schon das erste
+/// Wort nicht, bleibt der ganze Text (er wird am Feldrand abgeschnitten).
+pub fn placeholder_cut(text: &str, width: f32, x_for: impl Fn(usize) -> f32) -> usize {
+    if x_for(text.len()) <= width {
+        return text.len();
+    }
+    let mut best = None;
+    let mut in_word = false;
+    for (i, c) in text.char_indices() {
+        if c == ' ' && in_word {
+            if x_for(i) > width {
+                break;
+            }
+            best = Some(i);
+        }
+        in_word = c != ' ';
+    }
+    best.unwrap_or(text.len())
+}
+
 struct Prepaint {
     line: ShapedLine,
     cursor: Option<PaintQuad>,
@@ -543,10 +564,17 @@ impl Element for TextElement {
         let input = self.input.read(cx);
         let style = window.text_style();
         let empty = input.content.is_empty();
-        let (text, color) = if empty { (input.placeholder.clone(), self.colors.muted) } else { (input.content.clone(), style.color) };
+        let (mut text, color) = if empty { (input.placeholder.clone(), self.colors.muted) } else { (input.content.clone(), style.color) };
+        let font_size = style.font_size.to_pixels(window.rem_size());
+        if empty && input.large {
+            // Der Platzhalter des Palettenfelds bricht wie in AppKit nach Wörtern um und zeigt nur die erste Zeile.
+            let base = TextRun { len: text.len(), font: style.font(), color, background_color: None, underline: None, strikethrough: None };
+            let full = window.text_system().shape_line(text.clone(), font_size, &[base], None);
+            let cut = placeholder_cut(&text, f32::from(bounds.size.width), |i| f32::from(full.x_for_index(i)));
+            text = text[..cut].to_string().into();
+        }
         let base = TextRun { len: text.len(), font: style.font(), color, background_color: None, underline: None, strikethrough: None };
         let runs = runs_for(text.len(), if empty { None } else { input.marked.as_ref() }, base);
-        let font_size = style.font_size.to_pixels(window.rem_size());
         let line = window.text_system().shape_line(text, font_size, &runs, None);
         let cursor_x = line.x_for_index(if empty { 0 } else { input.cursor() });
         let margin = px(4.);
@@ -650,6 +678,16 @@ impl Focusable for TextInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn placeholder_breaks_after_the_last_word_that_fits() {
+        let text = "ab cd, efg hi";
+        let x = |i: usize| i as f32 * 10.;
+        assert_eq!(placeholder_cut(text, 200., x), text.len());
+        assert_eq!(placeholder_cut(text, 100., x), 10); // "ab cd, efg" passt, "hi" nicht
+        assert_eq!(placeholder_cut(text, 95., x), 6);
+        assert_eq!(placeholder_cut(text, 15., x), text.len());
+    }
 
     #[test]
     fn char_boundaries_respect_multibyte() {
