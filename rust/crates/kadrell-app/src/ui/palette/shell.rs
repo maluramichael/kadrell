@@ -2,13 +2,15 @@
 //! Auswahl (Session zeigen, Gruppe, Layout, Menü-Aktion, Treffer im Terminal).
 
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{AppContext, Context, Entity, Window};
 
 use super::model::{GroupRow, SessionRow, Snapshot};
-use super::{MockHistory, Palette, PaletteEvent};
+use super::{HistoryAction, Known, Pick, decide_history, history_provider, problem_title};
+use crate::ui::model::Status;
+use kadrell_control::{ControlHandler, NewRequest};
+use super::{Palette, PaletteEvent};
 use crate::Shell;
 use crate::ui::folders;
 use crate::ui::layout::Selection;
@@ -19,7 +21,7 @@ fn path_of(s: &crate::ui::model::Session) -> String {
 }
 
 /// Gruppen und Sessions in der Form, die die Palette braucht (ohne Verweis auf die Shell).
-fn snapshot(groups: &[Group], focused: Option<(usize, usize)>, home: &str) -> Snapshot {
+fn snapshot(groups: &[Group], focused: Option<(usize, usize)>, home: &str, live: HashMap<String, ((usize, usize), Status)>) -> Snapshot {
     let rows = groups.iter().enumerate().map(|(g, group)| {
         let sessions: Vec<SessionRow> = group
             .sessions
@@ -40,7 +42,7 @@ fn snapshot(groups: &[Group], focused: Option<(usize, usize)>, home: &str) -> Sn
         let path = if group.cwd.is_empty() { sessions.first().map(|s| s.path.clone()).unwrap_or_default() } else { group.cwd.replace('\\', "/") };
         GroupRow { index: g, name: group.name.clone(), short: folders::short_path(&path, home), path, sessions }
     });
-    Snapshot { groups: rows.collect(), focused }
+    Snapshot { groups: rows.collect(), focused, live }
 }
 
 impl Shell {
@@ -62,12 +64,80 @@ impl Shell {
             .flat_map(|(g, group)| group.sessions.iter().enumerate().map(move |(s, session)| ((g, s), session)))
             .filter_map(|(id, session)| Some((id, session.pane.clone()?)))
             .collect();
-        let snap = snapshot(&self.groups, self.selected, &folders::home_dir());
-        let history = Rc::new(MockHistory::new());
+        if self.quick_start.is_some() {
+            return;
+        }
+        let snap = snapshot(&self.groups, self.selected, &folders::home_dir(), self.live_conversations());
+        let history = history_provider(&self.history);
         let palette = cx.new(|cx| Palette::new(snap, panes, history, prefix, window, cx));
         cx.subscribe_in(&palette, window, Self::on_palette_event).detach();
         self.palette = Some(palette);
+        self.refresh_history(cx);
         cx.notify();
+    }
+
+    /// Verlaufsindex nachlesen (beim Start und bei jedem Öffnen der Suche); danach filtert eine offene Verlaufssuche neu.
+    pub fn refresh_history(&mut self, cx: &mut Context<Self>) {
+        let config_dir = self.state.env.config_dir();
+        let cache = super::history::cache_file(&config_dir, &self.state.home());
+        self.history.refresh(config_dir, cache, cx, |shell: &mut Shell, cx| {
+            if let Some(palette) = shell.palette.clone() {
+                palette.update(cx, |p, cx| p.refresh_history(cx));
+            }
+        });
+    }
+
+    /// Konversationen, die in Kadrell laufen (sessionId und Schlüssel), mit Platz im Baum und Status.
+    fn live_conversations(&self) -> HashMap<String, ((usize, usize), Status)> {
+        let mut live = HashMap::new();
+        for (g, group) in self.groups.iter().enumerate() {
+            for (s, session) in group.sessions.iter().enumerate() {
+                let entry = ((g, s), session.status);
+                if let Some(core) = self.state.session(&session.key) {
+                    live.insert(core.session_id.clone(), entry);
+                }
+                live.insert(session.key.clone(), entry);
+            }
+        }
+        live
+    }
+
+    /// Platz einer Session im Baum.
+    fn position_of(&self, key: &str) -> Option<(usize, usize)> {
+        self.groups.iter().enumerate().find_map(|(g, group)| Some((g, group.sessions.iter().position(|s| s.key == key)?)))
+    }
+
+    /// ⏎ auf einem Treffer des Verlaufs: zur Session springen, wenn sie in Kadrell läuft, sonst `claude --resume` im Ordner
+    /// ihrer ersten Eingabe (derselbe Weg wie `kadrell new --resume`). Geht es nicht, bleibt die Suche mit Meldung offen.
+    fn resume_history(&mut self, pick: &Pick, window: &mut Window, cx: &mut Context<Self>) {
+        let known: Vec<Known> = self.state.store.sessions.sessions.iter().map(|s| Known { key: s.id.clone(), session_id: s.session_id.clone() }).collect();
+        let folder_ok = !pick.cwd.is_empty() && std::path::Path::new(&pick.cwd).is_dir();
+        let blocker = self.state.resume_blocker(&pick.session_id);
+        match decide_history(pick, &known, folder_ok, blocker, &self.state.home()) {
+            HistoryAction::Jump(key) => {
+                self.close_palette(window, cx);
+                if let Some(id) = self.position_of(&key) {
+                    self.show_only(id, window, cx);
+                }
+            }
+            HistoryAction::Resume { session_id, cwd } => {
+                self.close_palette(window, cx);
+                self.start_resumed(&session_id, &cwd, window, cx);
+            }
+            HistoryAction::Problem(message) => {
+                if let Some(palette) = self.palette.clone() {
+                    palette.update(cx, |p, cx| p.show_notice(&problem_title(), &message, cx));
+                }
+            }
+        }
+    }
+
+    fn start_resumed(&mut self, session_id: &str, cwd: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let request = NewRequest { cwd: cwd.replace('\\', "/"), show: true, resume: Some(session_id.to_string()), ..NewRequest::default() };
+        if let Err(e) = self.state.new_session(request) {
+            self.state.error = Some(e.to_string());
+        }
+        self.sync(window, cx);
     }
 
     /// Für Screenshots ohne Eingabe: `KADRELL_DEV_OVERLAY=palette`, Text aus `KADRELL_DEV_QUERY` (mit Präfix),
@@ -141,7 +211,7 @@ impl Shell {
                 self.show_only(*id, window, cx);
                 self.reveal_hit(*id, query, *line, cx);
             }
-            PaletteEvent::Resume(_) => self.close_palette(window, cx),
+            PaletteEvent::Resume(pick) => self.resume_history(pick, window, cx),
         }
     }
 

@@ -6,7 +6,7 @@ use gpui::{Action, App, Context, Div, InteractiveElement, KeyBinding, actions};
 
 use crate::Shell;
 
-actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings]);
+actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, QuickStart, SearchHistory]);
 
 pub enum Entry {
     Separator,
@@ -53,6 +53,7 @@ fn file_menu() -> MenuDef {
         entries: vec![
             item("Neue Session", keys("⌘N", "Strg+N"), NewSession),
             item("Neue Session im selben Ordner", keys("⌘↩", "Strg+Enter"), NewSessionHere),
+            item("Schnellstart: Idee rein, Session raus", keys("⇧⌘I", "Strg+Umschalt+I"), QuickStart),
             item("Neues Terminal ohne Claude", keys("⌘T", "Strg+T"), NewTerminal),
             off("Remote verbinden …", keys("⇧⌘N", "Strg+Umschalt+N")),
             off("Neue Gruppe …", keys("⌥⌘N", "Strg+Alt+N")),
@@ -77,6 +78,7 @@ fn edit_menu() -> MenuDef {
             Entry::Separator,
             off("Im Terminal suchen …", keys("⌘F", "Strg+F")),
             item("In allen Terminals suchen …", keys("⇧⌘F", "Strg+Umschalt+F"), FindAll),
+            item("Alle Claude-Sessions durchsuchen, auch beendete", keys("⇧⌘H", "Strg+Umschalt+H"), SearchHistory),
         ],
     }
 }
@@ -151,6 +153,8 @@ pub fn init(cx: &mut App) {
     ]);
     let (search_key, find_all_key) = if cfg!(target_os = "macos") { ("cmd-p", "cmd-shift-f") } else { ("ctrl-p", "ctrl-shift-f") };
     cx.bind_keys([KeyBinding::new(search_key, OpenPalette, None), KeyBinding::new(find_all_key, FindAll, None)]);
+    let (quick_key, history_key) = if cfg!(target_os = "macos") { ("cmd-shift-i", "cmd-shift-h") } else { ("ctrl-shift-i", "ctrl-shift-h") };
+    cx.bind_keys([KeyBinding::new(quick_key, QuickStart, None), KeyBinding::new(history_key, SearchHistory, None)]);
     cx.bind_keys([KeyBinding::new(if cfg!(target_os = "macos") { "cmd-," } else { "ctrl-," }, OpenSettings, None)]);
     if cfg!(target_os = "macos") {
         cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
@@ -165,6 +169,8 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
         .on_action(cx.listener(|this, _: &FindAll, window, cx| this.open_palette("/", window, cx)))
+        .on_action(cx.listener(|this, _: &SearchHistory, window, cx| this.open_palette("#", window, cx)))
+        .on_action(cx.listener(|this, _: &QuickStart, window, cx| this.open_quick_start(window, cx)))
         .on_action(cx.listener(|this, _: &NewSessionHere, window, cx| this.new_session_here(window, cx)))
         .on_action(cx.listener(|this, _: &NewTerminal, window, cx| this.new_terminal(window, cx)))
         .on_action(cx.listener(|this, _: &CloseSession, window, cx| this.remove_focused(window, cx)))

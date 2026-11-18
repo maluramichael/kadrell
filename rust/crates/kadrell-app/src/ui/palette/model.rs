@@ -4,6 +4,7 @@
 use std::ops::Range;
 
 use gpui::Action;
+use kadrell_i18n::trd;
 
 use crate::menus;
 use crate::ui::folders::fuzzy;
@@ -86,6 +87,8 @@ pub struct Snapshot {
     pub groups: Vec<GroupRow>,
     /// Fokussierte Session (Ziel der „fokussierte“-Kommandos).
     pub focused: Option<Id>,
+    /// Konversationen (Claude-sessionId und Schlüssel), die in Kadrell laufen: Platz und Status, für die Verlaufssuche.
+    pub live: std::collections::HashMap<String, (Id, Status)>,
 }
 
 impl Snapshot {
@@ -184,8 +187,8 @@ pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
     list.push(plain("Trennlinien zurücksetzen (gleich verteilt)", Run::Unwired));
     list.push(via_menu(&mut pool, "Zoom ein/aus (fokussierte)", "Kachel zoomen"));
     list.push(via_menu(&mut pool, "Neue Session", "Neue Session"));
-    list.push(plain("Schnellstart: Idee rein, Session raus", Run::Unwired));
-    list.push(plain("Alle Claude-Sessions durchsuchen, auch beendete", Run::Mode(Mode::History)));
+    list.push(via_menu(&mut pool, "Schnellstart: Idee rein, Session raus", "Schnellstart: Idee rein, Session raus"));
+    list.push(via_menu(&mut pool, "Alle Claude-Sessions durchsuchen, auch beendete", "Alle Claude-Sessions durchsuchen, auch beendete"));
     list.push(via_menu(&mut pool, "Neues Terminal ohne Claude", "Neues Terminal ohne Claude"));
     list.push(via_menu(&mut pool, "Remote verbinden (ssh → tmux)", "Remote verbinden …"));
     list.push(via_menu(&mut pool, "Neue Gruppe (leer)", "Neue Gruppe …"));
@@ -223,8 +226,8 @@ pub enum Target {
     Command(usize),
     /// Treffer in einem Terminal: Session, Gridzeile, Suchbegriff.
     Hit { id: Id, line: i32, query: String },
-    /// Frühere Claude-Session (sessionId), zum Fortsetzen.
-    History(String),
+    /// Frühere Claude-Session (sessionId, Ordner, Titel), zum Fortsetzen oder Anspringen.
+    History { session_id: String, cwd: String, title: String },
     /// Zeile ohne Wirkung (Hinweis).
     Nothing,
 }
@@ -382,11 +385,17 @@ pub fn relative_de(secs_ago: u64) -> String {
 }
 
 pub fn history_item(hit: &HistoryHit, now_secs: u64, live: Option<(Id, Status)>) -> Item {
-    let sub = hit.snippet.clone().unwrap_or_else(|| hit.cwd.clone());
-    let mut it = Item::new(hit.title.clone(), sub, Target::History(hit.session_id.clone()));
+    let sub = hit.snippet.clone().unwrap_or_else(|| hit.short.clone());
+    let target = Target::History { session_id: hit.session_id.clone(), cwd: hit.cwd.clone(), title: hit.title.clone() };
+    let mut it = Item::new(hit.title.clone(), sub, target);
     it.right = Some(format!("{} · {}", hit.project, relative_de(now_secs.saturating_sub(hit.last_active))));
     it.status = live.map(|l| l.1);
     it
+}
+
+/// Einzelne Zeile ohne Wirkung mit Meldung.
+pub fn notice_item(title: &str, message: &str) -> Item {
+    Item::new(title, message, Target::Nothing)
 }
 
 pub fn history_placeholder(ready: bool) -> Vec<Item> {
@@ -394,8 +403,8 @@ pub fn history_placeholder(ready: bool) -> Vec<Item> {
         return Vec::new();
     }
     vec![Item::new(
-        "Verlauf wird eingelesen …",
-        "beim ersten Mal einmalig alle Transcripts, danach nur neue",
+        trd!("Verlauf wird eingelesen …"),
+        trd!("beim ersten Mal einmalig alle Transcripts, danach nur neue"),
         Target::Nothing,
     )]
 }
@@ -436,7 +445,7 @@ mod tests {
                 session(1, 1, "zweite shell", Status::Detached, "C:/dev/spike"),
             ],
         };
-        Snapshot { groups: vec![kad, spike], focused: Some((0, 0)) }
+        Snapshot { groups: vec![kad, spike], focused: Some((0, 0)), ..Snapshot::default() }
     }
 
     fn labels(items: &[Item]) -> Vec<&str> {
