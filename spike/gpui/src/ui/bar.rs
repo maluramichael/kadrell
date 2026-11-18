@@ -1,17 +1,20 @@
-//! Obere Leiste und Titelleiste in einem: Tasten links, Nutzung und Status rechts, freie Fläche zieht das Fenster.
+//! Obere Leiste (Tasten links, Nutzung und Status rechts) und unter Windows die eigene Titelzeile darüber
+//! (Menüs links, Titel in der Mitte, Fensterknöpfe rechts). Auf macOS liefert das System die Titelleiste.
 
-use gpui::{App, Hsla, InteractiveElement, IntoElement, ParentElement, Styled, Window, WindowControlArea, div, px};
+use gpui::{
+    App, Entity, Hsla, InteractiveElement, IntoElement, ParentElement, Styled, Window, WindowControlArea, div, px,
+};
 
 use super::icons;
 use super::chrome::{BAR_HEIGHT, h_seam, window_controls};
+use super::menubar::{MenuBar, TITLE_HEIGHT};
 use super::model::Status;
 use super::pill::{Pill, PillKind};
 use super::theme;
 
 const LEFT: [&str; 8] = ["▦", "‹", "AUTO COL", "›", "AUTO", "SYNC", "GRP", "A-Z"];
 
-/// Links neben den Ampelknöpfen von macOS (inset) oder am Fensterrand.
-const LEFT_INSET: f32 = if cfg!(target_os = "macos") { 78. } else { 8. };
+const LEFT_INSET: f32 = 8.;
 
 /// Eine Taste der linken Leiste: Layout-Symbol und Pfeile sind gezeichnet, der Rest Text.
 fn left_pill(i: usize, label: &'static str, ink: Hsla) -> Pill {
@@ -52,24 +55,48 @@ fn right_side(clock: &str, cx: &App) -> impl IntoElement + use<> {
         .child(running)
 }
 
-/// Die freie Fläche zwischen links und rechts: unter Windows Titelleisten-Zugriff zum Verschieben.
-fn drag_area() -> impl IntoElement + use<> {
-    div().flex_1().h_full().min_w(px(24.)).window_control_area(WindowControlArea::Drag)
+/// Die freie Fläche der Titelzeile mit dem Fenstertitel: zieht das Fenster.
+fn title_area(cx: &App) -> impl IntoElement + use<> {
+    div()
+        .flex()
+        .flex_1()
+        .items_center()
+        .justify_center()
+        .h_full()
+        .min_w(px(24.))
+        .text_color(theme(cx).sub)
+        .window_control_area(WindowControlArea::Drag)
+        .child("Kadrell")
 }
 
-pub fn bar(clock: &str, window: &Window, cx: &App) -> impl IntoElement + use<> {
+/// Windows: eigene Titelzeile im Kadrell-Stil, getrennt von der Leiste darunter. Sonst `None`.
+pub fn titlebar(menubar: &Entity<MenuBar>, window: &Window, cx: &App) -> Option<impl IntoElement + use<>> {
+    if !cfg!(target_os = "windows") {
+        return None;
+    }
     let t = theme(cx);
-    let mut row = div()
+    let row = div()
+        .flex()
+        .items_center()
+        .h(px(TITLE_HEIGHT - 2.))
+        .w_full()
+        .child(menubar.clone())
+        .child(title_area(cx))
+        .child(window_controls(window, cx));
+    Some(div().flex().flex_col().flex_none().bg(t.bg).child(row).child(h_seam(&t)))
+}
+
+/// Die Leiste mit Layout-Tasten, Nutzung und Status, erste Zeile unter der Titelleiste.
+pub fn bar(clock: &str, cx: &App) -> impl IntoElement + use<> {
+    let t = theme(cx);
+    let row = div()
         .flex()
         .items_center()
         .h(px(BAR_HEIGHT - 2.))
         .w_full()
         .pl(px(LEFT_INSET))
         .child(left_pills(t.sub))
-        .child(drag_area())
+        .child(div().flex_1().min_w(px(24.)))
         .child(right_side(clock, cx));
-    if cfg!(target_os = "windows") {
-        row = row.child(window_controls(window, cx));
-    }
     div().flex().flex_col().flex_none().bg(t.panel).child(row).child(h_seam(&t))
 }
