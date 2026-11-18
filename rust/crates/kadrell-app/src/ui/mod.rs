@@ -16,6 +16,7 @@ pub mod layout;
 pub mod model;
 pub mod folder_row;
 pub mod folders;
+pub mod groups;
 pub mod new_session;
 pub mod overlay;
 pub mod palette;

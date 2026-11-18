@@ -419,3 +419,66 @@ fn effects_are_handed_over_once_in_tracker_order() {
     assert!(effects.contains(&Effect::Play(TrackerSound::Waiting)));
     assert!(state.take_effects().is_empty());
 }
+
+#[test]
+fn edited_group_folder_keeps_running_sessions_and_new_ones_start_in_the_new_folder() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let (alpha, beta) = (cwd(&dir, "alpha"), cwd(&dir, "beta"));
+    let running = state.new_claude_session(&alpha, None, true);
+    start_all(&mut state);
+    let mut group = state.store.groups.group_for_session(&running).unwrap().clone();
+    group.cwd = beta.clone();
+    group.name = "Neu".into();
+    state.store.groups.update(group.clone());
+    state.store.assign();
+    assert_eq!(state.session(&running).unwrap().cwd, alpha, "laufende Session behält ihren Ordner");
+    assert_eq!(state.run(&running), Run::Running);
+    assert_eq!(state.store.groups.group_for_session(&running).unwrap().id, group.id, "und bleibt in der Gruppe");
+    let new_cwd = state.store.groups.group(&group.id).unwrap().cwd.clone();
+    let fresh = state.new_claude_session(&new_cwd, Some(&group.id), false);
+    assert_eq!(state.session(&fresh).unwrap().cwd, beta, "neue Sessions starten im neuen Ordner");
+    assert_eq!(state.store.groups.group(&group.id).unwrap().session_ids, vec![running, fresh]);
+}
+
+#[test]
+fn new_group_is_kept_without_sessions_and_unhearted_ones_vanish() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let a = state.new_claude_session(&cwd(&dir, "alpha"), None, true);
+    let draft = state.store.groups.make_group(&cwd(&dir, "leer"), Some("Leer"));
+    let kept = draft.id.clone();
+    state.add_group(draft);
+    assert!(state.store.groups.group(&kept).unwrap().favorite, "von Hand angelegt: Herz");
+    state.store.assign();
+    assert!(state.store.groups.group(&kept).is_some(), "bleibt ohne Session stehen");
+    let from = state.store.groups.group_for_session(&a).unwrap().id.clone();
+    assert!(state.move_sessions(std::slice::from_ref(&a), &kept));
+    assert!(state.store.groups.group(&from).is_none(), "die leere Gruppe ohne Herz verschwindet");
+    assert_eq!(state.store.groups.group(&kept).unwrap().session_ids, vec![a]);
+}
+
+#[test]
+fn terminal_goes_to_the_chosen_group_even_when_two_groups_share_a_folder() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let shared = cwd(&dir, "shared");
+    state.new_claude_session(&shared, None, false);
+    let second = state.store.groups.make_group(&shared, Some("zweite"));
+    let second_id = second.id.clone();
+    state.add_group(second);
+    let shell = state.new_shell_session_in(&shared, Some(&second_id), false);
+    assert_eq!(state.store.groups.group_for_session(&shell).unwrap().id, second_id);
+    let other = state.new_shell_session(&shared, false);
+    assert_ne!(state.store.groups.group_for_session(&other).unwrap().id, second_id, "ohne Gruppe gilt der erste Treffer");
+}
+
+#[test]
+fn flat_order_is_stored_in_the_profile_settings() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    state.set_flat_order(&["b".to_string(), "a".to_string()]);
+    assert_eq!(state.settings.sidebar_flat_order(), ["b", "a"]);
+    let reopened = state_in(&dir);
+    assert_eq!(reopened.settings.sidebar_flat_order(), ["b", "a"]);
+}

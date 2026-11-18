@@ -241,6 +241,7 @@ impl Render for NewSession {
         let t = theme(cx);
         let hint = tx(&trd!("⏎ starten · Tab ergänzt · ⌘O %@ · Ordner hineinziehen", file_manager()));
         let foot = dialog_foot(hint, format!("{} ⏎", trd!("Starten")), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let ring = t.accent;
         let dialog = overlay_height(overlay_width(dialog_frame(&t), 560.), 600.)
             .key_context(CONTEXT)
             .text_color(t.fg)
@@ -249,6 +250,13 @@ impl Render for NewSession {
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::complete))
             .on_action(cx.listener(|_, _: &Cancel, _, cx| cx.emit(NewSessionEvent::Close)))
+            // Ordner aus dem Explorer/Finder hineingezogen: sofort dort starten.
+            .on_drop(cx.listener(|_, paths: &gpui::ExternalPaths, _, cx| {
+                if let Some(dir) = super::groups::files::first_folder(paths) {
+                    cx.emit(NewSessionEvent::Start(dir));
+                }
+            }))
+            .drag_over::<gpui::ExternalPaths>(move |s, _, _, _| s.border_color(ring))
             .child(dialog_title(trd!("NEUE SESSION"), &t))
             .child(div().flex_none().p(px(14.)).child(self.input.clone()))
             .child(h_seam(&t))

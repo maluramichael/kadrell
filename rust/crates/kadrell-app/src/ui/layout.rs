@@ -12,6 +12,7 @@ use gpui::{
     Stateful, Styled, canvas, div, px,
 };
 
+use super::groups::drag::DragTile;
 use super::model::Group;
 use super::tile::{self, TileStyle};
 use super::theme;
@@ -447,9 +448,24 @@ fn grip(line: &SplitLine, i: usize, cx: &mut Context<Shell>) -> AnyElement {
     .into_any_element()
 }
 
-fn placed(r: Rect, g: usize, s: usize, tile: AnyElement, cx: &mut Context<Shell>) -> AnyElement {
+fn placed(r: Rect, g: usize, s: usize, key: &str, tile: AnyElement, cx: &mut Context<Shell>) -> AnyElement {
+    let t = theme(cx);
+    let host = format!("tile-{}", g * 100 + s);
+    let target = key.to_string();
+    let accent = t.accent;
+    // Rahmen in Akzentfarbe, solange eine Kachel darübergezogen wird.
+    let hot = div()
+        .group(format!("{host}-hot"))
+        .absolute()
+        .size_full()
+        .rounded(px(6.))
+        .border_2()
+        .border_color(gpui::transparent_black())
+        .group_drag_over::<DragTile>(host.clone(), move |s| s.border_color(accent));
     div()
         .id(("tile", g * 100 + s))
+        .group(host)
+        .on_drop(cx.listener(move |this, d: &DragTile, window, cx| this.drop_tile(d, &target, window, cx)))
         .absolute()
         .left(px(r.x))
         .top(px(r.y))
@@ -457,6 +473,7 @@ fn placed(r: Rect, g: usize, s: usize, tile: AnyElement, cx: &mut Context<Shell>
         .h(px(r.h))
         .capture_any_mouse_down(cx.listener(move |this, _, window, cx| this.focus_tile(g, s, window, cx)))
         .child(tile)
+        .child(hot)
         .into_any_element()
 }
 
@@ -487,7 +504,7 @@ fn tiles(shell: &Shell, frames: &[Rect], cx: &mut Context<Shell>) -> Vec<AnyElem
         let body = !stacked || focused;
         let group: &Group = &shell.groups[g];
         let el = tile::tile(group, &group.sessions[s], style, focused, body, cx);
-        out.push(placed(frames[i], g, s, el, cx));
+        out.push(placed(frames[i], g, s, &group.sessions[s].key, el, cx));
     }
     out
 }

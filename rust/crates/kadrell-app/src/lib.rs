@@ -66,6 +66,8 @@ pub struct Shell {
     settings: Option<Entity<ui::settings::SettingsDialog>>,
     rename: Option<Entity<ui::rename::Rename>>,
     context: Option<ui::context_menu::ContextMenu>,
+    /// Gruppen-Dialoge, Rückfragen und Zustand des Ziehens im Baum (`ui::groups`).
+    groups_ui: ui::groups::GroupsUi,
     /// Tastaturziel, solange keine Kachel da ist.
     idle_focus: FocusHandle,
     /// Der Steuerkanal; mit der Shell lebt und stirbt er.
@@ -107,7 +109,8 @@ fn control_layout(mode: LayoutMode) -> kadrell_control::LayoutMode {
 }
 
 impl Shell {
-    fn new(window: &mut Window, cx: &mut Context<Self>, state: AppState, jobs: async_channel::Receiver<wire::Job>, server: Option<ControlServer>, ext: ExtensionManager) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>, mut state: AppState, jobs: async_channel::Receiver<wire::Job>, server: Option<ControlServer>, ext: ExtensionManager) -> Self {
+        ui::groups::dev_seed(&mut state);
         let menubar = cx.new(ui::menubar::MenuBar::new);
         let mode = ui_layout(state.layout);
         let folder_home = state.home();
@@ -129,6 +132,7 @@ impl Shell {
             settings: None,
             rename: None,
             context: None,
+            groups_ui: ui::groups::GroupsUi::new(),
             idle_focus: cx.focus_handle(),
             server,
             down: false,
@@ -152,6 +156,7 @@ impl Shell {
         shell.open_quick_start_from_env(window, cx);
         shell.refresh_history(cx);
         shell.open_settings_from_env(window, cx);
+        shell.open_groups_from_env(window, cx);
         shell.start_ext_ui(window, cx);
         shell.start_extensions();
         shell.start_tray(window, cx);
@@ -360,6 +365,7 @@ impl Shell {
             "n" => self.step(1, window, cx),
             "p" => self.step(-1, window, cx),
             "t" => Self::toggle_theme(cx),
+            "e" => self.open_editor_focused(),
             "left" => self.move_focus(Direction::Left, window, cx),
             "right" => self.move_focus(Direction::Right, window, cx),
             "up" => self.move_focus(Direction::Up, window, cx),
@@ -381,7 +387,7 @@ impl Shell {
             return;
         }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
-        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some() || self.usage.overlay_open()) && m.alt {
+        if (self.overlay.is_some() || self.palette.is_some() || self.settings.is_some() || self.quick_start.is_some() || self.ext_ui.dialog.is_some() || self.usage.overlay_open() || self.groups_ui.open() || self.context.is_some()) && m.alt {
             cx.stop_propagation();
             return;
         }
@@ -423,7 +429,8 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_language(cx);
         let t = ui::theme(cx);
-        let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, cx);
+        let sidebar_ctx = self.sidebar_ctx();
+        let sidebar = ui::sidebar::sidebar(&self.groups, &self.selection, &sidebar_ctx, cx);
         let sidebar = self.ext_left_column(sidebar, cx);
         let mut ctl = self.layout_ctl(cx);
         ctl.usage = Some(self.bar_ctl(window, cx));
@@ -459,6 +466,8 @@ impl Render for Shell {
             .children(self.settings.clone())
             .children(self.ext_ui.dialog.clone())
             .children(self.rename.clone())
+            .children(self.groups_ui.edit.clone())
+            .children(self.groups_ui.confirm.clone())
             .children(self.usage.stats.clone())
             .children(self.context_layer(window, cx))
             .children(self.usage.notice.clone())
@@ -546,6 +555,7 @@ pub fn run(profile_name: Option<String>) -> i32 {
         ui::palette::bind_keys(cx);
         ui::quick_start::bind_keys(cx);
         ui::rename::bind_keys(cx);
+        ui::groups::bind_keys(cx);
         ui::ext::dialog::bind_keys(cx);
         ui::ext::keys::bind_keys(cx, &title_profile.settings());
         ui::notice::bind_keys(cx);

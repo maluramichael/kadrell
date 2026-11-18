@@ -2,9 +2,11 @@
 //! Mit einer einzigen sichtbaren Kachel füllt sie die Arbeitsfläche randlos (`Flat`), erst mehrere Kacheln
 //! bekommen Abstand, Rahmen und Fokuskante (`Bordered`), wie in der Mac-App.
 
-use gpui::{AnyElement, App, Div, FontWeight, IntoElement, ParentElement, Styled, div, px};
+use gpui::{AnyElement, App, AppContext, Div, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, div, px};
 
 use super::chrome::h_seam;
+use super::groups::drag::DragTile;
+use super::groups::rows::DragGhost;
 use super::model::{Group, Session};
 use super::theme;
 use crate::theme::Theme;
@@ -57,9 +59,14 @@ fn header(group: &Group, session: &Session, cx: &App) -> impl IntoElement + use<
     if let Some(branch) = &session.branch {
         row = row.child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(branch.clone()));
     }
+    let drag = DragTile { key: session.key.clone(), label: session.title.clone() };
     row.child(group_tag(group, &t))
         .child(div().flex_1())
         .child(div().flex_none().text_size(px(10.5)).text_color(t.muted).child(session.age.clone()))
+        // Ziehen an der Titelzeile sortiert um (Ablage in `layout::placed`).
+        .id(SharedString::from(format!("tile-head-{}", session.key)))
+        .cursor_grab()
+        .on_drag(drag, |d, _, _, cx| cx.new(|_| DragGhost { label: d.label.clone() }))
 }
 
 /// Rahmen der Kachel: Fokus in Akzentfarbe, sonst Linienfarbe. Eine reine Titelzeile (Stack) trägt nur 1 px,
