@@ -50,6 +50,51 @@ pub fn tile_label(title: &str, spoken: &str, group: &str, branch: Option<&str>) 
     parts.into_iter().flatten().collect::<Vec<_>>().join(", ")
 }
 
+/// „Unterscheiden ohne Farbe“ (`accessibilityDisplayShouldDifferentiateWithoutColor`): der Statuspunkt trägt den Status
+/// dann zusätzlich in der Form (`tree_rules::dot_shape`). Windows kennt dafür den Kontrastmodus; mit
+/// `KADRELL_DIFFERENTIATE=1` bzw. `0` überschreibbar (Tests, Screenshots). Das Ergebnis gilt zwei Sekunden.
+pub fn differentiate_without_color() -> bool {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    static CACHE: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+    if let Ok(v) = std::env::var("KADRELL_DIFFERENTIATE") {
+        return v == "1";
+    }
+    let mut cache = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    match *cache {
+        Some((at, v)) if at.elapsed() < Duration::from_secs(2) => v,
+        _ => {
+            let v = system_differentiate();
+            *cache = Some((Instant::now(), v));
+            v
+        }
+    }
+}
+
+#[cfg(windows)]
+fn system_differentiate() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::SystemParametersInfoW;
+    const SPI_GETHIGHCONTRAST: u32 = 0x0042;
+    const HCF_HIGHCONTRASTON: u32 = 0x1;
+    /// `HIGHCONTRASTW` (winuser.h); die Funktion braucht nur `cbSize` und liefert `dwFlags`.
+    #[repr(C)]
+    struct HighContrast {
+        size: u32,
+        flags: u32,
+        scheme: *mut u16,
+    }
+    let mut hc = HighContrast { size: std::mem::size_of::<HighContrast>() as u32, flags: 0, scheme: std::ptr::null_mut() };
+    // SAFETY: `hc` ist ein gültiger HIGHCONTRASTW mit gesetztem `cbSize`; `scheme` bleibt null und wird nicht gelesen.
+    let ok = unsafe { SystemParametersInfoW(SPI_GETHIGHCONTRAST, hc.size, (&raw mut hc).cast(), 0) };
+    ok != 0 && hc.flags & HCF_HIGHCONTRASTON != 0
+}
+
+#[cfg(not(windows))]
+fn system_differentiate() -> bool {
+    // TODO(macOS): `NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor`, auf dem Mac nachzuziehen.
+    false
+}
+
 /// Ebene einer Zeile in der Gliederung: Gruppen oben (1), Sessions darunter (2), ohne Gruppierung stehen sie auf 1.
 pub fn level(group_row: bool, grouped: bool) -> usize {
     if group_row || !grouped { 1 } else { 2 }

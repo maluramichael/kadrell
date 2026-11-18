@@ -85,6 +85,8 @@ pub struct AppState {
     /// Wirkungen des Aufmerksamkeits-Trackers (Klang, Benachrichtigung, Hüpfen), die die Plattformschicht noch
     /// ausführen muss (`take_effects`).
     pending_effects: Vec<Effect>,
+    /// Statuswechsel seit dem letzten Abruf: der Baum lässt den Punkt aufblitzen (`take_transitions`).
+    pending_transitions: kadrell_claude::attention::Transitions,
 }
 
 impl AppState {
@@ -134,6 +136,7 @@ impl AppState {
             window_active: true,
             error: None,
             pending_effects: Vec::new(),
+            pending_transitions: Default::default(),
         };
         state.restore_view();
         state
@@ -456,7 +459,9 @@ impl AppState {
         let looking: HashSet<String> = self.selected.iter().cloned().collect();
         self.attention.focus_hook_enabled = true;
         let input = UpdateInput { sessions: &sessions, waiting: &waiting, statuses: &statuses, focused: self.focused.as_deref(), looking: Some(&looking), is_key: self.window_active };
-        let (_, effects) = self.attention.update(&input);
+        let (changed, effects) = self.attention.update(&input);
+        self.pending_transitions.waiting.extend(changed.waiting);
+        self.pending_transitions.done.extend(changed.done);
         self.attention.prune(&sessions);
         for effect in effects {
             match effect {
@@ -464,6 +469,11 @@ impl AppState {
                 other => self.pending_effects.push(other),
             }
         }
+    }
+
+    /// Die Statuswechsel seit dem letzten Abruf (der Abgleich läuft mehrmals zwischen zwei Bildern, daher vereinigt).
+    pub fn take_transitions(&mut self) -> kadrell_claude::attention::Transitions {
+        std::mem::take(&mut self.pending_transitions)
     }
 
     /// Die Wirkungen seit dem letzten Abruf (Klang, Benachrichtigung, Hüpfen), in der Reihenfolge des Trackers.

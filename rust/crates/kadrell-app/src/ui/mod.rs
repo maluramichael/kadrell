@@ -32,6 +32,11 @@ pub mod rename;
 pub mod sidebar;
 pub mod tile;
 pub mod tiling;
+pub mod tree_actions;
+pub mod tree_anim;
+pub mod tree_icons;
+pub mod tree_rules;
+pub mod tree_toolbar;
 
 /// Aktuelles Farbschema aus dem Global.
 pub fn theme(cx: &App) -> Theme {

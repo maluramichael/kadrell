@@ -39,7 +39,7 @@ pub fn folder(color: Hsla) -> impl IntoElement {
 }
 
 /// Herzumriss als Linienzug (Herzkurve, 16 x 16).
-fn heart_points() -> Vec<(f32, f32)> {
+pub(crate) fn heart_points() -> Vec<(f32, f32)> {
     (0..48)
         .map(|i| {
             let t = i as f32 / 48. * std::f32::consts::TAU;

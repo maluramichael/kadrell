@@ -22,6 +22,9 @@ pub struct Theme {
     pub idle: Hsla,
     pub error: Hsla,
     pub accent: Hsla,
+    /// Noch laufendes Kommando aus dem Bash-Tool (`Theme.shell`): bei den Instrument-Schemata ein ruhiges Grau, sonst das
+    /// Blau (`ansi[4]`).
+    pub shell: Hsla,
     /// `accent`, aber lesbar als Text auf allen Dialogflächen (`Theme.accentText`).
     pub accent_text: Hsla,
     /// `error`, aber lesbar als Text auf allen Dialogflächen (`Theme.errorText`).
@@ -199,6 +202,15 @@ const SPECS: [Spec; 12] = [
     },
 ];
 
+/// Shell-Farbe eines Schemas: bei Instrument ausdrücklich gesetzt, sonst `ansi[4]` (`shell ?? ansi[4]`).
+fn shell_of(s: &Spec) -> Hsla {
+    match s.id {
+        "instrument-dark" => hex(0xa3a19a),
+        "instrument-light" => hex(0x5c5a54),
+        _ => hex(s.ansi[4]),
+    }
+}
+
 impl Theme {
     fn from_spec(s: &Spec) -> Self {
         let n = s.colors.map(hex);
@@ -222,6 +234,7 @@ impl Theme {
             idle: n[10],
             error: n[11],
             accent,
+            shell: shell_of(s),
             accent_text: from_comps(ensuring_contrast(comps(accent), 4.5, &dialog, extreme)),
             error_text: from_comps(ensuring_contrast(c(11), 4.5, &dialog, extreme)),
             ansi: s.ansi.map(hex),
@@ -316,7 +329,7 @@ fn dialog_surfaces(bg: Rgb, panel: Rgb, surface: Rgb, dark: bool) -> [Rgb; 5] {
     [panel, surface, raised_of(bg, panel, surface), well_of(bg, panel, dark), bg]
 }
 
-fn luminance(c: Hsla) -> f32 {
+pub(crate) fn luminance(c: Hsla) -> f32 {
     lum(comps(c))
 }
 
