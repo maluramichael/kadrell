@@ -59,7 +59,8 @@ pub fn standardize(p: &str) -> String {
     format!("{prefix}{joined}")
 }
 
-fn split_root(p: &str) -> (&str, &str) {
+/// Wurzel (`/`, `C:/` oder `C:`) und Rest eines Pfads mit `/`; ohne Wurzel ist der erste Teil leer.
+pub fn split_root(p: &str) -> (&str, &str) {
     let b = p.as_bytes();
     if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
         let n = if b.len() >= 3 && b[2] == b'/' { 3 } else { 2 };
