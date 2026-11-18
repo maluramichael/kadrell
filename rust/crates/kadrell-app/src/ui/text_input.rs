@@ -89,6 +89,8 @@ pub struct TextInput {
     large: bool,
     /// Pfadfeld wie `PathField` der Mac-App: Innenabstand 8, 13 pt, eingefügte Zeilenumbrüche fallen weg.
     path: bool,
+    /// Eigene Schriftgröße in Punkten (Swift: `PathField(size:)`), sonst die der Variante.
+    text_pt: Option<f32>,
 }
 
 // Zeichengrenzen und Wortsprünge als reine Funktionen, damit sie testbar bleiben.
@@ -137,6 +139,7 @@ impl TextInput {
             compact: false,
             large: false,
             path: false,
+            text_pt: None,
         }
     }
 
@@ -155,6 +158,12 @@ impl TextInput {
     /// Pfadfeld des Dialogs „Neue Session“: Innenabstand 8 statt 6, Zeilenumbrüche beim Einfügen weglassen.
     pub fn path_field(mut self) -> Self {
         self.path = true;
+        self
+    }
+
+    /// Andere Schriftgröße in Punkten (Ideenfeld des Schnellstarts: 14 statt 13).
+    pub fn size(mut self, points: f32) -> Self {
+        self.text_pt = Some(points);
         self
     }
 
@@ -565,6 +574,7 @@ impl Render for TextInput {
             (false, true) => (26., 13., 8.),
             (false, false) => (32., text_size, 6.),
         };
+        let text = self.text_pt.unwrap_or(text);
         div()
             .flex()
             .items_center()

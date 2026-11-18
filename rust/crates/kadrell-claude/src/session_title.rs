@@ -111,14 +111,24 @@ impl SessionTitler {
     /// Fragt höchstens einmal je Session (bis zum nächsten Start von Kadrell), Fehler jeder Art bleiben unsichtbar.
     /// Liefert den fertigen Titel. `readme` liest den README-Anfang eines Ordners.
     pub fn run(&mut self, s: &TitleCandidate, active: bool, model: &dyn LocalModel, readme: &dyn Fn(&str) -> Option<String>, home: &str) -> Option<String> {
-        let prompt = s.first_prompt.as_deref().filter(|_| Self::eligible(s, active))?;
-        if !self.attempted.insert(s.id.clone()) {
-            return None;
-        }
-        let head = readme(&s.cwd);
-        let reply = model.ask(SYSTEM, &user(&s.cwd, prompt, head.as_deref(), home), SESSION_TITLE_TIMEOUT).ok()?;
-        parse(&reply)
+        let prompt = self.begin(s, active)?;
+        request(&s.cwd, &prompt, model, readme, home)
     }
+
+    /// Der kurze, nicht blockierende Teil von `run`: prüft und merkt den Versuch vor. Liefert den ersten Prompt, mit dem
+    /// `request` (auf einem Hintergrund-Thread) fragen soll; `None`, wenn nichts zu tun ist oder schon gefragt wurde.
+    pub fn begin(&mut self, s: &TitleCandidate, active: bool) -> Option<String> {
+        let prompt = s.first_prompt.as_deref().filter(|_| Self::eligible(s, active))?;
+        self.attempted.insert(s.id.clone()).then(|| prompt.to_string())
+    }
+}
+
+/// Der blockierende Teil von `run`: README lesen, das Modell fragen (höchstens `SESSION_TITLE_TIMEOUT`), Antwort
+/// bereinigen. Jeder Fehler gibt `None`.
+pub fn request(cwd: &str, prompt: &str, model: &dyn LocalModel, readme: &dyn Fn(&str) -> Option<String>, home: &str) -> Option<String> {
+    let head = readme(cwd);
+    let reply = model.ask(SYSTEM, &user(cwd, prompt, head.as_deref(), home), SESSION_TITLE_TIMEOUT).ok()?;
+    parse(&reply)
 }
 
 #[cfg(test)]
@@ -217,6 +227,15 @@ mod tests {
         let model = Model { reply: Err(ModelError::Timeout), asked: Cell::new(0) };
         assert_eq!(SessionTitler::default().run(&candidate(Some("x")), true, &model, &|_| None, "/h"), None);
         assert_eq!(model.asked.get(), 1);
+    }
+
+    #[test]
+    fn begin_marks_the_attempt_so_a_second_status_report_does_not_ask_again() {
+        let mut titler = SessionTitler::default();
+        let s = candidate(Some("baue den Titel"));
+        assert_eq!(titler.begin(&s, true).as_deref(), Some("baue den Titel"));
+        assert_eq!(titler.begin(&s, true), None);
+        assert_eq!(titler.begin(&candidate(None), true), None, "ohne ersten Prompt nichts zu fragen");
     }
 
     #[test]

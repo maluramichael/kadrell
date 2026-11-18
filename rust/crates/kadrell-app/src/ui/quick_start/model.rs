@@ -4,10 +4,12 @@
 //! im Kern; hier steht nur, was die Oberfläche daraus macht.
 
 use kadrell_claude::folder_index::{self, FolderIndex};
+use kadrell_claude::local_model::ModelError;
 use kadrell_claude::quick_start::{
-    Cancelled, GroupInfo, NOT_READABLE, Origin, OriginKind, Phase, QuickStartCandidate, QuickStartFlow, SKIPPED, SessionInfo, Source, Started, Submitted, build_index,
+    Analysis, Cancelled, GroupInfo, ModelRequest, NOT_READABLE, Origin, OriginKind, Phase, QuickStartCandidate, QuickStartFlow, SKIPPED, SessionInfo, Source, Started, Submitted, build_index,
 };
 use kadrell_i18n::trd;
+use kadrell_models::http::describe;
 
 use crate::ui::folders::short_path;
 
@@ -129,38 +131,44 @@ pub fn missing_text(path: &str, home: &str) -> String {
 /// Was ⏎ (oder ein Klick auf die Haupttaste) bewirkt hat.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Confirmed {
-    /// Nichts zu tun (leere Eingabe, kein Kandidat): die Oberfläche piept nicht, es bleibt wie es ist.
+    /// Nichts zu tun (Klick neben die Liste): kein Ton, es bleibt wie es ist.
     Nothing,
+    /// Die Eingabe bewirkt nichts (leere Idee, kein Kandidat zum Starten): die Oberfläche piept (`NSSound.beep()`).
+    Beep,
     /// Die Projektwahl steht: Fokus auf das Suchfeld.
     ShowPick,
+    /// Die Phase „Denken“ beginnt: die Oberfläche stellt die Frage ans Modell und gibt die Antwort an `model_reply`.
+    Ask(ModelRequest),
     /// Hier startet die Session.
     Start { path: String, group_id: Option<String>, prompt: String },
-    /// Der Ordner ist weg.
+    /// Der Ordner ist weg (die Oberfläche zeigt den Text und piept).
     Missing(String),
 }
 
 fn started(s: Started) -> Confirmed {
     match s {
         Started::Go(c, prompt) => Confirmed::Start { path: c.path, group_id: c.group_id, prompt },
-        Started::Beep => Confirmed::Nothing,
+        Started::Beep => Confirmed::Beep,
         Started::Missing => Confirmed::Nothing,
     }
 }
 
-/// ⏎: Idee analysieren, Modellwarten überspringen oder starten. Eine Modellfrage stellt diese Version nicht (kein
-/// lokaler Modell-Client in der Rust-App): ohne `model_name` gibt der Kern nie `AskModel` zurück, kommt es doch, entscheidet
-/// die Namenssuche.
+/// ⏎: Idee analysieren, Modellwarten überspringen oder starten. Fragt das Modell (`Ask`), läuft die Antwort über
+/// [`model_reply`].
 pub fn confirm(flow: &mut QuickStartFlow, home: &str) -> Confirmed {
     match flow.submit() {
-        Submitted::Analysis(kadrell_claude::quick_start::Analysis::Beep) => Confirmed::Nothing,
-        Submitted::Analysis(kadrell_claude::quick_start::Analysis::Done) => Confirmed::ShowPick,
-        Submitted::Analysis(kadrell_claude::quick_start::Analysis::AskModel(_)) => {
-            flow.model_reply(Err(kadrell_claude::local_model::ModelError::Unreachable("kein lokales Modell".into())));
-            Confirmed::ShowPick
-        }
+        Submitted::Analysis(Analysis::Beep) => Confirmed::Beep,
+        Submitted::Analysis(Analysis::Done) => Confirmed::ShowPick,
+        Submitted::Analysis(Analysis::AskModel(request)) => Confirmed::Ask(request),
         Submitted::Start(Started::Missing) => Confirmed::Missing(pick_path(flow).map(|p| missing_text(&p, home)).unwrap_or_default()),
         Submitted::Start(s) => started(s),
     }
+}
+
+/// Antwort des Modells (oder Fehler) in den Ablauf geben. Fehler kommen in der eingestellten Sprache an (`describe`,
+/// Swift: `LocalModelError.describe`), der Kern zeigt sie dann unverändert hinter „Modell: “.
+pub fn model_reply(flow: &mut QuickStartFlow, reply: Result<String, ModelError>) {
+    flow.model_reply(reply.map_err(|e| ModelError::Invalid(describe(&e))));
 }
 
 /// Klick auf eine Zeile der Liste.

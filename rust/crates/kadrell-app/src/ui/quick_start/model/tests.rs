@@ -1,5 +1,6 @@
 use super::*;
 use kadrell_claude::folder_index::Use;
+use kadrell_claude::local_model::ModelError;
 use kadrell_claude::quick_start::Cancelled;
 
 const HOME: &str = "/home/m";
@@ -102,11 +103,11 @@ fn idea_with_a_project_name_preselects_it_and_enter_starts_with_the_idea() {
 }
 
 #[test]
-fn empty_idea_does_nothing() {
+fn empty_idea_beeps() {
     let tmp = Tmp::new();
     let mut flow = flow_in(&tmp);
     flow.set_idea("   ");
-    assert_eq!(confirm(&mut flow, HOME), Confirmed::Nothing);
+    assert_eq!(confirm(&mut flow, HOME), Confirmed::Beep);
     assert_eq!(flow.phase, Phase::Idea);
 }
 
@@ -125,7 +126,7 @@ fn arrows_and_typing_choose_another_project() {
     assert!(matches!(confirm(&mut flow, HOME), Confirmed::Start { path, .. } if path.ends_with("/lulububu")));
     flow.set_filter("zzzzzz");
     assert!(flow.list.is_empty());
-    assert_eq!(confirm(&mut flow, HOME), Confirmed::Nothing, "ohne Treffer nichts starten");
+    assert_eq!(confirm(&mut flow, HOME), Confirmed::Beep, "ohne Treffer nichts starten, nur piepen");
 }
 
 #[test]
@@ -197,4 +198,105 @@ fn texts_follow_phase_and_candidate_source() {
     assert_eq!(source_text(&c), "benutzter Ordner");
     c.sessions = 3;
     assert_eq!(source_text(&c), "3 Sessions");
+}
+
+// --- Mit lokalem Modell (Swift: QuickStartModel mit `ask`) ---
+
+fn flow_with_model(tmp: &Tmp, strip_reference: bool) -> QuickStartFlow {
+    let a = candidate(&tmp.dir("kadrell"), "kadrell", Source::Group, 2.0);
+    let b = candidate(&tmp.dir("lulububu"), "lulububu", Source::Repo, 1.0);
+    let mut flow = QuickStartFlow::new(vec![a, b], Some("qwen3:4b"), HOME);
+    flow.strip_reference = strip_reference;
+    flow
+}
+
+fn asked(flow: &mut QuickStartFlow, idea: &str) -> ModelRequest {
+    flow.set_idea(idea);
+    match confirm(flow, HOME) {
+        Confirmed::Ask(request) => request,
+        other => panic!("Modellfrage erwartet, bekommen {other:?}"),
+    }
+}
+
+#[test]
+fn without_a_clear_name_the_model_is_asked_and_its_pick_goes_first() {
+    let tmp = Tmp::new();
+    let mut flow = flow_with_model(&tmp, true);
+    let request = asked(&mut flow, "Der Roboter soll beim Start piepen");
+    assert_eq!(flow.phase, Phase::Thinking);
+    assert!(request.user.contains("Idea: Der Roboter soll beim Start piepen") && request.user.contains("0: kadrell"));
+    model_reply(&mut flow, Ok(r#"{"index": 1, "sure": true, "prompt": "Der Roboter soll beim Start piepen"}"#.into()));
+    assert_eq!(flow.phase, Phase::Pick);
+    assert_eq!(flow.list[0].name, "lulububu", "die Wahl des Modells steht vorn");
+    assert_eq!(origin_text(flow.origin.as_ref().unwrap()), "erkannt von qwen3:4b");
+}
+
+#[test]
+fn an_unsure_model_asks_for_a_check_and_no_project_is_said_so() {
+    let tmp = Tmp::new();
+    let mut flow = flow_with_model(&tmp, true);
+    asked(&mut flow, "Irgendeine Idee");
+    model_reply(&mut flow, Ok(r#"{"index": 0, "sure": false, "prompt": "x"}"#.into()));
+    assert_eq!(origin_text(flow.origin.as_ref().unwrap()), "qwen3:4b vermutet, bitte prüfen");
+    let mut again = flow_with_model(&tmp, true);
+    asked(&mut again, "Irgendeine Idee");
+    model_reply(&mut again, Ok(r#"{"index": -1, "sure": false, "prompt": "x"}"#.into()));
+    assert_eq!(origin_text(again.origin.as_ref().unwrap()), "qwen3:4b findet kein passendes Projekt · zuletzt benutzte zuerst");
+}
+
+#[test]
+fn model_failures_are_shown_behind_the_name_hint_and_never_block() {
+    let tmp = Tmp::new();
+    let mut flow = flow_with_model(&tmp, true);
+    asked(&mut flow, "Irgendeine Idee");
+    model_reply(&mut flow, Err(ModelError::Timeout));
+    assert_eq!(flow.phase, Phase::Pick);
+    assert_eq!(origin_text(flow.origin.as_ref().unwrap()), "kein Projekt im Text erkannt · zuletzt benutzte zuerst · Modell: keine Antwort in der Zeit");
+    let mut unreadable = flow_with_model(&tmp, true);
+    asked(&mut unreadable, "Irgendeine Idee");
+    model_reply(&mut unreadable, Ok("weiß nicht".into()));
+    assert!(origin_text(unreadable.origin.as_ref().unwrap()).ends_with("Modell: Antwort nicht lesbar"));
+    let mut down = flow_with_model(&tmp, true);
+    asked(&mut down, "Irgendeine Idee");
+    model_reply(&mut down, Err(ModelError::Unreachable("127.0.0.1".into())));
+    assert!(origin_text(down.origin.as_ref().unwrap()).ends_with("Modell: nicht erreichbar: 127.0.0.1"));
+}
+
+#[test]
+fn enter_while_thinking_skips_the_model_and_a_late_reply_is_ignored() {
+    let tmp = Tmp::new();
+    let mut flow = flow_with_model(&tmp, true);
+    asked(&mut flow, "Irgendeine Idee");
+    assert_eq!(confirm(&mut flow, HOME), Confirmed::ShowPick);
+    assert!(origin_text(flow.origin.as_ref().unwrap()).ends_with("Modell: übersprungen"));
+    let before = flow.list.clone();
+    model_reply(&mut flow, Ok(r#"{"index": 1, "sure": true, "prompt": "x"}"#.into()));
+    assert_eq!(flow.list, before, "die späte Antwort ändert nichts");
+}
+
+#[test]
+fn typing_or_escape_while_thinking_goes_back_to_the_idea() {
+    let tmp = Tmp::new();
+    let mut flow = flow_with_model(&tmp, true);
+    asked(&mut flow, "Irgendeine Idee");
+    flow.set_idea("Irgendeine andere Idee");
+    assert_eq!(flow.phase, Phase::Idea, "Tippen bricht die Frage ab");
+    asked(&mut flow, "Noch eine Idee");
+    assert_eq!(cancel(&mut flow), Cancelled::Back);
+    assert_eq!(flow.phase, Phase::Idea);
+}
+
+#[test]
+fn strip_reference_setting_decides_whether_a_clear_name_still_asks_and_whether_the_cleaned_prompt_counts() {
+    let tmp = Tmp::new();
+    let idea = "In Kadrell habe ich die Idee, dass alles schneller wird";
+    let mut off = flow_with_model(&tmp, false);
+    off.set_idea(idea);
+    assert_eq!(confirm(&mut off, HOME), Confirmed::ShowPick, "eindeutiger Name und Einstellung aus: kein Modell");
+    let mut on = flow_with_model(&tmp, true);
+    asked(&mut on, idea);
+    model_reply(&mut on, Ok(r#"{"index": 0, "sure": true, "prompt": "alles schneller wird"}"#.into()));
+    assert_eq!(on.cleaned.as_deref(), Some("alles schneller wird"), "Projektverweis entfernt");
+    assert_eq!(on.prompt(), "alles schneller wird");
+    assert_eq!(cleaned_label(on.use_cleaned), "Projektverweis entfernt · Tab: Originaltext");
 }
