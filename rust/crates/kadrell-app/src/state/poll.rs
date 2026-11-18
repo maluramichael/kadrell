@@ -37,10 +37,28 @@ impl AppState {
         PollJob { registry: self.registry.clone(), config_dir: self.env.config_dir(), pids: self.pids() }
     }
 
-    /// Sekunden bis zum nächsten Poll (im Hintergrund seltener).
-    pub fn poll_interval(&self) -> f64 {
+    /// Ist ein Poll fällig? Gleicht dabei den Hintergrundmodus ab: Fenster verdeckt, versteckt oder nicht aktiv pollt
+    /// seltener, beim Zurückkommen sofort (`SessionRegistry.setBackground`).
+    pub fn poll_due(&self, elapsed_secs: f64) -> bool {
         let mut registry = self.registry.lock().unwrap_or_else(PoisonError::into_inner);
-        registry.set_background(!self.window_active);
-        registry.poll_interval()
+        let returned = registry.set_background(!self.window_active);
+        due(elapsed_secs, registry.poll_interval(), returned)
+    }
+}
+
+/// Fällig, wenn der Takt um ist oder die App eben aus dem Hintergrund kam.
+fn due(elapsed_secs: f64, interval: f64, returned: bool) -> bool {
+    returned || elapsed_secs >= interval
+}
+
+#[cfg(test)]
+mod tests {
+    use super::due;
+
+    #[test]
+    fn a_poll_is_due_after_the_interval_or_when_coming_back() {
+        assert!(!due(1.5, 2., false));
+        assert!(due(2., 2., false));
+        assert!(due(0.1, 5., true), "aus dem Hintergrund zurück: sofort");
     }
 }

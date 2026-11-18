@@ -9,6 +9,7 @@ pub mod bar;
 pub mod bar_keys;
 pub mod chrome;
 pub mod context_menu;
+pub mod count_up;
 pub mod ext;
 pub mod footer;
 pub mod icons;

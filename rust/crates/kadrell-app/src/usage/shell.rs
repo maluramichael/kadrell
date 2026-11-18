@@ -50,6 +50,8 @@ pub struct UsageUi {
     pending: VecDeque<Notice>,
     /// Die zuletzt gedrückte Taste der Leiste, 80 ms lang eingesunken (`bar_wire::flash_bar`).
     pub(crate) pressed: Option<&'static str>,
+    /// Hochzählen der Nutzungswerte in der Leiste (0,5 s).
+    pub(crate) count_up: crate::ui::count_up::CountUp,
 }
 
 impl UsageUi {
@@ -61,7 +63,7 @@ impl UsageUi {
             let accounts = state_from(state.settings.accounts_index().as_deref(), state.settings.active_account_id());
             Hub::system(accounts, state.profile.dir.join("usage-history.jsonl"), &config(state), now)
         };
-        UsageUi { hub: Arc::new(hub), history: Arc::new(Mutex::new(SessionHistory::default())), stats: None, notice: None, notice_kind: None, pending: VecDeque::new(), pressed: None }
+        UsageUi { hub: Arc::new(hub), history: Arc::new(Mutex::new(SessionHistory::default())), stats: None, notice: None, notice_kind: None, pending: VecDeque::new(), pressed: None, count_up: Default::default() }
     }
 
     /// Ein Fenster der Konten oder Statistik ist offen: das Terminal dahinter bekommt keine Tasten.
@@ -146,6 +148,18 @@ impl Shell {
             flash: self.flash_fn(cx),
             ext: Vec::new(),
             update: None,
+            fade: None,
+        }
+    }
+
+    /// Bringt das Hochzählen der Nutzungswerte voran: neuer Stand aus dem Hub, laufender Zwischenstand in die Leiste,
+    /// solange er läuft weiter zeichnen (Swift: `StatusBarView.animate(0.5)`).
+    pub(crate) fn animate_usage(&mut self, bar: &mut BarCtl, window: &mut Window) {
+        let now = std::time::Instant::now();
+        self.usage.count_up.observe(&bar.view.usage, now);
+        bar.fade = self.usage.count_up.fade(now, kadrell_tray::reduce_motion());
+        if bar.fade.is_some() {
+            window.request_animation_frame();
         }
     }
 
