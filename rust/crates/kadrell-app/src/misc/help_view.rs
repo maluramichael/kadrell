@@ -203,7 +203,7 @@ fn section_view(s: &Section, first: bool, t: &Theme) -> impl IntoElement + use<>
             .flex()
             .items_start()
             .gap(px(12.))
-            .py(px(1.))
+            .py(px(2.6))
             .child(div().flex_none().w(px(KEY_COLUMN)).text_right().font_weight(FontWeight::BOLD).child(r.keys.clone()))
             .child(div().flex_1().min_w_0().text_color(t.muted).child(r.text.clone()))
     });

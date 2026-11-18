@@ -521,6 +521,7 @@ impl Render for Shell {
             .text_color(t.fg)
             .font_family(theme::FONT)
             .text_size(px(12.))
+            .line_height(gpui::relative(ui::overlay::LINE_HEIGHT))
             .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.on_key(ev, window, cx)));
         let root = self.menubar_hooks(misc::attach_actions(ui::ext::attach_actions(menus::attach_actions(root, cx), cx), cx), cx);
         let right = self.ext_right_panel(window, cx);
