@@ -2,7 +2,7 @@
 //! Spaltenzahl, Teilung der Abschnitte und Breite der Steuerelemente. Die Höhe jedes Abschnitts misst der Frame davor
 //! (`measure` in `controls`), erst im ersten Frame ohne Messung gilt eine Schätzung aus der Zeilenzahl.
 
-/// Ab dieser Spaltenbreite stehen zwei Spalten nebeneinander, darunter eine.
+/// Ab dieser Spaltenbreite (logisch, mal UI-Größe) stehen zwei Spalten nebeneinander, darunter eine.
 pub const MIN_COLUMN_WIDTH: f32 = 600.;
 /// Abstand zwischen zwei Abschnitten einer Spalte.
 pub const SECTION_SPACING: f32 = 4.;
@@ -10,8 +10,8 @@ pub const SECTION_SPACING: f32 = 4.;
 pub const MAX_CONTROL_WIDTH: f32 = 300.;
 
 /// Eine oder zwei Spalten, je nach Breite.
-pub fn count(width: f32) -> usize {
-    if width >= 2. * MIN_COLUMN_WIDTH { 2 } else { 1 }
+pub fn count(width: f32, scale: f32) -> usize {
+    if width >= 2. * MIN_COLUMN_WIDTH * scale { 2 } else { 1 }
 }
 
 /// Anzahl der Abschnitte in der linken Spalte, bei der die höhere Spalte am niedrigsten ist. Bei Gleichstand
@@ -36,11 +36,11 @@ pub fn left_count(heights: &[f32], columns: usize) -> usize {
 }
 
 /// Rund 45 % der Spalte nach Abzug der Ränder, höchstens 300, mindestens 120. Ohne gemessene Breite die volle.
-pub fn control_width(column: f32) -> f32 {
+pub fn control_width(column: f32, scale: f32) -> f32 {
     if column <= 0. {
-        return MAX_CONTROL_WIDTH;
+        return MAX_CONTROL_WIDTH * scale;
     }
-    (((column - 64.) * 0.45).round()).clamp(120., MAX_CONTROL_WIDTH)
+    (((column - 64.) * 0.45).round()).clamp(120. * scale, MAX_CONTROL_WIDTH * scale)
 }
 
 /// Höhen für die Teilung: je Abschnitt die gemessene, solange noch keine vorliegt die Schätzung (Swift nimmt dann 0,
@@ -69,10 +69,20 @@ mod tests {
 
     #[test]
     fn one_column_below_twice_the_minimum() {
-        assert_eq!(count(1100.), 1);
-        assert_eq!(count(1199.), 1);
-        assert_eq!(count(1200.), 2);
-        assert_eq!(count(1880.), 2);
+        assert_eq!(count(1100., 1.), 1);
+        assert_eq!(count(1199., 1.), 1);
+        assert_eq!(count(1200., 1.), 2);
+        assert_eq!(count(1880., 1.), 2);
+    }
+
+    #[test]
+    fn the_minimum_column_width_follows_the_ui_size() {
+        assert_eq!(count(1500., 1.5), 1, "2 x 600 x 1,5 = 1800");
+        assert_eq!(count(1800., 1.5), 2);
+        assert_eq!(count(900., 0.75), 2);
+        assert_eq!(control_width(0., 1.5), 450.);
+        assert_eq!(control_width(2000., 1.5), 450.);
+        assert_eq!(control_width(100., 1.5), 180.);
     }
 
     #[test]
@@ -118,8 +128,8 @@ mod tests {
     /// `SettingsLayoutTests.testSettingsUseTwoColumnsWhenWide`: breit zwei Spalten, schmal eine.
     #[test]
     fn settings_use_two_columns_when_wide() {
-        assert_eq!(left_count(&[100.; 4], count(1400.)), 2);
-        assert_eq!(left_count(&[100.; 4], count(900.)), 4, "eine Spalte: alle Abschnitte untereinander");
+        assert_eq!(left_count(&[100.; 4], count(1400., 1.)), 2);
+        assert_eq!(left_count(&[100.; 4], count(900., 1.)), 4, "eine Spalte: alle Abschnitte untereinander");
     }
 
     #[test]
@@ -144,9 +154,9 @@ mod tests {
 
     #[test]
     fn control_width_is_45_percent_of_the_column() {
-        assert_eq!(control_width(0.), 300.);
-        assert_eq!(control_width(940.), 300.);
-        assert_eq!(control_width(600.), 241.);
-        assert_eq!(control_width(100.), 120.);
+        assert_eq!(control_width(0., 1.), 300.);
+        assert_eq!(control_width(940., 1.), 300.);
+        assert_eq!(control_width(600., 1.), 241.);
+        assert_eq!(control_width(100., 1.), 120.);
     }
 }

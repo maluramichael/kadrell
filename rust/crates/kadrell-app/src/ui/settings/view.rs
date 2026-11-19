@@ -245,8 +245,8 @@ impl SettingsDialog {
 
     fn columns(&self, blocks: &[Block], shown: &[(usize, Vec<usize>)], inputs: (f32, &[f32]), t: &Theme, cx: &mut Context<Self>) -> Div {
         let (width, heights) = inputs;
-        let count = layout::count(width);
-        let ctl_w = layout::control_width(width / count as f32);
+        let count = layout::count(width, crate::ui::overlay::scale());
+        let ctl_w = layout::control_width(width / count as f32, crate::ui::overlay::scale());
         let left = layout::left_count(heights, count);
         let mut column = |part: &[(usize, Vec<usize>)]| {
             let views: Vec<Div> = part.iter().map(|(b, rows)| self.block_view((*b, &blocks[*b]), rows, ctl_w, t, cx)).collect();

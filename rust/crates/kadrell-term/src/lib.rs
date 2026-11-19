@@ -7,6 +7,7 @@ pub mod links;
 mod forward;
 pub mod process;
 mod terminal;
+mod search_bar;
 mod textsearch;
 mod theme;
 

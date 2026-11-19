@@ -1,6 +1,6 @@
 //! Daten, die der Einstellungsdialog nicht selbst besitzt: Claude-Konten und lokale Modelle. Der Dialog spricht
-//! nur mit dem Trait `Backend`; echte Daten kommen später aus `kadrell-accounts` und der Anbindung der lokalen
-//! Modelle. Bis dahin liefert `MockBackend` feste Beispieldaten (MOCK, nichts davon ist echt).
+//! nur mit dem Trait `Backend`; echte Daten liefern `usage::backend` (Konten, `kadrell-accounts`) und
+//! `models::backend` (lokale Modelle). `MockBackend` mit festen Beispieldaten gilt nur in Tests.
 
 use super::model::Provider;
 

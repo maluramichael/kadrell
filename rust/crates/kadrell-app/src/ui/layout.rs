@@ -602,6 +602,11 @@ fn on_move(this: &mut Shell, ev: &MouseMoveEvent, cx: &mut Context<Shell>) {
     cx.notify();
 }
 
+/// Sessions mit lesbarer Kachel (`visibleTiles`): bei Stack nur die aktive, sonst alle Kacheln der Fläche.
+fn looking_keys(keys: &[String], stacked: bool, active: usize) -> Vec<String> {
+    if stacked { keys.get(active).cloned().into_iter().collect() } else { keys.to_vec() }
+}
+
 /// Arbeitsfläche: alle sichtbaren Kacheln samt ziehbaren Grenzen.
 pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::Div> {
     let t = theme(cx);
@@ -621,6 +626,7 @@ pub fn workspace(shell: &mut Shell, cx: &mut Context<Shell>) -> Stateful<gpui::D
         let (frames, dividers) = shell.layout.plan(visible.len(), active);
         (tiles(shell, &frames, cx), dividers)
     };
+    shell.state.set_looking(&looking_keys(&keys, stacked, active));
     let shown: Vec<(String, Rect)> = keys.iter().cloned().zip(shell.layout.frames.iter().copied()).collect();
     let state = &shell.state;
     shell.layout.ghosts.update(std::time::Instant::now(), &shown, &|k| state.session(k).is_some());

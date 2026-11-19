@@ -238,6 +238,32 @@ struct Search {
     hit: Option<Match>,
 }
 
+/// Wohin die Suche vom aktuellen Treffer aus geht.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Step {
+    /// Begriff hat sich geändert: ab dem bisherigen Treffer (oder dem Anfang des Verlaufs) vorwärts, ein Treffer an
+    /// derselben Stelle bleibt stehen.
+    Refine,
+    /// Nächster Treffer weiter unten, nach dem letzten wieder oben.
+    Forward,
+    /// Voriger Treffer weiter oben, vor dem ersten wieder unten.
+    Backward,
+}
+
+impl Step {
+    /// Startpunkt und Richtung der Suche. Ohne bisherigen Treffer: vorwärts ab dem Anfang, rückwärts ab dem Ende.
+    fn origin(self, term: &Term<Listener>, hit: Option<&Match>) -> (TPoint, Direction) {
+        let top = TPoint::new(term.topmost_line(), Column(0));
+        match (self, hit) {
+            (Step::Backward, Some(h)) => (h.start().sub(term, Boundary::None, 1), Direction::Left),
+            (Step::Backward, None) => (TPoint::new(term.bottommost_line(), Column(term.columns() - 1)), Direction::Left),
+            (Step::Forward, Some(h)) => (h.end().add(term, Boundary::None, 1), Direction::Right),
+            (Step::Refine, Some(h)) => (*h.start(), Direction::Right),
+            (_, None) => (top, Direction::Right),
+        }
+    }
+}
+
 pub struct TerminalPane {
     term: Arc<FairMutex<Term<Listener>>>,
     notifier: Notifier,
@@ -445,9 +471,9 @@ impl TerminalPane {
             return self.open_search(cx);
         }
         if forward {
-            self.find(true);
+            self.find_forward();
         } else {
-            self.find_newer();
+            self.find_backward();
         }
         cx.notify();
     }
@@ -457,7 +483,7 @@ impl TerminalPane {
     fn dev_find(&mut self, query: String, cx: &mut Context<Self>) {
         self.write(format!("echo {query} Kadrell {} {query}\r", query.to_uppercase()).into_bytes());
         self.search = Some(Search { query, hit: None });
-        self.find(false);
+        self.find();
         cx.notify();
     }
 
@@ -502,54 +528,54 @@ impl TerminalPane {
         let mods = crate::links::Mods { platform: m.platform, control: m.control, alt: m.alt, shift: m.shift };
         match crate::links::search_step(mods, &ks.key, cfg!(target_os = "macos")) {
             Some(crate::links::SearchStep::Older) => {
-                self.find(true);
+                self.find_backward();
                 cx.notify();
                 return true;
             }
             Some(crate::links::SearchStep::Newer) => {
-                self.find_newer();
+                self.find_forward();
                 cx.notify();
                 return true;
             }
             None => {}
         }
         match ks.key.as_str() {
-            "escape" => {
-                self.search = None;
-                self.reveal = None;
-                let mut term = self.term.lock();
-                term.selection = None;
-                term.scroll_display(Scroll::Bottom);
-            }
-            "enter" => self.find(true),
+            "escape" => self.close_search(),
+            "enter" if ks.modifiers.shift => self.find_backward(),
+            "enter" => self.find_forward(),
             "backspace" => {
                 if let Some(s) = self.search.as_mut() {
                     s.query.pop();
-                    s.hit = None;
                 }
-                self.find(false);
+                self.find();
             }
             _ => return false,
         }
         cx.notify();
         true
     }
+    /// Suchleiste schließen (Esc, „Fertig“): Markierung weg, Ansicht wieder unten.
+    fn close_search(&mut self) {
+        self.search = None;
+        self.reveal = None;
+        let mut term = self.term.lock();
+        term.selection = None;
+        term.scroll_display(Scroll::Bottom);
+    }
 
-    fn find(&mut self, next: bool) {
+    /// Sucht ab dem aktuellen Treffer wie die Suchleiste der Mac-App (SwiftTerm: `findNext` läuft den Verlauf von oben
+    /// nach unten, `findPrevious` rückwärts) und markiert und zeigt den neuen Treffer.
+    fn seek(&mut self, step: Step) {
         let Some(search) = self.search.as_mut() else { return };
         let mut term = self.term.lock();
         term.selection = None;
         if search.query.is_empty() {
+            search.hit = None;
             return;
         }
         let Ok(mut regex) = RegexSearch::new(&escape_regex(&search.query)) else { return };
-        let origin = match (&search.hit, next) {
-            (Some(hit), true) => *hit.start(),
-            (Some(hit), false) => *hit.end(),
-            _ => TPoint::new(Line(term.screen_lines() as i32 - 1), Column(term.columns() - 1)),
-        };
-        let origin = if next { origin.sub(&*term, Boundary::None, 1) } else { origin };
-        let hit = term.search_next(&mut regex, origin, Direction::Left, Side::Left, None);
+        let (origin, direction) = step.origin(&term, search.hit.as_ref());
+        let hit = term.search_next(&mut regex, origin, direction, Side::Left, None);
         if let Some(hit) = &hit {
             let mut sel = Selection::new(SelectionType::Simple, *hit.start(), Side::Left);
             sel.update(*hit.end(), Side::Right);
@@ -559,27 +585,19 @@ impl TerminalPane {
         search.hit = hit;
     }
 
-    /// Zum nächsten neueren Treffer (⌘⇧G), Gegenstück zu `find(true)`; ohne Treffer vom Anfang des Verlaufs an.
-    fn find_newer(&mut self) {
-        let Some(search) = self.search.as_mut() else { return };
-        let mut term = self.term.lock();
-        term.selection = None;
-        if search.query.is_empty() {
-            return;
-        }
-        let Ok(mut regex) = RegexSearch::new(&escape_regex(&search.query)) else { return };
-        let origin = match &search.hit {
-            Some(hit) => hit.end().add(&*term, Boundary::None, 1),
-            None => TPoint::new(term.topmost_line(), Column(0)),
-        };
-        let hit = term.search_next(&mut regex, origin, Direction::Right, Side::Left, None);
-        if let Some(hit) = &hit {
-            let mut sel = Selection::new(SelectionType::Simple, *hit.start(), Side::Left);
-            sel.update(*hit.end(), Side::Right);
-            term.selection = Some(sel);
-            term.scroll_to_point(*hit.start());
-        }
-        search.hit = hit;
+    /// Tippen und Löschen: ab dem bisherigen Treffer neu suchen, Treffer an derselben Stelle bleiben stehen.
+    fn find(&mut self) {
+        self.seek(Step::Refine);
+    }
+
+    /// Weitersuchen (⌘G, Enter): zum nächsten Treffer weiter unten im Verlauf, nach dem letzten wieder oben.
+    fn find_forward(&mut self) {
+        self.seek(Step::Forward);
+    }
+
+    /// Rückwärts suchen (⇧⌘G, ⇧Enter): zum vorigen Treffer weiter oben, vor dem ersten wieder unten.
+    fn find_backward(&mut self) {
+        self.seek(Step::Backward);
     }
 
     /// Text einer Gridzeile ohne Leerraum am Ende, dazu die Spalte jedes Zeichens (breite Zeichen belegen zwei).
@@ -747,8 +765,22 @@ impl Render for TerminalPane {
         let entity = cx.entity();
         let theme = cx.global::<TermThemeGlobal>().0;
         let search = self.search.as_ref().map(|s| {
-            let found = if s.query.is_empty() || s.hit.is_some() { String::new() } else { format!("  {}", kadrell_i18n::trd!("keine Treffer")) };
-            kadrell_i18n::trd!("Suche: %@▏%@   Enter weiter · Esc schließen", &s.query, &found)
+            let content = crate::search_bar::Content { query: &s.query, no_hits: !s.query.is_empty() && s.hit.is_none() };
+            let actions = crate::search_bar::Actions {
+                previous: Box::new(cx.listener(|this, _, _, cx| {
+                    this.find_backward();
+                    cx.notify();
+                })),
+                next: Box::new(cx.listener(|this, _, _, cx| {
+                    this.find_forward();
+                    cx.notify();
+                })),
+                done: Box::new(cx.listener(|this, _, _, cx| {
+                    this.close_search();
+                    cx.notify();
+                })),
+            };
+            crate::search_bar::view(&content, actions, &theme)
         });
         div()
             .id("terminal")
@@ -761,19 +793,7 @@ impl Render for TerminalPane {
             .on_scroll(cx.listener(Self::scroll))
             .relative()
             .child(TerminalElement { pane: entity })
-            .children(search.map(|text| {
-                div()
-                    .absolute()
-                    .top(px(6.))
-                    .right(px(10.))
-                    .px_2()
-                    .py_1()
-                    .rounded(px(5.))
-                    .bg(theme.line)
-                    .text_color(theme.fg)
-                    .text_size(px(12.))
-                    .child(text)
-            }))
+            .children(search)
     }
 }
 
@@ -929,8 +949,7 @@ impl EntityInputHandler for TerminalPane {
         self.marked = None;
         if let Some(search) = self.search.as_mut() {
             search.query.push_str(text);
-            search.hit = None;
-            self.find(false);
+            self.find();
         } else if !text.is_empty() {
             self.term.lock().selection = None;
             self.write(text.as_bytes().to_vec());
@@ -1585,6 +1604,20 @@ mod tests {
         assert!(cell_at(&t, 2).flags.contains(Flags::UNDERLINE));
         assert!(cell_at(&t, 3).flags.contains(Flags::WIDE_CHAR));
         assert!(cell_at(&t, 4).flags.contains(Flags::WIDE_CHAR_SPACER));
+    }
+
+    /// Weitersuchen läuft den Verlauf nach unten (SwiftTerm `findNext`), Rückwärts nach oben.
+    #[test]
+    fn search_steps_start_at_the_ends_and_go_from_the_hit() {
+        let t = Term::new(Config::default(), &Grid { cols: 10, lines: 4 }, Listener { tx: async_channel::unbounded().0, exited: Arc::default() });
+        let (p, d) = Step::Forward.origin(&t, None);
+        assert_eq!((p, d), (TPoint::new(t.topmost_line(), Column(0)), Direction::Right), "ohne Treffer: von oben nach unten");
+        let (p, d) = Step::Backward.origin(&t, None);
+        assert_eq!((p, d), (TPoint::new(t.bottommost_line(), Column(9)), Direction::Left), "ohne Treffer: von unten nach oben");
+        let hit = TPoint::new(Line(1), Column(2))..=TPoint::new(Line(1), Column(4));
+        assert_eq!(Step::Forward.origin(&t, Some(&hit)), (TPoint::new(Line(1), Column(5)), Direction::Right));
+        assert_eq!(Step::Backward.origin(&t, Some(&hit)), (TPoint::new(Line(1), Column(1)), Direction::Left));
+        assert_eq!(Step::Refine.origin(&t, Some(&hit)), (TPoint::new(Line(1), Column(2)), Direction::Right), "Treffer bleibt stehen");
     }
 
     #[test]
