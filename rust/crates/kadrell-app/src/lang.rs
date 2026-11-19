@@ -254,4 +254,18 @@ mod tests {
         s.set_language(kadrell_core::settings::Language::En);
         assert_eq!(language_of(&s), Language::En);
     }
+
+    /// Alle Texte der Kataloge, wie sie unter Windows ankommen (Begriffe und Kürzel umgesetzt): keine Mac-Zeichen,
+    /// kein Finder. Die Info.plist-Texte der Mac-App kommen unter Windows nicht vor.
+    #[test]
+    fn windows_texts_have_no_mac_words() {
+        for lang in Lang::ALL {
+            let sources = [kadrell_i18n::ftl_source(lang), kadrell_i18n::extra_ftl_source(lang)];
+            for line in sources.iter().flat_map(|s| s.lines()).filter(|l| !l.starts_with('#') && !l.starts_with("infoplist-")) {
+                let text = win(&kadrell_i18n::windows_words(line, lang), lang);
+                let bad = text.chars().any(|c| matches!(c, '⌘' | '⌥' | '⌃' | '⇧' | '⌫')) || text.contains("Finder");
+                assert!(!bad, "{lang:?}: {text}");
+            }
+        }
+    }
 }
