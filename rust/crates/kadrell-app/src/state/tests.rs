@@ -221,6 +221,29 @@ fn select_adds_toggles_and_keeps_the_last() {
 }
 
 #[test]
+fn unseen_follows_the_visible_tiles_not_the_selection() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let a = state.new_claude_session(&cwd(&dir, "alpha"), None, true);
+    let b = state.new_claude_session(&cwd(&dir, "beta"), None, false);
+    start_all(&mut state);
+    state.window_active = true;
+    let report = |state: &mut AppState, s: &str| {
+        let r = kadrell_claude::hook::HookReport { state: s.into(), title: Some("fertig".into()), ..Default::default() };
+        state.report(&b, &r);
+    };
+    // Ausgewählt, aber keine lesbare Kachel (Auto-Modus, Stack): bleibt neu.
+    assert!(state.set_looking(std::slice::from_ref(&a)));
+    state.show_only(&b);
+    report(&mut state, "working");
+    report(&mut state, "idle");
+    assert!(state.is_unseen(&b));
+    assert!(!state.set_looking(std::slice::from_ref(&a)), "unverändert: nichts zu tun");
+    assert!(state.set_looking(std::slice::from_ref(&b)));
+    assert!(!state.is_unseen(&b), "Kachel sichtbar: angesehen");
+}
+
+#[test]
 fn registry_report_sets_status_title_and_unseen_marker() {
     let dir = Dir::new();
     let mut state = state_in(&dir);

@@ -55,7 +55,8 @@ pub fn index_at_column(cols: &[usize], col: usize) -> Option<usize> {
     (col < cols[i] + width.max(1)).then_some(i)
 }
 
-/// Schritt der Suchleiste per Kürzel: ⌘G bzw. Strg+G weiter (zum älteren Treffer wie ⏎), mit Umschalt zurück.
+/// Schritt der Suchleiste per Kürzel: ⌘G bzw. Strg+G weiter (`Newer`: im Verlauf nach unten wie ⏎, Weitersuchen der
+/// Mac-App), mit Umschalt zurück (`Older`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchStep {
     Older,
@@ -77,7 +78,7 @@ pub fn search_step(m: Mods, key: &str, mac: bool) -> Option<SearchStep> {
     if key != "g" || !primary || m.alt {
         return None;
     }
-    Some(if m.shift { SearchStep::Newer } else { SearchStep::Older })
+    Some(if m.shift { SearchStep::Older } else { SearchStep::Newer })
 }
 
 #[cfg(test)]
@@ -130,10 +131,10 @@ mod tests {
     fn search_step_keys_per_platform() {
         let ctrl = Mods { control: true, ..Mods::default() };
         let cmd = Mods { platform: true, ..Mods::default() };
-        assert_eq!(search_step(ctrl, "g", false), Some(SearchStep::Older));
-        assert_eq!(search_step(Mods { shift: true, ..ctrl }, "g", false), Some(SearchStep::Newer));
-        assert_eq!(search_step(cmd, "g", true), Some(SearchStep::Older));
-        assert_eq!(search_step(Mods { shift: true, ..cmd }, "g", true), Some(SearchStep::Newer));
+        assert_eq!(search_step(ctrl, "g", false), Some(SearchStep::Newer));
+        assert_eq!(search_step(Mods { shift: true, ..ctrl }, "g", false), Some(SearchStep::Older));
+        assert_eq!(search_step(cmd, "g", true), Some(SearchStep::Newer));
+        assert_eq!(search_step(Mods { shift: true, ..cmd }, "g", true), Some(SearchStep::Older));
         assert_eq!(search_step(cmd, "g", false), None, "unter Windows ist die Windows-Taste kein Strg");
         assert_eq!(search_step(Mods { alt: true, ..ctrl }, "g", false), None, "Strg+Alt ist AltGr");
         assert_eq!(search_step(ctrl, "h", false), None);

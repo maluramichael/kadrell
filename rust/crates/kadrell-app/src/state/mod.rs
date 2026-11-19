@@ -92,6 +92,9 @@ pub struct AppState {
     pub quit_requested: bool,
     /// Das Fenster ist vorn (für Marke „neu“ und Klang).
     pub window_active: bool,
+    /// Sessions, deren Kachel gerade zu sehen ist (letzter Frame der Arbeitsfläche, `visibleTiles`). `None`: noch kein
+    /// Frame, dann gilt die Auswahl.
+    looking: Option<HashSet<String>>,
     /// Letzter Fehler zum Anzeigen (claude fehlt, Start schlägt fehl).
     pub error: Option<String>,
     /// Wirkungen des Aufmerksamkeits-Trackers (Klang, Benachrichtigung, Hüpfen), die die Plattformschicht noch
@@ -157,6 +160,7 @@ impl AppState {
             ready: false,
             quit_requested: false,
             window_active: true,
+            looking: None,
             error: None,
             pending_effects: Vec::new(),
             focus_fired: Vec::new(),
@@ -485,6 +489,18 @@ impl AppState {
         self.note_title(key);
     }
 
+    /// Die Arbeitsfläche meldet, welche Kacheln lesbar zu sehen sind. Gibt zurück, ob sich etwas geändert hat (dann ist
+    /// die Aufmerksamkeit schon neu berechnet).
+    pub fn set_looking(&mut self, keys: &[String]) -> bool {
+        let set: HashSet<String> = keys.iter().cloned().collect();
+        if self.looking.as_ref() == Some(&set) {
+            return false;
+        }
+        self.looking = Some(set);
+        self.update_attention();
+        true
+    }
+
     /// Marke „neu“, Klang und Fokus-Hook nach jeder Änderung. Klang und Benachrichtigung bleiben Aufgabe der Plattform.
     pub fn update_attention(&mut self) {
         let sessions: HashMap<String, AttentionSession> =
@@ -492,7 +508,7 @@ impl AppState {
         let statuses: HashMap<String, kadrell_claude::agent::Status> =
             self.store.sessions.sessions.iter().filter(|s| self.run(&s.id) == Run::Running).map(|s| (s.id.clone(), agent_status(s.status()))).collect();
         let waiting: Vec<String> = self.ordered_keys().into_iter().filter(|k| statuses.get(k) == Some(&kadrell_claude::agent::Status::Waiting)).collect();
-        let looking: HashSet<String> = self.selected.iter().cloned().collect();
+        let looking: HashSet<String> = self.looking.clone().unwrap_or_else(|| self.selected.iter().cloned().collect());
         self.attention.focus_hook_enabled = true;
         let input = UpdateInput { sessions: &sessions, waiting: &waiting, statuses: &statuses, focused: self.focused.as_deref(), looking: Some(&looking), is_key: self.window_active };
         let (changed, effects) = self.attention.update(&input);

@@ -23,6 +23,23 @@ fn scaled(strokes: Vec<Stroke>, size: f32, offset: f32) -> Vec<Stroke> {
         .collect()
 }
 
+/// UI-Größe (`Theme.scale`): Die Mac-App zeichnet die Symbole in logischen Punkten in einem skalierten Kontext, also
+/// wachsen Striche, Abstände und Fläche gemeinsam.
+fn ui_scale() -> f32 {
+    crate::ui::overlay::scale().max(0.1)
+}
+
+/// Symbolfläche `size` (schon mal UI-Größe): `build` liefert die Linienzüge für die logische Größe `size / scale`, sie
+/// werden dann mit der UI-Größe vergrößert, ebenso die Strichstärke `width`.
+fn drawn(size: f32, color: Hsla, width: f32, build: impl FnOnce(f32) -> Vec<Stroke>) -> impl IntoElement {
+    let s = ui_scale();
+    icon(size, magnify(build(size / s), s), color, width * s)
+}
+
+fn magnify(strokes: Vec<Stroke>, s: f32) -> Vec<Stroke> {
+    strokes.into_iter().map(|k| Stroke { points: k.points.iter().map(|p| (p.0 * s, p.1 * s)).collect(), ..k }).collect()
+}
+
 fn plus_strokes(size: f32) -> Vec<Stroke> {
     let (a, b, mid) = (3., size - 3., size / 2.);
     vec![square_line((mid, a), (mid, b), WIDTH), square_line((a, mid), (b, mid), WIDTH)]
@@ -35,35 +52,35 @@ fn x_strokes(size: f32) -> Vec<Stroke> {
 
 /// Plus (neue Session in der Gruppe), Abstand 3 vom Rand.
 pub fn plus(color: Hsla) -> impl IntoElement {
-    plus_at(SIZE, color)
+    plus_at(SIZE * ui_scale(), color)
 }
 
 pub fn plus_at(size: f32, color: Hsla) -> impl IntoElement {
-    icon(size, plus_strokes(size), color, WIDTH)
+    drawn(size, color, WIDTH, plus_strokes)
 }
 
 /// Kreuz (schließen), Abstand 4 vom Rand.
 pub fn x(color: Hsla) -> impl IntoElement {
-    x_at(SIZE, color)
+    x_at(SIZE * ui_scale(), color)
 }
 
 pub fn x_at(size: f32, color: Hsla) -> impl IntoElement {
-    icon(size, x_strokes(size), color, WIDTH)
+    drawn(size, color, WIDTH, x_strokes)
 }
 
 /// Kreis-Umriss: Kachel aus der Ansicht nehmen, ohne die Session zu schließen (`Icons.circle`).
 pub fn circle_at(size: f32, color: Hsla) -> impl IntoElement {
-    icon(size, vec![ellipse(4., 4., size - 8., size - 8.)], color, WIDTH)
+    drawn(size, color, WIDTH, |l| vec![ellipse(4., 4., l - 8., l - 8.)])
 }
 
 /// Quadrat-Umriss: Kachel auf die ganze Arbeitsfläche zoomen (`Icons.square`).
 pub fn square_at(size: f32, color: Hsla) -> impl IntoElement {
-    icon(size, vec![rect(4., 4., size - 8., size - 8.)], color, WIDTH)
+    drawn(size, color, WIDTH, |l| vec![rect(4., 4., l - 8., l - 8.)])
 }
 
 /// Waagerechter Strich: den Zoom wieder verkleinern (`Icons.minus`).
 pub fn minus_at(size: f32, color: Hsla) -> impl IntoElement {
-    icon(size, vec![square_line((4., size / 2.), (size - 4., size / 2.), WIDTH)], color, WIDTH)
+    drawn(size, color, WIDTH, |l| vec![square_line((4., l / 2.), (l - 4., l / 2.), WIDTH)])
 }
 
 /// Stift: geschlossener Umriss mit Strich, quadratische Enden (`Icons.pen`).
@@ -73,11 +90,11 @@ fn pen_strokes() -> Vec<Stroke> {
 }
 
 pub fn pen(color: Hsla) -> impl IntoElement {
-    pen_at(SIZE, color)
+    pen_at(SIZE * ui_scale(), color)
 }
 
 pub fn pen_at(size: f32, color: Hsla) -> impl IntoElement {
-    icon(size, scaled(pen_strokes(), size, 0.), color, WIDTH)
+    drawn(size, color, WIDTH, |l| scaled(pen_strokes(), l, 0.))
 }
 
 /// Terminal: Monitor mit Fuß (Neue Session mit ⌘/Strg, ein Terminal ohne Claude; `Icons.computer`).
@@ -86,11 +103,11 @@ fn computer_strokes() -> Vec<Stroke> {
 }
 
 pub fn computer_at(size: f32, color: Hsla) -> impl IntoElement {
-    icon(size, scaled(computer_strokes(), size, 0.), color, THIN)
+    drawn(size, color, THIN, |l| scaled(computer_strokes(), l, 0.))
 }
 
 pub fn computer(color: Hsla) -> impl IntoElement {
-    icon(SIZE, computer_strokes(), color, THIN)
+    computer_at(SIZE * ui_scale(), color)
 }
 
 /// Server-Rack: zwei Einschübe mit Status-LED (`Icons.server`).
@@ -104,11 +121,11 @@ fn server_strokes() -> Vec<Stroke> {
 }
 
 pub fn server_at(size: f32, color: Hsla) -> impl IntoElement {
-    icon(size, scaled(server_strokes(), size, 0.), color, THIN)
+    drawn(size, color, THIN, |l| scaled(server_strokes(), l, 0.))
 }
 
 pub fn server(color: Hsla) -> impl IntoElement {
-    icon(SIZE, server_strokes(), color, THIN)
+    server_at(SIZE * ui_scale(), color)
 }
 
 /// π: Pi mit lokalem Modell statt Claude (`Icons.pi`): Systemschrift in `size * 1,15`, halbfett, zentriert.
@@ -130,7 +147,8 @@ pub fn pi_at(size: f32, color: Hsla) -> impl IntoElement {
 /// Ordner für die Taste neben dem Pfadfeld.
 pub fn folder(color: Hsla) -> impl IntoElement {
     let outline = closed(vec![(1.5, 4.), (6., 4.), (7.5, 5.5), (14.5, 5.5), (14.5, 12.5), (1.5, 12.5)]);
-    icon(SIZE, vec![outline], color, 1.4)
+    let s = ui_scale();
+    icon(SIZE * s, magnify(vec![outline], s), color, 1.4 * s)
 }
 
 /// Umriss des Herzens als Bézierpfad aus `Icons.heart` (16er-Raster): unten (8 | 13,5), links hoch, Mulde bei
@@ -152,12 +170,13 @@ fn heart_strokes(filled: bool) -> Vec<Stroke> {
 /// Herz für Favoriten, in der Werkzeugleiste mit einem Punkt Rand (`insetBy(1, 1)`): gefüllt, wenn die Gruppe
 /// Favorit ist, sonst nur der Umriss.
 pub fn heart(color: Hsla, filled: bool) -> impl IntoElement {
-    icon(SIZE, scaled(heart_strokes(filled), SIZE - 2., 1.), color, WIDTH)
+    let s = ui_scale();
+    icon(SIZE * s, magnify(scaled(heart_strokes(filled), SIZE - 2., 1.), s), color, WIDTH * s)
 }
 
 /// Herz in einer Fläche `size` x `size` ohne Rand (gefülltes Herz der Gruppenzeile, 12 x 12).
 pub fn heart_at(size: f32, color: Hsla, filled: bool) -> impl IntoElement {
-    icon(size, scaled(heart_strokes(filled), size, 0.), color, WIDTH)
+    drawn(size, color, WIDTH, move |l| scaled(heart_strokes(filled), l, 0.))
 }
 
 #[cfg(test)]
@@ -210,6 +229,15 @@ mod tests {
         let s = computer_strokes();
         assert_eq!(s[1].points, vec![(8., 11.), (8., 14.)]);
         assert_eq!(s[2].points, vec![(4.5, 14.), (11.5, 14.)]);
+    }
+
+    #[test]
+    fn magnify_grows_insets_with_the_ui_size() {
+        // Plus in der logischen Größe 16, bei UI-Größe 1,5: Abstand 3 wird 4,5, die Fläche 24.
+        let big = magnify(plus_strokes(16.), 1.5);
+        let (x0, _, x1, _) = extent(&big);
+        assert!((x0 - 2.25 * 1.5).abs() < 1e-4 && (x1 - 13.75 * 1.5).abs() < 1e-4);
+        assert_eq!(magnify(vec![open(&[(2., 4.)])], 2.)[0].points, vec![(4., 8.)]);
     }
 
     #[test]

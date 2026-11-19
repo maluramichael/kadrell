@@ -1,5 +1,5 @@
 //! Konten im Einstellungen-Dialog: die echte Liste aus dem [`Hub`], Wechseln, Entfernen und Hinzufügen als Aufträge an
-//! den Hintergrund-Schritt. Die lokalen Modelle bleiben beim Mock (eigenes Paket).
+//! den Hintergrund-Schritt. Die lokalen Modelle kommen aus `models::backend`, nur ohne sie (Tests) gilt der Mock.
 
 use std::collections::HashSet;
 use std::sync::Arc;
