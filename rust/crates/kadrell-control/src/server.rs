@@ -91,6 +91,7 @@ mod transport {
     use std::os::unix::net::{UnixListener, UnixStream};
 
     pub fn listen(path: &Path, service: Service, stop: Arc<AtomicBool>) -> io::Result<Listening> {
+        crate::endpoint::check_socket_path(path).map_err(io::Error::other)?;
         let _ = std::fs::remove_file(path);
         // Der Socket entsteht nie mit weiteren Rechten als 0600: umask um das Binden, danach chmod zur Sicherheit.
         // SAFETY: `umask` ist immer aufrufbar; die Maske wird sofort zurückgesetzt.

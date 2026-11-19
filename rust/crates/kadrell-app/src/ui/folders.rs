@@ -1,58 +1,11 @@
-//! Ordnersuche für „Neue Session“: Treffer-Rang (Kern von `FolderIndex.rank` der Mac-App), Pfad-Kürzel
-//! (`~/d/p/kad`), Repo-Scan. Alles Zeichenketten mit `/`, damit es unter Windows und macOS gleich testbar ist.
-
-use std::path::Path;
-
-/// Ein Kandidat der Liste: Ordner und wie viele Sessions dort schon laufen.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Entry {
-    pub path: String,
-    pub sessions: usize,
-}
+//! Pfadhilfen für die Oberfläche: Kürzel (`~/d/p/kad`) mit austauschbarem Dateisystem, `~` und Home-Kürzung. Alles
+//! Zeichenketten mit `/`, damit es unter Windows und macOS gleich testbar ist. Die Ordnersuche für „Neue Session“ (Rang,
+//! Frecency, Repo-Scan) liegt in `kadrell_claude::folder_index`.
 
 /// Buchstaben von `q` kommen in `text` in dieser Reihenfolge vor (Groß/Klein egal).
 pub fn fuzzy(q: &str, text: &str) -> bool {
     let mut hay = text.chars().flat_map(char::to_lowercase);
     q.chars().flat_map(char::to_lowercase).all(|c| hay.any(|h| h == c))
-}
-
-fn last_component(path: &str) -> &str {
-    path.trim_end_matches('/').rsplit('/').next().unwrap_or(path)
-}
-
-/// Wortfetzen wie bei zoxide: jeder muss im Pfad vorkommen, der letzte im letzten Ordnernamen.
-/// Kleiner ist besser: 0 Präfix, 1 Teilstring, 2 Buchstabenfolge im Namen, 3 nur im Pfad. `None` = kein Treffer.
-pub fn rank(query: &str, path: &str) -> Option<u8> {
-    let query = query.to_lowercase();
-    let words: Vec<&str> = query.split_whitespace().collect();
-    let Some((last, init)) = words.split_last() else { return Some(0) };
-    let lower = path.to_lowercase();
-    let name = last_component(&lower);
-    if init.iter().any(|w| !lower.contains(w)) {
-        return None;
-    }
-    if name.starts_with(last) {
-        Some(0)
-    } else if name.contains(last) {
-        Some(1)
-    } else if fuzzy(last, name) {
-        Some(2)
-    } else if words.len() == 1 && fuzzy(last, &lower) {
-        Some(3)
-    } else {
-        None
-    }
-}
-
-/// Sortiert und begrenzt die Kandidaten für eine Wortsuche: Rang, dann mehr Sessions, dann Pfad.
-pub fn filter(entries: &[Entry], query: &str, limit: usize) -> Vec<Entry> {
-    let mut hits: Vec<(u8, &Entry)> = entries.iter().filter_map(|e| Some((rank(query, &e.path)?, e))).collect();
-    hits.sort_by(|a, b| {
-        a.0.cmp(&b.0)
-            .then(b.1.sessions.cmp(&a.1.sessions))
-            .then_with(|| a.1.path.to_lowercase().cmp(&b.1.path.to_lowercase()))
-    });
-    hits.into_iter().take(limit).map(|(_, e)| e.clone()).collect()
 }
 
 /// Pfad statt Wortsuche: beginnt mit `/`, `~`, Laufwerk oder enthält einen `/`.
@@ -162,32 +115,6 @@ pub fn list_dirs(dir: &str) -> Vec<String> {
         .collect()
 }
 
-const SKIP: [&str; 5] = ["node_modules", "target", "vendor", "dist", "__pycache__"];
-
-fn walk(dir: &Path, depth: usize, max: usize, out: &mut Vec<String>) {
-    let Ok(read) = std::fs::read_dir(dir) else { return };
-    for e in read.flatten() {
-        let name = e.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') || SKIP.contains(&name.as_str()) || !e.file_type().is_ok_and(|t| t.is_dir()) {
-            continue;
-        }
-        let p = e.path();
-        if p.join(".git").exists() {
-            out.push(p.to_string_lossy().replace('\\', "/"));
-        } else if depth < max {
-            walk(&p, depth + 1, max, out);
-        }
-    }
-}
-
-/// Git-Repos unter `root` bis `max` Ebenen tief; in ein Repo wird nicht hinabgestiegen. Blockiert.
-pub fn scan_repos(root: &str, max: usize) -> Vec<String> {
-    let mut out = vec![];
-    walk(Path::new(root), 1, max, &mut out);
-    out
-}
-
-/// Home-Ordner des Nutzers mit `/`.
 pub fn home_dir() -> String {
     let h = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
     h.replace('\\', "/").trim_end_matches('/').to_string()
@@ -216,32 +143,6 @@ mod tests {
         assert!(fuzzy("kdl", "Kadrell"));
         assert!(!fuzzy("kdx", "Kadrell"));
         assert!(fuzzy("", "x"));
-    }
-
-    #[test]
-    fn rank_orders_prefix_contains_fuzzy_path() {
-        assert_eq!(rank("kad", "/h/p/kadrell"), Some(0));
-        assert_eq!(rank("rel", "/h/p/kadrell"), Some(1));
-        assert_eq!(rank("kdl", "/h/p/kadrell"), Some(2));
-        assert_eq!(rank("hpk", "/h/p/kadrell"), Some(3));
-        assert_eq!(rank("zzz", "/h/p/kadrell"), None);
-        assert_eq!(rank("", "/anything"), Some(0));
-    }
-
-    #[test]
-    fn rank_needs_every_leading_word_in_path() {
-        assert_eq!(rank("projects kad", "/h/projects/kadrell"), Some(0));
-        assert_eq!(rank("homelab kad", "/h/projects/kadrell"), None);
-        assert_eq!(rank("KAD", "/h/p/Kadrell"), Some(0));
-    }
-
-    #[test]
-    fn filter_sorts_by_rank_then_sessions() {
-        let e = |p: &str, s| Entry { path: p.into(), sessions: s };
-        let all = [e("/a/xkad", 5), e("/a/kadmon", 0), e("/a/kadrell", 2), e("/a/other", 9)];
-        let paths: Vec<_> = filter(&all, "kad", 10).into_iter().map(|e| e.path).collect();
-        assert_eq!(paths, ["/a/kadrell", "/a/kadmon", "/a/xkad"]);
-        assert_eq!(filter(&all, "", 2).len(), 2);
     }
 
     #[test]

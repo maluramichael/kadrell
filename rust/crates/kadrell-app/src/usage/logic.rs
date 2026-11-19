@@ -361,6 +361,32 @@ mod tests {
         assert!(!none.allows(UsageKey::Weekly, true) && !none.allows(UsageKey::Fable, true));
     }
 
+    /// Swift `testPlanTooltipIsTranslated`: der Tooltip mit Plan-Stand ist in beiden Sprachen übersetzt.
+    #[test]
+    fn plan_tooltip_is_translated() {
+        lang(Language::En);
+        assert_eq!(trd!("%@: %lld %% verbraucht, %lld %% nach Plan", "7d", 32, 25), "7d: 32% used, 25% on plan");
+        assert_eq!(trd!("%@: %lld %% verbraucht", "7d", 32), "7d: 32% used");
+        lang(Language::De);
+        assert_eq!(trd!("%@: %lld %% verbraucht, %lld %% nach Plan", "7d", 32, 25), "7d: 32 % verbraucht, 25 % nach Plan");
+    }
+
+    /// Swift `testBarUsageFollowsSettings`: ausgeschaltete Werte fehlen, 5h zusätzlich ohne 5-Stunden-Limit.
+    #[test]
+    fn bar_usage_follows_settings() {
+        let mut s = kadrell_core::Settings::default();
+        s.set_bar_show_session(true);
+        s.set_bar_show_weekly(true);
+        s.set_bar_show_fable(false);
+        let shown = |s: &kadrell_core::Settings| UsageShown { session: s.bar_show_session(), weekly: s.bar_show_weekly(), fable: s.bar_show_fable() };
+        assert!(shown(&s).allows(UsageKey::Session, true));
+        assert!(!shown(&s).allows(UsageKey::Session, false));
+        assert!(shown(&s).allows(UsageKey::Weekly, true));
+        assert!(!shown(&s).allows(UsageKey::Fable, true));
+        s.set_bar_show_session(false);
+        assert!(!shown(&s).allows(UsageKey::Session, true));
+    }
+
     /// Ein falscher Schlüssel fiele still auf den deutschen Text zurück: jeder Text muss in beiden Sprachen auflösen.
     #[test]
     fn every_key_resolves() {

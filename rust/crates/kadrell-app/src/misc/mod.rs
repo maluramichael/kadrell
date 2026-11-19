@@ -138,11 +138,9 @@ impl Shell {
     // MARK: Hilfe und Über
 
     pub(crate) fn toggle_help(&mut self, kind: Kind, window: &mut Window, cx: &mut Context<Self>) {
-        if self.misc.help.as_ref().is_some_and(|h| h.read(cx).kind() == kind) {
-            return self.close_help(window, cx);
-        }
+        // Eine Ansicht für Hilfe und Über: derselbe Kürzel schließt sie wieder (`togglePanel` der Mac-App).
         if self.misc.help.is_some() {
-            self.close_help(window, cx);
+            return self.close_help(window, cx);
         }
         self.open_help_view(kind, window, cx);
     }
@@ -168,8 +166,8 @@ impl Shell {
         self.show_next_confirm(window, cx);
     }
 
-    fn show_next_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.misc.confirm.is_some() {
+    pub(crate) fn show_next_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.misc.confirm.is_some() || self.panel_open() {
             return;
         }
         let Some(Pending { spec, on_confirm }) = self.misc.queue.pop_front() else { return };
@@ -275,7 +273,7 @@ impl Shell {
 
     /// Beim Start: fremde Claude-Sessions erfassen. Hintergrund-Sessions bietet Kadrell zur Übernahme an (nur im
     /// Standardprofil), die anderen zählt der Leerzustand.
-    fn start_adopt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn start_adopt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if dev_overlay().as_deref() == Some("adopt") {
             return self.offer_adopt(dev_plan(), None, window, cx);
         }
@@ -291,7 +289,11 @@ impl Shell {
             let plan = cx.background_executor().spawn(async move { adopt::scan(&scan_cli, &SystemRunner, &owned, default_profile) }).await;
             let _ = this.update_in(cx, |shell, window, cx| match plan {
                 Ok(plan) => shell.offer_adopt(plan, Some(cli), window, cx),
-                Err(e) => eprintln!("kadrell: agents: {e}"),
+                Err(e) => {
+                    eprintln!("kadrell: agents: {e}");
+                    shell.state.fail_registry(&e);
+                    cx.notify();
+                }
             });
         })
         .detach();
@@ -363,7 +365,7 @@ impl Shell {
         if let Some(opening) = open::plan(link, &open::base_for(&cwd, &home), &home, &editor)
             && let Err(e) = open::run(&opening)
         {
-            self.report_error(e, window, cx);
+            self.report(&e, window, cx);
         }
     }
 
@@ -372,7 +374,7 @@ impl Shell {
     /// Einmal nach dem Aufbau der Shell: Prüfungen und Schleifen starten, Dialoge für Screenshots öffnen.
     pub(crate) fn start_misc(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.start_update_check(window, cx);
-        self.start_adopt(window, cx);
+        // Die Übernahme-Suche läuft nach dem ersten Poll (`wire::after_first_poll`, Swift: `boot`).
         self.start_auto_detach(window, cx);
         match dev_overlay().as_deref() {
             Some("help") => self.open_help_view(Kind::Help, window, cx),

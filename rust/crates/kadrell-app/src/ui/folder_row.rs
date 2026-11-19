@@ -3,10 +3,11 @@
 
 use gpui::{
     App, ClickEvent, ElementId, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled,
-    Window, div, prelude::*, px,
+    Window, div, px,
 };
 
 use crate::theme::Theme;
+use crate::ui::instrument::selected_row;
 
 /// Höhe einer Zeile in Pixeln (`rowHeight` in `NewSessionSheet.swift` und `QuickStartView.swift`).
 pub const ROW_HEIGHT: f32 = 46.;
@@ -20,6 +21,7 @@ pub struct FolderRow {
     pub right: Vec<String>,
 }
 
+/// Zeile mit Titel in `fg`.
 pub fn folder_row(
     id: impl Into<ElementId>,
     row: FolderRow,
@@ -27,7 +29,18 @@ pub fn folder_row(
     t: &Theme,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> gpui::Stateful<gpui::Div> {
-    let outline = if on { t.fg } else { gpui::transparent_black() };
+    folder_row_titled(id, row, on, t.fg, t, on_click)
+}
+
+/// Zeile mit frei wählbarer Titelfarbe (Akzent bei „Ordner anlegen“, Swift: `accentTextColor`).
+pub fn folder_row_titled(
+    id: impl Into<ElementId>,
+    row: FolderRow,
+    on: bool,
+    title_color: gpui::Hsla,
+    t: &Theme,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> gpui::Stateful<gpui::Div> {
     let right = div()
         .flex()
         .flex_col()
@@ -37,16 +50,8 @@ pub fn folder_row(
         .text_size(px(11.))
         .text_color(t.muted)
         .children(row.right.into_iter().map(|line| div().child(line)));
-    let inner = div()
-        .flex()
-        .items_center()
-        .gap(px(10.))
-        .size_full()
-        .px(px(10.))
-        .rounded(px(6.))
-        .border_2()
-        .border_color(outline)
-        .when(on, |d| d.bg(t.bg))
+    // Instrument-Zeile: Fläche `bg`, 1,5-pt-Umriss in `fg`, kein Akzentring (`instrumentRow(selected:)`).
+    let inner = selected_row(div().flex().items_center().gap(px(10.)).size_full().px(px(10.)), on, t)
         .child(
             div()
                 .flex()
@@ -54,7 +59,7 @@ pub fn folder_row(
                 .flex_1()
                 .min_w_0()
                 .gap(px(2.))
-                .child(div().text_size(px(13.)).text_color(t.fg).overflow_hidden().whitespace_nowrap().child(row.name))
+                .child(div().text_size(px(12.)).text_color(title_color).overflow_hidden().whitespace_nowrap().child(row.name))
                 .child(div().text_size(px(11.)).text_color(t.muted).overflow_hidden().whitespace_nowrap().text_ellipsis().child(row.path)),
         )
         .child(right);

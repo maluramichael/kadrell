@@ -1,268 +1,299 @@
-//! Dialog „NEUE SESSION“ wie `NewSessionSheet.swift`: Suchfeld, Kandidatenliste, Startzeile. Kandidaten sind die
-//! Ordner der Gruppen plus Git-Repos unter `~/development` (Hintergrund-Scan); getippt wird per Wortsuche oder als
-//! Pfadkürzel (`~/d/p/kad`). Dazu die Anbindung an `Shell` (Öffnen, Schließen, Session anlegen).
+//! Dialog „NEUE SESSION“ wie `NewSessionSheet.swift`: Suchfeld, Kandidatenliste, Startzeile. Kandidaten, Rang, „Ordner
+//! anlegen“ und die Wirkung von ⏎ stehen im Modell (`model`), hier die Oberfläche und die Anbindung an `Shell` (Öffnen,
+//! Schließen, Session anlegen, Extension-Einträge, Einstellungen).
 
+mod model;
+
+use kadrell_claude::folder_index::{self as fi, FolderIndex};
 use kadrell_i18n::trd;
+
 use crate::lang::{file_manager, tx};
-use std::collections::{HashMap, HashSet};
+use crate::state::now_secs;
 
 use gpui::{
     App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Render, ScrollHandle, StatefulInteractiveElement, Styled, Subscription, Window,
-    actions, div, prelude::*, px,
+    ParentElement, PathPromptOptions, Render, ScrollHandle, StatefulInteractiveElement, Styled, Subscription, Window,
+    actions, div, prelude::*, px, relative,
 };
 
+use self::model::{Candidate, GroupInfo, Inputs, Model, Outcome, Select};
 use super::chrome::h_seam;
-use super::folder_row::{FolderRow, folder_row};
-use super::folders::{self, Entry};
-use super::model::Group;
-use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_height, overlay_width};
+use super::folder_row::{FolderRow, folder_row_titled};
+use super::groups::files;
+use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
 use super::text_input::{TextInput, TextInputEvent};
 use super::theme;
 use crate::Shell;
 use crate::theme::Theme;
 
-actions!(kadrell_new_session, [MoveUp, MoveDown, Confirm, Cancel, Complete]);
+actions!(kadrell_new_session, [MoveUp, MoveDown, Confirm, Cancel, Complete, Browse, CreateAndStart]);
 
 const CONTEXT: &str = "KadrellNewSession";
-const MAX_ROWS: usize = 60;
-const SCAN_DEPTH: usize = 3;
-const GROUP_COLORS: [u32; 6] = [0x89b4fa, 0xa6e3a1, 0xf9e2af, 0xf5c2e7, 0x94e2d5, 0xfab387];
+/// Breite des Dialogs (`dialogFrame` der Mac-App).
+const WIDTH: f32 = 640.;
+/// Sichtbare Zeilen der Liste: 8 mal 46 (`visibleRows` mal `rowHeight`).
+const VISIBLE_ROWS: f32 = 8.;
 
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
+    let (browse, create) = if cfg!(target_os = "macos") { ("cmd-o", "cmd-enter") } else { ("ctrl-o", "ctrl-enter") };
     cx.bind_keys([
         KeyBinding::new("up", MoveUp, c),
         KeyBinding::new("down", MoveDown, c),
         KeyBinding::new("enter", Confirm, c),
         KeyBinding::new("escape", Cancel, c),
         KeyBinding::new("tab", Complete, c),
+        KeyBinding::new(browse, Browse, c),
+        KeyBinding::new(create, CreateAndStart, c),
     ]);
 }
 
 pub enum NewSessionEvent {
     Close,
-    Start(String),
+    Start { group: Option<String>, path: String },
+    /// Eintrag einer Extension (Repo zum Klonen): der Dialog schließt, die Extension übernimmt.
+    Extension { name: String, id: String },
+    /// „ändern“ in der Zeile „Startet mit“.
+    OpenSettings,
 }
 
 impl EventEmitter<NewSessionEvent> for NewSession {}
 
 pub struct NewSession {
     input: Entity<TextInput>,
-    home: String,
-    /// Kleingeschriebener Pfad zu Anzahl der Sessions dort.
-    known: HashMap<String, usize>,
-    base: Vec<Entry>,
-    repo_count: usize,
-    scanning: bool,
-    shown: Vec<Entry>,
-    selected: usize,
+    model: Model,
+    summary: String,
     scroll: ScrollHandle,
     _typing: Subscription,
 }
 
-/// Ordner einer Gruppe, mit `/`; `None` bei der Sammelgruppe ohne Gruppierung.
-pub fn group_cwd(g: &Group) -> Option<String> {
-    (!g.cwd.is_empty()).then(|| g.cwd.replace('\\', "/"))
-}
-
-fn folder_name(path: &str) -> String {
-    path.trim_end_matches('/').rsplit('/').next().unwrap_or(path).to_string()
+/// Was `NewSession::new` zum Aufbau braucht.
+pub struct Setup {
+    pub inputs: Inputs,
+    pub index: FolderIndex,
+    /// Wurzeln des Repo-Scans im Hintergrund.
+    pub roots: Vec<String>,
+    /// Zusammenfassung der Startflags für „Startet mit“.
+    pub summary: String,
+    pub query: Option<String>,
 }
 
 impl NewSession {
-    pub fn new(groups: &[Group], query: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = cx.new(|cx| TextInput::new(&trd!("Projekt suchen oder Pfad tippen (~/d/p/kad)"), cx));
-        let typing = cx.subscribe(&input, |this, _, _: &TextInputEvent, cx| this.refilter(cx));
-        let mut known = HashMap::new();
-        let mut base = Vec::new();
-        for g in groups {
-            if let Some(cwd) = group_cwd(g) {
-                *known.entry(cwd.to_lowercase()).or_insert(0) += g.sessions.len();
-            }
+    pub fn new(setup: Setup, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let input = cx.new(|cx| TextInput::new(&trd!("Projekt suchen oder Pfad tippen (~/d/p/kad)"), cx).path_field());
+        let typing = cx.subscribe(&input, |this, _, _: &TextInputEvent, cx| this.query_changed(cx));
+        let home = setup.inputs.home.clone();
+        let clipboard = clipboard_folder(cx, &home);
+        let mut model = Model::new(setup.inputs, setup.index, clipboard);
+        model.scanning = true;
+        let this = Self { input, model, summary: setup.summary, scroll: ScrollHandle::new(), _typing: typing };
+        if let Some(q) = setup.query {
+            this.input.update(cx, |i, cx| i.set_text(&q, window, cx));
         }
-        let mut seen = HashSet::new();
-        for g in groups {
-            let Some(path) = group_cwd(g) else { continue };
-            if seen.insert(path.to_lowercase()) {
-                base.push(Entry { sessions: known[&path.to_lowercase()], path });
-            }
-        }
-        let mut this = Self {
-            input,
-            home: folders::home_dir(),
-            known,
-            base,
-            repo_count: 0,
-            scanning: true,
-            shown: vec![],
-            selected: 0,
-            scroll: ScrollHandle::new(),
-            _typing: typing,
-        };
-        if let Some(q) = query {
-            this.input.update(cx, |i, cx| i.set_text(q, window, cx));
-        }
-        this.refilter(cx);
-        this.start_scan(cx);
+        this.start_scan(setup.roots, cx);
+        this.ask_file_manager(home, cx);
         let focus = this.input.read(cx).focus.clone();
         focus.focus(window, cx);
         this
     }
 
-    fn start_scan(&self, cx: &mut Context<Self>) {
-        let roots = scan_roots(&self.home);
+    /// Repo-Scan im Hintergrund auf einer Kopie des Index; fertig wird der Stand übernommen (und `folders.json` ist neu).
+    fn start_scan(&self, roots: Vec<String>, cx: &mut Context<Self>) {
+        let mut index = self.model.index().clone();
         cx.spawn(async move |this, cx| {
-            let repos = cx.background_executor().spawn(async move { roots.iter().flat_map(|r| folders::scan_repos(r, SCAN_DEPTH)).collect::<Vec<_>>() }).await;
-            let _ = this.update(cx, |this, cx| this.add_repos(repos, cx));
+            let repos = cx
+                .background_executor()
+                .spawn(async move {
+                    index.refresh(&roots);
+                    index.repos
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.model.set_repos(repos);
+                this.scroll_to_selected();
+                cx.notify();
+            });
         })
         .detach();
     }
 
-    /// Scan fertig: neue Repos hinter die Gruppen-Ordner, doppelte (auch in anderer Schreibweise) weglassen.
-    fn add_repos(&mut self, mut repos: Vec<String>, cx: &mut Context<Self>) {
-        repos.sort_by_key(|p| p.to_lowercase());
-        let mut seen: HashSet<String> = self.base.iter().map(|e| e.path.to_lowercase()).collect();
-        for p in repos {
-            if seen.insert(p.to_lowercase()) {
-                self.repo_count += 1;
-                self.base.push(Entry { sessions: self.sessions_at(&p), path: p });
+    /// Ordner des vordersten Dateimanager-Fensters, asynchron: kommt er, steht er vorn, solange nichts getippt ist.
+    fn ask_file_manager(&self, home: String, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let folder = cx.background_executor().spawn(async move { fi::finder_folder(&home) }).await;
+            if let Some(folder) = folder {
+                let _ = this.update(cx, |this, cx| {
+                    this.model.set_finder(&folder);
+                    this.scroll_to_selected();
+                    cx.notify();
+                });
             }
-        }
-        self.scanning = false;
-        if self.selected == 0 {
-            self.refilter(cx);
-        }
+        })
+        .detach();
+    }
+
+    fn query_changed(&mut self, cx: &mut Context<Self>) {
+        let q = self.input.read(cx).text().to_string();
+        self.model.set_query(&q);
+        self.scroll_to_selected();
         cx.notify();
     }
 
-    fn sessions_at(&self, path: &str) -> usize {
-        self.known.get(&path.to_lowercase()).copied().unwrap_or(0)
-    }
-
-    fn query(&self, cx: &App) -> String {
-        self.input.read(cx).text().trim().to_string()
-    }
-
-    fn refilter(&mut self, cx: &mut Context<Self>) {
-        let q = self.query(cx);
-        self.shown = if folders::is_path_query(&q) {
-            let found = folders::expand_abbreviated(&q, &self.home, MAX_ROWS, &folders::list_dirs);
-            found.into_iter().map(|p| Entry { sessions: self.sessions_at(&p), path: p }).collect()
-        } else {
-            folders::filter(&self.base, &q, MAX_ROWS)
-        };
-        self.selected = 0;
-        self.scroll.scroll_to_item(0);
-        cx.notify();
+    /// Die Liste beginnt mit einem Kopf (Hinweise), danach folgen die Zeilen.
+    fn scroll_to_selected(&self) {
+        let at = self.model.selected;
+        self.scroll.scroll_to_item(if at == 0 { 0 } else { at + 1 });
     }
 
     fn move_by(&mut self, delta: isize, cx: &mut Context<Self>) {
-        let last = self.shown.len().saturating_sub(1) as isize;
-        self.selected = (self.selected as isize + delta).clamp(0, last) as usize;
-        self.scroll.scroll_to_item(self.selected);
+        self.model.move_by(delta);
+        self.scroll_to_selected();
         cx.notify();
     }
 
-    /// Ziel von Enter: die markierte Zeile, sonst ein ausgeschrieben getippter vorhandener Ordner.
-    fn target(&self, cx: &App) -> Option<String> {
-        if let Some(e) = self.shown.get(self.selected) {
-            return Some(e.path.clone());
+    fn apply(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
+        match outcome {
+            Outcome::Nothing => {}
+            Outcome::Beep => kadrell_tray::beep(),
+            Outcome::Start { group, path } => cx.emit(NewSessionEvent::Start { group, path }),
+            Outcome::Extension { name, id } => cx.emit(NewSessionEvent::Extension { name, id }),
         }
-        let dir = folders::normalize(&self.query(cx), &self.home);
-        (!dir.is_empty() && std::path::Path::new(&dir).is_dir()).then_some(dir)
+        cx.notify();
     }
 
     fn confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(path) = self.target(cx) {
-            cx.emit(NewSessionEvent::Start(path));
-        }
+        let outcome = self.model.start();
+        self.apply(outcome, cx);
+    }
+
+    fn create_and_start(&mut self, _: &CreateAndStart, _: &mut Window, cx: &mut Context<Self>) {
+        let outcome = self.model.create_and_start();
+        self.apply(outcome, cx);
+    }
+
+    fn pick(&mut self, i: usize, cx: &mut Context<Self>) {
+        let outcome = self.model.pick(i);
+        self.apply(outcome, cx);
     }
 
     fn complete(&mut self, _: &Complete, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(e) = self.shown.get(self.selected) else { return };
-        let short = folders::short_path(&e.path, &self.home);
-        self.input.update(cx, |i, cx| i.set_text(&short, window, cx));
+        if let Some(short) = self.model.tab() {
+            self.input.update(cx, |i, cx| i.set_text(&short, window, cx));
+        }
     }
 
-    fn status_line(&self, t: &Theme) -> Option<gpui::Div> {
-        let text = if self.scanning {
-            trd!("Suche Git-Repos unter ~ …")
-        } else {
-            trd!("%lld Git-Repos unter ~ gefunden", self.repo_count)
-        };
-        let line = div().flex_none().px(px(16.)).pt(px(8.)).pb(px(2.)).text_size(px(10.)).text_color(t.muted);
-        Some(line.child(text))
+    /// ⌘O / Strg+O: Ordnerdialog des Systems; der gewählte Ordner startet sofort. GPUI kennt keinen Startordner des
+    /// Dialogs, er öffnet dort, wo das System es für richtig hält.
+    fn browse(&mut self, _: &Browse, window: &mut Window, cx: &mut Context<Self>) {
+        let options = PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some(trd!("Wählen").into()) };
+        let picked = cx.prompt_for_paths(options);
+        cx.spawn_in(window, async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = picked.await
+                && let Some(dir) = paths.first().and_then(|p| files::folder_for(p))
+            {
+                let _ = this.update(cx, |_, cx| cx.emit(NewSessionEvent::Start { group: None, path: dir }));
+            }
+        })
+        .detach();
     }
 
-    fn row(&self, i: usize, e: &Entry, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let on = i == self.selected;
-        let path = e.path.clone();
-        let right = if e.sessions > 0 { vec![trd!("%lld Sessions", e.sessions)] } else { Vec::new() };
-        let row = FolderRow { name: folder_name(&e.path), path: folders::short_path(&e.path, &self.home), right };
-        folder_row(("ns-row", i), row, on, t, cx.listener(move |_, _, _, cx| cx.emit(NewSessionEvent::Start(path.clone()))))
+    // MARK: Zeichnen
+
+    /// Hinweise über den Zeilen: Scan läuft, Anlegen gescheitert, Ordner existiert nicht, nichts gefunden.
+    fn header(&self, t: &Theme) -> gpui::Div {
+        let line = |text: String, color| div().w_full().px(px(16.)).py(px(16.)).text_color(color).child(text);
+        let mut head = div().flex().flex_col().flex_none();
+        if self.model.scanning {
+            let scan = div().w_full().px(px(16.)).pt(px(8.)).text_size(px(10.)).text_color(t.muted).child(trd!("Suche Git-Repos unter ~ …"));
+            head = head.child(scan);
+        }
+        if let Some(error) = &self.model.create_error {
+            head = head.child(line(trd!("Ordner nicht angelegt: %@", error), t.error_text));
+        }
+        match (&self.model.not_found_path, self.model.candidates.is_empty()) {
+            (Some(bad), true) => head.child(line(trd!("%@ existiert nicht · anlegen geht nur im Home-Ordner", self.model.short(bad)), t.error_text)),
+            (None, true) => head.child(line(tx(&trd!("Kein Ordner gefunden. ⌘O wählt im %@.", file_manager())), t.muted)),
+            _ => head,
+        }
+    }
+
+    fn row(&self, i: usize, c: &Candidate, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let right = self.model.right(c);
+        let row = FolderRow { name: self.model.title(c), path: self.model.detail(c), right: if right.is_empty() { vec![] } else { vec![right] } };
+        let color = if c.is_create() { t.accent_text } else { t.fg };
+        folder_row_titled(("ns-row", i), row, i == self.model.selected, color, t, cx.listener(move |this, _, _, cx| this.pick(i, cx)))
     }
 
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let rows: Vec<_> = self.shown.iter().enumerate().map(|(i, e)| self.row(i, e, t, cx)).collect();
-        let empty = self.shown.is_empty().then(|| {
-            div().px(px(16.)).py(px(16.)).text_color(t.muted).child(tx(&trd!("Kein Ordner gefunden. ⌘O wählt im %@.", file_manager())))
-        });
+        let rows: Vec<_> = self.model.candidates.iter().enumerate().map(|(i, c)| self.row(i, c, t, cx)).collect();
         div()
             .id("ns-list")
             .flex()
             .flex_col()
-            .flex_1()
+            .flex_none()
+            .h(px(VISIBLE_ROWS * super::folder_row::ROW_HEIGHT))
             .min_h_0()
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
-            .children(self.status_line(t))
-            .children(empty)
+            .child(self.header(t))
             .children(rows)
     }
-}
 
-fn starts_with_line(t: &Theme) -> impl IntoElement + use<> {
-    div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_between()
-        .px(px(16.))
-        .py(px(6.))
-        .text_size(px(10.5))
-        .text_color(t.muted)
-        .child(trd!("Startet mit: %@", "sonnet · bypassPermissions · high"))
-        .child(div().id("ns-change").cursor_pointer().text_color(t.accent).hover(|s| s.underline()).child(trd!("ändern")))
+    fn starts_with_line(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let change = div()
+            .id("ns-change")
+            .cursor_pointer()
+            .text_color(t.accent_text)
+            .hover(|s| s.underline())
+            .on_click(cx.listener(|_, _, _, cx| cx.emit(NewSessionEvent::OpenSettings)))
+            .child(trd!("ändern"));
+        div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_between()
+            .gap(px(6.))
+            .px(px(16.))
+            .py(px(6.))
+            .text_size(px(10.5))
+            .text_color(t.muted)
+            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().child(trd!("Startet mit: %@", self.summary.as_str())))
+            .child(change)
+    }
 }
 
 impl Render for NewSession {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
-        let hint = tx(&trd!("⏎ starten · Tab ergänzt · ⌘O %@ · Ordner hineinziehen", file_manager()));
-        let foot = dialog_foot(hint, format!("{} ⏎", trd!("Starten")), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let hint = tx(&trd!("⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen").replace("Finder", file_manager()));
+        let foot = dialog_foot(hint, format!("{}  ⏎", trd!("Starten")), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
         let ring = t.accent;
-        let dialog = overlay_height(overlay_width(dialog_frame(&t), 560.), 600.)
+        let dialog = overlay_width(dialog_frame(&t), WIDTH)
+            .max_h(relative(0.86))
             .key_context(CONTEXT)
             .text_color(t.fg)
+            .text_size(px(12.))
             .on_action(cx.listener(|this, _: &MoveUp, _, cx| this.move_by(-1, cx)))
             .on_action(cx.listener(|this, _: &MoveDown, _, cx| this.move_by(1, cx)))
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::complete))
+            .on_action(cx.listener(Self::browse))
+            .on_action(cx.listener(Self::create_and_start))
             .on_action(cx.listener(|_, _: &Cancel, _, cx| cx.emit(NewSessionEvent::Close)))
             // Ordner aus dem Explorer/Finder hineingezogen: sofort dort starten.
             .on_drop(cx.listener(|_, paths: &gpui::ExternalPaths, _, cx| {
-                if let Some(dir) = super::groups::files::first_folder(paths) {
-                    cx.emit(NewSessionEvent::Start(dir));
+                if let Some(dir) = files::first_folder(paths) {
+                    cx.emit(NewSessionEvent::Start { group: None, path: dir });
                 }
             }))
-            .drag_over::<gpui::ExternalPaths>(move |s, _, _, _| s.border_color(ring))
+            // Beim Darüberziehen 2 pt Akzentrand ums ganze Fenster des Dialogs.
+            .drag_over::<gpui::ExternalPaths>(move |s, _, _, _| s.border_2().border_color(ring))
             .child(dialog_title(trd!("NEUE SESSION"), &t))
             .child(div().flex_none().p(px(14.)).child(self.input.clone()))
             .child(h_seam(&t))
             .child(self.list(&t, cx))
             .child(h_seam(&t))
-            .child(starts_with_line(&t))
+            .child(self.starts_with_line(&t, cx))
             .child(foot);
         backdrop(cx.listener(|_, _, _, cx| cx.emit(NewSessionEvent::Close))).child(dialog)
     }
@@ -272,6 +303,17 @@ impl Focusable for NewSession {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.input.read(cx).focus.clone()
     }
+}
+
+/// Ordner aus der Zwischenablage: eine Datei oder ein Ordner aus dem Dateimanager, sonst ein Pfad als Text
+/// (Swift: `FolderIndex.clipboardFolder`).
+fn clipboard_folder(cx: &App, home: &str) -> Option<String> {
+    let item = cx.read_from_clipboard()?;
+    let dropped = item.entries().iter().find_map(|e| match e {
+        gpui::ClipboardEntry::ExternalPaths(paths) => files::first_folder(paths),
+        _ => None,
+    });
+    dropped.or_else(|| item.text().and_then(|text| fi::clipboard_folder(&text, home)))
 }
 
 // Anbindung an die Shell.
@@ -289,19 +331,41 @@ impl Shell {
 
     /// Für Screenshots ohne Eingabe: `KADRELL_DEV_OVERLAY=new`, Suchtext aus `KADRELL_DEV_QUERY`.
     pub fn open_overlay_from_env(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // `KADRELL_DEV_OVERLAY=rename`: Umbenennen der ersten Session; `confirm1`: Rückfrage des Presenters.
+        if std::env::var("KADRELL_DEV_OVERLAY").as_deref() == Ok("rename") {
+            let key = self.groups.first().and_then(|g| g.sessions.first()).map(|s| s.key.clone());
+            if let Some(key) = key {
+                self.open_rename(super::rename::Target::Session(key), window, cx);
+            }
+        }
         if std::env::var("KADRELL_DEV_OVERLAY").as_deref() == Ok("new") {
             let query = std::env::var("KADRELL_DEV_QUERY").ok();
             self.open_new_session(query.as_deref(), window, cx);
         }
     }
 
+    /// Öffnet den Dialog; bei offenem Panel erst nach dessen Schließen (`SheetPresenter.present`).
     pub fn open_new_session(&mut self, query: Option<&str>, window: &mut Window, cx: &mut Context<Self>) {
-        let dialog = cx.new(|cx| NewSession::new(&self.groups, query, window, cx));
+        let query = query.map(str::to_string);
+        self.present_overlay(Box::new(move |shell, window, cx| shell.show_new_session(query.as_deref(), window, cx)), window, cx);
+    }
+
+    fn show_new_session(&mut self, query: Option<&str>, window: &mut Window, cx: &mut Context<Self>) {
+        let setup = self.new_session_setup(query);
+        let dialog = cx.new(|cx| NewSession::new(setup, window, cx));
         cx.subscribe_in(&dialog, window, |this, _, ev: &NewSessionEvent, window, cx| match ev {
             NewSessionEvent::Close => this.close_overlay(window, cx),
-            NewSessionEvent::Start(path) => {
+            NewSessionEvent::Start { group, path } => {
                 this.close_overlay(window, cx);
-                this.start_in(path, window, cx);
+                this.start_new_session(group.clone(), path, None, window, cx);
+            }
+            NewSessionEvent::Extension { name, id } => {
+                this.close_overlay(window, cx);
+                this.ext.palette_select(name, id);
+            }
+            NewSessionEvent::OpenSettings => {
+                this.close_overlay(window, cx);
+                this.open_settings_action(window, cx);
             }
         })
         .detach();
@@ -309,15 +373,47 @@ impl Shell {
         cx.notify();
     }
 
+    /// Eingaben des Dialogs aus dem Stand der App: Gruppen mit lebenden Sessions, Index ohne verschwundene Ordner, Wurzeln
+    /// des Scans (Startordner plus die Ordner über allen bekannten Projekten) und die Einträge der Extensions.
+    fn new_session_setup(&self, query: Option<&str>) -> Setup {
+        let state = &self.state;
+        let home = state.home();
+        let mut index = FolderIndex::load(&state.profile.dir.to_string_lossy().replace('\\', "/"), &home);
+        index.drop_missing(now_secs());
+        let groups: Vec<GroupInfo> = state.store.groups.groups.iter().map(|g| GroupInfo { id: g.id.clone(), name: g.name.clone(), cwd: g.cwd.replace('\\', "/"), host: g.host.clone() }).collect();
+        let counts = state.store.groups.groups.iter().map(|g| (g.id.clone(), g.session_ids.iter().filter(|k| state.session(k).is_some()).count())).collect();
+        let start_folder = state.settings.start_folder(&state.paths.home).replace('\\', "/");
+        let roots = scan_roots_for(&home, &start_folder, &groups, &index);
+        let inputs = Inputs { groups, counts, clones: self.extension_clones(), start_folder, home, now: now_secs() };
+        Setup { inputs, index, roots, summary: crate::models::agent_pick::claude_summary(&state.settings), query: query.map(String::from) }
+    }
+
+    /// Von Extensions beigesteuerte Einträge (Repos zum Klonen), Pfad `ext:<name>:<id>`.
+    fn extension_clones(&self) -> Vec<Candidate> {
+        self.ext
+            .palette_entries()
+            .into_iter()
+            .map(|(name, item)| Candidate {
+                path: format!("ext:{name}:{}", item.id),
+                group: None,
+                tag: item.group.clone().or_else(|| item.detail.clone()).unwrap_or_default(),
+                title: Some(item.title),
+                detail: item.detail,
+                select: Some(Select::Extension { name, id: item.id }),
+            })
+            .collect()
+    }
+
+    /// Klang „Pop“ einer neuen Session (Swift: `Feedback.play(.open)`), wenn die Einstellung Klänge erlaubt.
+    pub(crate) fn play_open_sound(&self) {
+        let level = crate::tray_wire::rules::sound_level(self.state.settings.sounds());
+        kadrell_tray::play(level, kadrell_tray::model::Sound::Open);
+    }
+
     /// Schließt den Dialog; der Fokus geht zurück an das Terminal der gewählten Session.
     fn close_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.overlay = None;
         self.sync(window, cx);
-    }
-
-    /// Neue Claude-Session in `path`: in die Gruppe mit diesem Ordner, sonst in eine neue Gruppe; dann wählen.
-    fn start_in(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.start_new_session(None, path, None, window, cx); // Claude, mit nutzbarem Pi erst „Starten mit“
     }
 
     /// Ordner der fokussierten Session (Strg+Enter, Strg+T): die Gruppe, sonst der Startordner der Einstellungen.
@@ -340,8 +436,21 @@ impl Shell {
     pub fn new_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let cwd = self.focused_folder();
         self.state.new_shell_session(&cwd, true);
+        self.play_open_sound();
         self.sync(window, cx);
     }
+}
+
+/// Wurzeln des Repo-Scans: der Startordner, die Wurzeln von Strg+N (unter Windows liegen Projekte oft außerhalb von `~`)
+/// und die Ordner über allen Gruppen und benutzten Ordnern (Swift: `openNewSession`).
+fn scan_roots_for(home: &str, start_folder: &str, groups: &[GroupInfo], index: &FolderIndex) -> Vec<String> {
+    let mut roots = scan_roots(home);
+    roots.push(start_folder.trim_end_matches('/').to_string());
+    let known = groups.iter().map(|g| g.cwd.clone()).chain(index.uses.keys().cloned());
+    roots.extend(known.filter_map(|p| p.trim_end_matches('/').rsplit_once('/').map(|(parent, _)| parent.to_string())).filter(|p| !p.is_empty()));
+    roots.sort();
+    roots.dedup();
+    roots
 }
 
 /// Wurzeln des Repo-Scans: `~/development`, unter Windows zusätzlich `C:/development`, falls es dort liegt.
@@ -351,4 +460,19 @@ pub(crate) fn scan_roots(home: &str) -> Vec<String> {
         roots.push("C:/development".to_string());
     }
     roots
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scan_roots_cover_start_folder_and_parents_of_known_projects() {
+        let groups = vec![GroupInfo { id: "a".into(), name: "x".into(), cwd: "/p/work/alpha".into(), host: None }];
+        let index = FolderIndex::load("/gibt/es/nicht", "/h");
+        let roots = scan_roots_for("/h", "/h/src/", &groups, &index);
+        assert!(roots.contains(&"/h/src".to_string()));
+        assert!(roots.contains(&"/p/work".to_string()));
+        assert!(roots.contains(&"/h/development".to_string()));
+    }
 }

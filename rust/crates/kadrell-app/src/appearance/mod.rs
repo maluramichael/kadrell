@@ -9,6 +9,7 @@ pub mod breathing;
 pub mod fonts;
 pub mod metrics;
 pub mod wallpaper;
+pub mod window_color;
 pub mod window_theme;
 pub mod zoom;
 

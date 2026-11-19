@@ -3,28 +3,26 @@
 //! Rückfragen (Session schließen, Gruppe schließen, Session stoppen) aus `AppDelegate.swift`.
 
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
-    StatefulInteractiveElement, Styled, Window, actions, div, px,
+    App, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render,
+    StatefulInteractiveElement, Styled, Window, div, px,
 };
 
-use kadrell_core::Session;
+use kadrell_core::{Session, SessionStatus};
 use kadrell_core::settings::Ask;
 use kadrell_i18n::trd;
 
 use crate::lang::shortcut;
 use crate::theme::Theme;
-use crate::ui::chrome::{h_seam, key_edge};
+use crate::ui::dialog_keys;
+use crate::ui::instrument::{KeyRole, key_focusable};
 use crate::ui::overlay::{backdrop, dialog_frame, overlay_width};
 use crate::ui::theme;
 
-actions!(kadrell_confirm, [Accept, AcceptForce, Dismiss]);
-
 const CONTEXT: &str = "KadrellConfirm";
 
+/// Enter, Strg/⌘+Enter, Esc und Tab laufen über die gemeinsame Dialogtastatur (`dialog_keys`).
 pub fn bind_keys(cx: &mut App) {
-    let c = Some(CONTEXT);
-    let force = if cfg!(target_os = "macos") { "cmd-enter" } else { "ctrl-enter" };
-    cx.bind_keys([KeyBinding::new("enter", Accept, c), KeyBinding::new(force, AcceptForce, c), KeyBinding::new("escape", Dismiss, c)]);
+    dialog_keys::bind_keys(cx);
 }
 
 /// Was nach dem Bestätigen passiert.
@@ -33,6 +31,10 @@ pub enum ConfirmAction {
     CloseSession(String),
     CloseGroup(String),
     StopSession(String),
+    /// Kadrell beenden, während Sessions laufen (`confirmShutdown`).
+    Quit,
+    /// Beenden und danach neu starten.
+    Restart,
 }
 
 /// Inhalt einer Rückfrage.
@@ -94,6 +96,45 @@ pub fn stop_session_spec(s: &Session) -> ConfirmSpec {
     }
 }
 
+/// Eine laufende Session für die Rückfrage beim Beenden: Titel und Status.
+pub struct RunningSession {
+    pub title: String,
+    pub status: SessionStatus,
+}
+
+/// „Kadrell beenden?“ (`confirmShutdown`): Titel nennt die arbeitenden Sessions, die Liste alle laufenden mit Status.
+pub fn quit_spec(running: &[RunningSession], relaunch: bool) -> ConfirmSpec {
+    let busy = running.iter().filter(|r| matches!(r.status, SessionStatus::Running | SessionStatus::Waiting)).count();
+    let title = match (relaunch, busy) {
+        (false, 0) => trd!("Kadrell beenden?"),
+        (true, 0) => trd!("Kadrell neu starten?"),
+        (false, n) => trd!("Kadrell beenden? %lld Session(s) arbeiten gerade!", n),
+        (true, n) => trd!("Kadrell neu starten? %lld Session(s) arbeiten gerade!", n),
+    };
+    let list: Vec<String> = running.iter().map(|r| format!("· {}{}", r.title, status_suffix(r.status))).collect();
+    let head = trd!(
+        "%lld Claude-Prozess(e) werden sauber beendet. Laufende Arbeit bricht dabei ab. Die Konversationen bleiben erhalten und werden beim nächsten Start fortgesetzt.",
+        running.len()
+    );
+    ConfirmSpec {
+        title,
+        info: format!("{head}\n\n{}", list.join("\n")),
+        button: if relaunch { trd!("Neu starten") } else { trd!("Beenden") },
+        destructive: true,
+        info_only: false,
+        ask: Some(Ask::Quit),
+        action: if relaunch { ConfirmAction::Restart } else { ConfirmAction::Quit },
+    }
+}
+
+fn status_suffix(status: SessionStatus) -> String {
+    match status {
+        SessionStatus::Running => trd!("  ARBEITET"),
+        SessionStatus::Waiting => trd!("  WARTET AUF ANTWORT"),
+        _ => String::new(),
+    }
+}
+
 pub enum ConfirmEvent {
     Accept(ConfirmAction),
     Cancel(ConfirmAction),
@@ -116,11 +157,11 @@ impl Confirm {
         Self { spec, dont_ask: false, focus }
     }
 
-    fn accept(&mut self, cx: &mut Context<Self>) {
+    fn accept(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         cx.emit(ConfirmEvent::Accept(self.spec.action.clone()));
     }
 
-    fn cancel(&mut self, cx: &mut Context<Self>) {
+    fn cancel(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if self.dont_ask {
             // Abbrechen stellt zurück: wer abbricht, will weiter gefragt werden.
             if let Some(ask) = self.spec.ask {
@@ -146,53 +187,57 @@ pub fn destructive_label(button: &str) -> String {
     format!("{button}  {key}")
 }
 
-/// Taste im Instrument-Look in beliebiger Farbe (`InstrumentKeyStyle`).
-fn cap(label: String, face: Hsla, ink: Hsla, t: &Theme) -> gpui::Div {
-    let cap = div().px(px(14.)).py(px(4.)).rounded(px(4.)).bg(face).text_color(ink).font_weight(gpui::FontWeight::BOLD).child(label);
-    div().flex_none().pb(px(2.)).rounded(px(5.)).bg(key_edge(t)).cursor_pointer().child(cap)
+/// Rolle der Bestätigen-Taste: destruktiv in `error`, sonst primär in Akzent (`InstrumentKeyStyle`).
+pub fn confirm_role(destructive: bool) -> KeyRole {
+    if destructive { KeyRole::Destructive } else { KeyRole::Primary }
 }
 
 fn checkbox(on: bool, t: &Theme) -> gpui::Div {
-    let mark = div().size(px(8.)).rounded(px(1.5)).bg(if on { t.accent } else { gpui::transparent_black() });
-    div().size(px(14.)).flex_none().flex().items_center().justify_center().rounded(px(3.)).border_1().border_color(t.line).bg(t.bg).child(mark)
+    let s = crate::ui::overlay::scale();
+    let mark = div().size(px(8. * s)).rounded(px(1.5 * s)).bg(if on { t.accent } else { gpui::transparent_black() });
+    div().size(px(14. * s)).flex_none().flex().items_center().justify_center().rounded(px(3. * s)).border_1().border_color(t.line).bg(t.bg).child(mark)
 }
 
 impl Confirm {
-    fn ask_row(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+    /// Häkchen „Nicht mehr fragen“: ein Tab-Stopp, Leertaste und Enter schalten um.
+    fn ask_row(&self, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let color = if self.dont_ask { t.fg } else { t.muted };
-        div()
+        let row = div()
             .id("confirm-dont-ask")
+            .relative()
             .flex()
             .items_center()
             .gap(px(6.))
             .cursor_pointer()
             .text_size(px(12.))
             .text_color(color)
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_dont_ask(cx)))
+            .tooltip(crate::ui::tooltip::text(shortcut(&trd!("Wieder einschalten: Einstellungen (⌘,) › Rückfragen"))))
             .child(checkbox(self.dont_ask, t))
-            .child(trd!("Nicht mehr fragen"))
+            .child(trd!("Nicht mehr fragen"));
+        let toggle = cx.listener(|this, _, _, cx| this.toggle_dont_ask(cx));
+        let (row, ring) = dialog_keys::control(row, "confirm-dont-ask", window, cx, std::rc::Rc::new(toggle));
+        if ring { row.child(crate::ui::instrument::focus_ring(t)) } else { row }
     }
 
-    fn buttons(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let mut row = div().flex().items_center().gap(px(8.)).p(px(16.));
+    fn buttons(&self, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let s = crate::ui::overlay::scale();
+        let mut row = div().flex().items_center().gap(px(8. * s)).p(px(16. * s));
         if self.spec.ask.is_some() {
-            row = row.child(self.ask_row(t, cx));
+            row = row.child(self.ask_row(t, window, cx));
         }
         row = row.child(div().flex_1());
         if !self.spec.info_only {
-            row = row.child(cap(trd!("Abbrechen"), t.surface, t.fg, t).id("confirm-cancel").on_click(cx.listener(|this, _, _, cx| this.cancel(cx))));
+            let cancel = cx.listener(|this, _, w, cx| this.cancel(w, cx));
+            row = row.child(key_focusable("confirm-cancel", trd!("Abbrechen"), KeyRole::Neutral, false, t, window, cx, cancel));
         }
-        let (label, face, ink) = if self.spec.destructive {
-            (destructive_label(&self.spec.button), t.error, t.pill_text_on(t.error))
-        } else {
-            (self.spec.button.clone(), t.accent, t.pill_text())
-        };
-        row.child(cap(label, face, ink, t).id("confirm-ok").on_click(cx.listener(|this, _, _, cx| this.accept(cx))))
+        let label = if self.spec.destructive { destructive_label(&self.spec.button) } else { self.spec.button.clone() };
+        let accept = cx.listener(|this, _, w, cx| this.accept(w, cx));
+        row.child(key_focusable("confirm-ok", label, confirm_role(self.spec.destructive), false, t, window, cx, accept))
     }
 }
 
 impl Render for Confirm {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let mut body = div().flex().flex_col().px(px(16.)).pt(px(16.)).child(
             div().text_size(px(14.)).font_weight(gpui::FontWeight::BOLD).text_color(t.fg).child(self.spec.title.clone()),
@@ -200,22 +245,10 @@ impl Render for Confirm {
         if !self.spec.info.is_empty() {
             body = body.child(div().pt(px(8.)).text_size(px(12.)).text_color(t.muted).child(self.spec.info.clone()));
         }
-        let destructive = self.spec.destructive;
-        let dialog = overlay_width(dialog_frame(&t), 520.)
-            .key_context(CONTEXT)
-            .track_focus(&self.focus)
-            .text_color(t.fg)
-            .on_action(cx.listener(move |this, _: &Accept, _, cx| {
-                if !destructive {
-                    this.accept(cx);
-                }
-            }))
-            .on_action(cx.listener(|this, _: &AcceptForce, _, cx| this.accept(cx)))
-            .on_action(cx.listener(|this, _: &Dismiss, _, cx| this.cancel(cx)))
-            .child(body)
-            .child(h_seam(&t))
-            .child(self.buttons(&t, cx));
-        backdrop(cx.listener(|this, _, _, cx| this.cancel(cx))).child(dialog)
+        let plain_return = !self.spec.destructive;
+        let dialog = overlay_width(dialog_frame(&t), 520.).key_context(dialog_keys::context(CONTEXT)).track_focus(&self.focus).text_color(t.fg);
+        let dialog = dialog_keys::keys(dialog, plain_return, cx, Self::accept, Self::cancel).child(body).child(self.buttons(&t, window, cx));
+        dialog_keys::nav(backdrop(cx.listener(|this, _, w, cx| this.cancel(w, cx)))).child(dialog)
     }
 }
 
@@ -228,6 +261,12 @@ impl Focusable for Confirm {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn destructive_confirmations_use_the_error_key() {
+        assert_eq!(confirm_role(true), KeyRole::Destructive);
+        assert_eq!(confirm_role(false), KeyRole::Primary);
+    }
 
     fn session(id: &str, host: Option<&str>) -> Session {
         let mut s = Session::new(id, "C:/p", 1.0, "claude-uuid", "Titel");
@@ -254,6 +293,23 @@ mod tests {
         assert_eq!((g.destructive, g.ask), (true, Some(Ask::CloseGroup)));
         let s = stop_session_spec(&session("a", None));
         assert_eq!((s.destructive, s.ask, s.button.as_str()), (false, Some(Ask::StopSession), "Stoppen"));
+    }
+
+    #[test]
+    fn quit_spec_counts_busy_sessions_and_lists_all() {
+        let running = vec![
+            RunningSession { title: "Theme".into(), status: SessionStatus::Running },
+            RunningSession { title: "Doku".into(), status: SessionStatus::Waiting },
+            RunningSession { title: "Ruhig".into(), status: SessionStatus::Idle },
+        ];
+        let q = quit_spec(&running, false);
+        assert_eq!(q.title, "Kadrell beenden? 2 Session(s) arbeiten gerade!");
+        assert!(q.info.starts_with("3 Claude-Prozess(e) werden sauber beendet."), "{}", q.info);
+        assert!(q.info.ends_with("\n\n· Theme  ARBEITET\n· Doku  WARTET AUF ANTWORT\n· Ruhig"), "{}", q.info);
+        assert_eq!((q.destructive, q.ask, q.action, q.button.as_str()), (true, Some(Ask::Quit), ConfirmAction::Quit, "Beenden"));
+        assert_eq!(quit_spec(&running[2..], false).title, "Kadrell beenden?");
+        let again = quit_spec(&running, true);
+        assert_eq!((again.title.as_str(), again.button.as_str(), again.action), ("Kadrell neu starten? 2 Session(s) arbeiten gerade!", "Neu starten", ConfirmAction::Restart));
     }
 
     #[test]

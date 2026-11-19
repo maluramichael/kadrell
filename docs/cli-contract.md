@@ -5,8 +5,8 @@ Schnittstelle. Skripte wie start-my-day rufen auf beiden Systemen dieselben Befe
 JSON-Ausgabe. Ändert sich hier etwas, ziehen beide Seiten im selben Arbeitsgang nach.
 
 Quellen der Wahrheit: `app/Kadrell/Services/Control.swift` (Befehle, Flags, Meldungen) und
-`app/Kadrell/App/AppDelegate+Control.swift` (Ausführung, `ls`). Windows bildet sie in `windows/src/command.rs`
-und `windows/src/app.rs` nach.
+`app/Kadrell/App/AppDelegate+Control.swift` (Ausführung, `ls`). Die Windows-Terminal-App bildet sie in `windows/src/command.rs`
+und `windows/src/app.rs` nach, die Rust-App (`rust/`) in `rust/crates/kadrell-control`.
 
 ## Befehle
 
@@ -28,15 +28,21 @@ Exakt geht vor Anfang, mehrdeutig ist ein Fehler. Ohne `-t` gilt die aufrufende 
 (`KADRELL_SESSION_KEY`), sonst die fokussierte. `new` ohne `-t` und `-c` aus einer Session heraus landet in deren
 Gruppe und Ordner.
 
-Nur Mac: `ssh-hosts`, `layout`, `zoom`, `new --host/--tmux/--pi`, `select -a`. Nur Windows: `kill-server`
-(beendet die Instanz, wie bei tmux). Windows meldet die Mac-Befehle als unbekannt.
+Dazu `ssh-hosts [--json]`, `layout grid|main|spiral|custom|scroll|stack`, `zoom [-t s]`, `new --host/--tmux/--pi`
+und `select -a`. Sie gelten in der Mac-App (Swift) und in der Rust-App (`rust/`, Mac und Windows). Die
+Windows-Terminal-App (`windows/`) meldet sie als unbekannt.
+
+`kill-server` (beendet die Instanz, alle Sessions enden, wie bei tmux) gibt es in der Windows-Terminal-App und in der
+Rust-App, auf Windows wie auf dem Mac. Die Swift-Mac-App kennt es nicht.
 
 ## `ls --json`
 
-Form siehe `docs/contract/ls.json`. Der Windows-Test `list_json_matches_contract` prüft, dass die eigene Ausgabe
-genau diese Schlüssel und Typen hat. `branch` fehlt, wenn der Ordner kein Git-Repo ist. `status` ist bei laufendem
+Form siehe `docs/contract/ls.json`. Die Tests `list_json_matches_contract` (Windows-Terminal-App in `windows/`, Rust-App
+in `rust/crates/kadrell-control`) prüfen, dass die eigene Ausgabe genau diese Schlüssel und Typen hat. `branch` und
+`focused` fehlen, wenn es keinen Branch bzw. keine fokussierte Session gibt. `status` ist bei laufendem
 Prozess `running`, `waiting`, `idle` oder `error`, sonst `stopped` (gestoppt oder noch nicht gestartet) oder
-`ended` (Prozess hat sich selbst beendet). `layout` ist auf Windows immer `stack`.
+`ended` (Prozess hat sich selbst beendet). `layout` ist in der Windows-Terminal-App immer `stack`, in der Mac- und
+der Rust-App der gewählte Modus.
 
 ## Umgebung jeder Kachel
 

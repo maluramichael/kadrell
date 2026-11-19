@@ -75,3 +75,31 @@ x-fertig-5d2e = Done ⏎
 x-pfad-der-app-unbekannt-c7d4 = App path unknown
 
 x-rechte-sidebar-tastatur-hierher-7b3a = Right sidebar: focus keyboard here
+
+x-gestern-7c10 = yesterday
+
+x-jetzt-7c11 = now
+
+x-vor-jahren-7c12 = { $arg1 } years ago
+
+x-vor-minuten-7c13 = { $arg1 } minutes ago
+
+x-vor-monaten-7c14 = { $arg1 } months ago
+
+x-vor-stunden-7c15 = { $arg1 } hours ago
+
+x-vor-tagen-7c16 = { $arg1 } days ago
+
+x-vor-wochen-7c17 = { $arg1 } weeks ago
+
+x-vor-1-jahr-7c18 = 1 year ago
+
+x-vor-1-minute-7c19 = 1 minute ago
+
+x-vor-1-monat-7c1a = 1 month ago
+
+x-vor-1-stunde-7c1b = 1 hour ago
+
+x-vor-1-woche-7c1c = 1 week ago
+
+x-vorgestern-7c1d = 2 days ago

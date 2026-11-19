@@ -4,7 +4,7 @@
 
 use gpui::{
     App, Context, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, PathPromptOptions, Render, StatefulInteractiveElement, Styled, Subscription, Window, actions, div, prelude::*, px,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Subscription, Window, actions, div, prelude::*, px,
     rgb,
 };
 
@@ -16,13 +16,14 @@ use super::model::{EditGroupModel, Hint, HintLine, RealFs};
 use super::tool_icons;
 use crate::lang::{file_manager, tx};
 use crate::theme::Theme;
-use crate::ui::chrome::h_seam;
 use crate::ui::model::parse_color;
-use crate::ui::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
+use crate::ui::dialog_keys;
+use crate::ui::instrument::{KeyRole, focus_ring, key_focusable};
+use crate::ui::overlay::{backdrop, border_px, dialog_foot_in, dialog_frame, dialog_title, overlay_width};
 use crate::ui::text_input::{TextInput, TextInputEvent};
 use crate::ui::theme;
 
-actions!(kadrell_edit_group, [Save, Cancel, Complete, Browse]);
+actions!(kadrell_edit_group, [Complete, Browse]);
 
 const CONTEXT: &str = "KadrellEditGroup";
 const SWATCH: f32 = 18.;
@@ -30,12 +31,8 @@ const SWATCH: f32 = 18.;
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
     let browse = if cfg!(target_os = "macos") { "cmd-o" } else { "ctrl-o" };
-    cx.bind_keys([
-        KeyBinding::new("enter", Save, c),
-        KeyBinding::new("escape", Cancel, c),
-        KeyBinding::new("tab", Complete, c),
-        KeyBinding::new(browse, Browse, c),
-    ]);
+    dialog_keys::bind_keys(cx);
+    cx.bind_keys([KeyBinding::new("tab", Complete, c), KeyBinding::new(browse, Browse, c)]);
 }
 
 pub enum EditEvent {
@@ -61,7 +58,7 @@ fn fm(source: &str) -> String {
 
 impl EditGroup {
     pub fn new(model: EditGroupModel, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let name = cx.new(|cx| TextInput::new(&trd!("Name"), cx));
+        let name = cx.new(|cx| TextInput::new(&trd!("Name"), cx).size(15.));
         let folder = cx.new(|cx| TextInput::new(&trd!("Ordner (~/d/p/kad kürzt ab)"), cx));
         name.update(cx, |i, cx| i.set_text(&model.name, window, cx));
         folder.update(cx, |i, cx| i.set_text(model.folder(), window, cx));
@@ -104,24 +101,21 @@ impl EditGroup {
         self.set_folder_text(&text, window, cx);
     }
 
-    fn save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
+    fn save(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.model.name = self.name.read(cx).text().to_string();
         if let Some(group) = self.model.save() {
             cx.emit(EditEvent::Save(group, self.model.is_new));
         }
     }
 
-    /// Tab: im Ordnerfeld ausschreiben, sonst ins Ordnerfeld springen.
+    /// Tab: im Ordnerfeld ausschreiben; gibt es nichts auszuschreiben oder steht der Fokus woanders, weiter zum nächsten
+    /// Bedienelement (Ordnerfeld, Ordnertaste, Farben, Haupttaste).
     fn complete(&mut self, _: &Complete, window: &mut Window, cx: &mut Context<Self>) {
-        if self.model.is_remote() {
-            return;
-        }
-        let focus = self.folder.read(cx).focus.clone();
-        if !focus.is_focused(window) {
-            return focus.focus(window, cx);
-        }
-        if let Some(text) = self.model.completion(&RealFs) {
-            self.set_folder_text(&text, window, cx);
+        let in_folder = !self.model.is_remote() && self.folder.read(cx).focus.is_focused(window);
+        let text = if in_folder { self.model.completion(&RealFs) } else { None };
+        match text {
+            Some(text) => self.set_folder_text(&text, window, cx),
+            None => window.focus_next(cx),
         }
     }
 
@@ -130,16 +124,11 @@ impl EditGroup {
         if self.model.is_remote() {
             return;
         }
-        let options = PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some(trd!("Wählen").into()) };
-        let picked = cx.prompt_for_paths(options);
-        cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(paths))) = picked.await
-                && let Some(dir) = paths.first().and_then(|p| files::folder_for(p))
-            {
-                let _ = this.update_in(cx, |this, window, cx| this.take_dir(&dir, window, cx));
+        crate::ui::pick::choose(false, window, cx, |this, path, window, cx| {
+            if let Some(dir) = files::folder_for(std::path::Path::new(&path)) {
+                this.take_dir(&dir, window, cx);
             }
-        })
-        .detach();
+        });
     }
 
     fn pick_color(&mut self, hex: &str, cx: &mut Context<Self>) {
@@ -152,24 +141,18 @@ impl EditGroup {
     fn hint_line(&self, t: &Theme) -> gpui::Div {
         let (text, error) = hint_text(&self.model);
         let color = if error { t.error_text } else { t.muted };
-        div().px(px(16.)).pt(px(6.)).pb(px(14.)).text_size(px(11.)).text_color(color).child(text)
+        div().px(px(16.)).pt(px(6.)).pb(px(14.)).text_size(px(11.)).line_height(px(crate::ui::overlay::line_px(11.))).text_color(color).child(text)
     }
 
-    fn folder_row(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let button = div()
-            .id("edit-group-browse")
-            .flex()
-            .flex_none()
-            .items_center()
-            .justify_center()
-            .w(px(34.))
-            .h(px(32.))
-            .rounded(px(5.))
-            .bg(t.surface)
-            .cursor_pointer()
-            .on_click(cx.listener(|this, _, window, cx| this.browse(&Browse, window, cx)))
-            .child(tool_icons::folder(t.fg));
-        div().flex().items_center().gap(px(6.)).px(px(14.)).pt(px(10.)).child(div().flex_1().child(self.folder.clone())).child(button)
+    fn folder_row(&self, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let s = crate::ui::overlay::scale();
+        // Kompakte neutrale Taste mit Ordnersymbol in 22 x 16 (`InstrumentKeyStyle(.neutral, compact: true)`).
+        let icon = div().flex().items_center().justify_center().w(px(22. * s)).h(px(16. * s)).child(tool_icons::folder(t.key_label()));
+        let tip = fm("Im Finder wählen (⌘O)");
+        let browse = cx.listener(|this, _, window, cx| this.browse(&Browse, window, cx));
+        let button = key_focusable("edit-group-browse", icon, KeyRole::Neutral, true, t, window, cx, browse)
+            .tooltip(crate::ui::tooltip::text(crate::lang::shortcut(&tip)));
+        div().flex().items_center().gap(px(6. * s)).px(px(14. * s)).pt(px(10. * s)).child(div().flex_1().child(self.folder.clone())).child(button)
     }
 
     fn name_row(&self, t: &Theme) -> gpui::Div {
@@ -178,27 +161,33 @@ impl EditGroup {
         div().flex().items_center().gap(px(12.)).px(px(14.)).pt(px(14.)).child(div().flex_1().child(self.name.clone())).child(capsule).text_color(t.fg)
     }
 
-    fn swatch(&self, p: usize, i: usize, hex: &'static str, t: &Theme, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+    fn swatch(&self, p: usize, i: usize, hex: &'static str, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let on = hex.eq_ignore_ascii_case(&self.model.color);
         let ring = if on { t.fg } else { gpui::transparent_black() };
-        div()
-            .id(("swatch", p * 100 + i))
-            .size(px(SWATCH))
+        let s = crate::ui::overlay::scale();
+        // Auswahlring 1,5 pt in `fg`; Bedienhilfe-Beschriftung „<Palette> <Hex>“ gibt GPUI nicht her (keine Accessibility-API).
+        let n = p * 100 + i;
+        let swatch = border_px(div(), 1.5 * s)
+            .id(("swatch", n))
+            .relative()
+            .size(px(SWATCH * s))
             .flex_none()
-            .rounded(px(3.))
-            .border_2()
+            .rounded(px(3. * s))
             .border_color(ring)
             .bg(rgb(parse_color(hex)))
-            .cursor_pointer()
-            .on_click(cx.listener(move |this, _, _, cx| this.pick_color(hex, cx)))
+            .cursor_pointer();
+        let pick = cx.listener(move |this, _, _, cx| this.pick_color(hex, cx));
+        let (swatch, focused) = dialog_keys::control(swatch, ("swatch-focus", n), window, cx, std::rc::Rc::new(pick));
+        if focused { swatch.child(focus_ring(t)) } else { swatch }
     }
 
-    fn palettes(&self, t: &Theme, cx: &mut Context<Self>) -> gpui::Div {
-        let mut col = div().flex().flex_col().gap(px(8.)).px(px(16.)).pb(px(12.));
+    fn palettes(&self, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
+        let s = crate::ui::overlay::scale();
+        let mut col = div().flex().flex_col().gap(px(8. * s)).px(px(16. * s)).pb(px(12. * s));
         for (p, (name, colors)) in PALETTES.iter().enumerate() {
-            let mut row = div().flex().items_center().gap(px(4.)).child(div().w(px(110.)).flex_none().text_color(t.sub).child(*name));
+            let mut row = div().flex().items_center().gap(px(4. * s)).child(div().w(px(110. * s)).flex_none().text_color(t.sub).child(*name));
             for (i, hex) in colors.iter().enumerate() {
-                row = row.child(self.swatch(p, i, hex, t, cx));
+                row = row.child(self.swatch(p, i, hex, t, window, cx));
             }
             col = col.child(row);
         }
@@ -225,35 +214,35 @@ fn line_text(line: &HintLine) -> String {
 }
 
 impl Render for EditGroup {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let title = if self.model.is_new { trd!("NEUE GRUPPE") } else { trd!("GRUPPE BEARBEITEN") };
         let button = if self.model.is_new { trd!("Anlegen") } else { trd!("Speichern") };
-        let foot = dialog_foot(trd!("Esc abbrechen"), format!("{button} ⏎"), &t, cx.listener(|this, _, w, cx| this.save(&Save, w, cx)));
+        let save = cx.listener(|this, _, w, cx| this.save(w, cx));
+        let foot = dialog_foot_in(trd!("Esc abbrechen"), format!("{button} ⏎"), KeyRole::Primary, &t, window, cx, save);
         let ring = t.accent;
         let remote = self.model.is_remote();
-        let mut dialog = overlay_width(dialog_frame(&t), 640.)
-            .key_context(CONTEXT)
-            .text_color(t.fg)
-            .text_size(px(12.))
-            .on_action(cx.listener(Self::save))
+        let dialog = overlay_width(dialog_frame(&t), 640.).key_context(dialog_keys::context(CONTEXT)).text_color(t.fg).text_size(px(12.));
+        let dialog = dialog_keys::keys(dialog, true, cx, Self::save, |_, _, cx| cx.emit(EditEvent::Close))
             .on_action(cx.listener(Self::complete))
             .on_action(cx.listener(Self::browse))
-            .on_action(cx.listener(|_, _: &Cancel, _, cx| cx.emit(EditEvent::Close)))
             .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
                 if let Some(dir) = files::first_folder(paths) {
                     this.take_dir(&dir, window, cx);
                 }
             }))
             .can_drop(move |_, _, _| !remote)
-            .drag_over::<ExternalPaths>(move |s, _, _, _| s.border_color(ring))
-            .child(dialog_title(title, &t))
-            .child(self.name_row(&t));
+            // Beim Darüberziehen ein 2-pt-Akzentrand um den ganzen Dialog (Radius 14), nicht nur die Fuge.
+            .drag_over::<ExternalPaths>(move |s, _, _, _| s.border_2().border_color(ring))
+            .child(dialog_title(title, &t));
+        // Der Inhalt scrollt, die Fußzeile steht fest darunter (`OverlayScroll`): im kleinen Fenster bleibt sie sichtbar.
+        let mut body = div().id("edit-group-body").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().child(self.name_row(&t));
         if !remote {
-            dialog = dialog.child(self.folder_row(&t, cx));
+            body = body.child(self.folder_row(&t, window, cx));
         }
-        let dialog = dialog.child(self.hint_line(&t)).child(self.palettes(&t, cx)).child(h_seam(&t)).child(foot);
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(EditEvent::Close))).child(dialog)
+        let body = body.child(self.hint_line(&t)).child(self.palettes(&t, window, cx));
+        let dialog = dialog.child(body).child(foot);
+        dialog_keys::nav(backdrop(cx.listener(|_, _, _, cx| cx.emit(EditEvent::Close)))).child(dialog)
     }
 }
 

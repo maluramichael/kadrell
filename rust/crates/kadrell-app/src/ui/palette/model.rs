@@ -2,12 +2,13 @@
 //! Kommandos, Text in allen Terminals und Verlauf. Port der Listenbildung aus `PaletteWindow.swift`.
 
 use kadrell_i18n::trd;
-use crate::lang::{de, shortcut};
-use std::ops::Range;
+use crate::lang::de;
 
 use gpui::Action;
 
+use crate::appearance::a11y;
 use crate::menus;
+use crate::remote::dialog::Connect;
 use crate::ui::folders::fuzzy;
 use crate::ui::layout::{Id, LayoutMode};
 use crate::ui::model::Status;
@@ -29,6 +30,8 @@ pub enum Mode {
     Text,
     /// `#` alle bisherigen Claude-Sessions.
     History,
+    /// `@` ssh-Hosts, `@host:` deren tmux-Sessions.
+    Remote,
 }
 
 impl Mode {
@@ -38,6 +41,7 @@ impl Mode {
             Mode::Commands => ">",
             Mode::Text => "/",
             Mode::History => "#",
+            Mode::Remote => "@",
         }
     }
 }
@@ -56,6 +60,7 @@ pub fn parse(input: &str) -> Query {
         Some('>') => Query { mode: Mode::Commands, term: rest(1).trim().to_string() },
         Some('/') => Query { mode: Mode::Text, term: rest(1) },
         Some('#') => Query { mode: Mode::History, term: rest(1).trim().to_string() },
+        Some('@') => Query { mode: Mode::Remote, term: rest(1) },
         _ => Query { mode: Mode::Sessions, term: input.to_string() },
     }
 }
@@ -72,6 +77,8 @@ pub struct SessionRow {
     /// Ordner mit `~`, für die Anzeige.
     pub short: String,
     pub has_pane: bool,
+    /// Letzte nicht leere Zeile des Terminals (Zusatzzeile der Trefferzeile), ohne Terminal `None`.
+    pub last_line: Option<String>,
 }
 
 #[derive(Clone)]
@@ -90,6 +97,8 @@ pub struct Snapshot {
     pub focused: Option<Id>,
     /// Konversationen (Claude-sessionId und Schlüssel), die in Kadrell laufen: Platz und Status, für die Verlaufssuche.
     pub live: std::collections::HashMap<String, (Id, Status)>,
+    /// Konten (id, Titel) für „Zu Konto wechseln: …“.
+    pub accounts: Vec<(String, String)>,
 }
 
 impl Snapshot {
@@ -113,12 +122,24 @@ pub enum Run {
     Ext { name: String, id: String },
     /// Wechselt in einen anderen Modus der Suche.
     Mode(Mode),
+    /// „Trennlinien zurücksetzen (gleich verteilt)“.
+    ResetRatios,
+    /// „Reload“: sofort pollen und neu auslegen.
+    Reload,
+    /// Konto hinzufügen oder wechseln.
+    Account(AccountRun),
     Unwired,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AccountRun {
+    /// Das aktuell angemeldete Konto aufnehmen.
+    AddCurrent,
+    Switch(String),
 }
 
 pub struct Command {
     pub title: String,
-    pub shortcut: String,
     pub run: Run,
 }
 
@@ -134,7 +155,7 @@ fn layout_title(mode: LayoutMode) -> &'static str {
     }
 }
 
-/// Menüeinträge, aus denen sich die Kommandos bedienen: Beschriftung, Kürzel und Aktion bleiben an einer Stelle
+/// Menüeinträge, aus denen sich die Kommandos bedienen: Beschriftung und Aktion bleiben an einer Stelle
 /// (`menus.rs`). Was ein Kommando schon übernommen hat, fehlt in `rest`.
 struct MenuPool(Vec<Option<MenuEntry>>);
 
@@ -155,42 +176,33 @@ impl MenuPool {
     }
 
     /// Entnimmt den Eintrag mit diesem Schlüssel (deutscher Quelltext der Beschriftung, sprachunabhängig).
-    fn take(&mut self, key: &str) -> Option<(String, Option<Box<dyn Action>>)> {
+    fn take(&mut self, key: &str) -> Option<Option<Box<dyn Action>>> {
         let slot = self.0.iter_mut().find(|s| s.as_ref().is_some_and(|e| e.0 == key))?;
-        slot.take().map(|(_, _, shortcut, action)| (shortcut, action))
+        slot.take().map(|(_, _, _, action)| action)
     }
 
-    fn rest(self) -> Vec<Command> {
-        let item = |(_, label, shortcut, action): MenuEntry| Command {
-            title: label,
-            shortcut,
-            run: action.map_or(Run::Unwired, Run::Menu),
-        };
-        self.0.into_iter().flatten().filter(|e| e.0 != de!("Suche")).map(item).collect()
-    }
 }
 
 /// Kommando, das ein Menüeintrag trägt (Kürzel und Aktion von dort); fehlt der Eintrag, ist es nicht verdrahtet.
 fn via_menu(pool: &mut MenuPool, title: String, menu_key: &str) -> Command {
-    let (shortcut, action) = pool.take(menu_key).unwrap_or((String::new(), None));
-    Command { title, shortcut, run: action.map_or(Run::Unwired, Run::Menu) }
+    let action = pool.take(menu_key).flatten();
+    Command { title, run: action.map_or(Run::Unwired, Run::Menu) }
 }
 
 fn plain(title: String, run: Run) -> Command {
-    Command { title, shortcut: String::new(), run }
+    Command { title, run }
 }
 
 fn focused_group(snap: &Snapshot) -> Option<usize> {
     snap.focused.map(|f| f.0)
 }
 
-/// Alle Kommandos in der Reihenfolge der Mac-App (`togglePalette`), danach die übrigen Menüeinträge.
+/// Alle Kommandos in der Reihenfolge der Mac-App (`togglePalette`); die Kommandos der Extensions hängt die Shell an.
 pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
     let mut pool = MenuPool::new();
     let mut list: Vec<Command> =
         LayoutMode::ALL.iter().map(|m| plain(trd!("Layout: %@", trd!(layout_title(*m))), Run::Layout(*m))).collect();
-    list.push(Command { title: trd!("Nächstes Layout"), shortcut: shortcut("⌘L"), run: Run::Menu(Box::new(menus::NextLayout)) });
-    list.push(plain(trd!("Trennlinien zurücksetzen (gleich verteilt)"), Run::Unwired));
+    list.push(plain(trd!("Trennlinien zurücksetzen (gleich verteilt)"), Run::ResetRatios));
     list.push(via_menu(&mut pool, trd!("Zoom ein/aus (fokussierte)"), de!("Kachel zoomen")));
     list.push(via_menu(&mut pool, trd!("Neue Session"), de!("Neue Session")));
     list.push(via_menu(&mut pool, trd!("Schnellstart: Idee rein, Session raus"), de!("Schnellstart: Idee rein, Session raus")));
@@ -205,15 +217,15 @@ pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
     list.push(via_menu(&mut pool, trd!("Gruppe bearbeiten (der fokussierten Session)"), de!("Gruppe umbenennen")));
     list.push(via_menu(&mut pool, trd!("Statistik"), de!("Statistik")));
     list.push(via_menu(&mut pool, trd!("Extensions"), de!("Extensions …")));
-    list.push(plain(trd!("Reload"), Run::Unwired));
+    list.push(plain(trd!("Reload"), Run::Reload));
     list.push(plain(trd!("Neu starten"), Run::Menu(Box::new(menus::RestartApp))));
-    list.push(plain(trd!("Konto hinzufügen (aktuell angemeldetes)"), Run::Unwired));
+    list.push(plain(trd!("Konto hinzufügen (aktuell angemeldetes)"), Run::Account(AccountRun::AddCurrent)));
+    list.extend(snap.accounts.iter().map(|(id, title)| plain(trd!("Zu Konto wechseln: %@", title), Run::Account(AccountRun::Switch(id.clone())))));
     list.extend(snap.groups.iter().map(|g| plain(trd!("Alle Sessions von %@", &g.name), Run::Group(g.index))));
     if let Some(own) = focused_group(snap) {
         let others = snap.groups.iter().filter(|g| g.index != own);
         list.extend(others.map(|g| plain(trd!("Fokussierte Session verschieben nach: %@", &g.name), Run::MoveFocused(g.index))));
     }
-    list.extend(pool.rest());
     list
 }
 
@@ -227,6 +239,8 @@ pub enum Target {
     Command(usize),
     /// Treffer in einem Terminal: Session, Gridzeile, Suchbegriff.
     Hit { id: Id, line: i32, query: String },
+    /// ⏎ im `@`-Modus: mit dem Host verbinden (und der tmux-Session).
+    Connect(Connect),
     /// Frühere Claude-Session (sessionId, Ordner, Titel), zum Fortsetzen oder Anspringen.
     History { session_id: String, cwd: String, title: String },
     /// Zeile ohne Wirkung (Hinweis).
@@ -241,36 +255,51 @@ pub struct Item {
     pub right: Option<String>,
     pub status: Option<Status>,
     pub indent: u8,
-    /// Hervorgehobene Bereiche im `label` (Bytes), bei Texttreffern.
-    pub highlights: Vec<Range<usize>>,
     /// Gedämpft: Befehl ohne Funktion.
     pub dim: bool,
-    /// Einzeilig, ohne Zusatzzeile.
-    pub compact: bool,
+    /// Die Session der Zeile (`sessionKey` der Mac-App): Grundlage der Hervorhebung in Kacheln und Baum.
+    pub session: Option<Id>,
     pub target: Target,
 }
 
 impl Item {
-    fn new(label: impl Into<String>, sub: impl Into<String>, target: Target) -> Self {
-        Item {
-            label: label.into(),
-            sub: sub.into(),
-            right: None,
-            status: None,
-            indent: 0,
-            highlights: Vec::new(),
-            dim: false,
-            compact: false,
-            target,
-        }
+    pub(super) fn new(label: impl Into<String>, sub: impl Into<String>, target: Target) -> Self {
+        Item { label: label.into(), sub: sub.into(), right: None, status: None, indent: 0, dim: false, session: None, target }
     }
+
+    /// Wie VoiceOver die Zeile liest: Titel, Status, Gruppe, Zusatzzeile, mit „, “ getrennt (`Item.spoken`).
+    pub fn spoken(&self) -> String {
+        let status = self.status.map(|s| a11y::spoken(s, false, false));
+        let parts = [Some(self.label.clone()), status, self.right.clone(), Some(self.sub.clone())];
+        parts.into_iter().flatten().collect::<Vec<_>>().join(", ")
+    }
+}
+
+/// Sessions, die die Palette hervorhebt (`onHighlight`): Treffer der Sessions-Suche mit Suchbegriff, Zeilen der
+/// Textsuche und laufende Sessions im Verlauf. Kommandos, `@` und die leere Sessions-Liste heben nichts hervor.
+pub fn highlight(query: &Query, items: &[Item]) -> Option<std::collections::HashSet<Id>> {
+    let on = match query.mode {
+        Mode::Commands | Mode::Remote => false,
+        Mode::Sessions => !query.term.is_empty(),
+        Mode::Text | Mode::History => true,
+    };
+    on.then(|| items.iter().filter_map(|i| i.session).collect())
 }
 
 // --- Sessions und Gruppen ---
 
+/// Zusatzzeile einer Session: die letzte Zeile des Terminals (höchstens 70 Zeichen), sonst der Kurzpfad.
+fn session_sub(s: &SessionRow) -> String {
+    match &s.last_line {
+        Some(line) => line.chars().take(70).collect(),
+        None => s.short.clone(),
+    }
+}
+
 fn session_item(g: &GroupRow, s: &SessionRow, indent: u8, show_group: bool) -> Item {
-    let mut it = Item::new(s.title.clone(), s.short.clone(), Target::Session(s.id));
+    let mut it = Item::new(s.title.clone(), session_sub(s), Target::Session(s.id));
     it.status = Some(s.status);
+    it.session = Some(s.id);
     it.indent = indent;
     it.right = show_group.then(|| g.name.clone());
     it
@@ -322,7 +351,6 @@ pub fn command_items(commands: &[Command], term: &str) -> Vec<Item> {
     shown
         .map(|(i, c)| {
             let mut it = Item::new(c.title.clone(), trd!("Kommando"), Target::Command(i));
-            it.right = (!c.shortcut.is_empty()).then(|| c.shortcut.clone());
             it.dim = matches!(c.run, Run::Unwired);
             it
         })
@@ -337,34 +365,23 @@ pub struct SessionHits {
     pub lines: Vec<(i32, String)>,
 }
 
-fn text_head(g: &GroupRow, s: &SessionRow, count: usize) -> Item {
-    let mut it = Item::new(s.title.clone(), format!("{} · {}", trd!("%lld Treffer", count), s.short), Target::Session(s.id));
+/// Eine Zeile je Treffer wie in der Mac-App: die Zeile als Titel, darunter die Session, rechts die Gruppe.
+fn text_row(g: &GroupRow, s: &SessionRow, line: i32, text: &str, query: &str) -> Item {
+    let mut it = Item::new(text.trim(), s.title.clone(), Target::Hit { id: s.id, line, query: query.to_string() });
     it.status = Some(s.status);
+    it.session = Some(s.id);
     it.right = Some(g.name.clone());
     it
 }
 
-fn text_hit(id: Id, line: i32, text: &str, query: &str) -> Item {
-    let label = text.trim_start();
-    let mut it = Item::new(label, "", Target::Hit { id, line, query: query.to_string() });
-    it.indent = 1;
-    it.compact = true;
-    it.highlights = kadrell_term::find_byte_ranges(label, query);
-    it
-}
-
-/// Treffer je Session gebündelt: Kopfzeile (springt zur Session), darunter die Zeilen mit markiertem Begriff.
-/// Gesamtzahl der Zeilen auf `MAX_TEXT_HITS` begrenzt.
+/// Treffer zeilenweise in der Reihenfolge der Sessions, Gesamtzahl auf `MAX_TEXT_HITS` begrenzt.
 pub fn text_items(snap: &Snapshot, hits: &[SessionHits], query: &str) -> Vec<Item> {
     let mut out = Vec::new();
-    let mut total = 0;
-    for h in hits.iter().filter(|h| !h.lines.is_empty()) {
+    for h in hits {
         let Some((g, s)) = snap.all_sessions().find(|(_, s)| s.id == h.id) else { continue };
-        let take = h.lines.len().min(MAX_TEXT_HITS - total);
-        out.push(text_head(g, s, take));
-        out.extend(h.lines.iter().take(take).map(|(line, text)| text_hit(h.id, *line, text, query)));
-        total += take;
-        if total >= MAX_TEXT_HITS {
+        let room = MAX_TEXT_HITS - out.len();
+        out.extend(h.lines.iter().take(room).map(|(line, text)| text_row(g, s, *line, text, query)));
+        if out.len() >= MAX_TEXT_HITS {
             break;
         }
     }
@@ -397,6 +414,7 @@ pub fn history_item(hit: &HistoryHit, now_secs: u64, live: Option<(Id, Status)>)
     let mut it = Item::new(hit.title.clone(), sub, target);
     it.right = Some(format!("{} · {}", hit.project, relative_de(now_secs.saturating_sub(hit.last_active))));
     it.status = live.map(|l| l.1);
+    it.session = live.map(|l| l.0);
     it
 }
 
@@ -428,6 +446,7 @@ mod tests {
             path: path.into(),
             short: path.replace("C:/dev", "~"),
             has_pane: true,
+            last_line: None,
         }
     }
 
@@ -467,11 +486,22 @@ mod tests {
         assert_eq!(parse("/ Claude"), Query { mode: Mode::Text, term: " Claude".into() });
         assert_eq!(parse("#  x "), Query { mode: Mode::History, term: "x".into() });
         assert_eq!(parse(">").term, "");
+        assert_eq!(parse("@vault: x"), Query { mode: Mode::Remote, term: "vault: x".into() });
+    }
+
+    #[test]
+    fn first_character_decides_the_mode() {
+        // Nur das erste Zeichen zählt: ein späteres Präfix ist normaler Text.
+        assert_eq!(parse("a>b").mode, Mode::Sessions);
+        assert_eq!(parse(">/#@").mode, Mode::Commands);
+        assert_eq!(parse("/#@").mode, Mode::Text);
+        assert_eq!(parse("#@").mode, Mode::History);
+        assert_eq!(parse(" @x").mode, Mode::Sessions);
     }
 
     #[test]
     fn prefix_round_trips() {
-        for m in [Mode::Commands, Mode::Text, Mode::History] {
+        for m in [Mode::Commands, Mode::Text, Mode::History, Mode::Remote] {
             assert_eq!(parse(&format!("{}abc", m.prefix())).mode, m);
         }
     }
@@ -503,13 +533,13 @@ mod tests {
     }
 
     #[test]
-    fn commands_filter_fuzzy_and_keep_shortcuts() {
+    fn commands_filter_fuzzy_and_show_no_shortcut() {
         let cmds = build_commands(&snap());
         let items = command_items(&cmds, "neue gruppe");
         assert!(labels(&items).contains(&"Neue Gruppe (leer)"));
         let new = command_items(&cmds, "neue session");
         assert_eq!(new[0].label, "Neue Session");
-        assert!(new[0].right.as_deref().is_some_and(|s| s.contains('N')));
+        assert!(new[0].right.is_none(), "Swift zeigt rechts kein Kürzel");
         assert!(!new[0].dim);
         let all = command_items(&cmds, "");
         assert_eq!(all.len(), cmds.len());
@@ -526,46 +556,131 @@ mod tests {
     }
 
     #[test]
-    fn menu_items_become_commands_without_duplicates() {
-        let cmds = build_commands(&snap());
-        let count = |t: &str| cmds.iter().filter(|c| c.title == t).count();
-        assert_eq!(count("Neue Session"), 1);
-        assert_eq!(count("Kadrell beenden"), 1);
-        assert_eq!(count("Suche"), 0);
-        assert!(cmds.iter().any(|c| c.title == "In allen Terminals suchen …"));
+    fn commands_follow_the_mac_order_and_nothing_else() {
+        let mut snap = snap();
+        snap.accounts = vec![("a1".into(), "Privat".into()), ("a2".into(), "Arbeit".into())];
+        let titles: Vec<String> = build_commands(&snap).into_iter().map(|c| c.title).collect();
+        let layouts: Vec<String> = LayoutMode::ALL.iter().map(|m| format!("Layout: {}", layout_title(*m))).collect();
+        let fixed = [
+            "Trennlinien zurücksetzen (gleich verteilt)",
+            "Zoom ein/aus (fokussierte)",
+            "Neue Session",
+            "Schnellstart: Idee rein, Session raus",
+            "Alle Claude-Sessions durchsuchen, auch beendete",
+            "Neues Terminal ohne Claude",
+            "Remote verbinden (ssh → tmux)",
+            "Neue Gruppe (leer)",
+            "Session stoppen (fokussierte)",
+            "Session fortsetzen (fokussierte)",
+            "Session umbenennen (fokussierte)",
+            "Session schließen (fokussierte)",
+            "Gruppe bearbeiten (der fokussierten Session)",
+            "Statistik",
+            "Extensions",
+            "Reload",
+            "Neu starten",
+            "Konto hinzufügen (aktuell angemeldetes)",
+            "Zu Konto wechseln: Privat",
+            "Zu Konto wechseln: Arbeit",
+            "Alle Sessions von kadrell",
+            "Alle Sessions von spike",
+            "Fokussierte Session verschieben nach: spike",
+        ];
+        let expected: Vec<String> = layouts.into_iter().chain(fixed.map(String::from)).collect();
+        assert_eq!(titles, expected);
     }
 
     #[test]
-    fn unwired_commands_are_dim() {
+    fn every_command_is_wired_and_restart_runs_the_shell_restart() {
         let cmds = build_commands(&snap());
-        let items = command_items(&cmds, "Reload");
-        assert!(items[0].dim);
-        let wired = command_items(&cmds, "Layout: Grid");
-        assert!(!wired[0].dim);
+        let dim: Vec<&str> = cmds.iter().filter(|c| matches!(c.run, Run::Unwired)).map(|c| c.title.as_str()).collect();
+        assert!(dim.is_empty(), "{dim:?}");
+        assert!(cmds.iter().any(|c| c.title == "Neu starten" && matches!(c.run, Run::Menu(_))));
+        assert!(command_items(&cmds, "Reload").iter().all(|i| !i.dim));
+        let run_of = |t: &str| cmds.iter().find(|c| c.title == t).map(|c| &c.run);
+        assert!(matches!(run_of("Trennlinien zurücksetzen (gleich verteilt)"), Some(Run::ResetRatios)));
+        assert!(matches!(run_of("Reload"), Some(Run::Reload)));
+        assert!(matches!(run_of("Konto hinzufügen (aktuell angemeldetes)"), Some(Run::Account(AccountRun::AddCurrent))));
     }
 
     #[test]
-    fn text_hits_are_grouped_per_session_with_highlight() {
+    fn session_sub_is_the_last_terminal_line_cut_to_70_chars() {
+        let mut snap = snap();
+        snap.groups[0].sessions[0].last_line = Some("x".repeat(90));
+        let items = session_items(&snap, "");
+        let item = items.iter().find(|i| i.label == "claude").unwrap();
+        assert_eq!(item.sub.chars().count(), 70);
+        let other = items.iter().find(|i| i.label == "shell").unwrap();
+        assert_eq!(other.sub, "~/kadrell", "ohne Terminalzeile der Kurzpfad");
+    }
+
+    #[test]
+    fn spoken_joins_title_status_group_and_sub() {
+        let items = session_items(&snap(), "");
+        assert_eq!(items[0].spoken(), "claude-zwei, wartet, spike, ~/spike");
+        let note = notice_item("Titel", "Meldung");
+        assert_eq!(note.spoken(), "Titel, Meldung");
+    }
+
+    #[test]
+    fn highlight_follows_mode_and_query() {
+        let snap = snap();
+        let ids = |q: &str, items: &[Item]| highlight(&parse(q), items);
+        let flat = session_items(&snap, "");
+        assert_eq!(ids("", &flat), None, "leere Suche hebt nichts hervor");
+        let hits = session_items(&snap, "zwei");
+        assert_eq!(ids("zwei", &hits), Some([(1, 0), (1, 1)].into_iter().collect()), "Gruppenzeilen haben keinen Schlüssel");
+        assert_eq!(ids(">neu", &flat), None);
+        assert_eq!(ids("@vault", &flat), None);
+        assert_eq!(ids("/xx", &[]), Some(Default::default()), "Textsuche ohne Treffer: leere Menge, nicht nil");
+        let lines = vec![SessionHits { id: (1, 0), lines: vec![(0, "claude".into())] }];
+        let text = text_items(&snap, &lines, "claude");
+        assert_eq!(ids("/claude", &text), Some([(1, 0)].into_iter().collect()));
+    }
+
+    #[test]
+    fn history_rows_of_live_sessions_are_highlighted() {
+        let hit = HistoryHit {
+            session_id: "s1".into(),
+            title: "Titel".into(),
+            cwd: "C:/dev/x".into(),
+            short: "~/x".into(),
+            project: "x".into(),
+            last_active: 0,
+            snippet: None,
+        };
+        let live = history_item(&hit, 100, Some(((0, 1), Status::Running)));
+        let gone = history_item(&hit, 100, None);
+        assert_eq!(highlight(&parse("#"), &[live, gone]), Some([(0, 1)].into_iter().collect()));
+    }
+
+    #[test]
+    fn text_hits_are_one_row_per_line() {
         let hits = vec![
-            SessionHits { id: (0, 0), lines: vec![(-3, "  hello Claude here".into()), (5, "claude again".into())] },
+            SessionHits { id: (0, 0), lines: vec![(-3, "  hello Claude here \t".into()), (5, "claude again".into())] },
             SessionHits { id: (0, 1), lines: vec![] },
             SessionHits { id: (1, 0), lines: vec![(2, "Claude!".into())] },
         ];
         let items = text_items(&snap(), &hits, "claude");
-        assert_eq!(labels(&items), ["claude", "hello Claude here", "claude again", "claude-zwei", "Claude!"]);
-        assert_eq!(items[0].sub, "2 Treffer · ~/kadrell");
-        assert_eq!(items[1].highlights, vec![6..12]);
-        assert_eq!(items[1].target, Target::Hit { id: (0, 0), line: -3, query: "claude".into() });
-        assert_eq!(items[1].indent, 1);
-        assert_eq!(items[3].target, Target::Session((1, 0)));
+        assert_eq!(labels(&items), ["hello Claude here", "claude again", "Claude!"]);
+        assert_eq!((items[0].sub.as_str(), items[0].right.as_deref()), ("claude", Some("kadrell")));
+        assert_eq!((items[2].sub.as_str(), items[2].right.as_deref()), ("claude-zwei", Some("spike")));
+        assert_eq!(items[0].status, Some(Status::Running));
+        assert_eq!(items[0].target, Target::Hit { id: (0, 0), line: -3, query: "claude".into() });
+        assert!(items.iter().all(|i| i.indent == 0));
     }
 
     #[test]
-    fn text_hits_are_capped() {
+    fn text_hits_are_capped_at_300_rows() {
         let lines: Vec<(i32, String)> = (0..400).map(|i| (i, "x claude".to_string())).collect();
         let hits = vec![SessionHits { id: (0, 0), lines }, SessionHits { id: (1, 0), lines: vec![(0, "claude".into())] }];
         let items = text_items(&snap(), &hits, "claude");
-        assert_eq!(items.len(), MAX_TEXT_HITS + 1);
+        assert_eq!(items.len(), MAX_TEXT_HITS);
+        let split = vec![
+            SessionHits { id: (0, 0), lines: (0..200).map(|i| (i, "claude".to_string())).collect() },
+            SessionHits { id: (1, 0), lines: (0..200).map(|i| (i, "claude".to_string())).collect() },
+        ];
+        assert_eq!(text_items(&snap(), &split, "claude").len(), MAX_TEXT_HITS, "zweiter Treffersatz füllt nur den Rest");
     }
 
     #[test]

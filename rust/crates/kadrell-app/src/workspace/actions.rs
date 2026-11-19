@@ -51,7 +51,7 @@ static HANDLERS: &[(A, Handler)] = &[
     (A::RenameSession, |s, w, c| s.rename_focused(w, c)),
     (A::CycleSort, |s, _, c| s.cycle_sort(c)),
     (A::ToggleGrouping, |s, _, c| s.toggle_grouped(c)),
-    (A::OpenEditor, |s, w, c| s.open_editor_hotkey(w, c)),
+    (A::OpenEditor, |s, w, c| s.open_editor_focused(w, c)),
 ];
 
 /// Der Handler einer Aktion der Arbeitsfläche, `None` für alle anderen.

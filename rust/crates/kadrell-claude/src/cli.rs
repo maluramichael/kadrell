@@ -3,9 +3,7 @@
 
 use crate::{agent, hook, paths};
 use std::collections::BTreeMap;
-use std::io::Read;
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Ausgabe eines Prozesses. Swift mischt stderr in stdout; hier bleiben beide getrennt, damit eine Warnung auf stderr
 /// nie das JSON von `claude agents --json` zerlegt.
@@ -29,48 +27,7 @@ pub trait CommandRunner {
     fn run(&self, program: &str, args: &[String], env: Option<&BTreeMap<String, String>>, cwd: Option<&str>, timeout: Duration) -> Result<RunOutput, String>;
 }
 
-/// Startet echte Prozesse; nach `timeout` wird der Prozess beendet, die bis dahin gelesene Ausgabe kommt zurück.
-pub struct SystemRunner;
-
-impl CommandRunner for SystemRunner {
-    fn run(&self, program: &str, args: &[String], env: Option<&BTreeMap<String, String>>, cwd: Option<&str>, timeout: Duration) -> Result<RunOutput, String> {
-        let mut cmd = Command::new(program);
-        cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        if let Some(env) = env {
-            cmd.env_clear().envs(env);
-        }
-        if let Some(cwd) = cwd {
-            cmd.current_dir(cwd);
-        }
-        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
-        let out = drain(child.stdout.take());
-        let err = drain(child.stderr.take());
-        let deadline = Instant::now() + timeout;
-        let status = loop {
-            match child.try_wait().map_err(|e| e.to_string())? {
-                Some(s) => break s.code().unwrap_or(-1),
-                None if Instant::now() >= deadline => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break -1;
-                }
-                None => std::thread::sleep(Duration::from_millis(10)),
-            }
-        };
-        let text = |h: std::thread::JoinHandle<Vec<u8>>| String::from_utf8_lossy(&h.join().unwrap_or_default()).into_owned();
-        Ok(RunOutput { status, stdout: text(out), stderr: text(err) })
-    }
-}
-
-fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle<Vec<u8>> {
-    std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(mut p) = pipe {
-            let _ = p.read_to_end(&mut buf);
-        }
-        buf
-    })
-}
+pub use crate::runner::SystemRunner;
 
 /// `claude …` endete mit Fehler (`CLIError`).
 #[derive(Clone, Debug, PartialEq)]

@@ -195,7 +195,10 @@ fn too_long_socket_path_is_a_clean_error() {
     std::fs::create_dir_all(long.parent().unwrap()).unwrap();
     let service: Service = Arc::new(|_, _| ControlResponse::ok("x"));
     let err = ControlServer::start(&long, service).err().expect("Fehler erwartet");
-    assert!(err.to_string().contains("bind"), "{err}");
+    assert_eq!(err.to_string(), format!("Socket-Pfad zu lang: {}", long.display()));
+    let req = ControlRequest::new(vec!["ls".into()], "/", None);
+    let sent = kadrell_control::client::send(&long, &req, Duration::from_secs(1));
+    assert_eq!(sent.err(), Some(format!("Socket-Pfad zu lang: {}", long.display())));
 }
 
 /// `SelfLauncher` startet losgelöst: eigene Session und Prozessgruppe (`setsid`), nicht in der des Aufrufers.

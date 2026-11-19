@@ -59,6 +59,8 @@ struct Inner {
     generation: AtomicU64,
     later: [AtomicU64; 2],
     search_token: AtomicU64,
+    /// Startet Ollama (Mac: Ollama.app, Windows: Tray-App); in Tests eine Attrappe.
+    launch: RwLock<fn() -> bool>,
 }
 
 /// Gemeinsamer Handle (billig zu klonen), lebt so lange wie die App.
@@ -89,6 +91,7 @@ impl LocalModels {
                 generation: AtomicU64::new(0),
                 later: [AtomicU64::new(0), AtomicU64::new(0)],
                 search_token: AtomicU64::new(0),
+                launch: RwLock::new(crate::launcher::launch_ollama_app),
             }),
         }
     }
@@ -459,11 +462,12 @@ impl LocalModels {
         }
     }
 
-    /// Läuft Ollama (1 s Limit)? Sonst Ollama.app im Hintergrund starten und bis zu 10 s warten (nur macOS). Nur für
-    /// ein Modell der Funktion bei Ollama auf dem eigenen Rechner. Fehlt die App, passiert nichts.
+    /// Läuft Ollama (1 s Limit)? Sonst die Ollama-App im Hintergrund starten (Mac: Ollama.app, Windows: Tray-App) und bis
+    /// zu 10 s warten. Nur für ein Modell der Funktion bei Ollama auf dem eigenen Rechner. Fehlt die App, passiert nichts.
     pub fn ensure_ollama_running(&self, f: Feature) {
         let Some(base) = self.active_model(f).filter(|m| m.provider == LocalProviderKind::Ollama).and_then(|_| self.base_url_now(LocalProviderKind::Ollama)) else { return };
-        if !is_local(&http::host_of(&base)) || self.reachable(&base) || !crate::launcher::launch_ollama_app() {
+        let launch = *self.inner.launch.read().unwrap_or_else(|e| e.into_inner());
+        if !is_local(&http::host_of(&base)) || self.reachable(&base) || !launch() {
             return;
         }
         for _ in 0..10 {
@@ -472,6 +476,11 @@ impl LocalModels {
                 return;
             }
         }
+    }
+
+    /// Ersetzt den Start von Ollama (Tests).
+    pub fn set_launcher(&self, launch: fn() -> bool) {
+        *self.inner.launch.write().unwrap_or_else(|e| e.into_inner()) = launch;
     }
 
     fn reachable(&self, base: &str) -> bool {
@@ -504,10 +513,9 @@ pub struct FeatureModel {
 }
 
 impl kadrell_claude::local_model::LocalModel for FeatureModel {
+    /// Wie in Swift startet die Anfrage selbst nie Ollama: das macht nur der Vorlauf des Sessiontitels
+    /// (`ensure_ollama_running` vor `warm_up`), damit eine Antwort nicht über die Zeitgrenze hinaus wartet.
     fn ask(&self, system: &str, user: &str, timeout: Duration) -> Result<String, ModelError> {
-        if self.feature == Feature::SessionTitle {
-            self.models.ensure_ollama_running(self.feature);
-        }
         self.models.complete(self.feature, system, user, self.schema.as_ref(), timeout)
     }
 }
@@ -711,6 +719,48 @@ mod tests {
         let err = hub(slow, on).complete(Feature::QuickStart, "s", "u", None, Duration::from_millis(200)).unwrap_err();
         assert_eq!(err, ModelError::Timeout);
         assert!(started.elapsed() < Duration::from_millis(1200), "wartet nicht auf die Antwort");
+    }
+
+    /// Swift: `testTimeoutWinsAgainstSlowWork`. 0,2 s Grenze gegen langsame Arbeit: `Timeout`, und zwar sofort.
+    #[test]
+    fn timeout_wins_against_slow_work() {
+        let slow = Arc::new(Fake::new(|_| {
+            std::thread::sleep(Duration::from_secs(3));
+            Ok((200, "{\"message\":{\"content\":\"zu spät\"}}".into()))
+        }));
+        let on = settings(&[("local.feature.sessionTitle.enabled", json!(true)), ("local.feature.sessionTitle.model", json!("ollama|m"))]);
+        let started = std::time::Instant::now();
+        let result = hub(slow, on).complete(Feature::SessionTitle, "s", "u", None, Duration::from_millis(200));
+        assert_eq!(result, Err(ModelError::Timeout), "muss in die Zeitgrenze laufen");
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    static LAUNCHED: AtomicU64 = AtomicU64::new(0);
+
+    fn count_launch() -> bool {
+        LAUNCHED.fetch_add(1, Ordering::SeqCst);
+        false
+    }
+
+    #[test]
+    fn ensure_running_launches_only_for_a_local_unreachable_ollama_model() {
+        let down = || Arc::new(Fake::new(|_| Err(TransportError::Unreachable("refused".into()))));
+        let on = |url: &str| settings(&[("local.feature.sessionTitle.enabled", json!(true)), ("local.feature.sessionTitle.model", json!("ollama|m")), ("local.ollama.url", json!(url))]);
+        let before = LAUNCHED.load(Ordering::SeqCst);
+        let local = hub(down(), on("http://127.0.0.1:11434"));
+        local.set_launcher(count_launch);
+        local.ensure_ollama_running(Feature::SessionTitle);
+        assert_eq!(LAUNCHED.load(Ordering::SeqCst), before + 1, "lokal und nicht erreichbar: starten");
+        let remote = hub(down(), on("http://gpu-box:11434"));
+        remote.set_launcher(count_launch);
+        remote.ensure_ollama_running(Feature::SessionTitle);
+        let no_model = hub(down(), LocalSettings::default());
+        no_model.set_launcher(count_launch);
+        no_model.ensure_ollama_running(Feature::SessionTitle);
+        let up = hub(ollama_fake(), on("http://127.0.0.1:11434"));
+        up.set_launcher(count_launch);
+        up.ensure_ollama_running(Feature::SessionTitle);
+        assert_eq!(LAUNCHED.load(Ordering::SeqCst), before + 1, "fremder Rechner, kein Modell, läuft schon: nie starten");
     }
 
     #[test]

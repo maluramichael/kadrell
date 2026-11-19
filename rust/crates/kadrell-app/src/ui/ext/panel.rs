@@ -4,12 +4,12 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    ClickEvent, Context, Div, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
-    MouseButton, MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollHandle, Stateful, StatefulInteractiveElement, Styled,
+    ClickEvent, Context, Div, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, SharedString,
+    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, Stateful, StatefulInteractiveElement, Styled,
     Window, div, px,
 };
 use kadrell_ext::manager::ExtensionManager;
-use kadrell_ext::panel::PanelAction;
+use kadrell_ext::panel::{PanelAction, ThemeColor};
 
 use super::model::{Line, LineKind, Outcome, PanelEntry, PanelModel, TAB_HEIGHT, tab_label};
 use super::{status_color, text_color};
@@ -34,11 +34,13 @@ pub struct ExtPanel {
     model: PanelModel,
     focus: FocusHandle,
     scroll: ScrollHandle,
+    /// Gedrückte Zeile (Maus unten): ein Knopf sinkt ein, bis die Maus losgelassen wird.
+    pressed: Option<usize>,
 }
 
 impl ExtPanel {
     pub fn new(id: &'static str, manager: ExtensionManager, cx: &mut Context<Self>) -> Self {
-        Self { id, manager, model: PanelModel::default(), focus: cx.focus_handle(), scroll: ScrollHandle::new() }
+        Self { id, manager, model: PanelModel::default(), focus: cx.focus_handle(), scroll: ScrollHandle::new(), pressed: None }
     }
 
     /// Neue Panels vom Manager. Gezeichnet wird nur bei geändertem Stand: der Manager meldet bis zu 50-mal pro Sekunde.
@@ -129,22 +131,40 @@ impl ExtPanel {
 
     // MARK: Zeichnen
 
+    /// Tab als Taste: der gewählte bleibt eingesunken. Die Breite ist die des fetten Textes plus 16 (`tabRects`), die
+    /// Taste sitzt 2 px eingerückt (Breite hier ohne Messen des fetten Textes: Abstand 6 px je Seite).
     fn tabs(&self, t: &Theme, cx: &mut Context<Self>) -> Div {
-        let mut row = div().flex().flex_none().items_center().gap(px(2.)).h(px(TAB_HEIGHT - 2.)).px(px(4.));
+        let mut row = div().flex().flex_none().items_start().h(px(TAB_HEIGHT - 2.)).pt(px(5.)).px(px(4.));
         for (i, entry) in self.model.panels().iter().enumerate() {
             let on = self.model.selected_tab() == Some(entry.0.as_str());
             let name = entry.0.clone();
-            let label = div()
-                .px(px(8.))
-                .h(px(22.))
+            let text = tab_label(entry).to_string();
+            let face = div()
                 .flex()
                 .items_center()
+                .justify_center()
+                .flex_1()
+                .px(px(6.))
                 .rounded(px(5.))
+                .bg(t.surface)
                 .text_size(px(11.))
-                .text_color(t.muted)
-                .when(on, |d| d.bg(t.surface).text_color(t.key_label()).font_weight(FontWeight::BOLD))
-                .child(tab_label(entry).to_string());
-            let edge = div().id((self.id, i)).flex_none().pb(px(if on { 0. } else { 2. })).rounded(px(5.)).bg(if on { key_edge(t) } else { gpui::transparent_black() }).cursor_pointer().child(label);
+                .text_color(if on { t.key_label() } else { t.muted })
+                .when(on, |d| d.font_weight(FontWeight::BOLD))
+                .whitespace_nowrap()
+                .child(text);
+            let edge = div()
+                .id((self.id, i))
+                .flex()
+                .flex_col()
+                .flex_none()
+                .h(px(22.))
+                .mx(px(2.))
+                .pt(px(if on { 2. } else { 0. }))
+                .pb(px(if on { 0. } else { 2. }))
+                .rounded(px(5.))
+                .bg(key_edge(t))
+                .cursor_pointer()
+                .child(face);
             row = row.child(edge.on_click(cx.listener(move |this, _, _, cx| {
                 this.model.select_tab(&name);
                 cx.notify();
@@ -153,57 +173,119 @@ impl ExtPanel {
         row
     }
 
+    /// Eine Zeile: Fläche bei Hover und Auswahl (`Instrument.rowHighlight`), darüber der Inhalt.
     fn line_row(&self, i: usize, line: &Line, focused: bool, t: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
         let cursor = self.model.cursor() == Some(i);
         let x = 12. + line.depth as f32 * 12.;
-        let face = line_face(line, x, t);
-        let mut row = div().id((self.id, 1000 + i)).flex_none().w_full().h(px(line.height)).px(px(4.)).child(face);
+        let group = SharedString::from(format!("{}-line-{i}", self.id));
+        let hot = Hot { cursor, pressed: self.pressed == Some(i), group: group.clone() };
+        let mut row = div().id((self.id, 1000 + i)).group(group.clone()).relative().flex_none().w_full().h(px(line.height));
         if line.selectable() {
-            let hot = t.bg;
-            let ring = if cursor && focused { t.accent } else { gpui::transparent_black() };
-            row = row.cursor_pointer().on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                this.model.set_cursor(Some(i));
-                this.activate(i, cx);
-            }));
-            row = row.on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
-                this.model.set_cursor(Some(i));
-                if let Some((tab, actions)) = this.model.actions(i) {
-                    cx.emit(PanelEvent::Menu { position: ev.position, tab, actions });
-                }
-                cx.notify();
-            }));
-            row = row.rounded(px(6.)).border_2().border_color(ring).when(cursor, |d| d.bg(hot)).hover(move |s| s.bg(hot));
+            row = row.child(highlight(cursor, cursor && focused, &group, t)).cursor_pointer();
+            row = self.row_events(row, i, cx);
         }
-        row
+        row.child(line_face(line, hot, x, t))
+    }
+
+    /// Maus auf einer wählbaren Zeile: Drücken senkt den Knopf, Loslassen darüber löst aus, Rechtsklick zeigt die Aktionen.
+    fn row_events(&self, row: Stateful<Div>, i: usize, cx: &mut Context<Self>) -> Stateful<Div> {
+        row.on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+            this.pressed = Some(i);
+            cx.notify();
+        }))
+        .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| {
+            this.pressed = None;
+            cx.notify();
+        }))
+        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            this.pressed = None;
+            this.model.set_cursor(Some(i));
+            this.activate(i, cx);
+        }))
+        .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+            this.model.set_cursor(Some(i));
+            if let Some((tab, actions)) = this.model.actions(i) {
+                cx.emit(PanelEvent::Menu { position: ev.position, tab, actions });
+            }
+            cx.notify();
+        }))
     }
 }
 
-fn line_face(line: &Line, x: f32, t: &Theme) -> Div {
-    let base = div().flex().items_center().size_full().pl(px(x - 4.)).pr(px(6.)).gap(px(6.)).min_w_0();
+/// Zustand einer Zeile für das Zeichnen: Tastaturzeile, gedrückt und Name der Gruppe für den Hover.
+struct Hot {
+    cursor: bool,
+    pressed: bool,
+    group: SharedString,
+}
+
+/// Fläche der Zeile, eingerückt 6/1 mit Radius 6. Mit Tastaturfokus kommt Umriss (1,5 px `fg`) und außen der Akzentring
+/// (2 px, 0,5 px Luft) dazu; Hover zeigt nur die Fläche.
+fn highlight(cursor: bool, ring: bool, group: &SharedString, t: &Theme) -> Div {
+    if ring {
+        let fill = div().size_full().rounded(px(6.)).bg(t.bg).border_1().border_color(t.fg);
+        return div().absolute().left(px(3.5)).right(px(3.5)).top(px(0.5)).bottom(px(0.5)).p(px(0.5)).rounded(px(8.)).border_2().border_color(t.accent).child(fill);
+    }
+    let area = div().absolute().left(px(6.)).right(px(6.)).top(px(1.)).bottom(px(1.)).rounded(px(6.));
+    let face = t.bg;
+    if cursor { area.bg(face) } else { area.group_hover(group.clone(), move |s| s.bg(face)) }
+}
+
+/// Neutrale Taste über die ganze Zeile (Knopf), solange die Maus gedrückt ist eingesunken.
+fn key_cap(label: String, pressed: bool, t: &Theme) -> Div {
+    let face = div()
+        .flex()
+        .items_center()
+        .justify_center()
+        .flex_1()
+        .rounded(px(4.))
+        .bg(t.surface)
+        .text_size(px(11.))
+        .text_color(t.key_label())
+        .whitespace_nowrap()
+        .overflow_hidden()
+        .text_ellipsis()
+        .child(label);
+    div().size_full().flex().flex_col().pt(px(if pressed { 2. } else { 0. })).pb(px(if pressed { 0. } else { 2. })).rounded(px(5.)).bg(key_edge(t)).child(face)
+}
+
+fn line_face(line: &Line, hot: Hot, x: f32, t: &Theme) -> Div {
+    let base = div().absolute().size_full().flex().items_center().pl(px(x)).pr(px(10.)).gap(px(6.)).min_w_0();
     match &line.kind {
         LineKind::Section { title, open } => base
-            .pl(px(x - 10.))
-            .child(icons::chevron(*open, t.muted))
-            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.accent_text).child(title.to_uppercase())),
-        LineKind::Item { text, detail, color, .. } => {
-            let mut row = base;
-            if let Some(c) = color {
-                row = row.child(div().size(px(8.)).flex_none().rounded_full().bg(status_color(*c, t)));
-            }
-            row = row.child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.sub).hover(move |s| s.text_color(t.fg)).child(text.clone()));
-            match detail.as_ref().filter(|d| !d.is_empty()) {
-                Some(d) => row.child(div().flex_none().max_w(gpui::relative(0.4)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(10.5)).text_color(t.muted).child(d.clone())),
-                None => row,
-            }
-        }
+            .pl(px(x - 6.))
+            .gap(px(4.))
+            .child(div().flex_none().child(icons::chevron(*open, t.muted)))
+            .child(div().min_w_0().overflow_hidden().child(crate::ui::instrument::kerned(&title.to_uppercase(), 11., crate::ui::instrument::LABEL_KERN, true, t.accent_text))),
+        LineKind::Item { text, detail, color, .. } => item_face(base, text, detail.as_deref(), *color, &hot, t),
         LineKind::Text { text, color } => base
             .text_size(px(11.))
             .text_color(color.map_or(t.muted, |c| text_color(c, t)))
             .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(text.clone())),
-        LineKind::Button { label, .. } => {
-            let cap = div().flex().items_center().justify_center().size_full().rounded(px(4.)).bg(t.surface).text_size(px(11.)).text_color(t.key_label()).child(label.clone());
-            div().size_full().px(px(x - 8.)).py(px(4.)).child(div().size_full().pb(px(2.)).rounded(px(5.)).bg(key_edge(t)).child(cap))
-        }
+        LineKind::Button { label, .. } => div().absolute().size_full().pl(px(x)).pr(px(10.)).py(px(4.)).child(key_cap(label.clone(), hot.pressed, t)),
+    }
+}
+
+/// Eintrag: Punkt (8 px), Titel in `sub`, bei Hover oder Tastaturzeile in `fg`, Detail rechts (10,5, höchstens 40 %).
+fn item_face(base: Div, text: &str, detail: Option<&str>, color: Option<ThemeColor>, hot: &Hot, t: &Theme) -> Div {
+    let mut row = base;
+    if let Some(c) = color {
+        row = row.child(div().size(px(8.)).flex_none().rounded_full().bg(status_color(c, t)));
+    }
+    let fg = t.fg;
+    let title = div()
+        .flex_1()
+        .min_w_0()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_ellipsis()
+        .text_color(if hot.cursor { t.fg } else { t.sub })
+        .group_hover(hot.group.clone(), move |s| s.text_color(fg))
+        .child(text.to_string());
+    row = row.child(title);
+    match detail.filter(|d| !d.is_empty()) {
+        Some(d) => row.child(div().flex_none().max_w(gpui::relative(0.4)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(10.5)).text_color(t.muted).child(d.to_string())),
+        None => row,
     }
 }
 
@@ -213,8 +295,13 @@ impl Render for ExtPanel {
         let focused = self.focus.is_focused(window);
         let rows: Vec<_> = self.model.lines().iter().enumerate().map(|(i, l)| self.line_row(i, l, focused, &t, cx)).collect();
         let body = div().id((self.id, 9999usize)).flex().flex_col().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).pt(px(4.)).pb(px(6.)).children(rows);
-        div()
-            .id(self.id)
+        let label = self.model.a11y_label();
+        let value = self.model.a11y_value();
+        let mut root = div().id(self.id).role(gpui::Role::List).aria_label(label);
+        if let Some(value) = value {
+            root = root.aria_value(value);
+        }
+        root
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, ev, window, cx| this.on_key(ev, window, cx)))
             .flex()
@@ -222,7 +309,7 @@ impl Render for ExtPanel {
             .flex_1()
             .min_h_0()
             .w_full()
-            .bg(t.panel)
+            .bg(crate::appearance::current(cx).panel_fill(t.panel))
             .text_color(t.fg)
             .child(self.tabs(&t, cx))
             .child(h_seam(&t))

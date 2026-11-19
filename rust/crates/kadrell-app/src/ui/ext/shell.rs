@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui::{AnyElement, App, AppContext, Context, Div, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Styled, Window, div, px};
+use gpui::{AnyElement, App, AppContext, Context, Div, DragMoveEvent, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Styled, Window, div, px};
 use kadrell_ext::bridge::{self, SettingsStore};
 use kadrell_ext::http::UreqClient;
 use kadrell_ext::manager::ExtensionManager;
@@ -16,9 +16,11 @@ use super::dialog_model::DialogModel;
 use super::footer_bar::{empty_footer, footer_bar};
 use super::footer_model::{self, FooterEntry};
 use super::keys;
+use super::model::PanelEntry;
 use super::panel::{ExtPanel, PanelEvent};
 use super::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar, status_color};
 use crate::Shell;
+use crate::windows::{layout, split};
 use crate::ui::bar::{ExtStatus, Handler};
 use crate::ui::chrome::{h_seam, v_seam};
 use crate::ui::context_menu::{Cmd, Item};
@@ -26,8 +28,6 @@ use crate::ui::palette::{Command, Run};
 use kadrell_i18n::trd;
 use crate::ui::theme;
 
-const SIDEBAR_WIDTH: f32 = 260.;
-const DOCK_HEIGHT: f32 = 220.;
 /// Der Manager meldet bis zu 50-mal pro Sekunde (jede Logzeile): höchstens so oft wird neu gezeichnet.
 const COALESCE: Duration = Duration::from_millis(100);
 /// Ohne Einträge verschwindet die Leiste unten erst nach dieser Frist, falls nichts nachkommt.
@@ -37,8 +37,6 @@ const FOOTER_HIDE: Duration = Duration::from_millis(1500);
 pub struct ExtUi {
     right: Entity<ExtPanel>,
     left: Entity<ExtPanel>,
-    /// Vom Nutzer ausgeblendet (Strg+Alt+B) ist `false`. Ohne Panels fehlt der Bereich unabhängig davon.
-    right_visible: bool,
     status: Vec<(String, StatusItem)>,
     footer: Vec<FooterEntry>,
     footer_shown: bool,
@@ -51,7 +49,6 @@ impl ExtUi {
         Self {
             right: cx.new(|cx| ExtPanel::new("ext-right", manager.clone(), cx)),
             left: cx.new(|cx| ExtPanel::new("ext-left", manager.clone(), cx)),
-            right_visible: true,
             status: Vec::new(),
             footer: Vec::new(),
             footer_shown: false,
@@ -92,6 +89,7 @@ impl Shell {
     /// Neuer Stand des Managers in alle Ansichten. Gezeichnet wird nur, wenn sich etwas geändert hat.
     fn refresh_ext(&mut self, cx: &mut Context<Self>) {
         let (right, left) = (self.ext.panels_in(Dock::Right), self.ext.panels_in(Dock::Left));
+        self.leave_vanishing_tab(&right, &left, cx);
         self.ext_ui.right.update(cx, |p, cx| p.set_panels(right, cx));
         self.ext_ui.left.update(cx, |p, cx| p.set_panels(left, cx));
         let status = self.ext.status_items();
@@ -103,6 +101,25 @@ impl Shell {
         if let Some(dialog) = self.ext_ui.dialog.clone() {
             dialog.update(cx, |d, cx| d.changed(cx));
         }
+    }
+
+    /// Verschwindet der gewählte Tab einer Seitenleiste, die gerade die Tastatur hat, bekommt sie zuerst die Kachel
+    /// zurück, bevor der Bereich womöglich wegfällt (`updateExtensionPanels`). Erst nach dem Zeichnen, denn dazu
+    /// braucht es das Fenster.
+    fn leave_vanishing_tab(&mut self, right: &[PanelEntry], left: &[PanelEntry], cx: &mut Context<Self>) {
+        let panels = [(self.ext_ui.right.clone(), self.ext_ui.right.read(cx).model().loses_tab(right)), (self.ext_ui.left.clone(), self.ext_ui.left.read(cx).model().loses_tab(left))];
+        let gone: Vec<Entity<ExtPanel>> = panels.into_iter().filter(|(_, lost)| *lost).map(|(panel, _)| panel).collect();
+        let (Some(main), false) = (self.main_window, gone.is_empty()) else { return };
+        let shell = cx.entity();
+        cx.defer(move |cx| {
+            let _ = cx.update_window(main, |_, window, cx| {
+                shell.update(cx, |sh, cx| {
+                    if gone.iter().any(|p| p.read(cx).has_keyboard(window)) {
+                        sh.focus_terminal(window, cx);
+                    }
+                });
+            });
+        });
     }
 
     /// Mit Einträgen erscheint die Leiste sofort, leer verschwindet sie erst nach `FOOTER_HIDE`.
@@ -158,13 +175,13 @@ impl Shell {
 
     // MARK: Seitenleisten
 
-    /// Strg+Alt+B: rechte Seitenleiste ein/aus. Hat sie dabei die Tastatur, geht sie ans Terminal.
+    /// Strg+Alt+B: rechte Seitenleiste ein/aus (pro Fenster gespeichert). Hat sie dabei die Tastatur, geht sie ans Terminal.
     fn toggle_right_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.ext_ui.right_visible = !self.ext_ui.right_visible;
-        if !self.ext_ui.right_visible && self.ext_ui.right.read(cx).has_keyboard(window) {
+        let change = self.win.sides.toggle_right();
+        self.queue_save(change, cx);
+        if !self.win.sides.right_visible && self.ext_ui.right.read(cx).has_keyboard(window) {
             self.focus_terminal(window, cx);
         }
-        cx.notify();
     }
 
     /// Strg+3: Tastatur in die rechte Seitenleiste (blendet sie bei Bedarf ein). Ohne Panels geschieht nichts.
@@ -172,7 +189,10 @@ impl Shell {
         if self.ext_ui.right.read(cx).is_empty() {
             return;
         }
-        self.ext_ui.right_visible = true;
+        if !self.win.sides.right_visible {
+            let change = self.win.sides.toggle_right();
+            self.queue_save(change, cx);
+        }
         let panel = self.ext_ui.right.clone();
         cx.notify();
         // Das Panel steht erst im nächsten Frame im Baum, ein Fokus davor liefe ins Leere.
@@ -182,29 +202,49 @@ impl Shell {
         });
     }
 
-    /// Die linke Spalte: der Baum, darunter (mit Panels) das Dock der Extensions.
-    pub(crate) fn ext_left_column(&self, sidebar: impl IntoElement, cx: &App) -> AnyElement {
-        if self.ext_ui.left.read(cx).is_empty() {
+    /// Die linke Spalte: der Baum, darunter (mit Panels) das Dock der Extensions. Der Trenner dazwischen lässt sich ziehen,
+    /// der Baum behält mindestens 80, das Dock mindestens 60 pt. Beim ersten Erscheinen bekommt das Dock unten 220 pt
+    /// (höchstens die halbe Spalte), danach gilt die gezogene Höhe.
+    pub(crate) fn ext_left_column(&self, sidebar: impl IntoElement, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+        if !layout::show_dock(self.ext_ui.left.read(cx).model().panels().len()) {
             return sidebar.into_any_element();
         }
         let t = theme(cx);
+        let width = self.win.sides.tree_width(window.viewport_size().width.as_f32());
+        // Die Spalte ist so hoch wie das Fenster ohne Titel und Leiste; genau wird sie erst beim Ziehen gemessen.
+        let column_h = window.viewport_size().height.as_f32() - 62.;
+        let dock_h = self.win.sides.dock_height(column_h);
         let dock = div()
             .flex()
             .flex_none()
-            .h(px(DOCK_HEIGHT))
-            .child(div().flex().flex_col().flex_none().w(px(SIDEBAR_WIDTH)).h_full().child(h_seam(&t)).child(self.ext_ui.left.clone()))
+            .h(px(dock_h))
+            .min_h(px(layout::DOCK_MIN_H))
+            .child(div().flex().flex_col().flex_none().w(px(width)).h_full().child(h_seam(&t)).child(self.ext_ui.left.clone()))
             .child(v_seam(&t));
-        div().flex().flex_col().flex_none().h_full().child(div().flex().flex_1().min_h_0().child(sidebar)).child(dock).into_any_element()
+        let tree = div().flex().flex_1().min_h(px(layout::TREE_MIN_H)).child(sidebar);
+        let grip = split::grip("grip-dock", split::DockDrag, false).bottom(px(dock_h - 1. - layout::GRAB / 2.));
+        div()
+            .relative()
+            .flex()
+            .flex_col()
+            .flex_none()
+            .h_full()
+            .on_drag_move::<split::DockDrag>(cx.listener(|this, ev: &DragMoveEvent<split::DockDrag>, _, cx| this.drag_dock(ev, cx)))
+            .child(tree)
+            .child(dock)
+            .child(grip)
+            .into_any_element()
     }
 
     /// Die rechte Seitenleiste, nur mit Panels und solange sie nicht ausgeblendet ist.
-    pub(crate) fn ext_right_panel(&self, cx: &App) -> Option<AnyElement> {
-        if !self.ext_ui.right_visible || self.ext_ui.right.read(cx).is_empty() {
+    pub(crate) fn ext_right_panel(&self, window: &Window, cx: &App) -> Option<AnyElement> {
+        if !layout::show_right(self.win.sides.right_visible, self.ext_ui.right.read(cx).model().panels().len()) {
             return None;
         }
         let t = theme(cx);
-        let column = div().flex().flex_col().flex_none().w(px(SIDEBAR_WIDTH)).h_full().child(self.ext_ui.right.clone());
-        Some(div().flex().flex_none().h_full().bg(t.panel).child(v_seam(&t)).child(column).into_any_element())
+        let width = self.win.sides.right_width(window.viewport_size().width.as_f32());
+        let column = div().flex().flex_col().flex_none().w(px(width)).h_full().child(self.ext_ui.right.clone());
+        Some(div().flex().flex_none().h_full().child(v_seam(&t)).child(column).into_any_element())
     }
 
     // MARK: Statusleisten
@@ -240,7 +280,7 @@ impl Shell {
     pub(crate) fn ext_palette_commands(&self) -> Vec<Command> {
         footer_model::commands(&self.ext.status_items(), &self.ext.footer_items())
             .into_iter()
-            .map(|(name, what, id)| Command { title: trd!("Statusleiste: %@ · %@", name.clone(), what), shortcut: String::new(), run: Run::Ext { name, id } })
+            .map(|(name, what, id)| Command { title: trd!("Statusleiste: %@ · %@", name.clone(), what), run: Run::Ext { name, id } })
             .collect()
     }
 
@@ -250,6 +290,10 @@ impl Shell {
     fn toggle_extensions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.ext_ui.dialog.is_some() {
             self.close_extensions(window, cx);
+        } else if !self.overlays.ext_started {
+            kadrell_tray::beep();
+        } else if self.panel_open() {
+            self.overlays.defer(Box::new(|shell, window, cx| shell.open_extensions(window, cx)));
         } else if self.overlay.is_none() && self.palette.is_none() && self.settings.is_none() && self.rename.is_none() {
             self.open_extensions(window, cx);
         }
@@ -287,16 +331,13 @@ impl Shell {
         .detach();
     }
 
-    /// `KADRELL_DEV_EXT_TAB=discover` zeigt „Entdecken“, `KADRELL_DEV_EXT_SELECT=<n>` wählt eine Zeile,
+    /// `KADRELL_DEV_EXT_SELECT=<n>` wählt eine Zeile,
     /// `KADRELL_DEV_EXT_LOG=1` blendet das Log ein.
     fn open_extensions_dev(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open_extensions(window, cx);
         let Some(dialog) = self.ext_ui.dialog.clone() else { return };
         let var = |name: &str| std::env::var(format!("KADRELL_DEV_EXT_{name}")).ok();
         dialog.update(cx, |d, cx| {
-            if var("TAB").as_deref() == Some("discover") {
-                d.model.tab = super::dialog_model::Tab::Discover;
-            }
             if let Some(n) = var("SELECT").and_then(|v| v.parse::<usize>().ok()) {
                 d.model.select(n);
             }

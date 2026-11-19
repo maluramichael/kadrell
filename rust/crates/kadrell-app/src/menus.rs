@@ -24,7 +24,7 @@ use crate::ui::text_input::{Copy, Cut, Paste};
 actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow, NewWindow, NewGroup, ShowContextMenu, NewRemote]);
 
 // Aktionen der App-Hülle: Neustart, Kommandozeile, Wegwerf-Instanz, Ausblenden, Auswahl, Auto-Modus, Session-Menü.
-actions!(kadrell_shell, [RestartApp, InstallCli, TemporaryInstance, HideApp, SelectGroups, SelectEverything, ToggleAuto, IsolateSession, RemoveFromView, NewSessionBeside, CopyPath, ShowInFolder]);
+actions!(kadrell_shell, [RestartApp, InstallCli, TemporaryInstance, HideApp, SelectGroups, SelectEverything, IsolateSession, RemoveFromView, NewSessionBeside, CopyPath, ShowInFolder]);
 
 pub enum Entry {
     Separator,
@@ -139,11 +139,11 @@ fn flat_view_menu() -> MenuDef {
     menu(
         de!("Ansicht"),
         vec![
-            item(de!("Auto-Modus ein/aus"), none(), ToggleAuto),
-            off(de!("Baum ein/aus"), shortcut("⌘B")),
+            item(de!("Auto-Modus ein/aus"), none(), crate::windows::ToggleAuto),
+            item(de!("Baum ein/aus"), shortcut("⌘B"), crate::windows::ToggleSidebar),
             item(de!("Rechte Sidebar ein/aus"), shortcut("⌥⌘B"), ToggleRightSidebar),
             item(de!("Rechte Sidebar: Tastatur hierher"), shortcut("⌘3"), FocusRightSidebar),
-            off(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B")),
+            item(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B"), crate::ui::tree_actions::ToggleAllGroups),
             Entry::Separator,
             item(de!("Terminal-Schrift größer"), shortcut("⌘+"), crate::appearance::zoom::FontBigger),
             item(de!("Terminal-Schrift kleiner"), shortcut("⌘-"), crate::appearance::zoom::FontSmaller),
@@ -193,10 +193,9 @@ fn hotkey_entries(ctx: &MenuContext) -> Vec<Entry> {
 fn live_view_menu(ctx: &MenuContext) -> MenuDef {
     let mut entries = layout_entries();
     entries.extend([
-        item(de!("Auto-Modus ein/aus"), none(), ToggleAuto),
-        // TODO(paket-windows): Baum ein/aus und Gruppen auf-/zuklappen.
-        off(de!("Baum ein/aus"), shortcut("⌘B")),
-        off(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B")),
+        item(de!("Auto-Modus ein/aus"), none(), crate::windows::ToggleAuto),
+        item(de!("Baum ein/aus"), shortcut("⌘B"), crate::windows::ToggleSidebar),
+        item(de!("Alle Gruppen auf-/zuklappen"), shortcut("⇧⌘B"), crate::ui::tree_actions::ToggleAllGroups),
         Entry::Separator,
         item(de!("Terminal-Schrift größer"), shortcut("⌘+"), crate::appearance::zoom::FontBigger),
         item(de!("Terminal-Schrift kleiner"), shortcut("⌘-"), crate::appearance::zoom::FontSmaller),
@@ -300,6 +299,7 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &Quit, cx| crate::quit::request(cx));
     cx.on_action(|_: &RestartApp, cx| crate::quit::request_restart(cx));
     cx.on_action(|_: &ToggleTheme, cx| Shell::toggle_theme(cx));
+    crate::windows::bind_keys(cx);
     set_native_menus(cx);
 }
 
@@ -321,11 +321,12 @@ fn bind_selection_keys(cx: &mut App) {
 
 /// Aktionen des Fensters: wirken auf die Shell und laufen über den Fokuspfad (Menü, Tastatur).
 pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
-    let root = crate::appearance::zoom::attach_actions(root, cx);
+    let root = crate::windows::attach_actions(crate::appearance::zoom::attach_actions(root, cx), cx);
+    let root = crate::ui::tree_actions::attach_actions(root, cx);
     let root = attach_session_actions(attach_shell_actions(root, cx), cx);
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
-        .on_action(cx.listener(|this, _: &NewRemote, window, cx| this.open_remote(window, cx)))
+        .on_action(cx.listener(|this, _: &NewRemote, window, cx| this.open_palette("@", window, cx)))
         .on_action(cx.listener(|this, _: &FindAll, window, cx| this.open_palette("/", window, cx)))
         .on_action(cx.listener(|this, _: &SearchHistory, window, cx| this.open_palette("#", window, cx)))
         .on_action(cx.listener(|this, _: &QuickStart, window, cx| this.open_quick_start(window, cx)))
@@ -354,7 +355,6 @@ fn attach_shell_actions(root: Div, cx: &mut Context<Shell>) -> Div {
         .on_action(cx.listener(|this, _: &HideApp, window, cx| this.hide_app(window, cx)))
         .on_action(cx.listener(|this, _: &SelectGroups, window, cx| this.select_groups_action(window, cx)))
         .on_action(cx.listener(|this, _: &SelectEverything, window, cx| this.select_everything_action(window, cx)))
-        .on_action(cx.listener(|this, _: &ToggleAuto, window, cx| this.toggle_auto(window, cx)))
         .on_action(cx.listener(|this, a: &SelectLayout, _, cx| this.select_layout_action(&a.mode, cx)))
         .on_action(cx.listener(|this, a: &PerformHotkey, window, cx| this.perform_hotkey_action(&a.action, window, cx)))
         .on_action(cx.listener(|this, _: &Paste, _, cx| this.paste_into_focused(cx)))

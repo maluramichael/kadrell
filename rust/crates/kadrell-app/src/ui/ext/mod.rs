@@ -23,6 +23,7 @@ pub mod keys;
 pub mod model;
 pub mod panel;
 mod shell;
+pub mod spinner;
 
 pub use shell::{ExtUi, attach_actions};
 

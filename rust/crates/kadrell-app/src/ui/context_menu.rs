@@ -45,6 +45,8 @@ pub enum Cmd {
     Ext { tab: String, id: String },
     /// Konto-Menü der Leiste (Wechseln, Auto-Wechsel, Hinzufügen, Verwalten).
     Account(crate::usage::AccountCmd),
+    /// Layout aus dem Menü der Layout-Taste der Leiste.
+    Layout(crate::ui::layout::LayoutMode),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -330,6 +332,10 @@ impl Shell {
         match cmd {
             Cmd::Rename(target) => self.open_rename(target, window, cx),
             Cmd::Account(cmd) => self.run_account_cmd(cmd, window, cx),
+            Cmd::Layout(mode) => {
+                self.set_mode(mode, cx);
+                self.sync(window, cx);
+            }
             Cmd::Ext { tab, id } => {
                 self.ext_action(&tab, &id);
                 self.sync(window, cx);

@@ -4,12 +4,18 @@
 
 pub mod agents;
 pub mod attention;
+mod folders;
+pub mod cli_check;
+pub mod feedback;
 mod handler;
 mod poll;
 pub mod stats;
 pub mod launch;
 pub mod mapping;
+mod dev;
+pub mod lifecycle;
 mod tiles;
+mod titles;
 mod workspace;
 
 use std::collections::{HashMap, HashSet};
@@ -60,6 +66,8 @@ pub struct AppState {
     pub models: kadrell_models::LocalModels,
     /// Hintergrundarbeit vor dem Start von Pi- und Remote-Kacheln (`agents`).
     prep: agents::Preparations,
+    /// Lokaler Sessiontitel (`titles`).
+    titles: titles::Titles,
     pub registry: Arc<Mutex<SessionRegistry>>,
     pub attention: AttentionTracker<ProfileAttention>,
     tiles: HashMap<String, Tile>,
@@ -67,6 +75,8 @@ pub struct AppState {
     prompts: HashMap<String, String>,
     /// Sessions, deren Prozess die Oberfläche als Nächstes starten soll.
     wanted: Vec<String>,
+    /// Lazy Start in Wellen und Verlauf der Terminals (`lifecycle`).
+    starts: lifecycle::Starts,
     pub selected: Vec<String>,
     pub focused: Option<String>,
     /// Die Kachel, die vor dem letzten Fokuswechsel den Fokus hatte (⌥⇥).
@@ -85,6 +95,16 @@ pub struct AppState {
     /// Wirkungen des Aufmerksamkeits-Trackers (Klang, Benachrichtigung, Hüpfen), die die Plattformschicht noch
     /// ausführen muss (`take_effects`).
     pending_effects: Vec<Effect>,
+    /// Sessions, für die der Fokus-Hook gefeuert hat und die Extensions noch `session.focus` bekommen (`take_focus_fired`).
+    focus_fired: Vec<String>,
+    /// Statuswechsel seit dem letzten Abruf: der Baum lässt den Punkt aufblitzen (`take_transitions`).
+    pending_transitions: kadrell_claude::attention::Transitions,
+    /// claude läuft, ist aber älter als getestet: nicht blockierend, nur die Leiste warnt (`cli_check`).
+    pub version_warning: Option<String>,
+    /// Letzte Ansage („<Titel> wartet“), als Beschreibung am Status-Display der Leiste (`tray_wire::feedback`).
+    pub announcement: Option<String>,
+    /// Klänge für Öffnen, Schließen und Umschalten, die die Oberfläche noch spielen muss (`feedback`).
+    pending_sounds: Vec<kadrell_tray::Sound>,
 }
 
 impl AppState {
@@ -117,11 +137,13 @@ impl AppState {
             endpoint,
             models,
             prep: Default::default(),
+            titles: Default::default(),
             registry,
             attention,
             tiles: HashMap::new(),
             prompts: HashMap::new(),
             wanted: Vec::new(),
+            starts: lifecycle::Starts::default(),
             selected: Vec::new(),
             focused: None,
             last_focused: None,
@@ -134,6 +156,11 @@ impl AppState {
             window_active: true,
             error: None,
             pending_effects: Vec::new(),
+            focus_fired: Vec::new(),
+            pending_transitions: Default::default(),
+            version_warning: None,
+            announcement: None,
+            pending_sounds: Vec::new(),
         };
         state.restore_view();
         state
@@ -153,7 +180,9 @@ impl AppState {
         self.layout = LayoutMode::from_raw(&self.settings.string_or("workspace.mode", "grid")).unwrap_or_default();
         let keys = if keys.is_empty() { self.ordered_keys().into_iter().take(1).collect() } else { keys };
         let focus = focus.or_else(|| keys.first().cloned());
+        self.starts.restoring = true; // beim Start warten die gespeicherten Kacheln auf ihre Welle
         self.set_selection(keys, focus);
+        self.starts.restoring = false;
     }
 
     fn save_view(&self) {
@@ -245,10 +274,9 @@ impl AppState {
     }
 
     fn queue_visible_starts(&mut self) {
-        for key in self.selected.clone() {
-            if self.run(&key) == Run::NotStarted && !self.wanted.contains(&key) {
-                self.wanted.push(key);
-            }
+        self.enqueue_visible();
+        if !self.starts.restoring {
+            self.start_selected_now();
         }
     }
 
@@ -266,7 +294,11 @@ impl AppState {
             return false;
         }
         self.registry.lock().unwrap_or_else(PoisonError::into_inner).add(mapping::record_of(&session));
+        if !session.is_remote() {
+            self.record_folder_use(&session.cwd);
+        }
         self.count_opened(session.is_shell());
+        self.queue_sound(kadrell_tray::Sound::Open);
         if let Some(prompt) = prompt {
             self.prompts.insert(key.clone(), prompt);
         }
@@ -313,6 +345,8 @@ impl AppState {
             self.prompts.remove(key);
         }
         self.wanted.retain(|k| !ids.contains(k));
+        self.queue_sound(kadrell_tray::Sound::Close);
+        self.starts.forget(&ids.iter().cloned().collect::<Vec<_>>());
         self.store.remove_sessions(&ids, now_secs());
         self.registry.lock().unwrap_or_else(PoisonError::into_inner).remove(&ids, now_ms());
         self.store.assign();
@@ -424,6 +458,7 @@ impl AppState {
 
     /// Kopiert den Live-Zustand des Registers in die Sessions des Kerns und gleicht die Marke „neu“ ab.
     pub fn apply_registry(&mut self, change: Change) {
+        self.apply_titles();
         let records = self.registry.lock().unwrap_or_else(PoisonError::into_inner).sessions.clone();
         let mut stored = false;
         for r in &records {
@@ -444,6 +479,7 @@ impl AppState {
         if let Some(change) = change {
             self.apply_registry(change);
         }
+        self.note_title(key);
     }
 
     /// Marke „neu“, Klang und Fokus-Hook nach jeder Änderung. Klang und Benachrichtigung bleiben Aufgabe der Plattform.
@@ -456,14 +492,29 @@ impl AppState {
         let looking: HashSet<String> = self.selected.iter().cloned().collect();
         self.attention.focus_hook_enabled = true;
         let input = UpdateInput { sessions: &sessions, waiting: &waiting, statuses: &statuses, focused: self.focused.as_deref(), looking: Some(&looking), is_key: self.window_active };
-        let (_, effects) = self.attention.update(&input);
+        let (changed, effects) = self.attention.update(&input);
+        self.pending_transitions.waiting.extend(changed.waiting);
+        self.pending_transitions.done.extend(changed.done);
         self.attention.prune(&sessions);
         for effect in effects {
             match effect {
-                Effect::FireFocusHook(key) => self.fire_hook(HookEvent::SessionFocus, &key),
+                Effect::FireFocusHook(key) => {
+                    self.fire_hook(HookEvent::SessionFocus, &key);
+                    self.focus_fired.push(key);
+                }
                 other => self.pending_effects.push(other),
             }
         }
+    }
+
+    /// Die Sessions, die seit dem letzten Abruf den Fokus-Hook ausgelöst haben (für das Extension-Event `session.focus`).
+    pub fn take_focus_fired(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.focus_fired)
+    }
+
+    /// Die Statuswechsel seit dem letzten Abruf (der Abgleich läuft mehrmals zwischen zwei Bildern, daher vereinigt).
+    pub fn take_transitions(&mut self) -> kadrell_claude::attention::Transitions {
+        std::mem::take(&mut self.pending_transitions)
     }
 
     /// Die Wirkungen seit dem letzten Abruf (Klang, Benachrichtigung, Hüpfen), in der Reihenfolge des Trackers.
@@ -494,3 +545,5 @@ fn agent_status(s: SessionStatus) -> kadrell_claude::agent::Status {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod bar_tests;

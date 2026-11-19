@@ -75,3 +75,31 @@ x-fertig-5d2e = Fertig ⏎
 x-pfad-der-app-unbekannt-c7d4 = Pfad der App unbekannt
 
 x-rechte-sidebar-tastatur-hierher-7b3a = Rechte Sidebar: Tastatur hierher
+
+x-gestern-7c10 = gestern
+
+x-jetzt-7c11 = jetzt
+
+x-vor-jahren-7c12 = vor { $arg1 } Jahren
+
+x-vor-minuten-7c13 = vor { $arg1 } Minuten
+
+x-vor-monaten-7c14 = vor { $arg1 } Monaten
+
+x-vor-stunden-7c15 = vor { $arg1 } Stunden
+
+x-vor-tagen-7c16 = vor { $arg1 } Tagen
+
+x-vor-wochen-7c17 = vor { $arg1 } Wochen
+
+x-vor-1-jahr-7c18 = vor 1 Jahr
+
+x-vor-1-minute-7c19 = vor 1 Minute
+
+x-vor-1-monat-7c1a = vor 1 Monat
+
+x-vor-1-stunde-7c1b = vor 1 Stunde
+
+x-vor-1-woche-7c1c = vor 1 Woche
+
+x-vorgestern-7c1d = vorgestern

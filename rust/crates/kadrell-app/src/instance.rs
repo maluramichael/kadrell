@@ -118,11 +118,6 @@ pub fn install_cli(link: &Path, target: &Path) -> Result<(), String> {
     }
 }
 
-/// Gibt es einen Editor und einen Ordner, den er öffnen kann?
-pub fn can_open_editor(command: &str, cwd: &str) -> bool {
-    !command.trim().is_empty() && !cwd.is_empty()
-}
-
 impl Shell {
     /// Menü „Kommandozeilen-Tool installieren …“: Link anlegen, das Ergebnis als Meldung.
     pub(crate) fn install_cli_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -132,25 +127,6 @@ impl Shell {
         match result {
             Ok(path) => self.tell(trd!("Kommandozeilen-Tool installiert"), trd!("%@ zeigt auf diese App. `kadrell help` listet die Befehle. In Sessions dieser App steht der Pfad zusätzlich in $KADRELL.", path), trd!("OK"), window, cx),
             Err(message) => self.tell(trd!("Installation fehlgeschlagen"), message, trd!("OK"), window, cx),
-        }
-    }
-
-    /// Fehlermeldung als Dialog, zusätzlich im Log (Swift: `sheets.report`).
-    pub(crate) fn report_error(&mut self, detail: String, window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("kadrell: {detail}");
-        self.tell(trd!("Claude CLI meldet einen Fehler"), detail, trd!("OK"), window, cx);
-    }
-
-    /// ⌥E: Ordner der Fokus-Session im eingestellten Editor. Ohne Editor oder Ordner geschieht nichts (die Mac-App
-    /// piept), ein Startfehler erscheint als Meldung (Swift: `openEditor`).
-    pub(crate) fn open_editor_hotkey(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let command = self.state.settings.editor_command();
-        let cwd = self.state.focused.as_deref().and_then(|k| self.state.session(k)).map(|s| s.cwd.clone()).unwrap_or_default();
-        if !can_open_editor(&command, &cwd) {
-            return;
-        }
-        if let Err(e) = crate::ui::groups::rows::spawn_editor(&command, &cwd) {
-            self.report_error(e.to_string(), window, cx);
         }
     }
 
@@ -183,13 +159,6 @@ mod tests {
     }
 
     #[test]
-    fn the_editor_needs_a_command_and_a_folder() {
-        assert!(can_open_editor("code", "C:/p"));
-        assert!(!can_open_editor("  ", "C:/p"));
-        assert!(!can_open_editor("code", ""));
-    }
-
-    #[test]
     fn the_link_lives_in_the_local_bin_of_the_home() {
         let link = link_path(Path::new("/home/m"));
         assert!(link.ends_with(if cfg!(windows) { ".local/bin/kadrell.exe" } else { ".local/bin/kadrell" }.replace('/', std::path::MAIN_SEPARATOR_STR)));
@@ -218,7 +187,9 @@ mod tests {
         std::fs::write(&b, "b").unwrap();
         let link = dir.join("neu").join("bin").join("kadrell");
         if let Err(e) = install_cli(&link, &a) {
-            assert!(cfg!(windows), "{e}");
+            if !cfg!(windows) {
+                panic!("{e}");
+            }
             std::fs::remove_dir_all(&dir).unwrap();
             return;
         }

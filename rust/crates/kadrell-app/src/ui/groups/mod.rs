@@ -73,7 +73,8 @@ impl Shell {
         let folder = folder.trim_end_matches(['/', '\\']).replace('\\', "/");
         let draft = self.state.store.groups.make_group(&folder, None);
         let others = self.state.store.groups.groups.clone();
-        self.show_group_dialog(EditGroupModel::new(draft, others, true, &self.state.home()), window, cx);
+        let model = EditGroupModel::new(draft, others, true, &self.state.home());
+        self.present_overlay(Box::new(move |shell, window, cx| shell.show_group_dialog(model, window, cx)), window, cx);
     }
 
     pub fn open_edit_group(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
@@ -82,7 +83,8 @@ impl Shell {
         }
         let Some(group) = self.state.store.groups.group(id).cloned() else { return };
         let others = self.state.store.groups.groups.iter().filter(|g| g.id != id).cloned().collect();
-        self.show_group_dialog(EditGroupModel::new(group, others, false, &self.state.home()), window, cx);
+        let model = EditGroupModel::new(group, others, false, &self.state.home());
+        self.present_overlay(Box::new(move |shell, window, cx| shell.show_group_dialog(model, window, cx)), window, cx);
     }
 
     /// Ein anderer Dialog ist schon offen.
@@ -129,6 +131,7 @@ impl Shell {
                     self.request_close_session(&key, false, window, cx);
                 }
             }
+            Ok("quit") => self.request_quit(window, cx),
             Ok("menu-session") => self.dev_menu(false, cx),
             Ok("menu-group") => self.dev_menu(true, cx),
             _ => {}
@@ -158,7 +161,7 @@ impl Shell {
     // MARK: Rückfragen
 
     /// Führt die Aktion sofort aus oder fragt vorher (`Ask` abgeschaltet oder `skip`: sofort).
-    fn confirm_or_run(&mut self, spec: ConfirmSpec, skip: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn confirm_or_run(&mut self, spec: ConfirmSpec, skip: bool, window: &mut Window, cx: &mut Context<Self>) {
         let asked = spec.ask.is_none_or(|a| self.state.settings.ask_enabled(a));
         if skip || !asked {
             return self.run_confirmed(&spec.action, window, cx);
@@ -195,6 +198,8 @@ impl Shell {
             ConfirmAction::StopSession(key) => {
                 self.state.stop_tile(key);
             }
+            ConfirmAction::Quit => return self.finish_shutdown(false, cx),
+            ConfirmAction::Restart => return self.finish_shutdown(true, cx),
         }
         self.sync(window, cx);
     }
@@ -223,6 +228,13 @@ impl Shell {
         let Some(session) = self.state.session(key) else { return };
         let spec = confirm::stop_session_spec(session);
         self.confirm_or_run(spec, false, window, cx);
+    }
+
+    /// Sessions mit laufendem Prozess in Baumreihenfolge.
+    pub(crate) fn running_sessions(&self) -> Vec<confirm::RunningSession> {
+        let keys = self.state.store.groups.ordered_keys();
+        let running = keys.iter().filter(|k| self.state.run(k) == Run::Running);
+        running.filter_map(|k| self.state.session(k)).map(|s| confirm::RunningSession { title: s.title(), status: s.status() }).collect()
     }
 
     // MARK: Aktionen der Menüs
@@ -258,19 +270,22 @@ impl Shell {
     }
 
     /// Ordner im eingestellten Editor öffnen (Menü, ⌥E).
-    pub fn open_editor_in(&mut self, cwd: &str) {
+    /// Ohne Editor-Befehl oder Ordner piept es, ein Startfehler kommt als Meldung (`openEditor(in:)`).
+    pub fn open_editor_in(&mut self, cwd: &str, window: &mut Window, cx: &mut Context<Self>) {
         let command = self.state.settings.editor_command();
+        if command.trim().is_empty() || cwd.is_empty() {
+            kadrell_tray::beep();
+            return;
+        }
         if let Err(e) = rows::spawn_editor(&command, cwd) {
-            eprintln!("kadrell: Editor nicht gestartet: {e}");
+            self.report(&e.to_string(), window, cx);
         }
     }
 
     /// ⌥E: Ordner der Fokus-Session im Editor.
-    pub fn open_editor_focused(&mut self) {
-        let cwd = self.state.focused.as_deref().and_then(|k| self.state.session(k)).map(|s| s.cwd.clone());
-        if let Some(cwd) = cwd {
-            self.open_editor_in(&cwd);
-        }
+    pub fn open_editor_focused(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let cwd = self.state.focused.as_deref().and_then(|k| self.state.session(k)).map(|s| s.cwd.clone()).unwrap_or_default();
+        self.open_editor_in(&cwd, window, cx);
     }
 
     // MARK: Ordner aus dem Explorer
@@ -290,7 +305,7 @@ impl Shell {
 
     /// Das, was der Baum von der Shell braucht (er wird gezeichnet, während die Shell gesperrt ist).
     pub fn sidebar_ctx(&self) -> SidebarCtx {
-        SidebarCtx { view: self.tree_view(), scroll: self.groups_ui.scroll.clone(), keys: self.ws.tree_focus }
+        SidebarCtx { view: self.tree_view(), scroll: self.groups_ui.scroll.clone(), keys: self.ws.tree_focus, anim: self.tree_anim.snapshot(std::time::Instant::now()), cmd: self.tree_anim.cmd_down }
     }
 
     /// Zeile im Baum losgelassen: Session sortieren oder verschieben, Gruppe verschieben.
@@ -339,10 +354,12 @@ impl Shell {
     fn run_group_cmd(&mut self, cmd: Cmd, window: &mut Window, cx: &mut Context<Self>) -> Option<Cmd> {
         match cmd {
             Cmd::ToggleFavorite(id) => self.state.store.groups.toggle_favorite(&id),
+            // Host-Gruppe: das „+“ öffnet die Auswahl der tmux-Sessions des Hosts (`pickRemoteSession`).
+            Cmd::NewSessionIn(id) | Cmd::NewTerminalIn(id) if self.pick_remote_session(&id, window, cx) => return None,
             Cmd::NewSessionIn(id) => self.new_session_in_group(&id),
             Cmd::NewTerminalIn(id) => self.new_terminal_in_group(&id),
             Cmd::ShowGroup(id) => self.show_group_sessions(&id),
-            Cmd::OpenEditor(path) => self.open_editor_in(&path),
+            Cmd::OpenEditor(path) => self.open_editor_in(&path, window, cx),
             Cmd::CloseGroup(id) => {
                 self.request_close_group(&id, false, window, cx);
                 return None;
@@ -403,8 +420,7 @@ impl Shell {
         }
         let Some(key) = self.state.focused.clone() else { return };
         let a = crate::appearance::current(cx);
-        let m = a.rows();
-        let measures = rows::Rows { top_pad: a.s(m.top_inset), group_row: a.s(m.group_row), session_row: a.s(m.session_row), group_gap: a.s(m.group_gap) };
+        let measures = crate::ui::tree_actions::row_measures(&a);
         let Some((top, group_row)) = rows::focus_row_top(&self.groups, &key, measures) else { return };
         let bounds = self.groups_ui.scroll.bounds();
         let offset = self.groups_ui.scroll.offset();

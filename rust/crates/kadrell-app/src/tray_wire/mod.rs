@@ -7,6 +7,7 @@
 //! - Der rote Knopf, Alt+F4 und „Fenster schließen“ verstecken das Fenster nur. Kadrell und alle Sessions laufen
 //!   weiter; Tray-Klick, `kadrell` ohne Befehl und ein zweiter Start holen es zurück.
 
+mod feedback;
 pub(crate) mod rules;
 pub(crate) mod view;
 mod window;
@@ -258,13 +259,14 @@ impl Shell {
     }
 
     /// Führt die Wirkungen des Trackers aus und bringt Icon, Menü und Badge auf den Stand des Zustands.
-    pub(crate) fn refresh_tray(&mut self, window: &mut Window, _cx: &mut Context<Self>) {
+    pub(crate) fn refresh_tray(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let effects = self.state.take_effects();
         let settings = (self.state.settings.sounds(), self.state.settings.notifications());
         let lang = rules::lang(kadrell_i18n::global().lang());
         for action in rules::plan(&effects, settings.0, settings.1) {
-            self.run_action(action, lang, window);
+            self.run_action(action, lang, window, cx);
         }
+        self.play_queued_sounds();
         // Ohne Icon (die Oberfläche zeichnet vor `start_tray`) nichts merken: sonst hält der erste Aufruf mit Icon den
         // Stand für schon gesendet, und Statustext, Menü und Badge kommen nie an.
         let Some(tray) = &self.tray.tray else { return };
@@ -279,9 +281,11 @@ impl Shell {
         self.tray.last = Some(view);
     }
 
-    fn run_action(&mut self, action: Action, lang: kadrell_tray::Lang, window: &mut Window) {
+    fn run_action(&mut self, action: Action, lang: kadrell_tray::Lang, window: &mut Window, cx: &mut Context<Self>) {
         self.tray.trace(&format!("Wirkung {action:?}"));
         match action {
+            Action::ShowTip(text) => self.show_tip(text, cx),
+            Action::Announce { key, waiting } => self.announce(&key, waiting, cx),
             Action::Play(sound) => kadrell_tray::play(rules::sound_level(self.state.settings.sounds()), sound),
             Action::RequestAttention => window.request_attention(),
             Action::Notify { key, waiting } => {

@@ -11,7 +11,6 @@ use gpui::{
     UnderlineStyle, Window, actions, div, fill, point, prelude::*, px, relative, size,
 };
 
-use super::chrome::seam_dark;
 use super::theme;
 use crate::theme::Theme;
 
@@ -85,6 +84,12 @@ pub struct TextInput {
     selecting: bool,
     /// Schmale Variante für Tabellenzeilen (Einstellungen): 22 px hoch, 12 pt, Fuge statt dicker Rand.
     compact: bool,
+    /// Suchfeld der Palette: 15 pt, nie ein Akzentring (die Mulde bleibt beim Tippen unverändert).
+    large: bool,
+    /// Pfadfeld wie `PathField` der Mac-App: Innenabstand 8, 13 pt, eingefügte Zeilenumbrüche fallen weg.
+    path: bool,
+    /// Schriftgröße in logischen Punkten, 0 = Standard der Variante (13, schmal 12).
+    size: f32,
 }
 
 // Zeichengrenzen und Wortsprünge als reine Funktionen, damit sie testbar bleiben.
@@ -117,10 +122,32 @@ pub fn next_word(text: &str, offset: usize) -> usize {
     text.len() - after_word.len()
 }
 
+/// Höhe und Schriftgröße eines Feldes in logischen Punkten: schmal 22 hoch bei 12, sonst aus der Schrift (13 gibt 23,
+/// 14 gibt 24 und 15 gibt 26, an den Swift-Dialogen gemessen). `size` 0 nimmt den Standard der Variante.
+pub fn field_metrics(compact: bool, size: f32) -> (f32, f32) {
+    if compact {
+        return (22., if size > 0. { size } else { 12. });
+    }
+    let text = if size > 0. { size } else { 13. };
+    // Die Zeilenhöhe der Schrift rundet AppKit uneinheitlich: 14 pt (Schnellstart) wird 24 statt 24,5 hoch.
+    if (text - 14.).abs() < 0.01 {
+        return (24., text);
+    }
+    ((text * 1.5 + 3.5).round(), text)
+}
+
 impl TextInput {
+    fn metrics(&self) -> (f32, f32) {
+        // Suchfeld der Palette: 32 pt hoch bei 15 (Swift `PaletteWindow`).
+        if self.large {
+            return (32., self.size);
+        }
+        field_metrics(self.compact, self.size)
+    }
+
     pub fn new(placeholder: &str, cx: &mut Context<Self>) -> Self {
         Self {
-            focus: cx.focus_handle(),
+            focus: cx.focus_handle().tab_stop(true),
             content: "".into(),
             placeholder: placeholder.to_string().into(),
             selected: 0..0,
@@ -131,13 +158,40 @@ impl TextInput {
             scroll_x: px(0.),
             selecting: false,
             compact: false,
+            large: false,
+            path: false,
+            size: 0.,
         }
+    }
+
+    /// Suchfeld der Palette (`PaletteWindow`): 15 pt, Fokus ohne Akzentring.
+    pub fn large(mut self) -> Self {
+        self.large = true;
+        self.size = 15.;
+        self
     }
 
     /// Schmale Variante für Tabellenzeilen.
     pub fn compact(mut self) -> Self {
         self.compact = true;
         self
+    }
+
+    /// Pfadfeld des Dialogs „Neue Session“: Innenabstand 8 statt 6, Zeilenumbrüche beim Einfügen weglassen.
+    pub fn path_field(mut self) -> Self {
+        self.path = true;
+        self
+    }
+
+    /// Eigene Schriftgröße (die Mac-App nimmt in Umbenennen und Gruppe bearbeiten 15).
+    pub fn size(mut self, points: f32) -> Self {
+        self.size = points;
+        self
+    }
+
+    /// Ändert den Platzhalter (Umbenennen zeigt den Titel von Claude Code).
+    pub fn set_placeholder(&mut self, text: &str) {
+        self.placeholder = text.to_string().into();
     }
 
     pub fn text(&self) -> &str {
@@ -268,7 +322,8 @@ impl TextInput {
 
     fn paste(&mut self, _: &Paste, w: &mut Window, cx: &mut Context<Self>) {
         if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-            self.replace_text_in_range(None, &text.replace(['\r', '\n'], " "), w, cx);
+            let glue = if self.path { "" } else { " " };
+            self.replace_text_in_range(None, &text.replace(['\r', '\n'], glue), w, cx);
         }
     }
 
@@ -441,6 +496,27 @@ struct TextElement {
     colors: Theme,
 }
 
+/// Ende (Byte-Index) der ersten Zeile eines Platzhalters, der nach Wörtern umbricht: das letzte Wort, das samt seiner
+/// Satzzeichen noch in `width` passt. `x_for` liefert die Breite des Textes bis zu einem Byte-Index. Passt schon das erste
+/// Wort nicht, bleibt der ganze Text (er wird am Feldrand abgeschnitten).
+pub fn placeholder_cut(text: &str, width: f32, x_for: impl Fn(usize) -> f32) -> usize {
+    if x_for(text.len()) <= width {
+        return text.len();
+    }
+    let mut best = None;
+    let mut in_word = false;
+    for (i, c) in text.char_indices() {
+        if c == ' ' && in_word {
+            if x_for(i) > width {
+                break;
+            }
+            best = Some(i);
+        }
+        in_word = c != ' ';
+    }
+    best.unwrap_or(text.len())
+}
+
 struct Prepaint {
     line: ShapedLine,
     cursor: Option<PaintQuad>,
@@ -488,10 +564,17 @@ impl Element for TextElement {
         let input = self.input.read(cx);
         let style = window.text_style();
         let empty = input.content.is_empty();
-        let (text, color) = if empty { (input.placeholder.clone(), self.colors.muted) } else { (input.content.clone(), style.color) };
+        let (mut text, color) = if empty { (input.placeholder.clone(), self.colors.muted) } else { (input.content.clone(), style.color) };
+        let font_size = style.font_size.to_pixels(window.rem_size());
+        if empty && input.large {
+            // Der Platzhalter des Palettenfelds bricht wie in AppKit nach Wörtern um und zeigt nur die erste Zeile.
+            let base = TextRun { len: text.len(), font: style.font(), color, background_color: None, underline: None, strikethrough: None };
+            let full = window.text_system().shape_line(text.clone(), font_size, &[base], None);
+            let cut = placeholder_cut(&text, f32::from(bounds.size.width), |i| f32::from(full.x_for_index(i)));
+            text = text[..cut].to_string().into();
+        }
         let base = TextRun { len: text.len(), font: style.font(), color, background_color: None, underline: None, strikethrough: None };
         let runs = runs_for(text.len(), if empty { None } else { input.marked.as_ref() }, base);
-        let font_size = style.font_size.to_pixels(window.rem_size());
         let line = window.text_system().shape_line(text, font_size, &runs, None);
         let cursor_x = line.x_for_index(if empty { 0 } else { input.cursor() });
         let margin = px(4.);
@@ -536,23 +619,25 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let focused = self.focus.is_focused(window);
-        let ring = if focused { t.accent } else { seam_dark(&t) };
-        // Schmal: 1 px Fuge, mit Fokus 2 px Akzentring; der Innenabstand gleicht den Unterschied aus.
-        let thick = focused || !self.compact;
-        let (height, text, pad) = if self.compact { (22., 12., if focused { 6. } else { 7. }) } else { (32., 13., 6.) };
-        div()
+        let s = super::overlay::scale();
+        // Wie `instrumentWell`: Radius 5, Abstand 8 seitlich. Fokus: 2 pt Akzentring innen statt der Fuge; ungefokussiert
+        // eine Haarlinie außen dunkel und direkt innen hell (`seamRing`). Ringe liegen als Overlay und verschieben nichts.
+        let radius = super::instrument::KEY_RADIUS * s;
+        let (height, text) = self.metrics();
+        let ring = if focused && !self.large { super::overlay::ring_inside(t.accent, radius, super::instrument::RING_WIDTH * s) } else { super::overlay::seam_ring_overlay(&t, radius) };
+        let el = div()
+            .relative()
             .flex()
             .items_center()
             .w_full()
-            .h(px(height))
-            .px(px(pad))
-            .rounded(px(5.))
-            .when(thick, |d| d.border_2())
-            .when(!thick, |d| d.border_1())
-            .border_color(ring)
+            .h(px(height * s))
+            .px(px(8. * s))
+            .rounded(px(radius))
             .bg(super::overlay::well(&t))
             .text_color(t.fg)
-            .text_size(px(text))
+            .text_size(px(text * s))
+            .child(ring);
+        el
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .cursor(CursorStyle::IBeam)
@@ -595,6 +680,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn placeholder_breaks_after_the_last_word_that_fits() {
+        let text = "ab cd, efg hi";
+        let x = |i: usize| i as f32 * 10.;
+        assert_eq!(placeholder_cut(text, 200., x), text.len());
+        assert_eq!(placeholder_cut(text, 100., x), 10); // "ab cd, efg" passt, "hi" nicht
+        assert_eq!(placeholder_cut(text, 95., x), 6);
+        assert_eq!(placeholder_cut(text, 15., x), text.len());
+    }
+
+    #[test]
     fn char_boundaries_respect_multibyte() {
         let s = "aäb";
         assert_eq!(next_boundary(s, 1), 3);
@@ -612,6 +707,14 @@ mod tests {
         assert_eq!(next_word(s, 5), 14);
         assert_eq!(next_word(s, s.len()), s.len());
         assert_eq!(prev_word(s, 0), 0);
+    }
+
+    #[test]
+    fn field_size_follows_the_font() {
+        assert_eq!(field_metrics(false, 0.), (23., 13.));
+        assert_eq!(field_metrics(false, 14.), (24., 14.));
+        assert_eq!(field_metrics(false, 15.), (26., 15.));
+        assert_eq!(field_metrics(true, 0.), (22., 12.));
     }
 
     #[test]

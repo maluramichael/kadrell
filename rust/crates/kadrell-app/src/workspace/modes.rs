@@ -18,8 +18,8 @@ use crate::ui::model::{flat_index, position};
 use crate::ui::settings::shortcut::{self, KeyInput};
 use crate::ui::tile::Marks;
 
-/// Zeile im Baum: Gruppenkopf und Session sind je 24 px hoch (`ui::sidebar`).
-const TREE_ROW: f32 = 24.;
+/// Takt der Arbeitsfläche (`WorkspaceView.tickTask`).
+const TICK: std::time::Duration = std::time::Duration::from_millis(80);
 
 fn matches_auto(state: &AppState, filter: &Filter, key: &str) -> bool {
     match state.display_status(key) {
@@ -177,11 +177,13 @@ impl Shell {
         }
     }
 
-    /// Takt für den Nachlauf: ohne Ereignis (kein Poll) muss die Kachel nach 3 s trotzdem verschwinden.
+    /// Takt für den Nachlauf wie `WorkspaceView.tick` (80 ms): ohne Ereignis (kein Poll) muss die Kachel nach 3 s trotzdem
+    /// verschwinden. Der Fokus folgt einem Klick ins Terminal nicht über diesen Takt, sondern sofort über
+    /// `placed` (Klick auf die Kachel); der Takt kostet ohne Nachlauf nichts.
     pub(crate) fn start_auto_tick(&self, window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
             loop {
-                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                cx.background_executor().timer(TICK).await;
                 let alive = this.update_in(cx, |shell, window, cx| {
                     if shell.ws.auto.lingering() {
                         let before = shell.ws.auto.shown.clone();
@@ -225,7 +227,7 @@ impl Shell {
             TreeKey::Step(d) => self.tree_step(d, window, cx),
             TreeKey::Collapse => self.tree_fold(true, cx),
             TreeKey::Expand => self.tree_fold(false, cx),
-            TreeKey::ContextMenu => self.tree_context_menu(cx),
+            TreeKey::ContextMenu => self.show_context_menu_for_focus(window, cx),
             TreeKey::Open => self.focus_workspace(window, cx),
             TreeKey::PassToSession => self.pass_to_session(window, cx),
             TreeKey::Close => self.remove_focused(window, cx),
@@ -252,19 +254,6 @@ impl Shell {
             return;
         }
         self.toggle_group(g, cx);
-    }
-
-    /// ⇧F10: das Menü der Fokus-Session an ihrer Zeile im Baum (aus der Zeilenzahl geschätzt: ohne Merker für das
-    /// Scrollen des Baums).
-    fn tree_context_menu(&mut self, cx: &mut Context<Self>) {
-        let Some(key) = self.state.focused.clone() else { return };
-        let Some((gi, si)) = position(&self.groups, &key) else { return };
-        let rows_before: usize = self.groups[..gi].iter().map(|g| 1 + if g.collapsed { 0 } else { g.sessions.len() }).sum();
-        let row = rows_before + 1 + si;
-        let top = crate::ui::chrome::BAR_HEIGHT + if cfg!(target_os = "windows") { crate::ui::menubar::TITLE_HEIGHT } else { 0. };
-        let pos = gpui::point(px(60.), px(top + 6. + row as f32 * TREE_ROW + TREE_ROW / 2.));
-        let items = self.session_menu_items(&key);
-        self.open_context(pos, items, cx);
     }
 
     /// ⌃⏎ (Mac) bzw. Alt+⏎ (Windows): die Tastatur zurück an die Fokus-Session, ⏎ geht mit.

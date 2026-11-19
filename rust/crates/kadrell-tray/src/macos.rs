@@ -12,6 +12,7 @@ use std::sync::mpsc::Sender;
 
 use block2::RcBlock;
 use objc2::rc::Retained;
+use objc2::runtime::Bool;
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
@@ -21,7 +22,7 @@ use objc2_app_kit::{
 use objc2_foundation::{NSBundle, NSDictionary, NSError, NSObject, NSObjectProtocol, NSString};
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNMutableNotificationContent, UNNotification, UNNotificationPresentationOptions,
-    UNNotificationRequest, UNNotificationResponse, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
+    UNNotificationRequest, UNNotificationResponse, UNNotificationSettings, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
 };
 
 use crate::model::{self, ItemIcon, Notification, Sound, StatusSummary, TrayItem};
@@ -109,6 +110,28 @@ fn notification_center() -> Option<Retained<UNUserNotificationCenter>> {
     in_app.then(UNUserNotificationCenter::currentNotificationCenter)
 }
 
+/// Mit `KADRELL_DEV_TRAYLOG` gesetzt: was das System für dieses Bündel erlaubt (Banner, Mitteilungszentrale, Badge).
+/// Zeigt, ob ein fehlendes Banner an den Systemeinstellungen liegt statt an der App.
+fn log_settings(granted: bool) {
+    if std::env::var_os("KADRELL_DEV_TRAYLOG").is_none() {
+        return;
+    }
+    let Some(center) = notification_center() else { return };
+    center.getNotificationSettingsWithCompletionHandler(&RcBlock::new(move |s: std::ptr::NonNull<UNNotificationSettings>| {
+        // SAFETY: Das System übergibt ein gültiges Einstellungsobjekt für die Dauer des Aufrufs.
+        let s = unsafe { s.as_ref() };
+        eprintln!(
+            "kadrell-tray: Mitteilungen erlaubt={granted} Status={:?} Banner={:?} Stil={:?} Zentrale={:?} Sperrbildschirm={:?} Badge={:?}",
+            s.authorizationStatus(),
+            s.alertSetting(),
+            s.alertStyle(),
+            s.notificationCenterSetting(),
+            s.lockScreenSetting(),
+            s.badgeSetting()
+        );
+    }));
+}
+
 pub struct Backend {
     mtm: MainThreadMarker,
     item: Retained<NSStatusItem>,
@@ -194,7 +217,10 @@ impl Backend {
         center.setDelegate(Some(ProtocolObject::from_ref(&*self.delegate)));
         if !self.authorized.replace(true) {
             let options = UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound | UNAuthorizationOptions::Badge;
-            center.requestAuthorizationWithOptions_completionHandler(options, &RcBlock::new(|_granted, _err: *mut NSError| {}));
+            center.requestAuthorizationWithOptions_completionHandler(
+                options,
+                &RcBlock::new(|granted: Bool, _err: *mut NSError| log_settings(granted.as_bool())),
+            );
         }
     }
 
@@ -236,6 +262,15 @@ pub fn play(sound: Sound) {
         s.setVolume(0.3);
         s.play();
     }
+}
+
+pub fn beep() {
+    #[link(name = "AppKit", kind = "framework")]
+    unsafe extern "C" {
+        fn NSBeep();
+    }
+    // SAFETY: `NSBeep` hat keine Vorbedingungen und darf vom Hauptthread aufgerufen werden.
+    unsafe { NSBeep() }
 }
 
 pub fn reduce_motion() -> bool {

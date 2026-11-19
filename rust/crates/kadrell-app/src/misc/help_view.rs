@@ -1,5 +1,5 @@
-//! Hilfe (⌥F1, alle Kürzel aus den Einstellungen) und „Über Kadrell“ (F1, Version, Autor, Lizenzen, Changelog-Auszug) als
-//! Overlay. `/` filtert die Hilfe wie in less und vim, Esc beendet erst den Filter, dann den Dialog.
+//! Hilfe und „Über Kadrell“ (⌥F1 und F1) als eine Ansicht wie `AboutView` der Mac-App: Version, Autor, Lizenzen und alle
+//! Kürzel aus den Einstellungen. `/` filtert wie in less und vim, Esc beendet erst den Filter, dann den Dialog.
 
 use gpui::{
     App, Context, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement, IntoElement, KeyBinding, KeyDownEvent,
@@ -77,7 +77,8 @@ impl HelpView {
         let focus = cx.focus_handle();
         focus.focus(window, cx);
         let help_key = keys::binding(settings, HotkeyAction::ShowHelp, mac).map(|k| keys::label(&k, mac));
-        let close_hint = if kind == Kind::Help { help_key.unwrap_or_default() } else { String::new() };
+        // Eine Ansicht für Hilfe und Über (`AboutView` der Mac-App): der Fuß nennt in beiden das Kürzel der Hilfe.
+        let close_hint = help_key.unwrap_or_default();
         Self { kind, focus, sections: help::sections(settings, mac), filter: Filter::default(), filter_input, scroll: ScrollHandle::new(), close_hint, _sub: sub }
     }
 
@@ -124,7 +125,7 @@ impl HelpView {
 
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
-        if self.kind == Kind::Help && !self.filter.open && ev.keystroke.key == "/" && !m.control && !m.alt && !m.platform {
+        if !self.filter.open && ev.keystroke.key == "/" && !m.control && !m.alt && !m.platform {
             self.open_filter(window, cx);
             cx.stop_propagation();
         }
@@ -132,11 +133,20 @@ impl HelpView {
 
     fn foot_hint(&self) -> String {
         let closing = if self.close_hint.is_empty() { trd!("Esc schließt") } else { trd!("Esc oder %@ schließen", self.close_hint.clone()) };
-        match (self.kind, self.filter.open) {
-            (Kind::Help, true) => trd!("Esc beendet die Suche"),
-            (Kind::Help, false) => trd!("/ sucht · %@", closing),
-            (Kind::About, _) => closing,
-        }
+        if self.filter.open { trd!("Esc beendet die Suche") } else { trd!("/ sucht · %@", closing) }
+    }
+}
+
+impl HelpView {
+    /// „/“, Feld und Trefferzahl (`FilterBar` der Mac-App).
+    fn filter_bar(&self, hits: usize, t: &Theme) -> gpui::Div {
+        let slash = div().flex_none().font_weight(FontWeight::BOLD).text_color(t.accent_text).child("/");
+        let count = self.filter.is_active().then(|| {
+            let text = if hits == 0 { trd!("Keine Treffer") } else { trd!("%lld Treffer", hits) };
+            div().flex_none().text_color(t.muted).child(text)
+        });
+        let bar = div().flex().items_center().gap(px(8.)).px(px(16.)).pt(px(10.)).text_size(px(12.));
+        bar.child(slash).child(div().flex_1().min_w_0().child(self.filter_input.clone())).children(count)
     }
 }
 
@@ -156,7 +166,7 @@ fn line(prefix: String, id: &'static str, label: &str, url: &'static str, t: &Th
     div().flex().gap(px(6.)).text_size(px(12.)).child(div().text_color(t.muted).child(prefix)).child(link(id, label, url, t))
 }
 
-fn header(kind: Kind, t: &Theme) -> impl IntoElement + use<> {
+fn header(t: &Theme) -> impl IntoElement + use<> {
     let title = div()
         .flex()
         .items_baseline()
@@ -176,24 +186,7 @@ fn header(kind: Kind, t: &Theme) -> impl IntoElement + use<> {
     let credits = trd!("Enthält Lua 5.5.1 (MIT, lua.org) und json.lua (MIT, rxi) sowie Farbwerte des Schemas Instrument aus Monsters (Apache-2.0, Saturday Company)");
     block = block.child(div().text_size(px(11.)).text_color(t.muted).child(credits));
     block = block.child(div().text_size(px(11.)).text_color(t.muted).child(FONT_CREDIT));
-    if kind == Kind::About {
-        block = block.child(changelog_excerpt(t));
-    }
     block
-}
-
-/// Die neuesten Änderungen aus dem eingebetteten Changelog.
-fn changelog_excerpt(t: &Theme) -> impl IntoElement + use<> {
-    let Some(release) = changelog::latest(changelog::BUNDLED, EXCERPT_LINES) else { return div() };
-    let rows = release.lines.into_iter().map(|l| div().flex().gap(px(6.)).child(div().text_color(t.muted).child("·")).child(div().min_w_0().child(l)));
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(3.))
-        .pt(px(10.))
-        .text_size(px(11.5))
-        .child(div().text_size(px(11.)).font_weight(FontWeight::BOLD).text_color(t.sub).child(format!("{} {}", trd!("Was ist neu").to_uppercase(), release.heading)))
-        .children(rows)
 }
 
 fn section_view(s: &Section, first: bool, t: &Theme) -> impl IntoElement + use<> {
@@ -201,16 +194,13 @@ fn section_view(s: &Section, first: bool, t: &Theme) -> impl IntoElement + use<>
         .pl(px(KEY_COLUMN + 12.))
         .pt(px(if first { 0. } else { 12. }))
         .pb(px(2.))
-        .text_size(px(11.))
-        .font_weight(FontWeight::BOLD)
-        .text_color(t.sub)
-        .child(s.title.to_uppercase());
+        .child(crate::ui::instrument::kerned(&s.title.to_uppercase(), 11., crate::ui::instrument::LABEL_KERN, true, t.accent_text));
     let rows = s.rows.iter().map(|r| {
         div()
             .flex()
             .items_start()
             .gap(px(12.))
-            .py(px(1.))
+            .py(px(2.6))
             .child(div().flex_none().w(px(KEY_COLUMN)).text_right().font_weight(FontWeight::BOLD).child(r.keys.clone()))
             .child(div().flex_1().min_w_0().text_color(t.muted).child(r.text.clone()))
     });
@@ -221,15 +211,24 @@ impl Render for HelpView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let shown = self.shown();
-        let filter_bar = (self.kind == Kind::Help && self.filter.open).then(|| {
-            let hits = help::row_count(&shown);
-            div().flex().items_center().gap(px(10.)).px(px(16.)).pt(px(10.)).child(div().flex_1().child(self.filter_input.clone())).child(div().text_size(px(11.)).text_color(t.muted).child(format!("{hits}")))
-        });
-        let list = (self.kind == Kind::Help).then(|| {
-            let sections = shown.iter().enumerate().map(|(i, s)| section_view(s, i == 0, &t));
-            div().id("help-scroll").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).p(px(16.)).gap(px(5.)).children(sections)
-        });
+        let filter_bar = self.filter.open.then(|| self.filter_bar(help::row_count(&shown), &t));
+        let sections = shown.iter().enumerate().map(|(i, s)| section_view(s, i == 0, &t));
+        let list = div().flex().flex_col().p(px(16.)).gap(px(5.)).children(sections);
         let foot = div().flex().justify_end().px(px(16.)).py(px(10.)).text_size(px(11.)).text_color(t.muted).child(self.foot_hint());
+        // Wie `OverlayPanel`: der ganze Inhalt scrollt, auch Kopf und Fuß, die Fußzeile steht am Ende der Liste.
+        let scroll = div()
+            .id("help-scroll")
+            .flex()
+            .flex_col()
+            .min_h_0()
+            .overflow_y_scroll()
+            .track_scroll(&self.scroll)
+            .child(header(&t))
+            .children(filter_bar)
+            .child(div().pt(px(14.)).child(h_seam(&t)))
+            .child(list)
+            .child(h_seam(&t))
+            .child(foot);
         let frame = overlay_height(overlay_width(dialog_frame(&t), WIDTH), HEIGHT)
             .key_context(CONTEXT)
             .track_focus(&self.focus)
@@ -237,13 +236,7 @@ impl Render for HelpView {
             .on_action(cx.listener(|this, _: &Cancel, window, cx| this.cancel(window, cx)))
             .on_action(cx.listener(|this, _: &Confirm, window, cx| this.confirm(window, cx)))
             .on_key_down(cx.listener(|this, ev, window, cx| this.on_key(ev, window, cx)))
-            .child(header(self.kind, &t))
-            .children(filter_bar)
-            .child(div().pt(px(14.)).child(h_seam(&t)))
-            .children(list)
-            .child(h_seam(&t))
-            .child(foot);
-        let frame = if self.kind == Kind::About { frame.h_auto() } else { frame };
+            .child(scroll);
         backdrop(cx.listener(|_, _, _, cx| cx.emit(HelpEvent::Close))).child(frame)
     }
 }

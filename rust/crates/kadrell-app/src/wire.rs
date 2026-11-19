@@ -99,6 +99,7 @@ impl Shell {
     /// Fokus-Kachel (solange kein Dialog offen ist), neu zeichnen.
     pub(crate) fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reconcile(window, cx);
+        self.emit_ext_events();
         self.rebuild();
         self.refresh_auto();
         if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && self.agent_pick.is_none() && self.remote.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() && !self.misc.overlay_open() && !self.ws.keeps_focus() {
@@ -108,6 +109,7 @@ impl Shell {
             }
         }
         self.refresh_tray(window, cx);
+        self.run_pending_overlay(window, cx);
         cx.notify();
     }
 
@@ -119,12 +121,27 @@ impl Shell {
                 Err(message) => eprintln!("kadrell: {message}"),
             }
         }
+        self.state.apply_scrollback();
+        self.arm_wave_timer(window, cx);
         let state = &self.state;
-        self.panes.retain(|key, _| state.session(key).is_some());
+        self.panes.retain(|key, _| state.session(key).is_some() && state.mounted(key));
+    }
+
+    /// Wartet noch eine Welle des Lazy Starts (4 Kacheln je 500 ms), kommt die Oberfläche dann wieder vorbei.
+    fn arm_wave_timer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(wait) = self.state.arm_wave_timer() else { return };
+        cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(wait).await;
+            let _ = this.update_in(cx, |shell, window, cx| {
+                shell.state.wave_timer_fired();
+                shell.sync(window, cx);
+            });
+        })
+        .detach();
     }
 
     fn start_pane(&mut self, key: String, spec: LaunchSpec, window: &mut Window, cx: &mut Context<Self>) {
-        let term = TermSpec { program: spec.program, args: spec.args, cwd: PathBuf::from(&spec.cwd), env: env_pairs(&spec.env) };
+        let term = TermSpec { program: spec.program, args: spec.args, cwd: PathBuf::from(&spec.cwd), env: env_pairs(&spec.env), scrollback: Some(self.state.scrollback()) };
         let parts = match kadrell_term::start_pty(term) {
             Ok(parts) => parts,
             Err(e) => {
@@ -194,25 +211,41 @@ impl Shell {
         .detach();
     }
 
-    // MARK: Statuspoll
+    // MARK: Start und Statuspoll
 
-    /// Pollt Session-Dateien und Transcripts im Hintergrund, solange die App läuft.
+    /// Startreihenfolge wie `AppDelegate.boot`: `claude` prüfen, erster Poll, `app.ready`, Verlauf aufwärmen,
+    /// Übernahme anbieten, erst danach das regelmäßige Pollen. Im Hintergrund (Fenster versteckt oder nicht aktiv)
+    /// pollt es seltener, beim Zurückkommen sofort (`SessionRegistry.setBackground`).
     pub(crate) fn start_poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
-            loop {
-                let Ok(job) = this.update(cx, |shell, _| shell.state.poll_job()) else { break };
-                let (change, messages) = cx.background_executor().spawn(async move { job.run_counted() }).await;
-                let wait = this.update_in(cx, |shell, window, cx| {
-                    shell.state.count_stat(kadrell_core::stats::StatKey::Messages, messages as i64);
-                    shell.state.apply_registry(change);
-                    shell.sync(window, cx);
-                    shell.state.poll_interval()
-                });
-                let Ok(wait) = wait else { break };
-                cx.background_executor().timer(Duration::from_secs_f64(wait)).await;
+            let Ok(input) = this.update(cx, |shell, _| shell.check_input()) else { return };
+            let (health, env) = cx.background_executor().spawn(async move { crate::cli_wire::run_check(input) }).await;
+            if this.update(cx, |shell, cx| shell.apply_cli_health(health, env, cx)).is_err() {
+                return;
             }
+            if crate::cli_wire::dev_loading() {
+                cx.background_executor().timer(Duration::from_secs(60)).await;
+            }
+            if !poll_once(&this, cx).await {
+                return;
+            }
+            let _ = this.update_in(cx, |shell, window, cx| shell.after_first_poll(window, cx));
+            poll_loop(&this, cx).await;
         })
         .detach();
+    }
+
+    /// Nach dem ersten Poll: `app.ready`, Verlaufssuche vorwärmen, Hintergrund-Sessions zur Übernahme anbieten.
+    fn after_first_poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.ext.emit("app.ready", serde_json::json!({}));
+        self.refresh_history(cx);
+        self.start_adopt(window, cx);
+    }
+
+    fn apply_poll(&mut self, change: kadrell_claude::registry::Change, messages: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.state.count_stat(kadrell_core::stats::StatKey::Messages, messages as i64);
+        self.state.apply_registry(change);
+        self.sync(window, cx);
     }
 
     // MARK: Beenden
@@ -225,7 +258,8 @@ impl Shell {
         if !self.quit.relaunch && !self.state.profile.temporary {
             kadrell_core::profile::mark_quit(&self.state.profile.dir, crate::state::now_secs());
         }
-        self.state.shutdown_all();
+        let pids = self.state.shutdown_all();
+        kadrell_term::process::terminate_all(&pids, kadrell_term::process::SHUTDOWN_TIMEOUT);
         self.tray.close();
         self.server = None;
         self.ext.shutdown_all();
@@ -235,6 +269,33 @@ impl Shell {
         }
     }
 }
+
+/// Ein Poll auf dem Hintergrund-Executor, Ergebnis in den Zustand. `false`: die Shell gibt es nicht mehr.
+async fn poll_once(this: &gpui::WeakEntity<Shell>, cx: &mut gpui::AsyncWindowContext) -> bool {
+    let Ok(job) = this.update(cx, |shell, _| shell.state.poll_job()) else { return false };
+    let (change, messages) = cx.background_executor().spawn(async move { job.run_counted() }).await;
+    this.update_in(cx, |shell, window, cx| shell.apply_poll(change, messages, window, cx)).is_ok()
+}
+
+/// Das regelmäßige Pollen: alle halbe Sekunde nachsehen, ob der Takt (2 s, im Hintergrund 5 s) abgelaufen ist oder
+/// das Fenster eben aus dem Hintergrund kam.
+async fn poll_loop(this: &gpui::WeakEntity<Shell>, cx: &mut gpui::AsyncWindowContext) {
+    let mut last = std::time::Instant::now();
+    loop {
+        cx.background_executor().timer(POLL_TICK).await;
+        let elapsed = last.elapsed().as_secs_f64();
+        let Ok(due) = this.update(cx, |shell, _| shell.state.poll_due(elapsed)) else { return };
+        if due {
+            if !poll_once(this, cx).await {
+                return;
+            }
+            last = std::time::Instant::now();
+        }
+    }
+}
+
+/// So oft prüft die Pollschleife, ob ein Poll fällig ist.
+const POLL_TICK: Duration = Duration::from_millis(500);
 
 /// Zeilen für `KADRELL_DEV_*`: Schlüssel der Sessions an den Positionen `g,s;g,s`.
 pub fn keys_at(groups: &[model::Group], spec: &str) -> Vec<String> {

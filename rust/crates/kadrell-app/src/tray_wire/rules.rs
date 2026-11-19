@@ -3,7 +3,7 @@
 //! er kennt „Fenster vorn“, „sichtbar“ und die Marke „neu“. Hier kommen nur noch die Einstellungen dazu
 //! („Sounds“, „Systembenachrichtigungen“, „Menüleiste“) und die Abbildung auf die Tray-Typen.
 
-use kadrell_claude::attention::{Effect, Sound as TrackerSound};
+use kadrell_claude::attention::{Effect, Sound as TrackerSound, TipText};
 use kadrell_core::settings::{NotificationLevel, SoundLevel, StatusBarDisplay};
 use kadrell_tray::model::{self, Display, Lang, NotifyLevel, Sound};
 
@@ -16,6 +16,10 @@ pub enum Action {
     Notify { key: String, waiting: bool },
     /// Fenster in der Taskleiste bzw. im Dock auf sich aufmerksam machen lassen.
     RequestAttention,
+    /// Einmaliger Tipp in der Leiste (verschwindet nach 12 s oder per Klick).
+    ShowTip(TipText),
+    /// Ansage für Bildschirmleser: „<Titel> wartet“ bzw. „<Titel> fertig“, unabhängig davon, ob man hinsieht.
+    Announce { key: String, waiting: bool },
 }
 
 pub fn sound_level(level: SoundLevel) -> model::SoundLevel {
@@ -51,7 +55,7 @@ pub fn lang(lang: kadrell_i18n::Lang) -> Lang {
 }
 
 /// Die Wirkungen des Trackers, durch die Einstellungen gefiltert. Badge, Ansage, Tipp und Fokus-Hook gehören nicht
-/// hierher: das Badge folgt dem Zustand (`view`), die anderen führt die Oberfläche bzw. der Zustand selbst aus.
+/// hierher: das Badge folgt dem Zustand (`view`) und der Fokus-Hook läuft im Zustand selbst.
 pub fn plan(effects: &[Effect], sounds: SoundLevel, notifications: NotificationLevel) -> Vec<Action> {
     let (sounds, notifications) = (sound_level(sounds), notify_level(notifications));
     effects
@@ -65,6 +69,8 @@ pub fn plan(effects: &[Effect], sounds: SoundLevel, notifications: NotificationL
                 model::should_notify(notifications, *waiting).then(|| Action::Notify { key: key.clone(), waiting: *waiting })
             }
             Effect::RequestAttention => Some(Action::RequestAttention),
+            Effect::Tip(Some(text)) => Some(Action::ShowTip(text.clone())),
+            Effect::Announce { key, waiting } => Some(Action::Announce { key: key.clone(), waiting: *waiting }),
             _ => None,
         })
         .collect()
@@ -114,15 +120,16 @@ mod tests {
     }
 
     #[test]
-    fn only_platform_effects_are_planned() {
-        let effects = [
-            Effect::SetBadge(3),
-            Effect::Announce { key: "a".into(), waiting: true },
-            Effect::Tip(None),
-            Effect::FireFocusHook("a".into()),
-            Effect::RequestAttention,
-        ];
+    fn badge_focus_hook_and_tip_removal_are_not_planned() {
+        let effects = [Effect::SetBadge(3), Effect::Tip(None), Effect::FireFocusHook("a".into()), Effect::RequestAttention];
         assert_eq!(plan(&effects, SoundLevel::All, NotificationLevel::All), [Action::RequestAttention]);
+    }
+
+    #[test]
+    fn tips_and_announcements_ignore_the_sound_and_notification_settings() {
+        let effects = [Effect::Announce { key: "a".into(), waiting: true }, Effect::Tip(Some(TipText::WaitingMeansYellow))];
+        let expected = [Action::Announce { key: "a".into(), waiting: true }, Action::ShowTip(TipText::WaitingMeansYellow)];
+        assert_eq!(plan(&effects, SoundLevel::Off, NotificationLevel::Off), expected);
     }
 
     #[test]

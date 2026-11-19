@@ -102,6 +102,17 @@ impl PanelModel {
         self.selected_tab.as_deref()
     }
 
+    /// Beschriftung für Bildschirmleser: „Extensions: <Tab>“ (`accessibilityLabel`).
+    pub fn a11y_label(&self) -> String {
+        let tab = self.selected_tab().and_then(|n| self.panels.iter().find(|p| p.0 == n)).map(tab_label).unwrap_or_default();
+        kadrell_i18n::trd!("Extensions: %@", tab)
+    }
+
+    /// Wert für Bildschirmleser: die vorgelesene Zeile unter dem Cursor (`accessibilityValue`).
+    pub fn a11y_value(&self) -> Option<String> {
+        self.cursor.and_then(|i| self.lines().get(i)).map(Line::spoken)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.panels.is_empty()
     }
@@ -119,6 +130,12 @@ impl PanelModel {
         }
         self.relayout();
         true
+    }
+
+    /// Fällt mit diesen Panels der gewählte Tab weg? Dann soll eine Seitenleiste mit der Tastatur sie abgeben, bevor sie
+    /// umspringt oder verschwindet (`updateExtensionPanels`).
+    pub fn loses_tab(&self, panels: &[PanelEntry]) -> bool {
+        self.selected_tab.as_ref().is_some_and(|tab| !panels.iter().any(|p| &p.0 == tab))
     }
 
     pub fn select_tab(&mut self, name: &str) {
@@ -355,6 +372,17 @@ mod tests {
     }
 
     #[test]
+    fn losing_the_selected_tab_is_detected() {
+        let mut m = PanelModel::default();
+        assert!(!m.loses_tab(&[]), "ohne gewählten Tab geht nichts verloren");
+        m.set_panels(two_tabs());
+        m.select_tab("b");
+        assert!(!m.loses_tab(&two_tabs()));
+        assert!(m.loses_tab(&two_tabs()[..1]), "b fehlt");
+        assert!(m.loses_tab(&[]), "alle Panels weg");
+    }
+
+    #[test]
     fn actions_keep_their_tab_and_spoken_text_joins_detail() {
         let mut m = PanelModel::default();
         m.set_panels(two_tabs());
@@ -373,5 +401,19 @@ mod tests {
         assert_eq!(m.cursor(), None);
         m.set_cursor(Some(2));
         assert_eq!(m.cursor(), Some(2));
+    }
+
+    /// `accessibilityLabel` und `accessibilityValue` der Liste: Tab im Namen, Zeile unter dem Cursor im Wert.
+    #[test]
+    fn list_label_names_the_tab_and_value_speaks_the_cursor_row() {
+        let mut m = PanelModel::default();
+        m.set_panels(two_tabs());
+        assert_eq!(m.a11y_label(), "Extensions: Alpha");
+        m.set_cursor(None);
+        assert_eq!(m.a11y_value(), None);
+        m.step(1);
+        assert_eq!(m.a11y_value().as_deref(), Some("eins, d"), "Eintrag mit Detail");
+        m.switch_tab(1);
+        assert_eq!(m.a11y_label(), "Extensions: b", "ohne Titel gilt der Name der Extension");
     }
 }

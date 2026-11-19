@@ -19,13 +19,15 @@ struct FakeTerm {
     pid: u32,
     written: RefCell<Vec<u8>>,
     exited: Cell<bool>,
+    code: Cell<Option<i32>>,
+    scrollback: Cell<usize>,
     paste: bool,
     rows: Vec<String>,
 }
 
 impl FakeTerm {
     fn new(pid: u32) -> Rc<FakeTerm> {
-        Rc::new(FakeTerm { pid, written: RefCell::new(Vec::new()), exited: Cell::new(false), paste: true, rows: vec!["hallo  ".into(), String::new(), String::new()] })
+        Rc::new(FakeTerm { pid, written: RefCell::new(Vec::new()), exited: Cell::new(false), code: Cell::new(None), scrollback: Cell::new(0), paste: true, rows: vec!["hallo  ".into(), String::new(), String::new()] })
     }
 }
 
@@ -51,12 +53,18 @@ impl Term for FakeTerm {
     fn shutdown(&self) {
         self.exited.set(true);
     }
+    fn exit_code(&self) -> Option<i32> {
+        self.code.get()
+    }
+    fn set_scrollback(&self, lines: usize) {
+        self.scrollback.set(lines);
+    }
 }
 
-struct Dir(PathBuf);
+pub(super) struct Dir(pub(super) PathBuf);
 
 impl Dir {
-    fn new() -> Dir {
+    pub(super) fn new() -> Dir {
         static N: AtomicU32 = AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!("kadrell-app-test-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
         std::fs::create_dir_all(dir.join("work")).unwrap();
@@ -70,7 +78,7 @@ impl Drop for Dir {
     }
 }
 
-fn state_in(dir: &Dir) -> AppState {
+pub(super) fn state_in(dir: &Dir) -> AppState {
     let profile_dir = dir.0.join("profile");
     std::fs::create_dir_all(&profile_dir).unwrap();
     let paths = Paths::new(dir.0.join("home"), dir.0.join("support"), dir.0.join("tmp"));
@@ -81,7 +89,7 @@ fn state_in(dir: &Dir) -> AppState {
     AppState::new(Parts { paths, profile, lock: None, env, endpoint: profile_dir.join("kadrell.endpoint") })
 }
 
-fn cwd(dir: &Dir, name: &str) -> String {
+pub(super) fn cwd(dir: &Dir, name: &str) -> String {
     let p = dir.0.join("work").join(name);
     std::fs::create_dir_all(&p).unwrap();
     p.to_string_lossy().replace('\\', "/")
@@ -355,8 +363,14 @@ fn two_running(dir: &Dir, window_active: bool) -> (AppState, String, String) {
     (state, a, b)
 }
 
+fn quiet(effects: &[Effect], sounds: SoundLevel, notifications: NotificationLevel) -> Vec<Action> {
+    plan(effects, sounds, notifications).into_iter().filter(|a| !matches!(a, Action::ShowTip(_) | Action::Announce { .. })).collect()
+}
+
 fn actions(state: &mut AppState) -> Vec<Action> {
-    plan(&state.take_effects(), SoundLevel::All, NotificationLevel::All)
+    // Tipp und Ansage gelten unabhängig vom Hinsehen: hier geht es um Klang, Benachrichtigung und Hüpfen.
+    let all = plan(&state.take_effects(), SoundLevel::All, NotificationLevel::All);
+    all.into_iter().filter(|a| !matches!(a, Action::ShowTip(_) | Action::Announce { .. })).collect()
 }
 
 #[test]
@@ -398,9 +412,9 @@ fn finished_session_follows_the_notification_setting_and_clears_when_seen() {
     let (mut state, _a, b) = two_running(&dir, true);
     report_status(&mut state, &b, "idle");
     let effects = state.take_effects();
-    assert_eq!(plan(&effects, SoundLevel::All, NotificationLevel::All), [Action::Play(Sound::Done), Action::Notify { key: b.clone(), waiting: false }]);
-    assert_eq!(plan(&effects, SoundLevel::Important, NotificationLevel::Waiting), [Action::Play(Sound::Done)], "fertig meldet nur „wartet und fertig“");
-    assert_eq!(plan(&effects, SoundLevel::Off, NotificationLevel::Off), []);
+    assert_eq!(quiet(&effects, SoundLevel::All, NotificationLevel::All), [Action::Play(Sound::Done), Action::Notify { key: b.clone(), waiting: false }]);
+    assert_eq!(quiet(&effects, SoundLevel::Important, NotificationLevel::Waiting), [Action::Play(Sound::Done)], "fertig meldet nur „wartet und fertig“");
+    assert_eq!(quiet(&effects, SoundLevel::Off, NotificationLevel::Off), []);
     let v = view::build(&state, Lang::En, 0.0);
     assert_eq!((v.summary.done, v.badge), (1, 1), "fertig und ungesehen: „neu“ und Badge");
     state.show_only(&b);
@@ -521,4 +535,138 @@ fn flat_order_is_stored_in_the_profile_settings() {
     assert_eq!(state.settings.sidebar_flat_order(), ["b", "a"]);
     let reopened = state_in(&dir);
     assert_eq!(reopened.settings.sidebar_flat_order(), ["b", "a"]);
+}
+
+// MARK: Lebenslauf der Kacheln (AttachManager)
+
+/// Port von `AttachManagerTests.testTerminalIsReleasedAfterStop`: nach Stop und gemeldetem Ende hält nichts mehr das Terminal.
+#[test]
+fn terminal_is_released_after_stop_and_after_exit() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let a = state.new_claude_session(&cwd(&dir, "alpha"), None, true);
+    let b = state.new_claude_session(&cwd(&dir, "beta"), None, false);
+    let mut terms = start_all(&mut state);
+    let (weak_a, weak_b) = {
+        let a_term = terms.iter().find(|(k, _)| *k == a).unwrap().1.clone();
+        let b_term = terms.iter().find(|(k, _)| *k == b).unwrap().1.clone();
+        (Rc::downgrade(&a_term), Rc::downgrade(&b_term))
+    };
+    assert!(state.stop_tile(&a));
+    assert!(state.mounted(&b) && !state.mounted(&a));
+    exits(&mut state, &terms, &b);
+    terms.clear();
+    assert!(weak_a.upgrade().is_none(), "gestoppt: kein Zyklus hält das Terminal");
+    assert!(weak_b.upgrade().is_none(), "beendet: auch hier nicht");
+    assert_eq!(state.run(&a), Run::Stopped);
+    assert_eq!(state.last_rows(&a), ["hallo  "], "der letzte Bildschirm bleibt, Leerzeilen sind weg");
+}
+
+fn exits(state: &mut AppState, terms: &[(String, Rc<FakeTerm>)], key: &str) {
+    terms.iter().find(|(k, _)| k == key).unwrap().1.exited.set(true);
+    assert!(state.on_exit(key));
+}
+
+#[test]
+fn quick_nonzero_exit_is_a_startup_failure_and_a_clean_exit_is_not() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let a = state.new_claude_session(&cwd(&dir, "alpha"), None, true);
+    let b = state.new_claude_session(&cwd(&dir, "beta"), None, false);
+    let terms = start_all(&mut state);
+    terms.iter().find(|(k, _)| *k == a).unwrap().1.code.set(Some(2));
+    terms.iter().find(|(k, _)| *k == b).unwrap().1.code.set(Some(0));
+    exits(&mut state, &terms, &a);
+    exits(&mut state, &terms, &b);
+    assert_eq!(state.exit_code(&a), Some(2));
+    assert_eq!(state.exit_code(&b), None, "reguläres /exit");
+    state.request_start(&a).unwrap();
+    assert_eq!(state.exit_code(&a), None, "neuer Anlauf löscht den Fehler");
+}
+
+#[test]
+fn a_missing_folder_starts_no_process_and_marks_the_tile() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    let gone = cwd(&dir, "gone");
+    let a = state.new_claude_session(&gone, None, true);
+    std::fs::remove_dir_all(&gone).unwrap();
+    assert!(state.take_starts().is_empty(), "kein Prozess für einen fehlenden Ordner");
+    assert!(state.missing_folder(&a));
+    assert_eq!(state.run(&a), Run::Ended);
+    assert!(state.error.is_none(), "kein Fehlerbanner, die Kachel erklärt es");
+    state.request_start(&a).unwrap();
+    assert!(state.take_starts().is_empty(), "auch der Klick startet nichts");
+    std::fs::create_dir_all(&gone).unwrap();
+    state.request_start(&a).unwrap();
+    assert_eq!(state.take_starts().len(), 1, "ist der Ordner wieder da, startet die Kachel");
+    assert!(!state.missing_folder(&a));
+}
+
+#[test]
+fn restored_tiles_start_in_waves_but_clicks_start_at_once() {
+    let dir = Dir::new();
+    let keys: Vec<String> = {
+        let mut state = state_in(&dir);
+        let keys: Vec<String> = (0..6).map(|i| state.new_claude_session(&cwd(&dir, &format!("p{i}")), None, false)).collect();
+        state.select_keys(&keys, false);
+        keys
+    };
+    let mut state = state_in(&dir);
+    assert_eq!(state.selected.len(), 6);
+    let t0 = std::time::Instant::now();
+    assert_eq!(state.take_starts_at(t0).len(), 4, "erste Welle: vier");
+    assert!(state.take_starts_at(t0 + std::time::Duration::from_millis(100)).is_empty());
+    assert!(state.next_wave_in().is_some());
+    assert_eq!(state.take_starts_at(t0 + std::time::Duration::from_millis(500)).len(), 2);
+    assert_eq!(state.next_wave_in(), None);
+    // Ein Klick im Baum startet sofort, nicht erst mit der nächsten Welle.
+    let mut fresh = state_in(&dir);
+    fresh.take_starts_at(t0);
+    let last = keys[5].clone();
+    fresh.show_only(&last);
+    assert_eq!(fresh.take_starts_at(t0).len(), 1);
+}
+
+#[test]
+fn the_focus_tile_leads_the_first_wave() {
+    let dir = Dir::new();
+    let keys: Vec<String> = {
+        let mut state = state_in(&dir);
+        let keys: Vec<String> = (0..6).map(|i| state.new_claude_session(&cwd(&dir, &format!("q{i}")), None, false)).collect();
+        state.select_keys(&keys, false);
+        state.focus_key(&keys[5]);
+        keys
+    };
+    let mut state = state_in(&dir);
+    let first: Vec<String> = state.take_starts_at(std::time::Instant::now()).into_iter().map(|(k, _)| k).collect();
+    assert_eq!(first[0], keys[5], "der Fokus zuerst");
+}
+
+#[test]
+fn a_changed_scrollback_setting_reaches_running_terminals_once() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    state.new_claude_session(&cwd(&dir, "alpha"), None, true);
+    let terms = start_all(&mut state);
+    assert_eq!(state.scrollback(), 10_000);
+    state.apply_scrollback();
+    assert_eq!(terms[0].1.scrollback.get(), 10_000);
+    state.settings.set_terminal_scrollback(2_000);
+    state.apply_scrollback();
+    assert_eq!(terms[0].1.scrollback.get(), 2_000, "laufende Terminals übernehmen sofort");
+    terms[0].1.scrollback.set(7);
+    state.apply_scrollback();
+    assert_eq!(terms[0].1.scrollback.get(), 7, "ohne Änderung wird nichts angefasst");
+}
+
+#[test]
+fn shutdown_collects_the_pids_of_running_processes() {
+    let dir = Dir::new();
+    let mut state = state_in(&dir);
+    state.new_claude_session(&cwd(&dir, "alpha"), None, true);
+    let b = state.new_claude_session(&cwd(&dir, "beta"), None, false);
+    let terms = start_all(&mut state);
+    terms.iter().find(|(k, _)| *k == b).unwrap().1.exited.set(true);
+    assert_eq!(state.shutdown_all(), vec![terms.iter().find(|(k, _)| *k != b).unwrap().1.pid]);
 }

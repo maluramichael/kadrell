@@ -31,11 +31,18 @@ pub struct Pill {
     on_click: Option<ClickFn>,
     fill: Option<Hsla>,
     tip: Option<SharedString>,
+    disabled: bool,
 }
 
 impl Pill {
     pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
-        Self { id: id.into(), label: label.into(), kind: PillKind::Normal, dot: None, icon: None, min_w: None, on_click: None, fill: None, tip: None }
+        Self { id: id.into(), label: label.into(), kind: PillKind::Normal, dot: None, icon: None, min_w: None, on_click: None, fill: None, tip: None, disabled: false }
+    }
+
+    /// Gesperrt: Schrift gedämpft, kein Zeiger, kein Druckzustand, kein Klick (`KeyBody` liest `isEnabled`).
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
 
     /// Tooltip beim Daraufzeigen.
@@ -66,7 +73,7 @@ impl Pill {
         self
     }
 
-    /// Mindestbreite der Kappe in px (die Umschalttaste der Leiste ist 26 breit).
+    /// Feste Breite der Kappe samt Kante in px (die Umschalttaste der Leiste ist 26 breit).
     pub fn min_width(mut self, w: f32) -> Self {
         self.min_w = Some(w);
         self
@@ -88,8 +95,9 @@ impl RenderOnce for Pill {
             _ if self.fill.is_some() => self.fill.map_or((t.surface, t.fg), |f| (f, t.pill_text_on(f))),
             PillKind::Active => (t.sub, t.pill_text_on(t.sub)),
             PillKind::Green => (t.idle, t.pill_text_on(t.idle)),
-            _ => (t.surface, t.fg),
+            _ => (t.surface, t.key_label()),
         };
+        let ink = if self.disabled { t.muted } else { ink };
         key(self, face, ink, cx).into_any_element()
     }
 }
@@ -98,7 +106,7 @@ fn dot_el(color: Hsla, a: &Appearance) -> impl IntoElement {
     div().size(px(a.s(7.))).flex_none().rounded_full().bg(color)
 }
 
-/// Taste: Außenmaß 20 px, Kante 1 px, unten 3 px (Kante plus 2 px Tiefe).
+/// Taste: Außenmaß 20 px, Kante 1 px, unten 3 px (Kante plus 2 px Tiefe). Text plus 16 px Breite wie `segment` der Mac-Leiste.
 fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
     let t = theme(cx);
     let a = crate::appearance::current(cx);
@@ -107,7 +115,7 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
         .items_center()
         .gap(px(a.s(5.)))
         .h(px(a.s(16.)))
-        .px(px(a.s(8.)))
+        .px(px(a.s(7.)))
         .rounded(px(a.s(4.)))
         .bg(face)
         .text_color(ink)
@@ -124,17 +132,19 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
         .px(px(a.s(1.)))
         .pb(px(a.s(if pill.kind == PillKind::Active { 2. } else { 3. })))
         .rounded(px(a.s(5.)))
-        .bg(key_edge(&t))
-        .cursor_pointer()
-        .active(|s| s.pt(px(a.s(2.))).pb(px(a.s(2.))));
-    if let Some(f) = pill.on_click {
+        .bg(key_edge(&t));
+    if !pill.disabled {
+        outer = outer.cursor_pointer().active(|s| s.pt(px(a.s(2.))).pb(px(a.s(2.))));
+    }
+    if let (Some(f), false) = (pill.on_click, pill.disabled) {
         outer = outer.on_click(move |e, w, c| f(e, w, c));
     }
     if let Some(tip) = pill.tip {
         outer = outer.tooltip(super::tooltip::text(tip));
     }
     if let Some(w) = pill.min_w {
-        cap = cap.min_w(px(w - 2.)).justify_center();
+        // Feste Breite samt Kante (Swift: `keyRect(width:)`), der Inhalt sitzt mittig ohne eigenen Rand.
+        cap = cap.w(px(a.s(w - 2.))).px_0().justify_center();
     }
     cap = match pill.icon {
         Some(icon) => cap.child(icon),
@@ -145,8 +155,12 @@ fn key(pill: Pill, face: Hsla, ink: Hsla, cx: &App) -> impl IntoElement {
 
 /// Display: dunkle Fläche mit heller Schrift, in allen Schemata gleich.
 fn display(pill: Pill, face: Hsla, a: &Appearance) -> impl IntoElement {
+    // Feine helle Haarlinie am oberen Rand, durch den Radius beschnitten (Swift: `Instrument.screen`).
+    let hairline = div().absolute().top_0().left_0().right_0().h(px(super::overlay::seam())).bg(gpui::hsla(0., 0., 1., 0.06));
     let mut el = div()
         .id(pill.id)
+        .relative()
+        .overflow_hidden()
         .flex_none()
         .flex()
         .items_center()
@@ -159,6 +173,7 @@ fn display(pill: Pill, face: Hsla, a: &Appearance) -> impl IntoElement {
         .text_size(px(a.s(10.5)))
         .font_weight(FontWeight::BOLD)
         .whitespace_nowrap();
+    el = el.child(hairline);
     if let Some(c) = pill.dot {
         el = el.child(dot_el(c, a));
     }

@@ -110,8 +110,9 @@ pub fn group_menu(g: &Group, editor: bool, known: &dyn Fn(&str) -> bool) -> Vec<
         items.push(entry(trd!("Neue Session in dieser Gruppe"), Cmd::NewSessionIn(g.id.clone())));
         items.push(entry(trd!("Neues Terminal in dieser Gruppe"), Cmd::NewTerminalIn(g.id.clone())));
     } else {
-        // Die Auswahl der tmux-Sessions eines Hosts (`@host:` in der Suche) gibt es in dieser App noch nicht.
-        items.push(Item::Off(trd!("Remote-Session wählen …")));
+        // Öffnet die Suche mit `@host:` (tmux-Sessions des Hosts): `NewSessionIn` einer Host-Gruppe führt dorthin
+        // (`pick_remote_session`).
+        items.push(entry(trd!("Remote-Session wählen …"), Cmd::NewSessionIn(g.id.clone())));
     }
     items.push(when(has_sessions, trd!("Alle Sessions zeigen"), Cmd::ShowGroup(g.id.clone())));
     items.push(Item::Separator);
@@ -212,7 +213,7 @@ mod tests {
         let mut remote = group("r", "box", "C:/Users/m", &[]);
         remote.host = Some("box".into());
         let l = labels(&group_menu(&remote, true, &known));
-        assert_eq!(l, ["(Remote-Session wählen …)", "(Alle Sessions zeigen)", "-", "+Bearbeiten …", "+Favorit", "-", "+Gruppe schließen …"]);
+        assert_eq!(l, ["+Remote-Session wählen …", "(Alle Sessions zeigen)", "-", "+Bearbeiten …", "+Favorit", "-", "+Gruppe schließen …"]);
     }
 
     #[test]

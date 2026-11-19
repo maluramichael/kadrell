@@ -10,6 +10,7 @@ use kadrell_accounts::SecretStore as KeychainStore;
 use kadrell_control::protocol::ControlRequest;
 use kadrell_control::Service;
 use kadrell_core::Settings;
+use kadrell_ext::events::{self, SessionState};
 use kadrell_ext::bridge::{ControlResponse, ControlRunner, SecretStore, SettingsStore};
 use kadrell_ext::manager::{ExtensionManager, ManagerConfig, SessionsProvider};
 use kadrell_ext::process::ProcessConfig;
@@ -152,4 +153,121 @@ fn change_logger(cell: Arc<OnceLock<ExtensionManager>>) -> Arc<dyn Fn() + Send +
             }
         }
     })
+}
+
+// MARK: Ereignisse an die Extensions
+
+type Known = HashMap<String, (SessionState, Value)>;
+
+/// Die Session als Event-Daten (`state` wie in `kadrell ls --json`, `group` der Gruppenname oder `null`).
+pub fn session_payload(state: &AppState, s: &kadrell_core::Session) -> Value {
+    let group = state.store.groups.group_for_session(&s.id).map_or(Value::Null, |g| Value::String(g.name.clone()));
+    serde_json::json!({
+        "key": s.id,
+        "title": s.title(),
+        "cwd": s.cwd,
+        "branch": s.branch,
+        "sessionId": s.session_id,
+        "state": s.status().as_str(),
+        "group": group,
+    })
+}
+
+/// Merkt sich den letzten Stand der Sessions und leitet daraus `session.new`, `session.status` und `session.remove` ab.
+/// Läuft auch ohne gestartete Extensions mit, sonst kämen beim Start alle Sessions als neu.
+#[derive(Default)]
+pub struct SessionTracker {
+    known: Known,
+}
+
+impl SessionTracker {
+    /// Events seit dem letzten Aufruf als `(Name, Daten)`. `session.status` trägt zusätzlich `state`; `session.remove`
+    /// trägt die Daten der Session vom letzten bekannten Stand.
+    pub fn diff(&mut self, now: Vec<(SessionState, Value)>) -> Vec<(&'static str, Value)> {
+        let old: HashMap<String, SessionState> = self.known.iter().map(|(k, (s, _))| (k.clone(), s.clone())).collect();
+        let states: Vec<SessionState> = now.iter().map(|(s, _)| s.clone()).collect();
+        let events = events::session_events(&old, &states);
+        let fresh: Known = now.into_iter().map(|(s, v)| (s.id.clone(), (s, v))).collect();
+        let out = events.into_iter().map(|e| (e.event, event_data(e.event, &e.id, &self.known, &fresh))).collect();
+        self.known = fresh;
+        out
+    }
+}
+
+fn event_data(event: &str, id: &str, old: &Known, fresh: &Known) -> Value {
+    let from = if event == "session.remove" { old } else { fresh };
+    let session = from.get(id).map_or(Value::Null, |(_, v)| v.clone());
+    let mut data = serde_json::json!({ "session": session });
+    if event == "session.status" {
+        let state = fresh.get(id).map_or("", |(s, _)| s.status.as_str());
+        data["state"] = Value::String(state.to_string());
+    }
+    data
+}
+
+impl crate::Shell {
+    /// Nach jeder Änderung: `app.locale` bei neuer Sprache, `session.focus` für gefeuerte Fokus-Hooks, dann
+    /// `session.new`/`status`/`remove` aus dem Vergleich mit dem letzten Stand.
+    pub(crate) fn emit_ext_events(&mut self) {
+        let code = kadrell_i18n::global().lang().code();
+        kadrell_ext::i18n::set_locale(code);
+        self.ext.set_locale(code);
+        for key in self.state.take_focus_fired() {
+            if let Some(s) = self.state.session(&key) {
+                self.ext.emit("session.focus", serde_json::json!({ "session": session_payload(&self.state, s) }));
+            }
+        }
+        for (event, data) in self.ext_sessions.diff(self.state.extension_sessions()) {
+            self.ext.emit(event, data);
+        }
+    }
+}
+
+impl AppState {
+    /// Die Sessions im Format, das `SessionTracker::diff` braucht.
+    pub fn extension_sessions(&self) -> Vec<(SessionState, Value)> {
+        let sessions = &self.store.sessions.sessions;
+        sessions.iter().map(|s| (SessionState { id: s.id.clone(), status: s.status().as_str().to_string() }, session_payload(self, s))).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(id: &str, status: &str, title: &str) -> (SessionState, Value) {
+        (SessionState { id: id.into(), status: status.into() }, serde_json::json!({ "key": id, "title": title, "state": status }))
+    }
+
+    fn names(events: &[(&'static str, Value)]) -> Vec<String> {
+        events.iter().map(|(e, d)| format!("{e} {}", d["session"]["key"].as_str().unwrap_or("?"))).collect()
+    }
+
+    #[test]
+    fn first_diff_reports_everything_as_new() {
+        let mut t = SessionTracker::default();
+        let events = t.diff(vec![entry("a", "idle", "A")]);
+        assert_eq!(names(&events), ["session.new a"]);
+    }
+
+    #[test]
+    fn status_event_only_on_state_change_and_carries_state() {
+        let mut t = SessionTracker::default();
+        t.diff(vec![entry("a", "idle", "A")]);
+        assert!(t.diff(vec![entry("a", "idle", "Neuer Titel")]).is_empty());
+        let events = t.diff(vec![entry("a", "waiting", "Neuer Titel")]);
+        assert_eq!(names(&events), ["session.status a"]);
+        assert_eq!(events[0].1["state"], "waiting");
+        assert_eq!(events[0].1["session"]["title"], "Neuer Titel");
+    }
+
+    #[test]
+    fn remove_events_are_sorted_and_carry_the_last_known_data() {
+        let mut t = SessionTracker::default();
+        t.diff(vec![entry("b", "idle", "B"), entry("a", "idle", "A"), entry("c", "idle", "C")]);
+        let events = t.diff(vec![entry("c", "idle", "C")]);
+        assert_eq!(names(&events), ["session.remove a", "session.remove b"]);
+        assert_eq!(events[1].1["session"]["title"], "B");
+        assert!(events[0].1.get("state").is_none());
+    }
 }

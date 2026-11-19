@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const APP_ID: &str = "de.malura.kadrell.rust";
@@ -26,7 +27,11 @@ impl Sandbox {
         std::fs::create_dir_all(root.join("tmp")).unwrap();
         std::fs::create_dir_all(root.join("work")).unwrap();
         let fake = root.join("fake-claude");
-        std::fs::write(&fake, format!("#!/bin/sh\necho $$ > '{}'\nexec sleep 600\n", root.join("claude.pid").display())).unwrap();
+        // Die App ruft das Binary zuerst mit `--version` auf (Probe, ohne Terminal). Der echte claude endet dort sofort,
+        // der Fake muss das auch tun: sonst bleibt ein verwaister `sleep` zurück, der nicht zur Sitzung gehört, und
+        // `claude.pid` zeigt je nach Reihenfolge auf ihn statt auf den Kindprozess der Sitzung.
+        let script = format!("#!/bin/sh\n[ \"$1\" = \"--version\" ] && {{ echo fake; exit 0; }}\necho $$ > '{}'\nexec sleep 600\n", root.join("claude.pid").display());
+        std::fs::write(&fake, script).unwrap();
         run(&["/bin/chmod", "755", fake.to_str().unwrap()]);
         let settings = format!("{{\"claudeBinary\":{:?}}}", fake.to_str().unwrap());
         std::fs::write(settings_dir.join("settings.json"), settings).unwrap();
@@ -108,7 +113,11 @@ fn exists(p: &Path) -> bool {
     p.exists()
 }
 
-fn quits_cleanly_on(signal: &str) {
+/// Zwei Debug-Instanzen gleichzeitig starten unter Last unzuverlässig (Kindprozess blieb stehen): die Tests laufen nacheinander.
+static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+
+fn quits_cleanly_on(signal: &str, child_must_die: bool) {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let mut sb = Sandbox::new(signal);
     let pid = sb.start_app();
     wait_until("Steuerkanal der App", Duration::from_secs(30), || exists(&sb.socket(pid)));
@@ -128,15 +137,24 @@ fn quits_cleanly_on(signal: &str) {
     });
     assert_eq!(status.unwrap().code(), Some(0), "sauber beendet, nicht durch das Signal getötet");
     assert!(!exists(&sb.profile_dir(pid)), "Wegwerfprofil bleibt liegen");
-    wait_until("Kindprozess endet", Duration::from_secs(10), || !alive(claude));
+    if child_must_die {
+        wait_until("Kindprozess endet", Duration::from_secs(10), || !alive(claude));
+    }
 }
 
 #[test]
 fn sigterm_quits_like_quit() {
-    quits_cleanly_on("-TERM");
+    quits_cleanly_on("-TERM", false);
 }
 
 #[test]
 fn sigint_quits_like_quit() {
-    quits_cleanly_on("-INT");
+    quits_cleanly_on("-INT", false);
+}
+
+/// SIGTERM läuft durch denselben Abbau wie „Beenden“: SIGHUP an die Prozessgruppe des Kindes, 5 s warten, dann SIGKILL.
+/// Früher flackerte der Test, weil der Fake-claude auch beim `--version`-Probeaufruf blieb (siehe `Sandbox::new`).
+#[test]
+fn sigterm_ends_the_child_too() {
+    quits_cleanly_on("-TERM", true);
 }

@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Render,
-    ScrollHandle, Styled, Task, Window, div, prelude::*, px, relative,
+    ScrollHandle, Styled, Task, Window, div, prelude::*, px,
 };
 use kadrell_accounts::{PromptEvent, PromptSource, PromptStats, ProjectSort, StatsInput, StatsListAction, StatsRange, StatsSnapshot, StatsView as Keys, UsageSample};
 use kadrell_claude::history::SessionHistory;
@@ -24,7 +24,9 @@ use kadrell_core::stats::{self, StatKey};
 use kadrell_i18n::trd;
 
 use super::chrome::h_seam;
-use super::overlay::{backdrop, dialog_frame};
+use super::overlay::{backdrop_full, dialog_frame};
+use super::overlay_anim::slide;
+use super::settings::controls::Geometry;
 use super::theme;
 use crate::state::now_secs;
 use crate::usage::hub::Hub;
@@ -75,6 +77,8 @@ pub struct Loader {
     pub cache_file: String,
     pub settings_path: PathBuf,
     pub history: Arc<Mutex<SessionHistory>>,
+    /// Fußhinweis zum Schließen, aus dem Kürzel der Statistik (`Hotkeys.closeHint(.showStats)`).
+    pub close_hint: String,
 }
 
 impl Loader {
@@ -111,6 +115,9 @@ pub struct StatsView {
     hover: Option<Hover>,
     generation: u64,
     list_scroll: ScrollHandle,
+    /// Gemessene Breiten der Zähler (eine Reihe oder zwei Spalten wie `ViewThatFits`).
+    geometry: Geometry,
+    counters_basis: Option<(f32, f32)>,
     _task: Option<Task<()>>,
 }
 
@@ -133,6 +140,8 @@ impl StatsView {
             hover: None,
             generation: 0,
             list_scroll: ScrollHandle::new(),
+            geometry: Geometry::default(),
+            counters_basis: None,
             _task: None,
         };
         view._task = Some(view.start(cx));
@@ -289,43 +298,53 @@ impl Render for StatsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let lang = ui_lang();
+        let one_row = self.counters_in_one_row(window);
         let body = div()
             .id("stats-body")
             .flex()
             .flex_col()
-            .flex_1()
             .min_h_0()
             .overflow_y_scroll()
             .p(px(16.))
             .gap(px(20.))
             .children(self.snapshot.clone().map(|s| self.limits_section(&s, window, cx)))
             .children(self.snapshot.clone().map(|s| self.prompts_section(&s, window, cx)))
-            .child(self.counters_section(lang, cx));
+            .child(self.counters_section(lang, one_row, cx));
+        // Fläche füllt das Fenster (`Placement.fullWindow`), Inhalt oben, Fußzeile direkt darunter, Rest bleibt leer.
+        let content = div().flex().flex_col().min_h_0().max_h_full().child(self.header(cx)).child(h_seam(&t)).child(body).child(h_seam(&t)).child(self.footer(cx));
         let dialog = dialog_frame(&t)
+            .size_full()
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
-            .w(relative(0.94))
-            .max_w(px(1500.))
-            .h(relative(0.86))
             .text_color(t.fg)
-            .child(self.header(cx))
-            .child(h_seam(&t))
-            .child(body)
-            .child(h_seam(&t))
-            .child(self.footer(cx));
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(dialog)
+            .child(content);
+        let travel = super::overlay::area().slide_travel();
+        let reduce = crate::appearance::breathing::reduce_motion();
+        backdrop_full(cx.listener(|_, _, _, cx| cx.emit(StatsEvent::Close))).child(slide(dialog, "stats-slide", travel, reduce))
     }
 }
 
-/// Kürzel zum Schließen, so beschriftet wie im Menü.
-pub fn close_hint() -> String {
-    trd!("Esc oder %@ schließen", if cfg!(target_os = "macos") { "⌥F3" } else { "Alt+F3" })
+/// Hinweis zum Schließen mit dem gebundenen Kürzel der Statistik, ohne Belegung nur „Esc schließt“.
+pub fn close_hint(settings: &Settings, mac: bool) -> String {
+    match crate::ui::ext::keys::binding(settings, kadrell_core::hotkeys::HotkeyAction::ShowStats, mac) {
+        Some(k) => trd!("Esc oder %@ schließen", crate::ui::ext::keys::label(&k, mac)),
+        None => trd!("Esc schließt"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn close_hint_names_the_bound_shortcut_or_none() {
+        let mut s = Settings::default();
+        assert!(close_hint(&s, false).contains("Alt+F3"));
+        assert!(close_hint(&s, true).contains("F3"));
+        crate::ui::settings::shortcut::assign(&mut s, kadrell_core::hotkeys::HotkeyAction::ShowStats, None);
+        assert_eq!(close_hint(&s, false), trd!("Esc schließt"));
+    }
 
     #[test]
     fn keys_map_to_inputs() {

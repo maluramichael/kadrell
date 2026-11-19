@@ -16,6 +16,7 @@ use super::backend::Backend;
 use super::controls::Geometry;
 use super::filter::Filter;
 use super::model::{Block, Btn, Control, Msg, Provider, Row, Setter};
+use super::paths;
 use super::sections::{self, Context as BuildContext};
 use super::shortcut::{self, KeyInput, Recorded};
 use super::store::{self, AppSettings};
@@ -23,6 +24,9 @@ use crate::ThemeGlobal;
 use crate::theme::Theme;
 use crate::ui::folders;
 use crate::ui::text_input::{TextInput, TextInputEvent};
+
+/// Pause nach der letzten Eingabe in einem Adressfeld, bevor der Anbieter neu geprüft wird.
+const RECHECK_DELAY: std::time::Duration = std::time::Duration::from_millis(700);
 
 pub enum SettingsEvent {
     Close,
@@ -59,6 +63,8 @@ pub struct SettingsDialog {
     pub(super) filter_input: Entity<TextInput>,
     pub(super) inputs: HashMap<String, Entity<TextInput>>,
     pub(super) geometry: Geometry,
+    /// Breite und Abschnittshöhen, mit denen der letzte Frame die Spalten verteilt hat.
+    pub(super) layout_basis: (f32, Vec<f32>),
     pub(super) scroll: ScrollHandle,
     pub(super) pop_scroll: ScrollHandle,
     pub(super) popover: Option<Popover>,
@@ -75,6 +81,8 @@ pub struct SettingsDialog {
     record_sub: Option<Subscription>,
     /// Zählt mit jedem Tippen im Suchfeld der Modelle hoch: nur die letzte Eingabe sucht (nach kurzer Pause).
     pub(super) search_token: u64,
+    /// Wie `search_token` für die Neuprüfung der lokalen Anbieter nach einer Eingabe in Adressfeldern.
+    reload_token: u64,
     _subs: Vec<Subscription>,
 }
 
@@ -93,6 +101,7 @@ impl SettingsDialog {
             filter_input,
             inputs: HashMap::new(),
             geometry: Geometry::default(),
+            layout_basis: (0., Vec::new()),
             scroll: ScrollHandle::new(),
             pop_scroll: ScrollHandle::new(),
             popover: None,
@@ -104,6 +113,7 @@ impl SettingsDialog {
             just_closed: None,
             record_sub: None,
             search_token: 0,
+            reload_token: 0,
             _subs: vec![filter_sub],
         };
         this.focus.focus(window, cx);
@@ -174,6 +184,25 @@ impl SettingsDialog {
         if let Some(Row { control: Control::Text { set: Some(set), .. }, .. }) = self.find_row(id, cx) {
             self.change(|s| set(s, text), cx);
         }
+        self.recheck_later(id, cx);
+    }
+
+    /// Adresse oder Pfad eines lokalen Anbieters geändert: nach 0,7 s ohne weitere Eingabe neu prüfen.
+    fn recheck_later(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(provider) = sections::provider_of(id) else { return };
+        self.reload_token += 1;
+        let token = self.reload_token;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(RECHECK_DELAY).await;
+            this.update(cx, |this, cx| {
+                if this.reload_token == token {
+                    this.backend.reload(provider);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// Modellsuche auf ollama.com, eine halbe Sekunde nach dem letzten Tastendruck.
@@ -314,6 +343,10 @@ impl SettingsDialog {
         if let Some((value, _)) = p.options.get(index) {
             let value = value.clone();
             self.change(|s| (p.set)(s, value), cx);
+            // An- und Ausschalten eines Anbieters prüft sofort neu.
+            if let Some(provider) = sections::provider_of(&p.row) {
+                self.backend.reload(provider);
+            }
         }
         cx.notify();
     }
@@ -397,7 +430,8 @@ impl SettingsDialog {
         let Some(action) = self.recording else { return };
         let input = KeyInput { control: m.control, alt: m.alt, shift: m.shift, platform: m.platform, key: key.to_string() };
         match shortcut::classify(&input, shortcut::current()) {
-            Recorded::Reject => return,
+            // Swift: `guard let k = Hotkey(event:), k.isUsable else { NSSound.beep(); return nil }`, die Aufnahme läuft weiter.
+            Recorded::Reject => return kadrell_tray::beep(),
             Recorded::Cancel => {}
             Recorded::Clear => self.change(|s| shortcut::assign(s, action, None), cx),
             Recorded::Set(h) => self.change(|s| shortcut::assign(s, action, Some(h)), cx),
@@ -452,6 +486,26 @@ impl SettingsDialog {
         self.focus.focus(window, cx);
         self.ensure_visible(cx);
         cx.notify();
+    }
+
+    /// Tab: in einem Pfadfeld das Kürzel ausschreiben (das Feld behält Tab, auch ohne Treffer), sonst zur nächsten Zeile.
+    pub(super) fn next_row(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let focused = self.inputs.iter().find(|(id, i)| paths::kind_of(id).is_some() && i.read(cx).focus.is_focused(window)).map(|(id, _)| id.clone());
+        let Some(id) = focused else { return self.move_cursor(1, window, cx) };
+        if paths::kind_of(&id) == Some(paths::PathKind::Folder) {
+            let typed = self.input_text(&id, cx);
+            if let Some(full) = paths::tab_expansion(&typed, &folders::home_dir(), &folders::list_dirs) {
+                self.set_input_text(&id, &full, window, cx);
+            }
+        }
+    }
+
+    /// Datei oder Ordner auf ein Pfadfeld gezogen: passt er zur Art des Feldes, steht er im Feld (und gilt sofort).
+    pub(super) fn drop_on_path(&mut self, row: &str, dropped: &[std::path::PathBuf], window: &mut Window, cx: &mut Context<Self>) {
+        let Some(kind) = paths::kind_of(row) else { return };
+        if let Some(text) = paths::dropped(kind, dropped, &folders::home_dir()) {
+            self.set_input_text(row, &text, window, cx);
+        }
     }
 
     /// Scrollt die Zeile mit der Tastatur ins Bild (Rechtecke aus dem letzten Frame).
@@ -566,14 +620,12 @@ fn sync_theme(cx: &mut App) {
     if !settings.contains("colorTheme") {
         return;
     }
-    let wanted = settings.color_theme();
-    if cx.global::<ThemeGlobal>().0.id == wanted {
+    let theme = Theme::named(&settings.color_theme());
+    if cx.global::<ThemeGlobal>().0.id == theme.id {
         return;
     }
-    if let Some(theme) = Theme::by_id(&wanted) {
-        crate::set_theme(cx, theme);
-        cx.refresh_windows();
-    }
+    crate::set_theme(cx, theme);
+    cx.refresh_windows();
 }
 
 /// Aktuelle Belegung einer Aktion.

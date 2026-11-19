@@ -228,6 +228,7 @@ mod tests {
         assert_eq!(rows[0].text, "diese Hilfe");
     }
 
+    #[cfg(windows)]
     #[test]
     fn windows_spells_the_keys_out() {
         let s = sections(&defaults(), false);
