@@ -9,6 +9,22 @@ use super::layout::{Id, Selection};
 use super::model::Status;
 use crate::theme::Theme;
 
+// MARK: Autoscroll beim Ziehen
+
+/// Streifen am oberen und unteren Rand des Baums, in dem das Ziehen ihn scrollt (Punkte).
+pub const AUTOSCROLL_ZONE: f32 = 28.;
+/// Größter Schritt je Mausbewegung (Punkte), erreicht am Rand und außerhalb.
+pub const AUTOSCROLL_MAX: f32 = 18.;
+
+/// Wie weit der Baum beim Ziehen mit der Maus auf Höhe `y` scrollt (`NSView.autoscroll`): negativ nach oben, positiv
+/// nach unten, 0 in der Mitte. Je näher am Rand oder je weiter draußen, desto größer der Schritt.
+pub fn autoscroll_step(y: f32, top: f32, bottom: f32) -> f32 {
+    let zone = AUTOSCROLL_ZONE.min((bottom - top) / 2.);
+    let (into_top, into_bottom) = ((top + zone - y).max(0.), (y - (bottom - zone)).max(0.));
+    let depth = if into_top > 0. { -into_top } else { into_bottom };
+    (depth / zone * AUTOSCROLL_MAX).clamp(-AUTOSCROLL_MAX, AUTOSCROLL_MAX)
+}
+
 // MARK: Farben
 
 /// Statuspunkt (`Theme.statusColor`): ohne laufenden Prozess grau, die Shell-Farbe nur bei fertiger Session mit noch
@@ -210,6 +226,17 @@ pub fn collapse_all(collapsed: &[bool]) -> bool {
 mod tests {
     use super::*;
     use gpui::Rgba;
+
+    #[test]
+    fn autoscroll_moves_only_near_the_edges() {
+        assert_eq!(autoscroll_step(300., 0., 600.), 0.);
+        assert_eq!(autoscroll_step(0., 0., 600.), -AUTOSCROLL_MAX);
+        assert_eq!(autoscroll_step(-50., 0., 600.), -AUTOSCROLL_MAX);
+        assert_eq!(autoscroll_step(600., 0., 600.), AUTOSCROLL_MAX);
+        assert_eq!(autoscroll_step(700., 0., 600.), AUTOSCROLL_MAX);
+        let half = autoscroll_step(14., 0., 600.);
+        assert!(half < 0. && half > -AUTOSCROLL_MAX);
+    }
 
     fn rgba(c: Hsla) -> u32 {
         let r: Rgba = c.into();

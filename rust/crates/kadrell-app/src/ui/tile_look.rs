@@ -2,7 +2,24 @@
 //! Körper zeigt, welche Farbe und Breite der Rand hat, wie sich die Kopfzeile bei wenig Platz aufteilt, wo die
 //! Symbole sitzen und wie rund die Ecke in der Arbeitsfläche ist. Alle Maße in logischen Punkten (vor UI-Größe).
 
+use std::collections::HashSet;
+
 use super::model::Status;
+
+/// Schlüssel der Sessions, die die offene Suche als Treffer zeigt (`None`: keine Hervorhebung). Als Global, damit
+/// Kacheln und Baum es beim Zeichnen lesen, ohne die Shell zu lesen; die Shell setzt es mit der Suche.
+#[derive(Default)]
+pub struct PaletteHits(pub Option<HashSet<String>>);
+
+impl gpui::Global for PaletteHits {}
+
+/// Treffer der Suche für diese Session: `None` ohne offene Hervorhebung, sonst ob sie Treffer ist.
+pub fn palette_hit(cx: &gpui::App, key: &str) -> Option<bool> {
+    cx.try_global::<PaletteHits>()?.0.as_ref().map(|keys| keys.contains(key))
+}
+
+/// Nicht getroffene Kacheln und Zeilen treten zurück, solange die Suche Treffer zeigt.
+pub const DIMMED_OPACITY: f32 = 0.45;
 
 /// Höhe von Kopfzeile und Stack-Zeile in logischen Punkten.
 pub const ROW: f32 = 26.;
@@ -100,8 +117,15 @@ pub enum Edge {
     Waiting,
     /// Status Fehler: Fehlerfarbe.
     StatusError,
+    /// Treffer der offenen Suche, ohne Fokus und Zustand: Akzentfarbe.
+    Hit,
     /// Sonst die dunkle Hälfte der Fuge.
     Seam,
+}
+
+/// Treffer der Suche färben nur die ruhige Fuge: Fokus, Fehler und Warten behalten ihre Farbe.
+pub fn with_hit(edge: Edge, hit: Option<bool>) -> Edge {
+    if edge == Edge::Seam && hit == Some(true) { Edge::Hit } else { edge }
 }
 
 pub fn edge(drop_target: bool, r: Run, focused: bool, status: Status) -> Edge {
@@ -123,6 +147,11 @@ pub fn edge(drop_target: bool, r: Run, focused: bool, status: Status) -> Edge {
 /// Breite des Rands in Pixeln: 2 bei Fokus oder als Ablageziel, sonst 1.
 pub fn edge_width(focused: bool, drop_target: bool) -> f32 {
     if focused || drop_target { 2. } else { 1. }
+}
+
+/// Breite mit Treffer: die Hervorhebung der Suche ist 2 breit wie der Fokus.
+pub fn edge_width_for(edge: Edge, focused: bool) -> f32 {
+    if edge == Edge::Hit { 2. } else { edge_width(focused, false) }
 }
 
 /// Breiten der Teile in der Kopfzeile (Text gemessen, ohne Abstände).
@@ -307,6 +336,16 @@ mod tests {
         assert_eq!(body_kind_mounted(run(), false), BodyKind::Lines);
         assert_eq!(body_kind_mounted(run(), true), BodyKind::Terminal);
         assert_eq!(body_kind_mounted(Run::default(), false), BodyKind::Starting);
+    }
+
+    #[test]
+    fn search_hits_only_color_the_quiet_seam() {
+        assert_eq!(with_hit(Edge::Seam, Some(true)), Edge::Hit);
+        assert_eq!(with_hit(Edge::Seam, Some(false)), Edge::Seam);
+        assert_eq!(with_hit(Edge::Seam, None), Edge::Seam);
+        assert_eq!(with_hit(Edge::Focus, Some(true)), Edge::Focus);
+        assert_eq!(with_hit(Edge::Error, Some(true)), Edge::Error);
+        assert_eq!((edge_width_for(Edge::Hit, false), edge_width_for(Edge::Seam, false), edge_width_for(Edge::Focus, true)), (2., 1., 2.));
     }
 
     #[test]

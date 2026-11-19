@@ -94,6 +94,7 @@ fn edge_color(edge: Edge, t: &Theme) -> Hsla {
         Edge::Drop | Edge::Focus => t.fg,
         Edge::Error | Edge::StatusError => t.error,
         Edge::Waiting => t.waiting,
+        Edge::Hit => t.accent,
         Edge::Seam => seam_dark(t),
     }
 }
@@ -273,9 +274,9 @@ fn inner_rim(c: &Cell, t: &Theme, a: &Appearance) -> Div {
 }
 
 /// Rand als Schicht über dem Inhalt; wechselt die Farbe, blendet er in 120 ms über.
-fn border_layer(c: &Cell, t: &Theme) -> AnyElement {
-    let edge = c.edge();
-    let width = tile_look::edge_width(c.marks.ring, false);
+fn border_layer(c: &Cell, t: &Theme, hit: Option<bool>) -> AnyElement {
+    let edge = tile_look::with_hit(c.edge(), hit);
+    let width = tile_look::edge_width_for(edge, c.marks.ring);
     let (to, base) = (edge_color(edge, t), edge_color(Edge::Seam, t));
     let layer = div().absolute().size_full().border(px(width)).rounded_tl(px(tile_edge::clamp_corner(c.geo.corner, c.geo.width, c.geo.height)));
     // Wechselt die Rangfolge, ändert sich die Kennung und der Rand blendet von der alten zur neuen Farbe über.
@@ -294,6 +295,7 @@ fn border_layer(c: &Cell, t: &Theme) -> AnyElement {
 pub fn cell(c: &Cell, cx: &App) -> AnyElement {
     let t = theme(cx);
     let a = crate::appearance::current(cx);
+    let hit = tile_look::palette_hit(cx, &c.session.key);
     let kind = tile_look::body_kind_mounted(c.run(), c.session.pane.is_some() && !c.elsewhere);
     let mut col = div().relative().flex().flex_col().size_full().overflow_hidden().rounded_tl(px(c.geo.corner));
     if !c.geo.header_hidden {
@@ -314,7 +316,10 @@ pub fn cell(c: &Cell, cx: &App) -> AnyElement {
     if c.body {
         col = col.child(body_area(c, kind, &t, &a, cx));
     }
-    col = col.child(inner_rim(c, &t, &a)).child(border_layer(c, &t));
+    col = col.child(inner_rim(c, &t, &a)).child(border_layer(c, &t, hit));
     // Die Gruppe trägt nur den Titel; die Kopfzeile ist der Knopf mit Status, Gruppe und Zweig (`CellView.accessibilityChildren`).
+    if hit == Some(false) {
+        col = col.opacity(tile_look::DIMMED_OPACITY);
+    }
     col.id(gpui::ElementId::Name(format!("tile-{}", c.session.key).into())).role(Role::Group).aria_label(c.session.title.clone()).into_any_element()
 }
