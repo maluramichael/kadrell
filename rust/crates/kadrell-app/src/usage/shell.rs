@@ -192,6 +192,12 @@ impl Shell {
     // MARK: Konto-Menü
 
     fn open_account_menu(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
+        let items = self.account_menu_items();
+        self.open_context(gpui::point(at.x, at.y + gpui::px(14.)), items, cx);
+    }
+
+    /// Einträge des Konto-Menüs der Leiste (Wechseln, Auto-Wechsel, Hinzufügen, Verwalten); jedes Fenster zeigt sie bei sich.
+    pub(crate) fn account_menu_items(&self) -> Vec<Item> {
         let view = self.usage.hub.view();
         let mark = |on: bool| if on { "✓ " } else { "    " };
         let mut items: Vec<Item> = view
@@ -207,7 +213,7 @@ impl Shell {
         items.push(Item::Entry(format!("{}{}", mark(auto), trd!("Automatisch wechseln bei Limit")), Cmd::Account(AccountCmd::ToggleAutoswitch)));
         items.push(Item::Entry(format!("    {}", trd!("Konto hinzufügen …")), Cmd::Account(AccountCmd::Add)));
         items.push(Item::Entry(format!("    {}", trd!("Konten verwalten …")), Cmd::Account(AccountCmd::Manage)));
-        self.open_context(gpui::point(at.x, at.y + gpui::px(14.)), items, cx);
+        items
     }
 
     pub(crate) fn run_account_cmd(&mut self, cmd: AccountCmd, window: &mut Window, cx: &mut Context<Self>) {

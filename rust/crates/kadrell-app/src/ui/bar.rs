@@ -64,7 +64,9 @@ fn left_keys(ctl: &LayoutCtl) -> Vec<Key> {
     if ctl.split.is_some() {
         keys.push(Key::Split);
     }
-    keys.extend([Key::Auto, Key::Sync, Key::Group, Key::Sort]);
+    if !ctl.compact {
+        keys.extend([Key::Auto, Key::Sync, Key::Group, Key::Sort]);
+    }
     if ctl.zoom {
         keys.push(Key::Zoom);
     }
@@ -179,6 +181,8 @@ pub struct LayoutCtl {
     pub ext: Vec<ExtStatus>,
     /// Konten, Nutzung und Status-Display der rechten Seite (`usage_bar`).
     pub usage: Option<BarCtl>,
+    /// Leiste eines weiteren Fensters: ohne AUTO, SYNC, GRP und SORT, die dort keine Wirkung hätten.
+    pub compact: bool,
 }
 
 /// Ein Statuseintrag einer Extension (`kadrell.status.set`): Text mit Punkt in der Farbe, mit Klick bei Aktion.
@@ -366,6 +370,7 @@ mod tests {
             waiting: 0,
             ext: Vec::new(),
             usage: None,
+            compact: false,
         }
     }
 

@@ -91,6 +91,33 @@ pub fn forward(shell: &gpui::Entity<Shell>, from: usize, action: Box<dyn Action>
     });
 }
 
+/// Ein weiteres Fenster löst ein Kürzel aus, das im Hauptfenster einen Dialog öffnet (Schnellstart, Verlaufssuche,
+/// Statistik) oder die App neu startet (`perform_hotkey_action`). Sonst wie `forward`.
+pub fn forward_hotkey(shell: &gpui::Entity<Shell>, from: usize, raw: &str, dialog: bool, cx: &mut gpui::App) {
+    let raw = raw.to_string();
+    on_main(shell, from, dialog, cx, move |sh, window, cx| sh.perform_hotkey_action(&raw, window, cx));
+}
+
+/// Ein weiteres Fenster lässt die Shell etwas im Hauptfenster tun (Fenster ohne Tastatur-Fokus, Dialoge): `current` bleibt
+/// das weitere Fenster, mit `dialog` kommt das Hauptfenster nach vorn, bis der Dialog zu ist.
+pub fn on_main(shell: &gpui::Entity<Shell>, from: usize, dialog: bool, cx: &mut gpui::App, run: impl FnOnce(&mut Shell, &mut Window, &mut Context<Shell>) + 'static) {
+    let main = shell.update(cx, |sh, _| {
+        sh.state.set_current_window(from);
+        if dialog {
+            sh.win.pin = Some(Pin::new(from));
+        }
+        sh.main_window
+    });
+    let Some(main) = main else { return };
+    let shell = shell.clone();
+    let _ = cx.update_window(main, |_, window, cx| {
+        if dialog {
+            window.activate_window();
+        }
+        shell.update(cx, |sh, cx| run(sh, window, cx));
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

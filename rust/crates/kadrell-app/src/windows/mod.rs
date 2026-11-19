@@ -4,6 +4,8 @@
 pub mod current;
 pub mod extra;
 pub mod extra_ext;
+pub mod extra_bar;
+pub mod extra_keys;
 pub mod frame;
 pub mod layout;
 pub mod model;
