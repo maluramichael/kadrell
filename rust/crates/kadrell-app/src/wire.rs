@@ -231,16 +231,18 @@ impl Shell {
                 return;
             }
             let _ = this.update_in(cx, |shell, window, cx| shell.after_first_poll(window, cx));
+            if !crate::misc::run_adopt(&this, cx).await {
+                return;
+            }
             poll_loop(&this, cx).await;
         })
         .detach();
     }
 
-    /// Nach dem ersten Poll: `app.ready`, Verlaufssuche vorwärmen, Hintergrund-Sessions zur Übernahme anbieten.
-    fn after_first_poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Nach dem ersten Poll: `app.ready`, Verlaufssuche vorwärmen, Übernahme folgt in `run_adopt`.
+    fn after_first_poll(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.ext.emit("app.ready", serde_json::json!({}));
         self.refresh_history(cx);
-        self.start_adopt(window, cx);
     }
 
     fn apply_poll(&mut self, change: kadrell_claude::registry::Change, messages: usize, window: &mut Window, cx: &mut Context<Self>) {

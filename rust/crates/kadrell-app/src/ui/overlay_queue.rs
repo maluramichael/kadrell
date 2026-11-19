@@ -204,7 +204,7 @@ impl Shell {
     pub(crate) fn report(&mut self, detail: &str, window: &mut Window, cx: &mut Context<Self>) {
         let line = first_line(detail);
         eprintln!("kadrell: {line}");
-        self.ask(Spec { title: trd!("Claude CLI meldet einen Fehler"), text: line, button: trd!("OK"), destructive: false, notice: true }, None, window, cx);
+        self.ask(Spec { title: trd!("Claude CLI meldet einen Fehler"), text: line, button: trd!("OK"), destructive: false, notice: true, ask: None }, None, window, cx);
     }
 }
 

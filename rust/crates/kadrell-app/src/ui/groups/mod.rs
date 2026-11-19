@@ -185,7 +185,7 @@ impl Shell {
     }
 
     /// „Nicht mehr fragen“ gilt sofort, Abbrechen stellt zurück (siehe `Confirm::cancel`).
-    fn set_ask(&mut self, ask: kadrell_core::settings::Ask, enabled: bool) {
+    pub(crate) fn set_ask(&mut self, ask: kadrell_core::settings::Ask, enabled: bool) {
         let mut settings = self.state.settings.clone();
         settings.set_ask_enabled(ask, enabled);
         self.state.apply_settings(settings);

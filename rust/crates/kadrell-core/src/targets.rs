@@ -102,7 +102,8 @@ pub fn resolve_session_or_group<'a>(
         (Err(_), Ok(g)) => Ok(Target::Group(g)),
         (Ok(_), Ok(_)) => Err(TargetError::new(format!("„{name}“ passt auf eine Session und eine Gruppe, bitte Key oder Id angeben"))),
         // Meldung der Session-Suche, damit „mehrdeutig“ nicht als „nicht gefunden“ erscheint.
-        (Err(e), Err(_)) => Err(e),
+        (Err(e), Err(_)) if e.0.contains("mehrdeutig") => Err(e),
+        (Err(_), Err(_)) => Err(TargetError::new(format!("keine Session oder Gruppe „{name}“"))),
     }
 }
 
@@ -181,8 +182,13 @@ mod tests {
         assert!(matches!(resolve_session_or_group(Some("s1"), &groups, &all, None, None), Ok(Target::Session(_))));
         let both = resolve_session_or_group(Some("api"), &groups, &all, None, None).unwrap_err();
         assert!(both.0.contains("passt auf eine Session und eine Gruppe"), "„api“ ist Session-Titel und Gruppenname zugleich");
-        assert_eq!(resolve_session_or_group(Some("zzz"), &groups, &all, None, None).unwrap_err().0, "keine Session „zzz“");
+        assert_eq!(resolve_session_or_group(Some("zzz"), &groups, &all, None, None).unwrap_err().0, "keine Session oder Gruppe „zzz“");
         assert!(matches!(resolve_session_or_group(None, &groups, &all, Some("s1"), None), Ok(Target::Session(_))));
+        // Mehrdeutig bleibt mehrdeutig (Meldung der Session-Suche), nicht „keine Session oder Gruppe“.
+        let twice = resolve_session_or_group(Some("s"), &groups, &all, None, None);
+        if let Err(e) = twice {
+            assert!(e.0.contains("mehrdeutig") || e.0.contains("passt auf"), "{}", e.0);
+        }
     }
 
     #[test]

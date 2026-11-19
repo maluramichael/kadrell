@@ -217,6 +217,7 @@ impl AppState {
         let keys: Vec<String> = keys.into_iter().filter(|k| self.store.sessions.get(k).is_some() && seen.insert(k.clone())).collect();
         let focus = focus.filter(|f| keys.contains(f)).or_else(|| keys.last().cloned());
         let changed = self.selected != keys || self.focused != focus;
+        let focus_moved = self.focused != focus;
         self.count_focus_switch(&self.focused.clone(), &focus);
         if self.focused.is_some() && self.focused != focus {
             self.last_focused = self.focused.clone();
@@ -227,7 +228,9 @@ impl AppState {
             self.anchor = self.focused.clone();
         }
         self.queue_visible_starts();
-        if let Some(f) = self.focused.clone() {
+        // Nur ein Fokuswechsel quittiert die Marke „neu“ (`onFocusChange`); ein Klick auf eine einzelne Session tut es
+        // zusätzlich in `click_session`, ein Klick auf eine ganze Gruppe nicht.
+        if let (true, Some(f)) = (focus_moved, self.focused.clone()) {
             self.attention.mark_seen(&f);
         }
         if changed {

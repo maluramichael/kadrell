@@ -192,7 +192,7 @@ pub fn confirm_role(destructive: bool) -> KeyRole {
     if destructive { KeyRole::Destructive } else { KeyRole::Primary }
 }
 
-fn checkbox(on: bool, t: &Theme) -> gpui::Div {
+pub(crate) fn checkbox(on: bool, t: &Theme) -> gpui::Div {
     let s = crate::ui::overlay::scale();
     let mark = div().size(px(8. * s)).rounded(px(1.5 * s)).bg(if on { t.accent } else { gpui::transparent_black() });
     div().size(px(14. * s)).flex_none().flex().items_center().justify_center().rounded(px(3. * s)).border_1().border_color(t.line).bg(t.bg).child(mark)

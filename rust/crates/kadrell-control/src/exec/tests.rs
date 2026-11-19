@@ -256,7 +256,7 @@ fn select_zoom_layout() {
     // Gruppe: alle ihre Sessions.
     run(&mut h, &["select", "-t", "ga"]);
     assert_eq!(h.selected, ["s1", "s2"]);
-    assert_eq!(stderr(run(&mut h, &["select", "-t", "zzz"])), "kadrell: keine Session „zzz“\n");
+    assert_eq!(stderr(run(&mut h, &["select", "-t", "zzz"])), "kadrell: keine Session oder Gruppe „zzz“\n");
     assert_eq!(run(&mut h, &["layout", "row"]).status, 0);
     assert_eq!(h.layout, LayoutMode::Row);
     // zoom ohne Fokus.

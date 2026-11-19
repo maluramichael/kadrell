@@ -21,6 +21,7 @@ use kadrell_accounts::UreqClient;
 use kadrell_claude::background_shells::{AdoptCandidate, AdoptPlan};
 use kadrell_claude::cli::SystemRunner;
 use kadrell_core::Settings;
+use kadrell_core::settings::Ask;
 use kadrell_core::hotkeys::HotkeyAction;
 use kadrell_i18n::trd;
 
@@ -128,6 +129,31 @@ fn dev_plan() -> AdoptPlan {
     AdoptPlan { other_interactive_count: 2, candidates }
 }
 
+/// Eine anstehende Suche nach fremden Claude-Sessions (`claude agents`).
+pub(crate) struct AdoptScan {
+    cli: kadrell_claude::cli::ClaudeCli,
+    owned: std::collections::HashSet<String>,
+    default_profile: bool,
+}
+
+/// Fragt nach fremden Sessions und wartet, bis das Ergebnis im Zustand ist (nicht auf die Antwort im Dialog). Erst danach
+/// darf das regelmäßige Pollen laufen. `false`: die Shell gibt es nicht mehr.
+pub(crate) async fn run_adopt(this: &gpui::WeakEntity<Shell>, cx: &mut gpui::AsyncWindowContext) -> bool {
+    let Ok(scan) = this.update_in(cx, |shell, window, cx| shell.start_adopt(window, cx)) else { return false };
+    let Some(AdoptScan { cli, owned, default_profile }) = scan else { return true };
+    let scan_cli = cli.clone();
+    let plan = cx.background_executor().spawn(async move { adopt::scan(&scan_cli, &SystemRunner, &owned, default_profile) }).await;
+    this.update_in(cx, |shell, window, cx| match plan {
+        Ok(plan) => shell.offer_adopt(plan, Some(cli), window, cx),
+        Err(e) => {
+            eprintln!("kadrell: agents: {e}");
+            shell.state.fail_registry(&e);
+            cx.notify();
+        }
+    })
+    .is_ok()
+}
+
 impl Shell {
     /// Beschriftete Belegung von „Hilfe“ (`⌥F1`, unter Windows `Alt+F1`), `None` ohne Belegung.
     pub(crate) fn help_shortcut(&self) -> Option<String> {
@@ -162,6 +188,13 @@ impl Shell {
 
     /// Zeigt die Rückfrage, sobald keine andere offen ist; `on_confirm` läuft bei Bestätigung.
     pub(crate) fn ask(&mut self, spec: Spec, on_confirm: Option<ShellAction>, window: &mut Window, cx: &mut Context<Self>) {
+        // „Nicht mehr fragen“ gesetzt: die Aktion läuft sofort (`confirm(... ask:)` der Mac-App).
+        if spec.ask.is_some_and(|a| !self.state.settings.ask_enabled(a)) {
+            if let Some(action) = on_confirm {
+                action(self, window, cx);
+            }
+            return;
+        }
         self.misc.queue.push_back(Pending { spec, on_confirm });
         self.show_next_confirm(window, cx);
     }
@@ -172,7 +205,11 @@ impl Shell {
         }
         let Some(Pending { spec, on_confirm }) = self.misc.queue.pop_front() else { return };
         let dialog = cx.new(|cx| ConfirmDialog::new(spec, window, cx));
-        cx.subscribe_in(&dialog, window, |this, _, ev: &ConfirmEvent, window, cx| this.answered(*ev, window, cx)).detach();
+        cx.subscribe_in(&dialog, window, |this, _, ev: &ConfirmEvent, window, cx| match ev {
+            ConfirmEvent::DontAsk(ask, on) => this.set_ask(*ask, !*on),
+            _ => this.answered(*ev, window, cx),
+        })
+        .detach();
         self.misc.confirm = Some(dialog);
         self.misc.action = on_confirm;
         cx.notify();
@@ -190,7 +227,7 @@ impl Shell {
 
     /// Meldung mit einer Taste, ohne Abbrechen.
     pub(crate) fn tell(&mut self, title: String, text: String, button: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.ask(Spec { title, text, button, destructive: false, notice: true }, None, window, cx);
+        self.ask(Spec { title, text, button, destructive: false, notice: true, ask: None }, None, window, cx);
     }
 
     // MARK: Was ist neu
@@ -254,7 +291,7 @@ impl Shell {
     pub(crate) fn show_update(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(m) = self.misc.update.clone() else { return };
         let url = m.url.clone();
-        let spec = Spec { title: trd!("Kadrell %@ verfügbar", m.version.clone()), text: update::dialog_text(&m), button: trd!("Herunterladen"), destructive: false, notice: false };
+        let spec = Spec { title: trd!("Kadrell %@ verfügbar", m.version.clone()), text: update::dialog_text(&m), button: trd!("Herunterladen"), destructive: false, notice: false, ask: None };
         let open = Box::new(move |_: &mut Shell, _: &mut Window, _: &mut Context<Shell>| {
             if let Err(e) = open::run(&open::Opening::Url(url)) {
                 eprintln!("kadrell: {e}");
@@ -272,38 +309,28 @@ impl Shell {
     // MARK: Hintergrund-Sessions übernehmen
 
     /// Beim Start: fremde Claude-Sessions erfassen. Hintergrund-Sessions bietet Kadrell zur Übernahme an (nur im
-    /// Standardprofil), die anderen zählt der Leerzustand.
-    pub(crate) fn start_adopt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Standardprofil), die anderen zählt der Leerzustand. Die Suche (`AdoptScan`) läuft in `run_adopt`, damit das
+    /// regelmäßige Pollen erst danach startet (Swift: `await offerAdopt(); registry.start()`).
+    pub(crate) fn start_adopt(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AdoptScan> {
         if dev_overlay().as_deref() == Some("adopt") {
-            return self.offer_adopt(dev_plan(), None, window, cx);
+            self.offer_adopt(dev_plan(), None, window, cx);
+            return None;
         }
         if let Some(n) = std::env::var("KADRELL_DEV_ELSEWHERE").ok().and_then(|v| v.parse().ok()) {
             self.misc.other_interactive = n;
-            return;
+            return None;
         }
-        let Some(cli) = self.state.env.claude.clone() else { return };
+        let cli = self.state.env.claude.clone()?;
         let owned = adopt::owned_ids(&self.state.store.sessions.sessions);
         let default_profile = self.state.profile.name.is_none() && !self.state.profile.temporary;
-        let scan_cli = cli.clone();
-        cx.spawn_in(window, async move |this, cx| {
-            let plan = cx.background_executor().spawn(async move { adopt::scan(&scan_cli, &SystemRunner, &owned, default_profile) }).await;
-            let _ = this.update_in(cx, |shell, window, cx| match plan {
-                Ok(plan) => shell.offer_adopt(plan, Some(cli), window, cx),
-                Err(e) => {
-                    eprintln!("kadrell: agents: {e}");
-                    shell.state.fail_registry(&e);
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
+        Some(AdoptScan { cli, owned, default_profile })
     }
 
     fn offer_adopt(&mut self, plan: AdoptPlan, cli: Option<kadrell_claude::cli::ClaudeCli>, window: &mut Window, cx: &mut Context<Self>) {
         self.misc.other_interactive = plan.other_interactive_count;
         cx.notify();
         let Some(offer) = adopt::offer(&plan) else { return };
-        let spec = Spec { title: offer.title, text: offer.text, button: trd!("Übernehmen"), destructive: offer.destructive, notice: false };
+        let spec = Spec { title: offer.title, text: offer.text, button: trd!("Übernehmen"), destructive: offer.destructive, notice: false, ask: Some(Ask::AdoptBackground) };
         // Ohne `cli` (Ansicht mit `KADRELL_DEV_OVERLAY=adopt`) bleibt die Bestätigung folgenlos.
         let run = cli.map(|cli| -> ShellAction { Box::new(move |shell, window, cx| shell.adopt_now(cli, plan, window, cx)) });
         self.ask(spec, run, window, cx);
