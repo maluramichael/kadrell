@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::{
-    Anchor, App, AppContext, ClickEvent, Context, Div, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement,
+    Anchor, App, AppContext, ClickEvent, Context, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement,
     IntoElement, KeyBinding, KeyDownEvent, MouseButton, ParentElement, Render, ScrollHandle, Stateful, StatefulInteractiveElement,
     Styled, SharedString, Subscription, Window, actions, anchored, deferred, div, point, prelude::*, px,
 };
@@ -24,6 +24,8 @@ use super::spinner::spinner;
 use super::status_color;
 use crate::theme::Theme;
 use crate::ui::chrome::h_seam;
+use crate::ui::dialog_keys;
+use crate::ui::instrument::focus_ring;
 use crate::ui::overlay::{backdrop, dialog_frame, overlay_height, overlay_width};
 use crate::ui::settings::controls::{Geometry, key_cap, measure, popover, popover_item, row as form_row, seam_ring, select_face, table};
 use crate::ui::text_input::TextInput;
@@ -38,7 +40,23 @@ const HEIGHT: f32 = 720.;
 
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
+    dialog_keys::bind_keys(cx);
     cx.bind_keys([KeyBinding::new("escape", Cancel, c), KeyBinding::new("enter", Confirm, c)]);
+}
+
+/// Kleine Taste als Tab-Stopp (`kbdFocusRing`): Enter und Leertaste lösen sie aus, mit Tastaturfokus zeichnet sie den Ring.
+fn cap_control(
+    id: impl Into<ElementId> + Clone,
+    label: String,
+    destructive: bool,
+    t: &Theme,
+    window: &mut Window,
+    cx: &mut App,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    let key = key_cap(div().child(label), destructive, t).id(id.clone()).relative();
+    let (key, ring) = dialog_keys::control(key, id, window, cx, std::rc::Rc::new(on_click));
+    if ring { key.child(focus_ring(t)) } else { key }
 }
 
 pub enum DialogEvent {
@@ -305,8 +323,9 @@ impl ExtensionsDialog {
     // MARK: Zeichnen
 
     /// Kopf: „EXTENSIONS“ als gesperrtes Versal-Label (gedämpft), rechts die Taste für den Ordner und der Link zur Doku.
-    fn header(&self, t: &Theme, cx: &mut Context<Self>) -> Div {
-        let folder = key_cap(div().child(trd!("Extensions-Ordner öffnen")), false, t).id("open-catalog").on_click(cx.listener(|this, _, _, cx| this.open_catalog(cx)));
+    fn header(&self, t: &Theme, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let on_catalog = cx.listener(|this, _, _, cx| this.open_catalog(cx));
+        let folder = cap_control("open-catalog", trd!("Extensions-Ordner öffnen"), false, t, window, cx, on_catalog);
         let docs = div().id("docs").flex_none().text_size(px(11.)).text_color(t.accent_text).cursor_pointer().child(trd!("Doku")).on_click(|_, _, cx| cx.open_url(DOCS_URL));
         div()
             .flex()
@@ -324,16 +343,18 @@ impl ExtensionsDialog {
 
     /// Einmalige Warnung vor dem ersten Einschalten: fremder Code läuft ohne Sandbox mit den Rechten des Nutzers.
     /// Gruppenfläche mit 1,5 px Rand in der Fehlerfarbe, ohne den Fugenring der Gruppe darunter zu verdecken.
-    fn enable_warning(&self, name: &str, t: &Theme, cx: &mut Context<Self>) -> Div {
+    fn enable_warning(&self, name: &str, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> Div {
         let rights = self.model.items().into_iter().find(|e| e.name == name).and_then(|e| e.manifest).map(|m| m.permissions).filter(|p| !p.is_empty());
-        let yes = key_cap(div().child(trd!("Einschalten")), true, t).id("confirm-yes").on_click(cx.listener(|this, _, _, cx| {
+        let on_yes = cx.listener(|this, _, _, cx| {
             this.model.confirm_yes();
             cx.notify();
-        }));
-        let no = key_cap(div().child(trd!("Abbrechen")), false, t).id("confirm-no").on_click(cx.listener(|this, _, _, cx| {
+        });
+        let yes = cap_control("confirm-yes", trd!("Einschalten"), true, t, window, cx, on_yes);
+        let on_no = cx.listener(|this, _, _, cx| {
             this.model.confirm_no();
             cx.notify();
-        }));
+        });
+        let no = cap_control("confirm-no", trd!("Abbrechen"), false, t, window, cx, on_no);
         let mut col = div()
             .flex()
             .flex_col()
@@ -426,28 +447,27 @@ impl ExtensionsDialog {
         col
     }
 
-    fn small_button(&self, id: &'static str, label: String, t: &Theme) -> Stateful<Div> {
-        key_cap(div().child(label), false, t).id(id)
-    }
-
     fn detail(&mut self, ext: &FoundExtension, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> Div {
         self.ensure_fields(ext, window, cx);
         let can_reload = DialogModel::can_toggle(ext) && self.model.is_enabled(&ext.name);
         let e1 = ext.clone();
         let e2 = ext.clone();
-        let reload = self.small_button("reload", trd!("Neu laden  R"), t).on_click(cx.listener(move |this, _, _, cx| {
+        let on_reload = cx.listener(move |this, _, _, cx| {
             if can_reload {
                 this.model.reload(&e1);
             }
             cx.notify();
-        }));
+        });
+        let reload = cap_control("reload", trd!("Neu laden  R"), false, t, window, cx, on_reload);
         let reload = if can_reload { reload.into_any_element() } else { div().opacity(0.4).child(reload).into_any_element() };
-        let folder = self.small_button("folder", trd!("Ordner öffnen"), t).on_click(cx.listener(move |this, _, _, cx| this.open_folder(&e2, cx)));
+        let on_folder = cx.listener(move |this, _, _, cx| this.open_folder(&e2, cx));
+        let folder = cap_control("folder", trd!("Ordner öffnen"), false, t, window, cx, on_folder);
         let log_label = if self.model.show_log { trd!("Log ausblenden  L") } else { trd!("Log  L") };
-        let log = self.small_button("log", log_label, t).on_click(cx.listener(|this, _, _, cx| {
+        let on_log = cx.listener(|this, _, _, cx| {
             this.model.show_log = !this.model.show_log;
             cx.notify();
-        }));
+        });
+        let log = cap_control("log", log_label, false, t, window, cx, on_log);
         let head = div()
             .flex()
             .items_center()
@@ -461,7 +481,7 @@ impl ExtensionsDialog {
             .child(folder)
             .child(log);
         let mut col = div().flex().flex_col().pb(px(12.)).text_size(px(12.)).child(head);
-        if let Some(form) = self.form(ext, t, cx) {
+        if let Some(form) = self.form(ext, window, t, cx) {
             col = col.child(form);
         }
         if self.model.show_log {
@@ -470,23 +490,23 @@ impl ExtensionsDialog {
         col
     }
 
-    fn form(&self, ext: &FoundExtension, t: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+    fn form(&self, ext: &FoundExtension, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         let settings = &ext.manifest.as_ref()?.settings;
         if settings.is_empty() {
             return None;
         }
-        let rows = settings.iter().map(|s| form_row(&s.label, self.control(ext, s, t, cx), 300., t).into_any_element()).collect();
+        let rows = settings.iter().map(|s| form_row(&s.label, self.control(ext, s, window, t, cx), 300., t).into_any_element()).collect();
         Some(table(rows, t))
     }
 
-    fn control(&self, ext: &FoundExtension, s: &Setting, t: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn control(&self, ext: &FoundExtension, s: &Setting, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
         match s.kind.as_str() {
             "bool" => {
                 let on = self.model.stored.get(&s.key).and_then(Value::as_bool).unwrap_or(false);
                 let (e, key) = (ext.clone(), s.key.clone());
                 div().flex().child(switch(on, true, t).id(SharedString::from(format!("bool-{}", s.key))).on_click(cx.listener(move |this, _, _, cx| this.commit_value(&e, &key, Value::Bool(!on), cx)))).into_any_element()
             }
-            "choice" => self.choice(s, t, cx).into_any_element(),
+            "choice" => self.choice(s, window, t, cx).into_any_element(),
             "secret" => {
                 let label = if self.model.secrets_set.contains(&s.key) { trd!("gesetzt") } else { trd!("nicht gesetzt") };
                 let input = self.fields.get(&s.key).map(|f| f.input.clone());
@@ -498,16 +518,20 @@ impl ExtensionsDialog {
 
     /// Auswahl für `choice` (`ChoiceMenu`): Fläche mit dem gewählten Namen (sonst dem Rohwert oder „–“) und Auf-Ab-Pfeilen,
     /// ein Klick öffnet die Liste mit dem gewählten Eintrag hervorgehoben.
-    fn choice(&self, s: &Setting, t: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn choice(&self, s: &Setting, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
         let value = self.model.stored.get(&s.key).and_then(Value::as_str).map(str::to_string);
         let label = choice_label(s.options.as_deref().unwrap_or(&[]), value.as_deref());
         let key = s.key.clone();
         let open = self.open_choice.as_deref() == Some(s.key.as_str());
         let face = select_face(&label, open, t).relative().child(measure(&self.geometry, format!("choice:{}", s.key)));
-        div().id(SharedString::from(format!("choice-{}", s.key))).cursor_pointer().child(face).on_click(cx.listener(move |this, _, _, cx| {
+        let id = SharedString::from(format!("choice-{}", s.key));
+        let toggle = cx.listener(move |this, _, _, cx| {
             this.open_choice = if this.open_choice.as_deref() == Some(key.as_str()) { None } else { Some(key.clone()) };
             cx.notify();
-        }))
+        });
+        let el = div().id(id.clone()).relative().cursor_pointer().child(face);
+        let (el, ring) = dialog_keys::control(el, id, window, cx, std::rc::Rc::new(toggle));
+        if ring { el.child(focus_ring(t)).into_any_element() } else { el.into_any_element() }
     }
 
     /// Die offene Liste einer Auswahl unter ihrer Fläche (über allem, am Fenster gehalten).
@@ -544,14 +568,15 @@ impl ExtensionsDialog {
         div().px(px(16.)).pt(px(10.)).child(body)
     }
 
-    fn result_row(&self, i: usize, remote: &RemoteExtension, t: &Theme, cx: &mut Context<Self>) -> Div {
+    fn result_row(&self, i: usize, remote: &RemoteExtension, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> Div {
         let busy = self.model.installing.contains(&remote.full_name());
         let label = if self.model.is_installed(remote) { trd!("Aktualisieren") } else { trd!("Installieren") };
         let action: gpui::AnyElement = if busy {
             spinner(t.muted).into_any_element()
         } else {
             let r = remote.clone();
-            self.small_button("install", label, t).id(("install", i)).on_click(cx.listener(move |this, _, _, cx| this.install(r.clone(), cx))).into_any_element()
+            let on_install = cx.listener(move |this, _, _, cx| this.install(r.clone(), cx));
+            cap_control(("install", i), label, false, t, window, cx, on_install).into_any_element()
         };
         let url = remote.html_url.clone();
         let title = div()
@@ -567,7 +592,7 @@ impl ExtensionsDialog {
     }
 
     /// Marktplatz-Block: „ENTDECKEN“ mit Spinner während der Suche, Suchfeld und Taste, Fehlertext, Treffer.
-    fn discover(&self, t: &Theme, cx: &mut Context<Self>) -> Div {
+    fn discover(&self, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> Div {
         let title = div()
             .flex()
             .items_center()
@@ -575,14 +600,15 @@ impl ExtensionsDialog {
             .child(crate::ui::instrument::kerned("ENTDECKEN", 11., crate::ui::instrument::LABEL_KERN, true, t.accent_text))
             .child(div().flex_1())
             .children(self.model.searching.then(|| spinner(t.muted)));
-        let search = self.small_button("search", trd!("Suchen"), t).on_click(cx.listener(|this, _, _, cx| this.search(cx)));
+        let on_search = cx.listener(|this, _, _, cx| this.search(cx));
+        let search = cap_control("search", trd!("Suchen"), false, t, window, cx, on_search);
         let bar = div().flex().items_center().gap(px(10.)).child(div().flex_1().min_w_0().child(self.query.clone())).child(search);
         let mut col = div().flex().flex_col().gap(px(8.)).px(px(16.)).py(px(10.)).text_size(px(12.)).child(title).child(bar);
         if let Some(e) = &self.model.store_error {
             col = col.child(div().text_color(t.error_text).child(e.clone()));
         }
         for (i, r) in self.model.results.iter().enumerate() {
-            col = col.child(self.result_row(i, r, t, cx));
+            col = col.child(self.result_row(i, r, window, t, cx));
         }
         col
     }
@@ -591,13 +617,13 @@ impl ExtensionsDialog {
     fn body(&mut self, window: &mut Window, t: &Theme, cx: &mut Context<Self>) -> Div {
         let mut col = div().flex().flex_col();
         if let Some(name) = self.model.confirm.clone() {
-            col = col.child(self.enable_warning(&name, t, cx));
+            col = col.child(self.enable_warning(&name, window, t, cx));
         }
         col = col.child(self.list(t, cx));
         if let Some(ext) = self.model.current() {
             col = col.child(h_seam(t)).child(self.detail(&ext, window, t, cx));
         }
-        col.child(h_seam(t)).child(self.discover(t, cx))
+        col.child(h_seam(t)).child(self.discover(window, t, cx))
     }
 }
 
@@ -661,12 +687,12 @@ impl Render for ExtensionsDialog {
             .on_action(cx.listener(|this, _: &Cancel, _, cx| this.cancel(cx)))
             .on_action(cx.listener(|this, _: &Confirm, window, cx| this.commit_key(window, cx)))
             .on_key_down(cx.listener(|this, ev, window, cx| this.on_key(ev, window, cx)))
-            .child(self.header(&t, cx))
+            .child(self.header(&t, window, cx))
             .child(div().pt(px(12.)).child(h_seam(&t)))
             .child(scroll)
             .child(foot)
             .children(self.choice_popover(&t, cx));
-        backdrop(cx.listener(|this, _, _, cx| this.close(cx))).child(frame)
+        dialog_keys::nav(backdrop(cx.listener(|this, _, _, cx| this.close(cx)))).child(frame)
     }
 }
 

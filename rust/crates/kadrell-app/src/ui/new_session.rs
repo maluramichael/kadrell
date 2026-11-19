@@ -12,7 +12,7 @@ use crate::state::now_secs;
 
 use gpui::{
     App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, PathPromptOptions, Render, ScrollHandle, StatefulInteractiveElement, Styled, Subscription, Window,
+    ParentElement, Render, ScrollHandle, StatefulInteractiveElement, Styled, Subscription, Window,
     actions, div, prelude::*, px, relative,
 };
 
@@ -20,7 +20,9 @@ use self::model::{Candidate, GroupInfo, Inputs, Model, Outcome, Select};
 use super::chrome::h_seam;
 use super::folder_row::{FolderRow, folder_row_titled};
 use super::groups::files;
-use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
+use super::dialog_keys;
+use super::instrument::KeyRole;
+use super::overlay::{backdrop, dialog_foot_in, dialog_frame, dialog_title, overlay_width};
 use super::text_input::{TextInput, TextInputEvent};
 use super::theme;
 use crate::Shell;
@@ -36,6 +38,7 @@ const VISIBLE_ROWS: f32 = 8.;
 
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
+    dialog_keys::bind_keys(cx);
     let (browse, create) = if cfg!(target_os = "macos") { ("cmd-o", "cmd-enter") } else { ("ctrl-o", "ctrl-enter") };
     cx.bind_keys([
         KeyBinding::new("up", MoveUp, c),
@@ -177,24 +180,25 @@ impl NewSession {
     }
 
     fn complete(&mut self, _: &Complete, window: &mut Window, cx: &mut Context<Self>) {
+        // Tab im Suchfeld vervollständigt; steht der Fokus woanders (Haupttaste, „ändern“), geht Tab weiter.
+        if !self.input.read(cx).focus.is_focused(window) {
+            return window.focus_next(cx);
+        }
         if let Some(short) = self.model.tab() {
             self.input.update(cx, |i, cx| i.set_text(&short, window, cx));
+        } else {
+            window.focus_next(cx);
         }
     }
 
     /// ⌘O / Strg+O: Ordnerdialog des Systems; der gewählte Ordner startet sofort. GPUI kennt keinen Startordner des
     /// Dialogs, er öffnet dort, wo das System es für richtig hält.
     fn browse(&mut self, _: &Browse, window: &mut Window, cx: &mut Context<Self>) {
-        let options = PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some(trd!("Wählen").into()) };
-        let picked = cx.prompt_for_paths(options);
-        cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(paths))) = picked.await
-                && let Some(dir) = paths.first().and_then(|p| files::folder_for(p))
-            {
-                let _ = this.update(cx, |_, cx| cx.emit(NewSessionEvent::Start { group: None, path: dir }));
+        super::pick::choose(false, window, cx, |_, path, _, cx| {
+            if let Some(dir) = files::folder_for(std::path::Path::new(&path)) {
+                cx.emit(NewSessionEvent::Start { group: None, path: dir });
             }
-        })
-        .detach();
+        });
     }
 
     // MARK: Zeichnen
@@ -263,10 +267,11 @@ impl NewSession {
 }
 
 impl Render for NewSession {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let hint = tx(&trd!("⏎ starten · Tab übernehmen · ⌘O Finder · Ordner hineinziehen").replace("Finder", file_manager()));
-        let foot = dialog_foot(hint, format!("{}  ⏎", trd!("Starten")), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let on_foot = cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx));
+        let foot = dialog_foot_in(hint, format!("{}  ⏎", trd!("Starten")), KeyRole::Primary, &t, window, cx, on_foot);
         let ring = t.accent;
         let dialog = overlay_width(dialog_frame(&t), WIDTH)
             .max_h(relative(0.86))
@@ -295,7 +300,7 @@ impl Render for NewSession {
             .child(h_seam(&t))
             .child(self.starts_with_line(&t, cx))
             .child(foot);
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(NewSessionEvent::Close))).child(dialog)
+        dialog_keys::nav(backdrop(cx.listener(|_, _, _, cx| cx.emit(NewSessionEvent::Close)))).child(dialog)
     }
 }
 
@@ -342,6 +347,22 @@ impl Shell {
             let query = std::env::var("KADRELL_DEV_QUERY").ok();
             self.open_new_session(query.as_deref(), window, cx);
         }
+    }
+
+    /// Für Screenshots: `KADRELL_DEV_FOCUS=<n>` springt nach dem Öffnen eines Dialogs `n` Tab-Stopps weiter (Index 1 ist das
+    /// zweite Element), ohne Tastendruck; der Ring steht dann trotzdem (`dialog_keys::shows_ring`).
+    pub fn dev_focus_from_env(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(steps) = std::env::var("KADRELL_DEV_FOCUS").ok().and_then(|v| v.parse::<usize>().ok()) else { return };
+        cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(std::time::Duration::from_millis(2500)).await;
+            let _ = this.update_in(cx, |_, window, cx| {
+                for _ in 0..steps {
+                    window.focus_next(cx);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Öffnet den Dialog; bei offenem Panel erst nach dessen Schließen (`SheetPresenter.present`).

@@ -33,6 +33,16 @@ pub fn options(images: bool) -> PathPromptOptions {
 /// Öffnet den Dialog und ruft `done` mit dem gewählten Pfad. Bricht der Nutzer ab oder passt die Wahl nicht, geschieht
 /// nichts (ein falscher Dateityp piept).
 pub fn choose<V: 'static>(images: bool, window: &mut Window, cx: &mut Context<V>, done: fn(&mut V, String, &mut Window, &mut Context<V>)) {
+    choose_with(images, window, cx, done);
+}
+
+/// Wie `choose`, mit einem Abschluss, der etwas mitnehmen darf (etwa die Zeile, deren Feld gefüllt wird).
+pub fn choose_with<V: 'static>(
+    images: bool,
+    window: &mut Window,
+    cx: &mut Context<V>,
+    done: impl FnOnce(&mut V, String, &mut Window, &mut Context<V>) + 'static,
+) {
     if warn_if_replaced(window, cx) {
         return;
     }

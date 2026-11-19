@@ -82,7 +82,13 @@ pub fn handle(id: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> Fo
 
 /// Zeigt das Element den Tastaturring? Nur mit Fokus und nur, wenn zuletzt eine Taste gedrückt wurde (nicht nach Klick).
 pub fn shows_ring(handle: &FocusHandle, window: &Window) -> bool {
-    handle.is_focused(window) && window.last_input_was_keyboard()
+    handle.is_focused(window) && (window.last_input_was_keyboard() || dev_ring())
+}
+
+/// Nur für Screenshots (`KADRELL_DEV_FOCUS`): der Tastaturring steht auch ohne gedrückte Taste (simulierte Eingabe gibt es nicht).
+fn dev_ring() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("KADRELL_DEV_FOCUS").is_some())
 }
 
 /// Macht ein Element zum Tab-Stopp: Fokus am Namen, Enter und Leertaste lösen `on_click` aus. Zweiter Wert: Tastaturring
