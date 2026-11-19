@@ -93,6 +93,11 @@ impl Views {
         self.views.get_mut(&index)
     }
 
+    /// Nummern der offenen weiteren Fenster.
+    pub fn indices(&self) -> Vec<usize> {
+        self.views.keys().copied().collect()
+    }
+
     /// Das aktuelle weitere Fenster; `None`, wenn das Hauptfenster aktuell ist (oder das Fenster nicht mehr existiert).
     pub fn current_extra(&self) -> Option<usize> {
         (self.current != 0 && self.views.contains_key(&self.current)).then_some(self.current)
@@ -255,6 +260,16 @@ impl AppState {
     }
 
     /// Auswahl von Fenster `index` ändern, speichern und fehlende Prozesse starten lassen.
+    /// „Kachel schließen, wenn Claude endet“: die Session verschwindet aus der Auswahl jedes weiteren Fensters, das sie zeigt
+    /// (`for c in windows where c.workspace.selected.contains(key)`). Die letzte Kachel eines Fensters bleibt, wie im Hauptfenster.
+    pub fn view_drop_everywhere(&mut self, key: &str) {
+        for index in self.wins.indices() {
+            if self.wins.get(index).is_some_and(|v| v.selected.iter().any(|k| k == key)) {
+                self.view_select(index, &[key.to_string()], true);
+            }
+        }
+    }
+
     pub fn view_select(&mut self, index: usize, keys: &[String], add: bool) {
         let order = self.ordered_keys();
         let mut view = self.wins.get(index).cloned().unwrap_or_default();

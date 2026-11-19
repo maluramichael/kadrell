@@ -274,6 +274,12 @@ impl MenuNav {
 impl Shell {
     /// Einträge für eine Session (Rechtsklick, ⇧F10), nach `AppDelegate+SessionMenu.swift`.
     pub fn session_menu_items(&self, key: &str) -> Vec<Item> {
+        self.session_menu_items_in(None, key)
+    }
+
+    /// Wie `session_menu_items`, für den Baum von Fenster `win` (`None`: Hauptfenster): was das Menü anbietet, hängt an der
+    /// Auswahl dieses Fensters (`shown`, Mehrfachauswahl), nicht an der des Hauptfensters.
+    pub fn session_menu_items_in(&self, win: Option<usize>, key: &str) -> Vec<Item> {
         use super::groups::menu::{SessionMenu, session_menu};
         let Some(session) = self.state.session(key) else { return Vec::new() };
         let state = &self.state;
@@ -281,7 +287,7 @@ impl Shell {
         let m = SessionMenu {
             session,
             running: state.run(key) == Run::Running,
-            selected: &state.selected,
+            selected: crate::windows::route::menu_selection(&state.selected, win.and_then(|i| state.wins.get(i)), win),
             groups: &state.store.groups.groups,
             editor: !state.settings.editor_command().trim().is_empty(),
             known: &known,

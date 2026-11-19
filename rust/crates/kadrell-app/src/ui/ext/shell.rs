@@ -258,7 +258,7 @@ impl Shell {
     // MARK: Dialog
 
     /// Das eigene Kürzel öffnet den Dialog und schließt ihn wieder (wie in der Mac-App).
-    fn toggle_extensions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_extensions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.ext_ui.dialog.is_some() {
             self.close_extensions(window, cx);
         } else if !self.overlays.ext_started {

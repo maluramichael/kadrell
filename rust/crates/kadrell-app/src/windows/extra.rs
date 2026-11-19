@@ -9,7 +9,7 @@
 //! das Hauptfenster weiter (`current::forward`); sie wirken dort auf dieses Fenster, weil es das aktuelle ist.
 
 use gpui::{AppContext as _, DragMoveEvent, MouseButton, MouseUpEvent,
-    Action, AnyWindowHandle, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render,
+    AnyWindowHandle, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render,
     Styled, Window, WindowOptions, div, px, size,
 };
 use kadrell_core::Settings;
@@ -33,7 +33,7 @@ pub struct ExtraWindow {
     pub(super) shell: Entity<Shell>,
     pub(super) index: usize,
     pub(super) layout: LayoutState,
-    idle_focus: FocusHandle,
+    pub(super) idle_focus: FocusHandle,
     /// Aufteilung dieses Fensters: Breite des Baums (`sidebar.width.N`), rechte Seitenleiste, Dock, Baum ein/aus.
     sides: Sides,
     /// Noch nicht gespeicherte Breiten und Höhen, bis die Maus losgelassen wird.
@@ -114,6 +114,9 @@ impl ExtraWindow {
             if shell.win.pin.is_some_and(|p| p.index == index) {
                 shell.win.pin = None;
             }
+            if shell.win.host == Some(index) {
+                shell.win.host = None;
+            }
             let keys = keys_of(index);
             for key in &keys {
                 shell.state.settings.remove(key);
@@ -189,7 +192,7 @@ impl ExtraWindow {
     }
 
     /// Layout dieses Fensters wählen (Menü der Layout-Taste).
-    fn set_mode(&mut self, mode: LayoutMode, cx: &mut Context<Self>) {
+    pub(super) fn set_mode(&mut self, mode: LayoutMode, cx: &mut Context<Self>) {
         let (index, mode) = (self.index, kadrell_control::LayoutMode::from_raw(mode.key()).unwrap_or_default());
         self.shell.update(cx, |sh, _| sh.state.view_set_mode(index, mode));
         cx.notify();
@@ -280,32 +283,6 @@ impl ExtraWindow {
         cx.notify();
     }
 
-    /// Befehl an das Hauptfenster geben (siehe `current::forward`).
-    pub(super) fn forward(&mut self, action: Box<dyn Action>, dialog: bool, cx: &mut Context<Self>) {
-        super::current::forward(&self.shell, self.index, action, dialog, cx);
-    }
-}
-
-/// Hängt die Aktionen `$a` an die Wurzel: jede geht unverändert an das Hauptfenster (`$dialog`: sie öffnet dort einen
-/// Dialog, das Hauptfenster kommt nach vorn).
-macro_rules! forward {
-    ($root:expr, $cx:expr, $dialog:expr; $($a:ty),+ $(,)?) => {{
-        let mut root = $root;
-        $( root = root.on_action($cx.listener(|this, a: &$a, _, cx| this.forward(a.boxed_clone(), $dialog, cx))); )+
-        root
-    }};
-}
-
-/// Alle Befehle des Menüs und der Kürzel, die auf die Sessions und Dialoge der App wirken.
-fn forward_commands(root: gpui::Stateful<gpui::Div>, cx: &mut Context<ExtraWindow>) -> gpui::Stateful<gpui::Div> {
-    use crate::menu_ctx::{MoveToGroup, SelectLayout};
-    use crate::menus::*;
-    use crate::misc::{OpenAbout, OpenWhatsNew};
-    use crate::ui::ext::OpenExtensions;
-    let root = forward!(root, cx, true; NewSession, NewRemote, OpenPalette, FindAll, SearchHistory, QuickStart, NewGroup, OpenSettings, OpenStats);
-    let root = forward!(root, cx, true; OpenExtensions, OpenAbout, OpenWhatsNew, RenameSession, RenameGroup, InstallCli);
-    let root = forward!(root, cx, false; NewSessionHere, NewTerminal, NewWindow, CloseSession, StopSession, ResumeSession, SelectGroups, SelectEverything);
-    forward!(root, cx, false; IsolateSession, RemoveFromView, NewSessionBeside, CopyPath, ShowInFolder, MoveToGroup, SelectLayout, crate::menu_ctx::PerformHotkey)
 }
 
 impl MenuHost for ExtraWindow {
@@ -341,6 +318,8 @@ impl Focusable for ExtraWindow {
 impl Render for ExtraWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::appearance::window_color::ensure_native(window);
+        crate::ui::overlay::sync_area(window, cx);
+        self.shell.update(cx, |sh, _| sh.settle_host());
         let t = crate::ui::theme(cx);
         let a = crate::appearance::current(cx);
         self.layout.sync_columns(&self.shell.read(cx).state.settings);
@@ -436,7 +415,9 @@ impl Render for ExtraWindow {
             .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| this.save_sides(cx)))
             .relative();
         let menu = menu_layer(self.context.as_mut(), window, cx);
-        let inner = forward_commands(root, cx)
+        // Dialoge, die dieses Fenster aufgerufen hat (`ui::overlay_host`): die Maße kommen aus der Fläche dieses Fensters.
+        let layers = self.shell.read(cx).overlay_layers(index);
+        let inner = super::dialogs::attach_commands(root, cx)
             .children((!self.sides.tree_hidden).then_some(left))
             .child(work)
             .children(right)
@@ -453,7 +434,7 @@ impl Render for ExtraWindow {
             .font_family(crate::theme::FONT)
             .text_size(px(12.))
             .line_height(gpui::relative(crate::ui::overlay::LINE_HEIGHT));
-        crate::ui::menubar::attach_hooks(frame, &self.modes.menubar).children(titlebar).child(bar).child(inner).children(menu)
+        crate::ui::menubar::attach_hooks(frame, &self.modes.menubar).children(titlebar).child(bar).child(inner).children(layers).children(menu)
     }
 }
 

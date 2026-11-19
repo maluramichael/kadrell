@@ -509,7 +509,7 @@ fn session_row(row: SessionRow, group: &Group, ctx: &SidebarCtx, a: &Appearance,
             None => this.click_session(g, s, ev.modifiers(), window, cx),
         }))
         .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
-            let items = this.session_menu_items(&menu_key);
+            let items = this.session_menu_items_in(win, &menu_key);
             this.open_menu_for(win, ev.position, items, cx);
         }))
         .on_mouse_down(MouseButton::Middle, routed(cx, win, move |this, _: &MouseDownEvent, _, _| this.groups_ui.middle = Some(pressed.clone())))

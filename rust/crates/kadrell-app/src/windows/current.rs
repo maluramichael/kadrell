@@ -98,24 +98,37 @@ pub fn forward_hotkey(shell: &gpui::Entity<Shell>, from: usize, raw: &str, dialo
     on_main(shell, from, dialog, cx, move |sh, window, cx| sh.perform_hotkey_action(&raw, window, cx));
 }
 
-/// Ein weiteres Fenster lässt die Shell etwas im Hauptfenster tun (Fenster ohne Tastatur-Fokus, Dialoge): `current` bleibt
-/// das weitere Fenster, mit `dialog` kommt das Hauptfenster nach vorn, bis der Dialog zu ist.
+/// Ein weiteres Fenster lässt die Shell etwas tun: `current` bleibt das weitere Fenster. Der Befehl läuft im Fenster, das
+/// ihn gegeben hat (`SheetPresenter.present` hängt den Dialog an das Fenster des Befehls): ein Dialog, den er öffnet, steht
+/// dort (`WinState::host`) und das Hauptfenster bleibt, wo es ist. Terminals und Starts hält weiter das Hauptfenster
+/// (`Shell::sync` gibt sie dorthin). Der Befehl läuft nach dem aktuellen Ereignis, das Fenster ist gerade in Arbeit.
 pub fn on_main(shell: &gpui::Entity<Shell>, from: usize, dialog: bool, cx: &mut gpui::App, run: impl FnOnce(&mut Shell, &mut Window, &mut Context<Shell>) + 'static) {
-    let main = shell.update(cx, |sh, _| {
+    let target = shell.update(cx, |sh, _| {
         sh.state.set_current_window(from);
         if dialog {
             sh.win.pin = Some(Pin::new(from));
         }
-        sh.main_window
+        sh.window_of(from)
     });
-    let Some(main) = main else { return };
+    let Some(target) = target else { return };
     let shell = shell.clone();
-    let _ = cx.update_window(main, |_, window, cx| {
-        if dialog {
-            window.activate_window();
-        }
-        shell.update(cx, |sh, cx| run(sh, window, cx));
+    cx.defer(move |cx| {
+        let _ = cx.update_window(target, |_, window, cx| {
+            shell.update(cx, |sh, cx| {
+                let was_open = sh.any_overlay_open();
+                run(sh, window, cx);
+                sh.note_host_after(from, was_open);
+            });
+        });
     });
+}
+
+impl Shell {
+    /// Das Fenster mit dieser Nummer: das Hauptfenster oder ein offenes weiteres; ein geschlossenes fällt auf das Hauptfenster.
+    pub(crate) fn window_of(&self, index: usize) -> Option<gpui::AnyWindowHandle> {
+        let extra = self.extras.iter().find(|(i, _)| *i == index).map(|(_, handle)| *handle);
+        extra.or(self.main_window)
+    }
 }
 
 #[cfg(test)]

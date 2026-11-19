@@ -169,7 +169,15 @@ impl Shell {
     /// Ein Dialog ist offen, hat aber nicht mehr den Fokus (nach Dropdown, Klick daneben, App-Wechsel): Esc landet dann am
     /// Hauptfenster. Ohne das schlösse nichts den Dialog und die Abdunklung blockte alle Klicks. `true`: geschlossen.
     pub(crate) fn cancel_visible(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        if !self.plain_overlay_open() || !self.main_window_has_focus(window, cx) {
+        let idle = self.idle_focus.clone();
+        self.cancel_visible_with(&idle, window, cx)
+    }
+
+    /// Wie `cancel_visible`, für ein weiteres Fenster (`idle` ist seine Ruhelage): nur das Fenster, in dem der Dialog
+    /// steht, schließt ihn.
+    pub(crate) fn cancel_visible_with(&mut self, idle: &gpui::FocusHandle, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let index = self.extras.iter().find(|(_, h)| *h == window.window_handle()).map_or(0, |(i, _)| *i);
+        if !super::overlay_host::shows_overlays(self.win.host, index) || !self.plain_overlay_open() || !self.window_has_focus(window, idle, cx) {
             return false;
         }
         self.close_plain_dialogs();
@@ -188,14 +196,6 @@ impl Shell {
             || self.settings.is_some()
             || self.palette.is_some()
             || self.groups_ui.edit.is_some()
-    }
-
-    /// Hat das Hauptfenster die Tastatur: kein Fokus, die Leerlauf-Fläche der Shell oder ein Terminal? Genau dann kam Esc
-    /// am Hauptfenster an (`cancelVisible`); jeder Fokus in einem Dialog (auch in dessen zweitem Feld) gehört dem Dialog.
-    fn main_window_has_focus(&self, window: &Window, cx: &gpui::App) -> bool {
-        let Some(focused) = window.focused(cx) else { return true };
-        focused == self.idle_focus
-            || self.groups.iter().flat_map(|g| g.sessions.iter()).filter_map(|s| s.pane.as_ref()).any(|p| p.read(cx).focus == focused)
     }
 
     // MARK: Meldungen

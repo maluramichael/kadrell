@@ -2,11 +2,13 @@
 //! und die Verbindung zur `Shell` des Hauptfensters.
 
 pub mod current;
+pub mod dialogs;
 pub mod extra;
 pub mod extra_ext;
 pub mod extra_bar;
 pub mod extra_keys;
 pub mod extra_modes;
+pub mod extra_split;
 pub mod frame;
 pub mod layout;
 pub mod model;
@@ -40,6 +42,8 @@ pub struct WinState {
     pub sides: layout::Sides,
     /// Dialog, den ein weiteres Fenster im Hauptfenster angefordert hat (`current`).
     pub pin: Option<current::Pin>,
+    /// Weiteres Fenster, in dem die Overlays stehen (`ui::overlay_host`); `None`: das Hauptfenster.
+    pub host: Option<usize>,
     /// Seitenleiste und Dock der weiteren Fenster, damit `refresh_ext` sie aktuell hält.
     pub extra_panels: std::collections::HashMap<usize, extra_ext::ExtraPanels>,
     /// Menü, das ein weiteres Fenster bei sich öffnen soll (Rechtsklick im Baum).
@@ -52,7 +56,21 @@ impl WinState {
     pub fn new(settings: &Settings) -> WinState {
         let mut sides = layout::Sides::restore(settings, 0);
         sides.apply_dev();
-        WinState { sides, pin: None, extra_panels: Default::default(), menu_request: None, pending: Vec::new(), generation: 0 }
+        WinState { sides, pin: None, host: None, extra_panels: Default::default(), menu_request: None, pending: Vec::new(), generation: 0 }
+    }
+}
+
+/// Für Screenshots: `KADRELL_DEV_WINDOW_DIALOG=palette|new` öffnet den Dialog im weiteren Fenster 2 (Nummer 1), wie ein
+/// Befehl aus diesem Fenster.
+fn dev_dialog(shell: &gpui::Entity<Shell>, index: usize, cx: &mut gpui::App) {
+    let Ok(which) = std::env::var("KADRELL_DEV_WINDOW_DIALOG") else { return };
+    if index != 1 {
+        return;
+    }
+    match which.as_str() {
+        "palette" => current::on_main(shell, index, true, cx, |sh, w, c| sh.open_palette("", w, c)),
+        "new" => current::on_main(shell, index, true, cx, |sh, w, c| sh.new_session_action(w, c)),
+        _ => {}
     }
 }
 
@@ -88,6 +106,7 @@ impl Shell {
             let cascade = frame::cascade_source(&shell, cx);
             if let Some(handle) = extra::open(&shell, index, title, cascade, cx) {
                 shell.update(cx, |sh, _| sh.extras.push((index, handle)));
+                dev_dialog(&shell, index, cx);
             }
         });
     }
