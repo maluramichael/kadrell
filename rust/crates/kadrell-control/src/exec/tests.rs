@@ -70,7 +70,7 @@ fn list_json_matches_contract() {
     let keys: Vec<&str> = r.stdout.lines().filter(|l| l.starts_with("      \"") || l.starts_with("          \"")).map(|l| l.trim().split('"').nth(1).unwrap()).collect();
     let first_session: Vec<&str> = keys.iter().copied().skip_while(|k| *k != "branch").take(9).collect();
     assert_eq!(first_session, ["branch", "cwd", "focused", "key", "running", "sessionId", "shown", "status", "title"]);
-    assert!(r.stdout.starts_with("{\n  \"focused\": \"s1\",\n  \"groups\": ["), "{}", r.stdout);
+    assert!(r.stdout.starts_with("{\n  \"focused\" : \"s1\",\n  \"groups\" : ["), "{}", r.stdout);
 }
 
 #[test]
@@ -256,7 +256,7 @@ fn select_zoom_layout() {
     // Gruppe: alle ihre Sessions.
     run(&mut h, &["select", "-t", "ga"]);
     assert_eq!(h.selected, ["s1", "s2"]);
-    assert_eq!(stderr(run(&mut h, &["select", "-t", "zzz"])), "kadrell: keine Session oder Gruppe „zzz“\n");
+    assert_eq!(stderr(run(&mut h, &["select", "-t", "zzz"])), "kadrell: keine Session „zzz“\n");
     assert_eq!(run(&mut h, &["layout", "row"]).status, 0);
     assert_eq!(h.layout, LayoutMode::Row);
     // zoom ohne Fokus.

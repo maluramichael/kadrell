@@ -100,13 +100,8 @@ fn connect(_path: &Path, _req: &ControlRequest) -> Option<(Box<dyn Duplex>, Cont
 /// ist nicht Teil davon (siehe [`crate::hook::run_hook`]).
 pub fn run(argv: &[String], opts: &ClientOptions, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
     // Vor dem Verbinden prüfen: ein Tippfehler soll die App nicht starten.
-    match command::parse(argv) {
-        Ok(Command::Help) => {
-            let _ = writeln!(out, "{}", command::USAGE);
-            return 0;
-        }
-        Ok(_) => {}
-        Err(e) => return fail(err, &e.0),
+    if let Some(code) = precheck(argv, out, err) {
+        return code;
     }
     let req = ControlRequest::new(argv.to_vec(), opts.cwd.clone(), opts.caller.clone());
     match request(&req, opts, err) {
@@ -116,6 +111,19 @@ pub fn run(argv: &[String], opts: &ClientOptions, out: &mut dyn Write, err: &mut
             resp.status
         }
         Err(message) => fail(err, &message),
+    }
+}
+
+/// Hilfe und Tippfehler beantwortet die CLI selbst, vor jeder Prüfung des Kanals (Swift parst zuerst). `Some(exit)`,
+/// wenn schon alles gesagt ist.
+fn precheck(argv: &[String], out: &mut dyn Write, err: &mut dyn Write) -> Option<i32> {
+    match command::parse(argv) {
+        Ok(Command::Help) => {
+            let _ = writeln!(out, "{}", command::USAGE);
+            Some(0)
+        }
+        Ok(_) => None,
+        Err(e) => Some(fail(err, &e.0)),
     }
 }
 
@@ -248,6 +256,9 @@ pub fn main_cli(argv: &[String], profile: Option<String>, hook_map: &dyn Fn(&[u8
         let env = crate::hook::HookEnv::from_env();
         return crate::hook::run_hook(argv, &env, &mut std::io::stdin().lock(), hook_map, &mut err);
     }
+    if let Some(code) = precheck(argv, &mut std::io::stdout(), &mut err) {
+        return code;
+    }
     let Some(socket) = socket_from_env(profile.as_deref()) else {
         return fail(&mut err, "Wegwerfprofil: KADRELL_SOCKET zeigt auf den Kanal der Instanz, ohne läuft keine zu finden");
     };
@@ -259,6 +270,21 @@ pub fn main_cli(argv: &[String], profile: Option<String>, hook_map: &dyn Fn(&[u8
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Hilfe und Tippfehler kommen ohne Kanal (Wegwerfprofil ohne `KADRELL_SOCKET`), alles andere läuft weiter.
+    #[test]
+    fn precheck_answers_help_and_typos_before_any_channel() {
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let args = |a: &[&str]| a.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+        assert_eq!(precheck(&args(&["help"]), &mut out, &mut err), Some(0));
+        assert!(String::from_utf8(out.clone()).unwrap().contains("Kadrell fernsteuern"));
+        assert_eq!(precheck(&args(&["frobnicate"]), &mut out, &mut err), Some(1));
+        assert_eq!(String::from_utf8(err.clone()).unwrap(), "kadrell: unbekannter Befehl „frobnicate“, siehe kadrell help
+");
+        assert_eq!(precheck(&args(&["--profile", "x"]), &mut out, &mut err), Some(1), "Option im Befehl ist unbekannt");
+        assert_eq!(precheck(&args(&["ls"]), &mut out, &mut err), None);
+        assert_eq!(precheck(&args(&["ext-host"]), &mut out, &mut err), Some(1));
+    }
 
     fn launcher(dir: &Path) -> SelfLauncher {
         SelfLauncher { exe: PathBuf::from("kadrell"), profile: None, profile_dir: dir.to_path_buf() }

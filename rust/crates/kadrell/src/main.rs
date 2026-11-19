@@ -9,19 +9,11 @@ use std::collections::HashMap;
 
 use kadrell_core::Profile;
 
-/// `--profile <name>` und `--extensions-dir <ordner>` (das liest die Extension-Schicht selbst) aus den Argumenten nehmen: (restliche Argumente, Name aus Argument oder `KADRELL_PROFILE`).
-fn split_profile(args: Vec<String>) -> (Vec<String>, Option<String>) {
-    let name = Profile::name_from_args(&args, std::env::var(kadrell_core::profile::PROFILE_ENV).ok().as_deref());
-    let mut rest = Vec::new();
-    let mut it = args.into_iter();
-    while let Some(arg) = it.next() {
-        if arg == "--profile" || arg == "--extensions-dir" {
-            it.next();
-        } else {
-            rest.push(arg);
-        }
-    }
-    (rest, name)
+/// Profilname aus `--profile <name>` oder `KADRELL_PROFILE`. Die Argumente bleiben unangetastet: `--profile` und
+/// `--extensions-dir` sind nur Startargumente der App (Swift: `Profile.name`), in einem Befehl sind sie eine unbekannte
+/// Option, in `send`/`new`-Text und nach `--` gewöhnlicher Text.
+fn profile_name(args: &[String]) -> Option<String> {
+    Profile::name_from_args(args, std::env::var(kadrell_core::profile::PROFILE_ENV).ok().as_deref())
 }
 
 /// Hook-Abbildung: Hook-JSON von Claude Code auf die Argumente von `kadrell status`.
@@ -43,13 +35,13 @@ fn detach_console() {
 #[cfg(not(windows))]
 fn detach_console() {}
 
-/// `kadrell ext-host <ordner>`: der Helper einer Lua-Extension; Protokoll auf stdin und stdout.
-fn ext_host(args: &[String]) -> std::process::ExitCode {
-    let Some(dir) = args.get(1) else {
-        eprintln!("kadrell: ext-host braucht den Ordner der Extension");
-        return std::process::ExitCode::from(2);
-    };
-    kadrell_ext::run_host(std::path::Path::new(dir))
+/// `kadrell ext-host <ordner>`: der Helper einer Lua-Extension; Protokoll auf stdin und stdout. Nur bei genau zwei
+/// Argumenten, sonst ist `ext-host` wie in Swift ein unbekannter Befehl.
+fn ext_host_dir(args: &[String]) -> Option<&str> {
+    match args {
+        [cmd, dir] if cmd == "ext-host" => Some(dir),
+        _ => None,
+    }
 }
 
 /// Kommandozeile oder App? Das erste Argument ohne „-“ (oder `-h`/`--help`) ist ein Befehl; Optionen mit „-“ (Xcode,
@@ -59,9 +51,12 @@ fn runs_cli(first: &str) -> bool {
 }
 
 fn main() -> std::process::ExitCode {
-    let (args, profile) = split_profile(std::env::args().skip(1).collect());
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(dir) = ext_host_dir(&args) {
+        return kadrell_ext::run_host(std::path::Path::new(dir));
+    }
+    let profile = profile_name(&args);
     let code = match args.first().map(String::as_str) {
-        Some("ext-host") => return ext_host(&args),
         Some(first) if runs_cli(first) => kadrell_control::client::main_cli(&args, profile, &hook_map),
         _ => {
             // Vor allen Threads: die Marker einer umgebenden Claude-Session erben die Kacheln sonst.
@@ -89,12 +84,21 @@ mod tests {
     }
 
     #[test]
-    fn profile_arguments_are_taken_out_before_the_decision() {
+    fn profile_arguments_stay_in_the_arguments() {
         let args = |a: &[&str]| a.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
-        let (rest, name) = split_profile(args(&["--profile", "tmp"]));
-        assert!(rest.is_empty());
-        assert_eq!(name.as_deref(), Some("tmp"));
-        let (rest, name) = split_profile(args(&["--profile", "tmp", "ls"]));
-        assert_eq!((rest, name.as_deref()), (args(&["ls"]), Some("tmp")));
+        assert_eq!(profile_name(&args(&["--profile", "tmp"])).as_deref(), Some("tmp"));
+        assert_eq!(profile_name(&args(&["--profile", "tmp", "ls"])).as_deref(), Some("tmp"));
+        // Als Befehl ist `--profile` keiner: die App startet, `ls` danach wird nicht ausgeführt.
+        assert!(!runs_cli("--profile"));
+        assert!(!runs_cli("--extensions-dir"));
+    }
+
+    #[test]
+    fn ext_host_needs_exactly_two_arguments() {
+        let args = |a: &[&str]| a.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+        assert_eq!(ext_host_dir(&args(&["ext-host", "/x"])), Some("/x"));
+        assert_eq!(ext_host_dir(&args(&["ext-host"])), None);
+        assert_eq!(ext_host_dir(&args(&["ext-host", "/x", "y"])), None);
+        assert!(runs_cli("ext-host"), "sonst: unbekannter Befehl in der CLI");
     }
 }

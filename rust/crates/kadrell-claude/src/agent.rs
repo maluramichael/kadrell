@@ -125,6 +125,18 @@ pub fn local_agents(pids: &[u32], config_dir: &str, process_start: &dyn Fn(u32) 
         .collect()
 }
 
+/// Läuft die Konversation `session_id` noch in einem Claude-Prozess? Liefert dessen pid (Swift: `resumeBlocker`):
+/// alle `<configDir>/sessions/<pid>.json`, deren Prozess lebt (`alive`), über [`local_agents`] gelesen.
+pub fn running_pid(session_id: &str, config_dir: &str, alive: &dyn Fn(u32) -> bool, process_start: &dyn Fn(u32) -> Option<f64>) -> Option<u32> {
+    let entries = std::fs::read_dir(format!("{config_dir}/sessions")).ok()?;
+    let pids: Vec<u32> = entries
+        .flatten()
+        .filter_map(|e| e.file_name().to_string_lossy().replace(".json", "").parse::<u32>().ok())
+        .filter(|pid| alive(*pid))
+        .collect();
+    local_agents(&pids, config_dir, process_start).into_iter().find(|a| a.session_id == session_id).map(|a| a.pid.unwrap_or(0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,5 +230,18 @@ mod tests {
         assert!(local_agents(&[7], &dir.path(), start).is_empty());
         dir.write("sessions/7.json", r#"{"pid":7,"sessionId":"neu","cwd":"/p","startedAt":1700000100000,"kind":"interactive","name":"p"}"#);
         assert_eq!(local_agents(&[7], &dir.path(), start)[0].session_id, "neu");
+    }
+
+    #[test]
+    fn running_pid_needs_a_live_process_with_that_session() {
+        let dir = TempDir::new("agents");
+        dir.write("sessions/11.json", r#"{"pid":11,"sessionId":"s-live","cwd":"/p","startedAt":9999999999999,"kind":"interactive","name":"p"}"#);
+        dir.write("sessions/12.json", r#"{"pid":12,"sessionId":"s-dead","cwd":"/p","startedAt":9999999999999,"kind":"interactive","name":"p"}"#);
+        let alive = &|pid: u32| pid == 11;
+        let none = &|_: u32| None;
+        assert_eq!(running_pid("s-live", &dir.path(), alive, none), Some(11));
+        assert_eq!(running_pid("s-dead", &dir.path(), alive, none), None, "Prozess lebt nicht mehr");
+        assert_eq!(running_pid("andere", &dir.path(), alive, none), None);
+        assert_eq!(running_pid("s-live", "/gibt/es/nicht", alive, none), None);
     }
 }

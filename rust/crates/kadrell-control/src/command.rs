@@ -161,8 +161,7 @@ Aus einer Session heraus nur Sessions der eigenen Gruppe, außer „Sessions dü
   kadrell hook claude                                  Claude-Code-Hook: liest das Hook-JSON von stdin, meldet status
   kadrell kill-server                                  Kadrell beenden, alle Sessions enden (beim nächsten Start --resume)
 
-Starten: kadrell [--profile name|tmp] öffnet das Fenster. Die Session-Keys stehen in `kadrell ls`.
-Exit-Code 1 bei Fehlern, Meldung auf stderr.";
+Die Session-Keys stehen in `kadrell ls`. Exit-Code 1 bei Fehlern, Meldung auf stderr.";
 
 /// Tastennamen für `send -k`, angelehnt an tmux `send-keys`.
 pub fn key_bytes(name: &str) -> Option<&'static str> {
@@ -459,6 +458,15 @@ fn color(c: Option<String>) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
+    /// Hilfetext wie in Swift (`Control.usage`), nur mit der zusätzlichen `kill-server`-Zeile des Vertrags.
+    #[test]
+    fn usage_ends_like_the_swift_text() {
+        assert!(!USAGE.contains("Starten:"));
+        assert!(USAGE.ends_with("
+
+Die Session-Keys stehen in `kadrell ls`. Exit-Code 1 bei Fehlern, Meldung auf stderr."));
+    }
+
     use super::*;
 
     const UUID: &str = "0b7e1c2a-3f4d-4e5f-8a9b-0c1d2e3f4a5b";

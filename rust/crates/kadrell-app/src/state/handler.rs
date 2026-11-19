@@ -60,7 +60,11 @@ impl ControlHandler for AppState {
         if self.store.sessions.sessions.iter().any(|s| s.session_id == session_id || s.id == session_id) {
             return Some(ResumeBlocker::InKadrell);
         }
-        transcript::path(session_id, &self.env.config_dir()).is_none().then_some(ResumeBlocker::NoTranscript)
+        let config_dir = self.env.config_dir();
+        if transcript::path(session_id, &config_dir).is_none() {
+            return Some(ResumeBlocker::NoTranscript);
+        }
+        kadrell_claude::agent::running_pid(session_id, &config_dir, &crate::process_alive, &|_| None).map(|pid| ResumeBlocker::Running(i64::from(pid)))
     }
 
     /// Pi ist installiert und unter „Pi-Sessions“ ist ein Modell (oder Pis Standard) gewählt.
@@ -138,7 +142,9 @@ impl ControlHandler for AppState {
     }
 
     fn resume(&mut self, key: &str) -> Result<()> {
-        self.request_start(key).map_err(ControlError::new)
+        // Swift (`attachNow`) meldet nie einen Fehler: läuft die Kachel schon, bleibt es dabei.
+        let _ = self.request_start(key);
+        Ok(())
     }
 
     fn kill(&mut self, key: &str) {

@@ -25,6 +25,7 @@ pub mod endpoint;
 pub mod exec;
 pub mod handler;
 pub mod hook;
+pub mod json_pretty;
 pub mod list;
 pub mod protocol;
 pub mod server;
