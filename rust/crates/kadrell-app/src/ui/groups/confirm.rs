@@ -316,6 +316,6 @@ mod tests {
     fn destructive_label_shows_the_platform_key() {
         let label = destructive_label("Entfernen");
         assert!(label.starts_with("Entfernen  "));
-        assert!(if cfg!(target_os = "macos") { label.ends_with("⌘⏎") } else { label.ends_with("Strg+Enter") }, "{label}");
+        assert!(if cfg!(target_os = "macos") { label.ends_with("⌘⏎") } else { label.ends_with("Alt+Enter") }, "{label}");
     }
 }

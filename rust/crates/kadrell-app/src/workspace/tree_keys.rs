@@ -1,8 +1,7 @@
-//! Tastatur im Baum (⌘1 / Strg+1): ↑↓ zeigt die nächste Session rechts, ohne Tasten an Claude zu schicken, ← klappt die
+//! Tastatur im Baum (⌘1 / Alt+1): ↑↓ zeigt die nächste Session rechts, ohne Tasten an Claude zu schicken, ← klappt die
 //! Gruppe zu, → auf, ⇧F10 öffnet das Kontextmenü, ⏎ und Leertaste übernehmen, Entf schließt. Das Kürzel für
-//! „Taste an die Fokus-Session geben“ ist auf dem Mac ⌃⏎ (`keyDown` des Baums). Unter Windows ist Strg+⏎ schon
-//! „Neue Session im selben Ordner“ und Win+⏎ startet den Sprachausgabe-Dialog des Systems: dort gilt Alt+⏎.
-//! Port von `SidebarView.keyDown`.
+//! „Taste an die Fokus-Session geben“ ist auf dem Mac ⌃⏎ (`keyDown` des Baums) und unter Windows Strg+⏎ (⌘⏎ ist dort
+//! Alt+⏎: „Neue Session im selben Ordner“). Port von `SidebarView.keyDown`.
 
 use kadrell_core::hotkeys::mods;
 
@@ -26,24 +25,25 @@ pub enum TreeKey {
     Move(isize),
 }
 
-fn pass_modifier(platform: Platform) -> u64 {
+/// ⌥⌘↑/↓ auf dem Mac. Unter Windows ist Strg+Alt+Pfeil schon „Trennlinie“ (⌃⌥) und Alt+Pfeil der Fokus: Strg+Umschalt.
+fn move_modifier(platform: Platform) -> u64 {
     match platform {
-        Platform::Mac => mods::CONTROL,
-        Platform::Windows => mods::OPTION,
+        Platform::Mac => mods::OPTION | mods::COMMAND,
+        Platform::Windows => mods::CONTROL | mods::SHIFT,
     }
 }
 
 pub fn classify(input: &KeyInput, platform: Platform) -> Option<TreeKey> {
     let bits = modifier_bits(input, platform);
     let key = input.key.as_str();
-    if bits == mods::OPTION | mods::COMMAND {
+    if bits == move_modifier(platform) {
         return match key {
             "down" => Some(TreeKey::Move(1)),
             "up" => Some(TreeKey::Move(-1)),
             _ => None,
         };
     }
-    if key == "enter" && bits == pass_modifier(platform) {
+    if key == "enter" && bits == mods::CONTROL {
         return Some(TreeKey::PassToSession);
     }
     if key == "f10" && bits == mods::SHIFT {
@@ -92,19 +92,21 @@ mod tests {
     }
 
     #[test]
-    fn passing_the_key_to_the_session_uses_ctrl_return_on_the_mac_and_alt_return_on_windows() {
+    fn passing_the_key_to_the_session_uses_ctrl_return_on_both_systems() {
         let ctrl = KeyInput { control: true, ..key("enter") };
         assert_eq!(classify(&ctrl, Platform::Mac), Some(TreeKey::PassToSession));
-        assert_eq!(classify(&ctrl, Platform::Windows), None, "Strg+⏎ ist ⌘⏎: neue Session im selben Ordner");
+        assert_eq!(classify(&ctrl, Platform::Windows), Some(TreeKey::PassToSession));
         let alt = KeyInput { alt: true, ..key("enter") };
-        assert_eq!(classify(&alt, Platform::Windows), Some(TreeKey::PassToSession));
+        assert_eq!(classify(&alt, Platform::Windows), None, "Alt+⏎ ist ⌘⏎: neue Session im selben Ordner");
         assert_eq!(classify(&alt, Platform::Mac), None);
     }
 
     #[test]
     fn option_command_arrows_move_the_session() {
-        let win = KeyInput { control: true, alt: true, ..key("down") };
+        let win = KeyInput { control: true, shift: true, ..key("down") };
         assert_eq!(classify(&win, Platform::Windows), Some(TreeKey::Move(1)));
+        let resize = KeyInput { control: true, alt: true, ..key("down") };
+        assert_eq!(classify(&resize, Platform::Windows), None, "Strg+Alt+Pfeil ist „Trennlinie“");
         let mac = KeyInput { platform: true, alt: true, ..key("up") };
         assert_eq!(classify(&mac, Platform::Mac), Some(TreeKey::Move(-1)));
     }

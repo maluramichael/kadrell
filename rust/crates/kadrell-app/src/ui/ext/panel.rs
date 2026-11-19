@@ -1,5 +1,5 @@
 //! Seitenleiste der Extensions (`ExtensionPanelView.swift` und `+Drawing`): ein Tab je Extension mit Panel, darunter
-//! ihr Baum im Stil des Session-Baums. Tastatur (nach Strg+3 / ⌘3): ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, Alt+⏎ alle
+//! ihr Baum im Stil des Session-Baums. Tastatur (nach Alt+3 / ⌘3): ↑↓ Eintrag, ←→ Tab, ⏎ erste Aktion, ⌥⏎ (Windows Strg+⏎) alle
 //! Aktionen, Esc zurück. Dieselbe Komponente dient als rechte Seitenleiste und als linkes Dock unter dem Baum.
 
 use gpui::prelude::FluentBuilder;
@@ -58,7 +58,7 @@ impl ExtPanel {
         &self.model
     }
 
-    /// Nur per Strg+3 / ⌘3, nicht per Klick: sonst blitzt der Tastaturrahmen bei jedem Klick auf.
+    /// Nur per Alt+3 / ⌘3, nicht per Klick: sonst blitzt der Tastaturrahmen bei jedem Klick auf.
     pub fn take_keyboard(&self, window: &mut Window, cx: &mut gpui::App) {
         self.focus.focus(window, cx);
     }
@@ -81,7 +81,9 @@ impl ExtPanel {
 
     fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
-        match (ev.keystroke.key.as_str(), m.alt) {
+        // ⌥⏎ auf dem Mac, Strg+⏎ unter Windows (Alt+⏎ ist dort ⌘⏎: neue Session im selben Ordner).
+        let all_actions = if cfg!(target_os = "macos") { m.alt } else { m.control };
+        match (ev.keystroke.key.as_str(), all_actions) {
             ("down", false) => self.model.step(1),
             ("up", false) => self.model.step(-1),
             ("left", false) => self.model.switch_tab(-1),
@@ -102,7 +104,7 @@ impl ExtPanel {
         }
     }
 
-    /// Alt+⏎: Menü unter dem Eintrag der Tastaturzeile.
+    /// ⌥⏎ (Windows Strg+⏎): Menü unter dem Eintrag der Tastaturzeile.
     fn show_actions(&mut self, _: &Window, cx: &mut Context<Self>) {
         let Some(c) = self.model.cursor() else { return };
         let Some((tab, actions)) = self.model.actions(c) else { return };

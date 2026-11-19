@@ -20,7 +20,7 @@ use crate::ui::chrome::h_seam;
 use crate::ui::overlay::{self, backdrop_full, dialog_foot, dialog_frame};
 use crate::ui::overlay_anim::slide;
 use crate::ui::theme;
-use kadrell_core::hotkeys::{self, HotkeyAction};
+use kadrell_core::hotkeys::HotkeyAction;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -136,9 +136,9 @@ impl SettingsDialog {
 
     fn hotkey_row(&self, row: &Row, action: HotkeyAction, ctl_w: f32, focused: bool, t: &Theme, cx: &mut Context<Self>) -> Div {
         let settings = &cx.global::<AppSettings>().settings;
-        let key = hotkeys::current(settings).remove(&action);
+        let key = crate::workspace::keys::effective_map(settings, shortcut::current()).remove(&action);
         let recording = self.recording == Some(action);
-        let default = action.default_key();
+        let default = crate::workspace::keys::platform_default(action, shortcut::current());
         let (text, color) = match (&key, recording) {
             (_, true) => (trd!("Tasten drücken …"), t.accent_text),
             (Some(k), false) => (shortcut::format(k, shortcut::current()), t.fg),

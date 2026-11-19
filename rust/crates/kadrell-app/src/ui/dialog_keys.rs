@@ -32,10 +32,9 @@ pub fn context(own: &str) -> KeyContext {
 }
 
 pub fn bind_keys(cx: &mut App) {
-    let force = if cfg!(target_os = "macos") { "cmd-enter" } else { "ctrl-enter" };
     cx.bind_keys([
         KeyBinding::new("enter", Primary, Some(KEYS)),
-        KeyBinding::new(force, Force, Some(KEYS)),
+        KeyBinding::new(crate::keys::platform("cmd-enter"), Force, Some(KEYS)),
         KeyBinding::new("escape", Cancel, Some(KEYS)),
         KeyBinding::new("tab", NextControl, Some(NAV)),
         KeyBinding::new("shift-tab", PrevControl, Some(NAV)),

@@ -108,12 +108,12 @@ fn sorted_drag_only_moves_across_groups() {
     assert_eq!(across, Some(Plan::MoveToGroup { id: "a".into(), group: "h".into() }));
 }
 
-/// `testControlReturnPassesThroughAndShiftF10OnCollapsedGroup`: ⌃⏎ geht an die Session (Mac; Windows Alt+⏎), ⇧F10 ist
+/// `testControlReturnPassesThroughAndShiftF10OnCollapsedGroup`: ⌃⏎ geht an die Session (Mac und Windows Strg+⏎), ⇧F10 ist
 /// die Menütaste, bei zugeklappter Gruppe steht die Gruppenzeile für die Fokus-Session (siehe oben).
 #[test]
 fn control_return_passes_through_and_shift_f10_opens_the_menu() {
     assert_eq!(classify(&key("enter", true, false, false, false), Platform::Mac), Some(TreeKey::PassToSession));
-    assert_eq!(classify(&key("enter", false, true, false, false), Platform::Windows), Some(TreeKey::PassToSession));
+    assert_eq!(classify(&key("enter", true, false, false, false), Platform::Windows), Some(TreeKey::PassToSession));
     assert_eq!(classify(&key("f10", false, false, true, false), Platform::Mac), Some(TreeKey::ContextMenu));
     assert_ne!(classify(&key("enter", false, false, false, false), Platform::Mac), Some(TreeKey::PassToSession));
 }

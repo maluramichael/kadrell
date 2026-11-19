@@ -263,7 +263,7 @@ mod tests {
         if cfg!(target_os = "macos") {
             assert_eq!(keys, ["⌘N", "⌘⏎", "Alt+F1"]);
         } else {
-            assert_eq!(keys, ["Strg+N", "Strg+Enter", "Alt+F1"]);
+            assert_eq!(keys, ["Alt+N", "Alt+Enter", "Alt+F1"]);
         }
         assert_eq!(c.title, "Erste Session starten");
         assert!(c.button.starts_with("Neue Session starten"));
