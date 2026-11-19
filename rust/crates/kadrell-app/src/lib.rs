@@ -270,10 +270,8 @@ impl Shell {
     }
 
     /// Alt allein und Tastenfolge für die gezeichnete Menüleiste (Windows).
-    fn menubar_hooks(&self, root: gpui::Div, cx: &mut Context<Self>) -> gpui::Div {
-        let (on_mod, on_key) = (self.menubar.clone(), self.menubar.clone());
-        root.on_modifiers_changed(move |ev, window, cx| on_mod.update(cx, |m, cx| m.on_modifiers(ev, window, cx)))
-            .capture_key_down(cx.listener(move |_, _: &KeyDownEvent, _, cx| on_key.update(cx, |m, _| m.note_key())))
+    fn menubar_hooks(&self, root: gpui::Div, _cx: &mut Context<Self>) -> gpui::Div {
+        ui::menubar::attach_hooks(root, &self.menubar)
     }
 
     fn start_clock(&self, cx: &mut Context<Self>) {

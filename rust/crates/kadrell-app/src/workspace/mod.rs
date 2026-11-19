@@ -7,7 +7,7 @@ pub mod actions;
 pub mod auto;
 mod dev;
 pub mod keys;
-mod modes;
+pub(crate) mod modes;
 pub mod preview;
 pub mod sync;
 pub mod tree_keys;

@@ -9,8 +9,8 @@
 //! das Hauptfenster weiter (`current::forward`); sie wirken dort auf dieses Fenster, weil es das aktuelle ist.
 
 use gpui::{AppContext as _, DragMoveEvent, MouseButton, MouseUpEvent,
-    Action, AnyWindowHandle, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, Role,
-    StatefulInteractiveElement, Styled, Window, WindowOptions, div, px, size,
+    Action, AnyWindowHandle, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render,
+    Styled, Window, WindowOptions, div, px, size,
 };
 use kadrell_core::Settings;
 
@@ -44,6 +44,9 @@ pub struct ExtraWindow {
     pub(super) context: Option<ContextMenu>,
     /// Kürzel aus den Einstellungen (`workspace_key` des Hauptfensters).
     pub(super) keys: crate::workspace::keys::Table,
+    /// Menüleiste, AUTO und SYNC dieses Fensters (`extra_modes`).
+    pub(super) modes: super::extra_modes::Modes,
+    pub(super) tree_scroll: gpui::ScrollHandle,
 }
 
 impl ExtraWindow {
@@ -75,7 +78,7 @@ impl ExtraWindow {
         let settings = Settings::load(&shell.read(cx).state.profile.settings_path());
         let layout = LayoutState::from_settings(LayoutMode::from_name(mode.as_str()).unwrap_or(LayoutMode::Grid), &settings);
         let keys = crate::workspace::keys::Table::new(&settings, crate::ui::settings::shortcut::current());
-        let me = ExtraWindow { shell, index, layout, idle_focus: cx.focus_handle(), sides, unsaved: Vec::new(), panels, context: None, keys };
+        let me = ExtraWindow { shell, index, layout, idle_focus: cx.focus_handle(), sides, unsaved: Vec::new(), panels, context: None, keys, modes: super::extra_modes::Modes::new(cx), tree_scroll: gpui::ScrollHandle::new() };
         cx.spawn(async move |this, cx| {
             let _ = this.update(cx, |this, cx| this.sync_main(cx));
         })
@@ -149,13 +152,6 @@ impl ExtraWindow {
     pub(super) fn changed(&mut self, cx: &mut Context<Self>) {
         self.sync_main(cx);
         cx.notify();
-    }
-
-    /// Klick im Baum: nur diese Session, Strg/Cmd nimmt sie dazu oder weg.
-    fn click_session(&mut self, key: String, add: bool, cx: &mut Context<Self>) {
-        let index = self.index;
-        self.shell.update(cx, |sh, _| sh.state.view_select(index, &[key], add));
-        self.changed(cx);
     }
 
     /// Klick oder Fokus in eine Kachel: sie wird Fokus und holt sich das Terminal, wenn es woanders hängt.
@@ -309,7 +305,7 @@ fn forward_commands(root: gpui::Stateful<gpui::Div>, cx: &mut Context<ExtraWindo
     let root = forward!(root, cx, true; NewSession, NewRemote, OpenPalette, FindAll, SearchHistory, QuickStart, NewGroup, OpenSettings, OpenStats);
     let root = forward!(root, cx, true; OpenExtensions, OpenAbout, OpenWhatsNew, RenameSession, RenameGroup, InstallCli);
     let root = forward!(root, cx, false; NewSessionHere, NewTerminal, NewWindow, CloseSession, StopSession, ResumeSession, SelectGroups, SelectEverything);
-    forward!(root, cx, false; IsolateSession, RemoveFromView, NewSessionBeside, CopyPath, ShowInFolder, MoveToGroup, SelectLayout)
+    forward!(root, cx, false; IsolateSession, RemoveFromView, NewSessionBeside, CopyPath, ShowInFolder, MoveToGroup, SelectLayout, crate::menu_ctx::PerformHotkey)
 }
 
 impl MenuHost for ExtraWindow {
@@ -324,7 +320,8 @@ impl MenuHost for ExtraWindow {
             Cmd::Ext { tab, id } => self.shell.read(cx).ext_action(&tab, &id),
             Cmd::Layout(mode) => self.set_mode(mode, cx),
             Cmd::Account(cmd) => self.run_account(cmd, cx),
-            _ => {}
+            // Befehle des Baums (Session- und Gruppenmenü): im Hauptfenster, mit diesem Fenster als aktuellem.
+            other => super::current::on_main(&self.shell, self.index, false, cx, move |sh, window, cx| sh.run_cmd(other, window, cx)),
         }
     }
 
@@ -350,11 +347,15 @@ impl Render for ExtraWindow {
         self.layout.gap = a.gap;
         self.layout.ui_scale = a.scale;
         let index = self.index;
+        self.sync_menubar(cx);
+        self.take_menu_request(cx);
+        self.refresh_auto(window, cx);
         let view = self.view(cx);
         self.layout.mode = LayoutMode::from_name(view.mode.as_str()).unwrap_or(LayoutMode::Grid);
         let all = Self::visible_keys(&view, &self.shell.read(cx).groups);
         let visible = super::extra_keys::zoomed_keys(&all, view.focus.as_deref(), view.zoom);
-        if visible.is_empty() {
+        // Mit AUTO darf das Fenster leer sein, bis etwas wartet.
+        if visible.is_empty() && !self.modes.auto.on {
             self.pick_default(cx);
         }
         // Dem Hauptfenster melden, was hier zu sehen ist: danach steht fest, wer welches Terminal hält.
@@ -365,6 +366,12 @@ impl Render for ExtraWindow {
             }
         });
         let bar = self.bar(window, cx);
+        let chrome_h = crate::appearance::metrics::bar_height(a.scale) + crate::ui::overlay::title_bar_height();
+        let (vw, vh) = (window.viewport_size().width.as_f32(), window.viewport_size().height.as_f32() - chrome_h);
+        let tree_w = self.sides.tree_width(vw);
+        let tree = self.tree(tree_w, cx);
+        let titlebar = crate::ui::bar::titlebar(&self.modes.menubar, window, cx);
+        let sync = self.modes.sync;
         let sh = self.shell.read(cx);
         let groups: &[Group] = &sh.groups;
         let ids: Vec<(usize, usize)> = visible.iter().filter_map(|k| position(groups, k)).collect();
@@ -379,22 +386,12 @@ impl Render for ExtraWindow {
                 let (group, session) = (&groups[g], &groups[g].sessions[s]);
                 let focused = Some((g, s)) == focus_id;
                 let elsewhere = sh.owners.elsewhere(index, &session.key);
-                let marks = tile::Marks { active: focused, ring: focused, ..Default::default() };
+                // Wie im Hauptfenster: bei SYNC tragen alle Kacheln den Ring (`Shell::tile_marks`).
+                let marks = tile::Marks { active: focused, ring: focused || (sync && ids.len() > 1), ..Default::default() };
                 let el = tile::cell(&tile::Cell { group, session, marks, geo: tile::Geometry::of(frames[i]), body: !stacked || focused, elsewhere, on_icon: None, on_head: None }, cx);
                 placed(frames[i], &session.key, el, cx)
             })
             .collect();
-        let (vw, vh) = (window.viewport_size().width.as_f32(), window.viewport_size().height.as_f32() - crate::appearance::metrics::bar_height(a.scale));
-        let tree_w = self.sides.tree_width(vw);
-        let mut tree = div().id("extra-tree").role(Role::Tree).flex().flex_col().flex_none().w(px(tree_w)).h_full().pt(px(a.s(6.))).overflow_y_scroll().bg(a.panel_fill(t.panel));
-        for group in groups {
-            tree = tree.child(
-                div().px(px(a.s(10.))).pt(px(a.s(8.))).pb(px(a.s(2.))).text_size(px(a.s(10.5))).text_color(t.sub).child(format!("{} · {}", group.name.to_uppercase(), group.sessions.len())),
-            );
-            for session in &group.sessions {
-                tree = tree.child(tree_row(session, view.selected.contains(&session.key), view.focus.as_deref() == Some(session.key.as_str()), &a, cx));
-            }
-        }
         let left = extra_ext::left_column(&self.sides, &self.panels.left, tree, window, vh, &t, cx, cx.listener(|this, ev: &DragMoveEvent<split::DockDrag>, _, cx| this.drag_dock(ev, cx)));
         let right = extra_ext::right_panel(&self.sides, &self.panels.right, window, &t, cx);
         let right_w = self.sides.right_width(vw);
@@ -443,46 +440,39 @@ impl Render for ExtraWindow {
             .children((!self.sides.tree_hidden).then_some(left))
             .child(work)
             .children(right)
-            .children((!self.sides.tree_hidden).then(|| split::grip("extra-grip-tree", split::TreeDrag, true).left(px(tree_w - layout::GRAB / 2.))))
-            .children(has_right.then(|| split::grip("extra-grip-right", split::RightDrag, true).left(px(vw - right_w - 1. - layout::GRAB / 2.))))
-;
-        div().size_full().relative().flex().flex_col().bg(t.bg).child(bar).child(inner).children(menu)
+            .children((!self.sides.tree_hidden).then(|| split::grip("extra-grip-tree", split::TreeDrag, true).left(px(tree_w + 1. - layout::GRAB / 2.))))
+            .children(has_right.then(|| split::grip("extra-grip-right", split::RightDrag, true).left(px(vw - right_w - 1. - layout::GRAB / 2.))));
+        // Dieselbe Hülle wie im Hauptfenster: Schrift und Größe gelten auch für die Leiste.
+        let frame = div()
+            .size_full()
+            .relative()
+            .flex()
+            .flex_col()
+            .bg(t.bg)
+            .text_color(t.fg)
+            .font_family(crate::theme::FONT)
+            .text_size(px(12.))
+            .line_height(gpui::relative(crate::ui::overlay::LINE_HEIGHT));
+        crate::ui::menubar::attach_hooks(frame, &self.modes.menubar).children(titlebar).child(bar).child(inner).children(menu)
     }
 }
 
-/// Zeile im Baum dieses Fensters: Statuspunkt und Titel, Klick wählt (mit Strg dazu oder weg).
-fn tree_row(session: &crate::ui::model::Session, selected: bool, focused: bool, a: &crate::appearance::Appearance, cx: &Context<ExtraWindow>) -> impl IntoElement + use<> {
-    let t = crate::ui::theme(cx);
-    let key = session.key.clone();
-    let edge = if focused { t.fg } else if selected { t.muted } else { gpui::transparent_black() };
-    div()
-        .id(gpui::ElementId::Name(format!("extra-row-{}", session.key).into()))
-        .role(Role::TreeItem)
-        .aria_label(crate::appearance::a11y::session_label(&session.title))
-        .aria_selected(selected)
-        .flex()
-        .items_center()
-        .gap(px(a.s(6.)))
-        .mx(px(a.s(6.)))
-        .my(px(a.s(1.)))
-        .h(px(a.s(a.rows().session_row - 2.)))
-        .px(px(a.s(6.)))
-        .rounded(px(a.s(6.)))
-        .border_1()
-        .border_color(edge)
-        .cursor_pointer()
-        .when_selected(selected, t.bg)
-        .child(crate::ui::sidebar::status_dot(session, &t, a))
-        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(if selected { t.fg } else { t.sub }).child(session.title.clone()))
-        .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| this.click_session(key.clone(), ev.modifiers().secondary(cx), cx)))
-}
-
-trait WhenSelected: Styled + Sized {
-    fn when_selected(self, selected: bool, face: gpui::Hsla) -> Self {
-        if selected { self.bg(face) } else { self }
+impl ExtraWindow {
+    /// Rechtsklick im Baum dieses Fensters: das Menü der Shell-Anfrage öffnet hier.
+    fn take_menu_request(&mut self, cx: &mut Context<Self>) {
+        let index = self.index;
+        let request = self.shell.update(cx, |sh, _| match sh.win.menu_request.take() {
+            Some(r) if r.index == index => Some(r),
+            other => {
+                sh.win.menu_request = other;
+                None
+            }
+        });
+        if let Some(r) = request {
+            self.open_menu(r.at, r.items, cx);
+        }
     }
 }
-impl WhenSelected for gpui::Stateful<gpui::Div> {}
 
 /// Kachel an ihrem Platz; ein Klick macht sie zum Fokus.
 fn placed(r: Rect, key: &str, tile: gpui::AnyElement, cx: &Context<ExtraWindow>) -> gpui::AnyElement {
@@ -505,7 +495,8 @@ pub fn open(shell: &Entity<Shell>, index: usize, title: String, cascade: Option<
     let bounds = super::frame::bounds_for(index, saved.as_ref(), cascade, cx)
         .unwrap_or_else(|| gpui::Bounds::centered(None, crate::ui::overlay::window_size(), cx));
     let options = WindowOptions {
-        titlebar: Some(gpui::TitlebarOptions { title: Some(title.into()), appears_transparent: false, traffic_light_position: None }),
+        // Wie das Hauptfenster: unter Windows eigene Titelzeile mit Menü und Fensterknöpfen, auf dem Mac die des Systems.
+        titlebar: Some(gpui::TitlebarOptions { title: Some(title.into()), appears_transparent: !cfg!(target_os = "macos"), traffic_light_position: None }),
         window_min_size: Some(size(px(super::frame::MIN_SIZE.0), px(super::frame::MIN_SIZE.1))),
         window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
         ..Default::default()

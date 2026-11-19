@@ -14,6 +14,7 @@ use super::groups::tool_icons;
 use super::model::Group;
 use super::{chrome, overlay::raised, tooltip};
 use crate::Shell;
+use crate::windows::route::routed;
 use crate::appearance::Appearance;
 use crate::appearance::metrics::ROW_INSET;
 use crate::theme::Theme;
@@ -142,11 +143,13 @@ pub struct Spot {
     pub host: String,
     pub row_height: f32,
     pub cmd: bool,
+    /// Baum eines weiteren Fensters: die Tasten wirken über das Hauptfenster (`windows::route`).
+    pub win: Option<usize>,
 }
 
 /// Leiste einer Gruppenzeile.
 pub fn group_toolbar(g: usize, group: &Group, spot: Spot, t: &Theme, a: &Appearance, cx: &mut Context<Shell>) -> Div {
-    let Spot { host, row_height, cmd } = spot;
+    let Spot { host, row_height, cmd, win } = spot;
     let id = group.id.clone();
     let (fav_color, filled) = (t.group(group.color), group.favorite);
     let fav = id.clone();
@@ -156,22 +159,22 @@ pub fn group_toolbar(g: usize, group: &Group, spot: Spot, t: &Theme, a: &Appeara
         icon: icon(move |c| tool_icons::heart(if filled { fav_color } else { c }, filled).into_any_element()),
         last: false,
     };
-    let mut tools = vec![tool_button(favorite, t, a, cx.listener(move |this, _, window, cx| this.run_cmd(Cmd::ToggleFavorite(fav.clone()), window, cx)))];
+    let mut tools = vec![tool_button(favorite, t, a, routed(cx, win, move |this, _: &ClickEvent, window, cx| this.run_cmd(Cmd::ToggleFavorite(fav.clone()), window, cx)))];
     if group.cwd.is_empty() {
         return toolbar(host, row_height, tools, t, a);
     }
     let kind = new_icon_element_kind(group, cmd);
     let new = id.clone();
     let plus = Tool { id: ("tool-new", g), label: trd!("Neue Session").into(), icon: icon(move |c| new_icon_element(kind, c)), last: false };
-    tools.push(tool_button(plus, t, a, cx.listener(move |this, ev: &ClickEvent, window, cx| {
+    tools.push(tool_button(plus, t, a, routed(cx, win, move |this, ev: &ClickEvent, window, cx| {
         let cmd = if ev.modifiers().secondary(cx) { Cmd::NewTerminalIn(new.clone()) } else { Cmd::NewSessionIn(new.clone()) };
         this.run_cmd(cmd, window, cx);
     })));
     let edit = id.clone();
     let pen = Tool { id: ("tool-edit", g), label: trd!("Bearbeiten").into(), icon: icon(|c| tool_icons::pen(c).into_any_element()), last: false };
-    tools.push(tool_button(pen, t, a, cx.listener(move |this, _, window, cx| this.open_edit_group(&edit, window, cx))));
+    tools.push(tool_button(pen, t, a, routed(cx, win, move |this, _: &ClickEvent, window, cx| this.open_edit_group(&edit, window, cx))));
     let cross = Tool { id: ("tool-close", g), label: trd!("Schließen").into(), icon: icon(|c| tool_icons::x(c).into_any_element()), last: true };
-    tools.push(tool_button(cross, t, a, cx.listener(move |this, ev: &ClickEvent, window, cx| this.request_close_group(&id, ev.modifiers().alt, window, cx))));
+    tools.push(tool_button(cross, t, a, routed(cx, win, move |this, ev: &ClickEvent, window, cx| this.request_close_group(&id, ev.modifiers().alt, window, cx))));
     toolbar(host, row_height, tools, t, a)
 }
 
@@ -180,13 +183,14 @@ fn new_icon_element_kind(group: &Group, cmd: bool) -> NewIcon {
 }
 
 /// Leiste einer Session-Zeile: Umbenennen und Schließen.
-pub fn session_toolbar(n: usize, key: &str, host: String, row_height: f32, t: &Theme, a: &Appearance, cx: &mut Context<Shell>) -> Div {
+#[allow(clippy::too_many_arguments)]
+pub fn session_toolbar(n: usize, key: &str, host: String, row_height: f32, win: Option<usize>, t: &Theme, a: &Appearance, cx: &mut Context<Shell>) -> Div {
     let (rename, close) = (key.to_string(), key.to_string());
     let pen = Tool { id: ("tool-rename", n), label: trd!("Umbenennen").into(), icon: icon(|c| tool_icons::pen(c).into_any_element()), last: false };
     let cross = Tool { id: ("tool-remove", n), label: trd!("Schließen").into(), icon: icon(|c| tool_icons::x(c).into_any_element()), last: true };
     let buttons = vec![
-        tool_button(pen, t, a, cx.listener(move |this, _, window, cx| this.open_rename(super::rename::Target::Session(rename.clone()), window, cx))),
-        tool_button(cross, t, a, cx.listener(move |this, ev: &ClickEvent, window, cx| this.request_close_session(&close, ev.modifiers().alt, window, cx))),
+        tool_button(pen, t, a, routed(cx, win, move |this, _: &ClickEvent, window, cx| this.open_rename(super::rename::Target::Session(rename.clone()), window, cx))),
+        tool_button(cross, t, a, routed(cx, win, move |this, ev: &ClickEvent, window, cx| this.request_close_session(&close, ev.modifiers().alt, window, cx))),
     ];
     toolbar(host, row_height, buttons, t, a)
 }
