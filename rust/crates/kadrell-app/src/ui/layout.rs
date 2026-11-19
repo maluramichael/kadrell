@@ -219,6 +219,13 @@ impl LayoutState {
         state
     }
 
+    /// Spaltenzahlen aus den Einstellungen: sie gelten für alle Fenster, ein ‹ › in einem Fenster zeigt sich in den anderen
+    /// (`Settings.gridColumns` wird bei jedem Layout gelesen).
+    pub fn sync_columns(&mut self, settings: &Settings) {
+        self.cols = settings.i64_or(GRID_COLUMNS_KEY, 0).clamp(0, MAX_COLS as i64) as usize;
+        self.scroll_cols = settings.i64_or(SCROLL_COLUMNS_KEY, 2).clamp(1, 12) as usize;
+    }
+
     /// Gespeicherte Verhältnisse; die Länge prüft die Vorlage (`Splitter::normalized`), Scrollen kennt beliebige Längen.
     pub fn ratios_for(&self, key: &str, _count: usize) -> Option<Vec<f64>> {
         self.ratios.get(key).cloned()

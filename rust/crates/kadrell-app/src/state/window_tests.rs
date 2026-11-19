@@ -91,3 +91,62 @@ fn a_selection_in_an_extra_window_starts_its_sessions() {
     let started: Vec<String> = state.take_starts().into_iter().map(|(k, _)| k).collect();
     assert!(started.contains(&b));
 }
+
+#[test]
+fn zoom_belongs_to_the_current_window() {
+    let dir = Dir::new();
+    let (mut state, _, _, _) = two_windows(&dir);
+    state.set_current_window(1);
+    ControlHandler::toggle_zoom(&mut state);
+    assert!(state.wins.get(1).unwrap().zoom);
+    assert!(!state.zoom, "das Hauptfenster zoomt nicht mit");
+    assert!(state.cur_zoom());
+    state.set_current_window(0);
+    assert!(!state.cur_zoom());
+    ControlHandler::toggle_zoom(&mut state);
+    assert!(state.zoom && state.wins.get(1).unwrap().zoom, "beide Fenster zoomen unabhängig");
+    state.set_current_window(1);
+    ControlHandler::toggle_zoom(&mut state);
+    assert!(!state.wins.get(1).unwrap().zoom && state.zoom);
+}
+
+#[test]
+fn zoom_ends_with_another_selection_and_is_not_saved() {
+    let dir = Dir::new();
+    let (mut state, _, b, c) = two_windows(&dir);
+    state.view_select(1, &[b.clone(), c.clone()], false);
+    state.view_toggle_zoom(1);
+    state.view_focus(1, &c);
+    assert!(state.wins.get(1).unwrap().zoom, "ein anderer Fokus lässt den Zoom stehen");
+    state.view_select(1, std::slice::from_ref(&b), false);
+    assert!(!state.wins.get(1).unwrap().zoom, "eine andere Auswahl beendet ihn");
+    state.view_toggle_zoom(1);
+    let mut again = state_in(&dir);
+    again.open_view(1);
+    assert!(!again.wins.get(1).unwrap().zoom, "der Zoom wird nicht gespeichert");
+}
+
+#[test]
+fn taking_the_focus_tile_out_changes_only_that_window() {
+    let dir = Dir::new();
+    let (mut state, a, b, c) = two_windows(&dir);
+    state.view_select(1, &[b.clone(), c.clone()], false);
+    state.view_focus(1, &c);
+    state.view_select(1, std::slice::from_ref(&c), true);
+    assert_eq!(state.wins.get(1).unwrap().selected, std::slice::from_ref(&b));
+    assert_eq!(state.selected, [a]);
+}
+
+#[test]
+fn a_column_step_in_any_window_reaches_the_others() {
+    use crate::ui::layout::{GRID_COLUMNS_KEY, LayoutMode, LayoutState};
+    let dir = Dir::new();
+    let (mut state, _, _, _) = two_windows(&dir);
+    state.save_workspace_setting(GRID_COLUMNS_KEY, Some(serde_json::json!(3)));
+    let mut layout = LayoutState::new(LayoutMode::Grid);
+    layout.sync_columns(&state.settings);
+    assert_eq!(layout.cols, 3);
+    state.save_workspace_setting(GRID_COLUMNS_KEY, None);
+    layout.sync_columns(&state.settings);
+    assert_eq!(layout.cols, 0, "ohne Eintrag wieder automatisch");
+}

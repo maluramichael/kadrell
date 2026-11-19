@@ -130,7 +130,7 @@ impl ControlHandler for AppState {
     }
 
     fn toggle_zoom(&mut self) {
-        self.zoom = !self.zoom;
+        self.cur_toggle_zoom();
     }
 
     fn stop(&mut self, key: &str) {

@@ -402,61 +402,98 @@ impl Shell {
 
     /// Das offene Menü samt Fläche, die Klicks daneben abfängt. Das Menü holt sich beim ersten Zeichnen die Tastatur.
     pub fn context_layer(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
-        let menu = self.context.as_mut()?;
-        if std::mem::take(&mut menu.focus_pending) {
-            menu.prev_focus = window.focused(cx);
-            menu.focus.focus(window, cx);
-        }
-        let menu = self.context.as_ref()?;
-        let t = theme(cx);
-        let view = window.viewport_size();
-        let panels = panels(menu, (view.width.as_f32(), view.height.as_f32()), &t, cx);
-        let (close, close_right) = (cx.listener(|this, _, w, cx| this.dismiss_context(w, cx)), cx.listener(|this, _, w, cx| this.dismiss_context(w, cx)));
-        Some(
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .occlude()
-                .key_context(CONTEXT)
-                .track_focus(&menu.focus)
-                .on_action(cx.listener(|this, _: &MenuDown, _, cx| this.menu_key(|m| m.step(1), cx)))
-                .on_action(cx.listener(|this, _: &MenuUp, _, cx| this.menu_key(|m| m.step(-1), cx)))
-                .on_action(cx.listener(|this, _: &MenuRight, _, cx| this.menu_key(|m| m.right(), cx)))
-                .on_action(cx.listener(|this, _: &MenuLeft, w, cx| {
-                    if !this.context.as_mut().is_some_and(|m| m.left()) {
-                        this.dismiss_context(w, cx);
-                    } else {
-                        cx.notify();
-                    }
-                }))
-                .on_action(cx.listener(|this, _: &MenuAccept, w, cx| this.menu_accept(w, cx)))
-                .on_action(cx.listener(|this, _: &MenuClose, w, cx| this.dismiss_context(w, cx)))
-                .on_mouse_down(MouseButton::Left, close)
-                .on_mouse_down(MouseButton::Right, close_right)
-                .children(panels),
-        )
+        menu_layer(self.context.as_mut(), window, cx)
     }
+}
 
-    fn menu_key(&mut self, f: impl FnOnce(&mut ContextMenu), cx: &mut Context<Self>) {
-        if let Some(menu) = self.context.as_mut() {
+/// Wer ein Kontextmenü besitzt und seine Zeilen ausführt: die `Shell` des Hauptfensters und jedes weitere Fenster
+/// (Panels der Extensions öffnen ihr Aktionsmenü im Fenster, in dem sie stehen).
+pub trait MenuHost: Sized + 'static {
+    fn host_menu(&mut self) -> Option<&mut ContextMenu>;
+    fn host_run(&mut self, cmd: Cmd, window: &mut Window, cx: &mut Context<Self>);
+    fn host_dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>);
+
+    /// Bewegt den Cursor des Menüs und zeichnet neu.
+    fn host_nav(&mut self, f: impl FnOnce(&mut ContextMenu), cx: &mut Context<Self>) {
+        if let Some(menu) = self.host_menu() {
             f(menu);
             cx.notify();
         }
     }
 
-    fn menu_accept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let cmd = self.context.as_mut().and_then(|m| m.accept());
+    /// Enter: Befehl unter dem Cursor ausführen, auf einem Untermenü klappt es auf.
+    fn host_accept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let cmd = self.host_menu().and_then(|m| m.accept());
         match cmd {
-            Some(cmd) => self.run_cmd(cmd, window, cx),
+            Some(cmd) => self.host_run(cmd, window, cx),
             None => cx.notify(),
         }
     }
 }
 
+impl MenuHost for Shell {
+    fn host_menu(&mut self) -> Option<&mut ContextMenu> {
+        self.context.as_mut()
+    }
+
+    fn host_run(&mut self, cmd: Cmd, window: &mut Window, cx: &mut Context<Self>) {
+        self.run_cmd(cmd, window, cx);
+    }
+
+    fn host_dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.dismiss_context(window, cx);
+    }
+}
+
+/// Nimmt das Menü weg und gibt die Tastatur zurück, die es beim Öffnen bekommen hat. `true`: es war offen.
+pub fn take_menu(menu: &mut Option<ContextMenu>, window: &mut Window, cx: &mut App) -> bool {
+    let Some(menu) = menu.take() else { return false };
+    if let Some(prev) = menu.prev_focus {
+        window.focus(&prev, cx);
+    }
+    true
+}
+
+/// Die Fläche des offenen Menüs über dem Fenster: fängt Klicks daneben ab und führt Tasten und Zeilen über den Besitzer aus.
+pub fn menu_layer<V: MenuHost>(menu: Option<&mut ContextMenu>, window: &mut Window, cx: &mut Context<V>) -> Option<gpui::Div> {
+    let menu = menu?;
+    if std::mem::take(&mut menu.focus_pending) {
+        menu.prev_focus = window.focused(cx);
+        menu.focus.focus(window, cx);
+    }
+    let t = theme(cx);
+    let view = window.viewport_size();
+    let panels = panels(menu, (view.width.as_f32(), view.height.as_f32()), &t, cx);
+    let (close, close_right) = (cx.listener(|this: &mut V, _, w, cx| this.host_dismiss(w, cx)), cx.listener(|this: &mut V, _, w, cx| this.host_dismiss(w, cx)));
+    Some(
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .occlude()
+            .key_context(CONTEXT)
+            .track_focus(&menu.focus)
+            .on_action(cx.listener(|this: &mut V, _: &MenuDown, _, cx| this.host_nav(|m| m.step(1), cx)))
+            .on_action(cx.listener(|this: &mut V, _: &MenuUp, _, cx| this.host_nav(|m| m.step(-1), cx)))
+            .on_action(cx.listener(|this: &mut V, _: &MenuRight, _, cx| this.host_nav(|m| m.right(), cx)))
+            .on_action(cx.listener(|this: &mut V, _: &MenuLeft, w, cx| {
+                if this.host_menu().is_some_and(|m| m.left()) {
+                    cx.notify();
+                } else {
+                    this.host_dismiss(w, cx);
+                }
+            }))
+            .on_action(cx.listener(|this: &mut V, _: &MenuAccept, w, cx| this.host_accept(w, cx)))
+            .on_action(cx.listener(|this: &mut V, _: &MenuClose, w, cx| this.host_dismiss(w, cx)))
+            .on_mouse_down(MouseButton::Left, close)
+            .on_mouse_down(MouseButton::Right, close_right)
+            .children(panels),
+    )
+}
+
 /// Alle sichtbaren Ebenen als Flächen: das Hauptmenü bei `pos`, jedes Untermenü neben der Zeile, die es öffnet.
-fn panels(menu: &ContextMenu, view: (f32, f32), t: &crate::theme::Theme, cx: &mut Context<Shell>) -> Vec<gpui::AnyElement> {
+fn panels<V: MenuHost>(menu: &ContextMenu, view: (f32, f32), t: &crate::theme::Theme, cx: &mut Context<V>) -> Vec<gpui::AnyElement> {
     let mut out = Vec::new();
     let (mut x, mut y) = (menu.pos.x.as_f32(), menu.pos.y.as_f32());
     let height = |d: usize| menu.level(d).map_or(0., |l| l.iter().map(Item::height).sum::<f32>() + 2. * PAD);
@@ -474,7 +511,7 @@ fn panels(menu: &ContextMenu, view: (f32, f32), t: &crate::theme::Theme, cx: &mu
     out
 }
 
-fn panel(menu: &ContextMenu, depth: usize, items: &[Item], at: (f32, f32), t: &crate::theme::Theme, cx: &mut Context<Shell>) -> gpui::AnyElement {
+fn panel<V: MenuHost>(menu: &ContextMenu, depth: usize, items: &[Item], at: (f32, f32), t: &crate::theme::Theme, cx: &mut Context<V>) -> gpui::AnyElement {
     let marks = items.iter().any(|i| matches!(i, Item::Flag { .. }));
     let cursor = menu.cursor_at(depth);
     let rows: Vec<_> = items.iter().enumerate().map(|(i, item)| row(depth, i, item, cursor == Some(i), marks, t, cx)).collect();
@@ -507,7 +544,7 @@ fn label_row(label: &str, color: gpui::Hsla, marks: bool, checked: bool, dot: Op
     row.child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label.to_string()))
 }
 
-fn row(depth: usize, i: usize, item: &Item, on: bool, marks: bool, t: &crate::theme::Theme, cx: &mut Context<Shell>) -> gpui::AnyElement {
+fn row<V: MenuHost>(depth: usize, i: usize, item: &Item, on: bool, marks: bool, t: &crate::theme::Theme, cx: &mut Context<V>) -> gpui::AnyElement {
     let id = ("ctx", depth * 1000 + i);
     let face = |d: gpui::Stateful<gpui::Div>| {
         let d = d.flex().items_center().h(px(ROW)).mx(px(PAD)).px(px(8.)).rounded(px(5.));
@@ -515,7 +552,7 @@ fn row(depth: usize, i: usize, item: &Item, on: bool, marks: bool, t: &crate::th
     };
     let hover = cx.listener(move |this, hovered: &bool, _, cx| {
         if *hovered {
-            this.menu_key(|m| m.hover(depth, i), cx);
+            this.host_nav(|m| m.hover(depth, i), cx);
         }
     });
     match item {
@@ -526,7 +563,7 @@ fn row(depth: usize, i: usize, item: &Item, on: bool, marks: bool, t: &crate::th
             face(div().id(id))
                 .cursor_pointer()
                 .on_hover(hover)
-                .on_click(cx.listener(move |this, _, window, cx| this.run_cmd(cmd.clone(), window, cx)))
+                .on_click(cx.listener(move |this: &mut V, _, window, cx| this.host_run(cmd.clone(), window, cx)))
                 .child(label_row(label, t.fg, marks, false, None))
                 .into_any_element()
         }
@@ -538,12 +575,12 @@ fn row(depth: usize, i: usize, item: &Item, on: bool, marks: bool, t: &crate::th
             if !*enabled {
                 return base.into_any_element();
             }
-            base.cursor_pointer().on_click(cx.listener(move |this, _, window, cx| this.run_cmd(cmd.clone(), window, cx))).into_any_element()
+            base.cursor_pointer().on_click(cx.listener(move |this: &mut V, _, window, cx| this.host_run(cmd.clone(), window, cx))).into_any_element()
         }
         Item::Sub(label, _) => face(div().id(id))
             .cursor_pointer()
             .on_hover(hover)
-            .on_click(cx.listener(move |this, _, _, cx| this.menu_key(|m| m.hover(depth, i), cx)))
+            .on_click(cx.listener(move |this: &mut V, _, _, cx| this.host_nav(|m| m.hover(depth, i), cx)))
             .child(label_row(label, t.fg, marks, false, None))
             .child(super::icons::chevron(false, t.muted))
             .into_any_element(),

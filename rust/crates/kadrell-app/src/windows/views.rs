@@ -17,13 +17,17 @@ pub struct View {
     pub selected: Vec<String>,
     pub focus: Option<String>,
     pub mode: LayoutMode,
+    /// Zoom: nur die Fokus-Kachel. Gehört dem Fenster, wird nicht gespeichert und endet mit einer anderen Auswahl.
+    pub zoom: bool,
 }
 
 impl View {
     /// Setzt die Auswahl: Unbekanntes fällt weg, Doppelte auch, der Fokus gehört immer zur Auswahl.
     pub fn set(&mut self, keys: Vec<String>, focus: Option<String>, known: &dyn Fn(&str) -> bool) {
         let mut seen = std::collections::HashSet::new();
+        let before = std::mem::take(&mut self.selected);
         self.selected = keys.into_iter().filter(|k| known(k) && seen.insert(k.clone())).collect();
+        self.zoom &= before == self.selected;
         self.focus = focus.filter(|f| self.selected.contains(f)).or_else(|| self.selected.last().cloned());
     }
 
@@ -113,7 +117,7 @@ fn load_view(state: &AppState, index: usize) -> View {
     }
     let focus = s.opt_string(&key_for("workspace.selected.focus", index)).filter(|f| selected.contains(f)).or_else(|| selected.first().cloned());
     let mode = LayoutMode::from_raw(&s.string_or(&key_for("workspace.mode", index), "grid")).unwrap_or_default();
-    View { selected, focus, mode }
+    View { selected, focus, mode, zoom: false }
 }
 
 impl AppState {
@@ -153,6 +157,14 @@ impl AppState {
         }
     }
 
+    /// Zoom des aktuellen Fensters (jedes Fenster zoomt für sich).
+    pub fn cur_zoom(&self) -> bool {
+        match self.wins.current_extra().and_then(|i| self.wins.get(i)) {
+            Some(v) => v.zoom,
+            None => self.zoom,
+        }
+    }
+
     /// Layout des aktuellen Fensters.
     pub fn cur_layout(&self) -> LayoutMode {
         match self.wins.current_extra().and_then(|i| self.wins.get(i)) {
@@ -162,6 +174,28 @@ impl AppState {
     }
 
     // MARK: Schreiben (aktuelles Fenster)
+
+    /// Zoom des aktuellen Fensters ein/aus (`kadrell zoom`, Menü, Kürzel).
+    pub fn cur_toggle_zoom(&mut self) {
+        match self.wins.current_extra() {
+            Some(i) => self.view_toggle_zoom(i),
+            None => self.zoom = !self.zoom,
+        }
+    }
+
+    /// Zoom von Fenster `index` ein/aus; er wird nicht gespeichert.
+    pub fn view_toggle_zoom(&mut self, index: usize) {
+        if let Some(v) = self.wins.get_mut(index) {
+            v.zoom = !v.zoom;
+        }
+    }
+
+    /// Zoom von Fenster `index` aus.
+    pub fn view_clear_zoom(&mut self, index: usize) {
+        if let Some(v) = self.wins.get_mut(index) {
+            v.zoom = false;
+        }
+    }
 
     /// Nur diese Session im aktuellen Fenster zeigen (`workspace.select([id])` des Fensters, das Fokus hat).
     pub fn cur_show_only(&mut self, key: &str) {

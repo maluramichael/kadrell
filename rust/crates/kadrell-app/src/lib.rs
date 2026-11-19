@@ -411,6 +411,7 @@ impl Shell {
             waiting: self.waiting_count(),
             ext: self.ext_status(cx),
             usage: None,
+            compact: false,
         }
     }
 
@@ -507,6 +508,7 @@ impl Focusable for Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_language(cx);
+        self.layout.sync_columns(&self.state.settings);
         self.sync_menus(cx);
         appearance::window_color::ensure_native(window);
         ui::overlay::sync_area(window, cx);
