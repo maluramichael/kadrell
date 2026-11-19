@@ -229,7 +229,7 @@ fn edges<E: Styled>(mut el: E, top: f32, right: f32, bottom: f32, left: f32) -> 
     el
 }
 
-// TODO(paket-look): die Kacheln (ui/tile.rs) zeichnen noch einen einfachen Rahmen; `rim` und `clamp_corner` sind fertig.
+// Die Kacheln legen ihren Rand als eigene Ebenen (`tile.rs`: `border_layer`, `inner_rim`, Ecke mit `tile_edge::clamp_corner`).
 /// Rand einer eingesetzten Fläche ohne Unterkante (`Instrument.rim`): links, rechts und mit `top` oben außen eine
 /// Haarlinie `seamDark`, direkt innen eine Haarlinie `seamLight`. Mit `radius` folgt die Ecke oben links dem Bogen der
 /// Modul-Ecke (`topLeftRounded`, nur diese Ecke rund). Das Element nimmt den Inhalt in seine Mitte auf.

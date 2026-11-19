@@ -112,10 +112,10 @@ pub fn localize_shortcuts_for(text: &str, mac: bool, lang: Lang) -> String {
     out
 }
 
-/// Tasten, die unter Windows nicht auf Alt liegen: Einsetzen im Terminal (Strg+Umschalt+V statt ⌘V) und „alle Aktionen“
+/// Tasten, die unter Windows nicht auf Alt liegen: „alle Aktionen“
 /// im Panel der Extensions (Strg+⏎ statt ⌥⏎, Alt+⏎ ist ⌘⏎). `⏎` allein kennt die Umwandlung nicht, es wird `↩`.
 fn terminal_keys(text: &str) -> String {
-    text.replace("⌘V", "⇧⌃V").replace("⌥⏎", "⌃↩").replace("⌘⏎", "⌘↩").replace("⌃⏎", "⌃↩")
+    text.replace("⌥⏎", "⌃↩").replace("⌘⏎", "⌘↩").replace("⌃⏎", "⌃↩")
 }
 
 /// Wie `localize_shortcuts_for` für dieses Betriebssystem und die eingestellte Sprache.
@@ -228,8 +228,8 @@ mod tests {
     }
 
     #[test]
-    fn terminal_paste_and_panel_actions_stay_off_alt() {
-        assert_eq!(win("Tippen und ⌘V gehen", Lang::De), "Tippen und Strg+Umschalt+V gehen");
+    fn panel_actions_stay_off_alt() {
+        assert_eq!(win("Tippen und ⌘V gehen", Lang::De), "Tippen und Alt+V gehen");
         assert_eq!(win("⏎ erste Aktion, ⌥⏎ alle Aktionen", Lang::En), "⏎ erste Aktion, Ctrl+Enter alle Aktionen");
     }
 

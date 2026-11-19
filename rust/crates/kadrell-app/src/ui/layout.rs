@@ -384,6 +384,7 @@ fn placed(r: Rect, g: usize, s: usize, key: &str, spot: Spot, tile: AnyElement, 
     let a = crate::appearance::current(cx);
     let host = format!("tile-{}", g * 100 + s);
     let (target, hover_key) = (key.to_string(), key.to_string());
+    let menu_key = key.to_string();
     let (fg, corner) = (t.fg, tile_look::corner_radius((r.x, r.y), a.gap, a.scale));
     // Rahmen in Vordergrundfarbe, 2 px, solange eine Kachel darübergezogen wird.
     let hot = div()
@@ -422,6 +423,7 @@ fn placed(r: Rect, g: usize, s: usize, key: &str, spot: Spot, tile: AnyElement, 
                 this.focus_tile(g, s, window, cx);
             }
         }))
+        .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| this.tile_context_menu(&menu_key, ev.position, cx)))
         .child(tile)
         .child(hot)
 }

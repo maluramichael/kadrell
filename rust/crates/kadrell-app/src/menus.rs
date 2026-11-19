@@ -20,6 +20,7 @@ use crate::ui::context_menu::Cmd;
 use crate::ui::ext::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar};
 use crate::ui::layout::LayoutMode;
 use crate::ui::text_input::{Copy, Cut, Paste};
+use crate::ui::tile_context::{FindInTerminal, FindNext, FindPrevious};
 
 actions!(kadrell, [NewSession, NewSessionHere, NewTerminal, CloseSession, StopSession, ResumeSession, RenameSession, RenameGroup, ZoomTile, NextSession, PrevSession, NextLayout, MoreColumns, FewerColumns, ToggleTheme, Minimize, Zoom, Quit, OpenPalette, FindAll, OpenSettings, OpenStats, QuickStart, SearchHistory, CloseWindow, NewWindow, NewGroup, ShowContextMenu, NewRemote]);
 
@@ -116,19 +117,17 @@ fn edit_menu() -> MenuDef {
     menu(
         de!("Bearbeiten"),
         vec![
-            // Textfelder und Terminal behalten unter Windows Strg (⌃): Strg+X im Textfeld, im Terminal ist Strg+C der
-            // Abbruch, Kopieren und Einsetzen heißen dort Strg+Umschalt+C und +V.
+            // Textfelder behalten unter Windows Strg (Strg+X im Textfeld), im Terminal ist Strg+C der Abbruch: Kopieren
+            // und Einsetzen im Terminal liegen dort auf Alt+C und Alt+V (⌘ ist Alt).
             item(de!("Ausschneiden"), shortcut_os("⌘X", "⌃X"), Cut),
-            // TODO(paket-tiles): Kopieren aus dem Terminal (`TerminalPane::copy` ist nicht öffentlich).
-            item(de!("Kopieren"), shortcut_os("⌘C", "⇧⌃C"), Copy),
-            item(de!("Einsetzen"), shortcut_os("⌘V", "⇧⌃V"), Paste),
+            item(de!("Kopieren"), shortcut("⌘C"), Copy),
+            item(de!("Einsetzen"), shortcut("⌘V"), Paste),
             item(de!("Ganze Gruppen auswählen"), shortcut_mac_only("⌘A"), SelectGroups),
             item(de!("Alle Sessions auswählen"), shortcut("⇧⌘A"), SelectEverything),
             Entry::Separator,
-            // TODO(paket-tiles): Suchleiste, Weitersuchen und Rückwärts suchen im Terminal (öffentliche Methoden am Terminal).
-            off(de!("Im Terminal suchen …"), shortcut("⌘F")),
-            off(de!("Weitersuchen"), shortcut("⌘G")),
-            off(de!("Rückwärts suchen"), shortcut("⇧⌘G")),
+            item(de!("Im Terminal suchen …"), shortcut("⌘F"), FindInTerminal),
+            item(de!("Weitersuchen"), shortcut("⌘G"), FindNext),
+            item(de!("Rückwärts suchen"), shortcut("⇧⌘G"), FindPrevious),
             item(de!("In allen Terminals suchen …"), shortcut("⇧⌘F"), FindAll),
             item(de!("Alle Claude-Sessions durchsuchen, auch beendete"), shortcut("⇧⌘H"), SearchHistory),
         ],
@@ -291,6 +290,7 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new(key("cmd-p"), OpenPalette, None), KeyBinding::new(key("cmd-shift-f"), FindAll, None)]);
     cx.bind_keys([KeyBinding::new(key("cmd-,"), OpenSettings, None)]);
     bind_selection_keys(cx);
+    crate::ui::tile_context::bind_keys(cx);
     // Alt+F4 und der rote Knopf verstecken nur das Fenster (`tray_wire`), beendet wird mit Alt+Q, über das Menü oder das Tray.
     cx.bind_keys([
         KeyBinding::new(key("cmd-q"), Quit, None),
@@ -324,7 +324,7 @@ fn bind_selection_keys(cx: &mut App) {
 /// Aktionen des Fensters: wirken auf die Shell und laufen über den Fokuspfad (Menü, Tastatur).
 pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
     let root = crate::windows::attach_actions(crate::appearance::zoom::attach_actions(root, cx), cx);
-    let root = crate::ui::tree_actions::attach_actions(root, cx);
+    let root = crate::ui::tree_actions::attach_actions(crate::ui::tile_context::attach_actions(root, cx), cx);
     let root = attach_session_actions(attach_shell_actions(root, cx), cx);
     root.on_action(cx.listener(|this, _: &NewSession, window, cx| this.new_session_action(window, cx)))
         .on_action(cx.listener(|this, _: &OpenPalette, window, cx| this.open_palette("", window, cx)))
@@ -515,6 +515,8 @@ mod tests {
     fn edit_menu_has_clipboard_selection_and_search_items() {
         let l = labels(&menu_named(&MenuContext::live(), "Bearbeiten"));
         assert_eq!(l[..5], ["Ausschneiden", "Kopieren", "Einsetzen", "Ganze Gruppen auswählen", "Alle Sessions auswählen"]);
-        assert!(l.contains(&"Weitersuchen (aus)".to_string()) && l.contains(&"Rückwärts suchen (aus)".to_string()));
+        for name in ["Im Terminal suchen …", "Weitersuchen", "Rückwärts suchen"] {
+            assert!(l.contains(&name.to_string()), "{name} ist belegt und nicht ausgegraut");
+        }
     }
 }

@@ -27,6 +27,7 @@ pub fn windows_default(action: HotkeyAction) -> Option<Hotkey> {
         HotkeyAction::PrevSession => alt_shift("k"),
         HotkeyAction::LastSession => alt_shift("l"),
         HotkeyAction::CycleSort => alt_shift("o"),
+        HotkeyAction::ToggleGrouping => alt_shift("u"),
         HotkeyAction::ShowExtensions => alt_shift("e"),
         HotkeyAction::CloseFocused => Some(Hotkey::new(mods::COMMAND | mods::OPTION, "Esc")),
         _ => None,

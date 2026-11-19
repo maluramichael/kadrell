@@ -126,6 +126,11 @@ pub const FIXED: &[(&str, &str)] = &[
     ("zoom: Schrift kleiner", "cmd--"),
     ("zoom: Schrift Standard", "cmd-0"),
     ("lib: Farbschema wechseln", "cmd-alt-t"),
+    ("tile_context: Im Terminal suchen", "cmd-f"),
+    ("tile_context: Weitersuchen", "cmd-g"),
+    ("tile_context: Rückwärts suchen", "cmd-shift-g"),
+    ("tile_context: Kopieren", "cmd-c"),
+    ("tile_context: Einsetzen", "cmd-v"),
 ];
 
 /// Feste Bindungen mit Kontext: im Dialog gilt dieselbe Taste wie sonst für „Neue Session im selben Ordner“, das ist

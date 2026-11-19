@@ -77,13 +77,10 @@ pub fn text_width(cx: &App, text: &str, size: f32, bold: bool) -> f32 {
     (sum / d - 1e-3).ceil() * d
 }
 
-/// Statuspunkt: arbeitende Sessions atmen statt zu stehen.
+/// Statuspunkt wie in der Seitenleiste (`Theme.activityColor` / `statusColor`): arbeitende Sessions atmen, auch fertige
+/// mit laufendem Kommando; Form und Shell-Farbe wie im Baum.
 pub fn dot(session: &Session, t: &Theme, a: &Appearance) -> AnyElement {
-    let color = session.status.color(t);
-    if session.status == super::model::Status::Running {
-        return div().flex_none().child(breathing::breathing_dot(color, a.s(8.), a.s(breathing::GLOW_RADIUS))).into_any_element();
-    }
-    div().size(px(a.s(8.))).flex_none().rounded_full().bg(color).into_any_element()
+    super::sidebar::status_dot(session, t, a)
 }
 
 /// Gruppen-Label in Versalien (10,5 fett), wie im Baum.

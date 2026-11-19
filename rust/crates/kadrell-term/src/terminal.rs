@@ -279,6 +279,15 @@ impl TerminalPane {
             }
         })
         .detach();
+        if let Ok(query) = std::env::var("KADRELL_DEV_FIND") {
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(std::time::Duration::from_secs(4)).await;
+                let _ = this.update(cx, |pane, cx| pane.dev_find(query.clone(), cx));
+                cx.background_executor().timer(std::time::Duration::from_secs(2)).await;
+                let _ = this.update(cx, |pane, cx| pane.dev_find(query.clone(), cx));
+            })
+            .detach();
+        }
 
         Self {
             term,
@@ -409,10 +418,47 @@ impl TerminalPane {
         }
     }
 
-    fn copy(&mut self, cx: &mut Context<Self>) -> bool {
-        let Some(text) = self.term.lock().selection_to_string() else { return false };
+    /// Markierten Text in die Zwischenablage (Menü „Kopieren“, Rechtsklick). `false`: nichts markiert. Ausschneiden
+    /// gibt es im Terminal nicht (wie in SwiftTerm): der Text steht im Verlauf, nicht in einem Feld.
+    pub fn copy(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(text) = self.term.lock().selection_to_string().filter(|t| !t.is_empty()) else { return false };
         cx.write_to_clipboard(ClipboardItem::new_string(text));
         true
+    }
+
+    /// Ist Text markiert? Davon hängt ab, ob der Rechtsklick Kopieren und Einsetzen anbietet.
+    pub fn has_selection(&self) -> bool {
+        self.term.lock().selection_to_string().is_some_and(|t| !t.is_empty())
+    }
+
+    /// Suchleiste öffnen (⌘F); eine schon offene bleibt mit ihrem Begriff stehen.
+    pub fn open_search(&mut self, cx: &mut Context<Self>) {
+        if self.search.is_none() {
+            self.search = Some(Search { query: String::new(), hit: None });
+        }
+        cx.notify();
+    }
+
+    /// Weitersuchen (⌘G, `forward`) bzw. rückwärts (⇧⌘G). Ohne offene Suchleiste öffnet es sie nur.
+    pub fn step_search(&mut self, forward: bool, cx: &mut Context<Self>) {
+        if self.search.is_none() {
+            return self.open_search(cx);
+        }
+        if forward {
+            self.find(true);
+        } else {
+            self.find_newer();
+        }
+        cx.notify();
+    }
+
+    /// Dev-Schalter `KADRELL_DEV_FIND=<Begriff>` für Bilder ohne Eingabe: schreibt Zeilen mit dem Begriff ins Terminal
+    /// und öffnet die Suche danach mit ihm.
+    fn dev_find(&mut self, query: String, cx: &mut Context<Self>) {
+        self.write(format!("echo {query} Kadrell {} {query}\r", query.to_uppercase()).into_bytes());
+        self.search = Some(Search { query, hit: None });
+        self.find(false);
+        cx.notify();
     }
 
     fn key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {

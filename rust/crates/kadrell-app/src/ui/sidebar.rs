@@ -313,7 +313,7 @@ fn new_badge(status: Status, height: f32, t: &Theme, a: &Appearance) -> impl Int
 
 /// Statuspunkt; arbeitende Sessions bekommen den atmenden Punkt (Warten und Fehler behalten den Punkt), auch fertige
 /// mit noch laufendem Kommando. Mit „Unterscheiden ohne Farbe“ trägt die Form den Status.
-/// TODO(paket-tiles): die Kachel (`tile.rs`) soll `Session::activity_color`/`dot_color` und diesen Punkt nutzen.
+/// Die Kachel (`tile.rs`) zeigt denselben Punkt.
 pub(crate) fn status_dot(session: &Session, t: &Theme, a: &Appearance) -> gpui::AnyElement {
     status_dot_with(session, None, t, a)
 }
