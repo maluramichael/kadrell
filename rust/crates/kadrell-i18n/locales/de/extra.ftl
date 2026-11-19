@@ -1,6 +1,8 @@
 # Zusatztexte der Rust-App, die es in den xcstrings der Mac-App nicht gibt. Von Hand gepflegt, nach kadrell.ftl geladen.
 # Schlüssel ist der deutsche Quelltext in src/extra.rs, Variablen wie dort: arg1, arg2, ... für %@ und %lld.
 
+x-existiert-schon-kein-symlink-5e21 = { $arg1 } existiert schon und ist kein Symlink
+
 x-git-repos-unter-gefunden-d4f3 = { $arg1 } Git-Repos unter ~ gefunden
 
 x-di-212f = Di.
@@ -69,6 +71,8 @@ x-sprache-des-systems-e0a8 = 🌐  Sprache des Systems
 
 
 x-fertig-5d2e = Fertig ⏎
+
+x-pfad-der-app-unbekannt-c7d4 = Pfad der App unbekannt
 
 x-rechte-sidebar-tastatur-hierher-7b3a = Rechte Sidebar: Tastatur hierher
 

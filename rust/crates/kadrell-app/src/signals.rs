@@ -33,17 +33,13 @@ pub fn install_quit_signals() -> Signals {
     None
 }
 
-/// Das erste Signal beendet die App wie Quit, jedes weitere sofort.
+/// Jedes Signal läuft wie Quit über die Rückfrage (`quit::on_signal`): mit laufenden Prozessen fragt die App, ein
+/// Signal mitten im bestätigten Beenden beendet sofort (`128 + Signal`), falls das saubere Beenden hängt.
 pub fn quit_on(cx: &mut App, signals: Signals) {
     let Some(rx) = signals else { return };
     cx.spawn(async move |cx| {
-        let mut asked = false;
         while let Ok(sig) = rx.recv().await {
-            if asked {
-                std::process::exit(128 + sig);
-            }
-            asked = true;
-            cx.update(|cx| cx.quit());
+            cx.update(|cx| crate::quit::on_signal(cx, sig));
         }
     })
     .detach();

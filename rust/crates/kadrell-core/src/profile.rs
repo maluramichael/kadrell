@@ -227,10 +227,103 @@ pub fn relaunch_command(pid: u32, bundle_path: &str, profile: Option<&str>) -> V
     vec!["/bin/sh".into(), "-c".into(), format!("while kill -0 {pid} 2>/dev/null; do sleep 0.2; done; exec /usr/bin/open {quoted}{profile_args}")]
 }
 
+/// Der `.app`-Ordner, in dem `exe` liegt (`/Applications/Kadrell.app/Contents/MacOS/kadrell` gibt
+/// `/Applications/Kadrell.app`). `None` außerhalb eines Bündels.
+pub fn bundle_path_of(exe: &str) -> Option<String> {
+    let end = exe.match_indices(".app").map(|(i, m)| i + m.len()).find(|end| exe[*end..].is_empty() || exe[*end..].starts_with(['/', '\\']))?;
+    Some(exe[..end].to_string())
+}
+
+/// Einfache Anführungszeichen für PowerShell: `'` wird verdoppelt.
+fn powershell_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "''"))
+}
+
+/// Windows: PowerShell wartet, bis `pid` weg ist (dann ist der Profil-Lock frei), und startet danach `exe` mit demselben
+/// Profil. Gegenstück zu [`relaunch_command`] auf dem Mac (dort `open` auf das Bündel).
+pub fn relaunch_command_windows(pid: u32, exe: &str, profile: Option<&str>) -> Vec<String> {
+    let args = profile.map(|p| format!(" -ArgumentList '--profile','{p}'")).unwrap_or_default();
+    let script = format!(
+        "$p = Get-Process -Id {pid} -ErrorAction SilentlyContinue; if ($p) {{ $p.WaitForExit() }}; Start-Process -FilePath {}{args}",
+        powershell_quote(exe)
+    );
+    ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command"].iter().map(|s| (*s).to_string()).chain([script]).collect()
+}
+
+/// Anderes Unix ohne Bündel: wie auf dem Mac mit `sh`, am Ende `exec` auf das Binary.
+pub fn relaunch_command_unix(pid: u32, exe: &str, profile: Option<&str>) -> Vec<String> {
+    let quoted = format!("'{}'", exe.replace('\'', "'\\''"));
+    let profile_args = profile.map(|p| format!(" --profile {p}")).unwrap_or_default();
+    vec!["/bin/sh".into(), "-c".into(), format!("while kill -0 {pid} 2>/dev/null; do sleep 0.2; done; exec {quoted}{profile_args}")]
+}
+
+/// Der Befehl für den Neustart auf diesem System (Mac: Bündel mit `open`, sonst das Binary).
+pub fn relaunch_argv(pid: u32, exe: &str, profile: Option<&str>) -> Vec<String> {
+    if cfg!(windows) {
+        return relaunch_command_windows(pid, exe, profile);
+    }
+    match bundle_path_of(exe).filter(|_| cfg!(target_os = "macos")) {
+        Some(bundle) => relaunch_command(pid, &bundle, profile),
+        None => relaunch_command_unix(pid, exe, profile),
+    }
+}
+
+/// Der Befehl für „Neue Instanz mit temporärem Profil“: auf dem Mac `open -n <Bündel> --args --profile tmp`, sonst
+/// das Binary selbst mit `--profile tmp`.
+pub fn temporary_argv(exe: &str) -> Vec<String> {
+    match bundle_path_of(exe).filter(|_| cfg!(target_os = "macos")) {
+        Some(bundle) => ["/usr/bin/open", "-n", &bundle, "--args", "--profile", TEMP_NAME].iter().map(|s| (*s).to_string()).collect(),
+        None => vec![exe.to_string(), "--profile".to_string(), TEMP_NAME.to_string()],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::paths::testutil::TempDir;
+
+    #[test]
+    fn bundle_path_is_the_app_folder_around_the_executable() {
+        assert_eq!(bundle_path_of("/Applications/Kadrell.app/Contents/MacOS/kadrell").as_deref(), Some("/Applications/Kadrell.app"));
+        assert_eq!(bundle_path_of("/x/Kadrell.app").as_deref(), Some("/x/Kadrell.app"));
+        assert_eq!(bundle_path_of("/x/My.app.d/kadrell"), None, ".app muss ein ganzer Ordnername sein");
+        assert_eq!(bundle_path_of("C:\\Tools\\kadrell.exe"), None);
+    }
+
+    #[test]
+    fn windows_relaunch_waits_for_the_pid_then_starts_the_exe_with_the_profile() {
+        let c = relaunch_command_windows(4242, "C:\\Tools\\it's\\kadrell.exe", Some("work"));
+        assert_eq!(c[0], "powershell.exe");
+        let script = c.last().unwrap();
+        assert!(script.contains("Get-Process -Id 4242") && script.contains("WaitForExit()"), "{script}");
+        assert!(script.contains("Start-Process -FilePath 'C:\\Tools\\it''s\\kadrell.exe' -ArgumentList '--profile','work'"), "{script}");
+        assert!(!relaunch_command_windows(1, "k.exe", None).last().unwrap().contains("ArgumentList"));
+    }
+
+    #[test]
+    fn unix_relaunch_ends_in_exec_of_the_binary() {
+        let c = relaunch_command_unix(7, "/opt/it's/kadrell", Some("w"));
+        assert!(c[2].contains("kill -0 7") && c[2].contains(r"exec '/opt/it'\''s/kadrell' --profile w"), "{}", c[2]);
+    }
+
+    #[test]
+    fn the_system_picks_the_right_relaunch_and_temporary_command() {
+        let argv = relaunch_argv(9, "/Applications/Kadrell.app/Contents/MacOS/kadrell", None);
+        if cfg!(windows) {
+            assert_eq!(argv[0], "powershell.exe");
+        } else if cfg!(target_os = "macos") {
+            assert!(argv[2].contains("exec /usr/bin/open '/Applications/Kadrell.app'"));
+        } else {
+            assert!(argv[2].contains("exec '/Applications/Kadrell.app/Contents/MacOS/kadrell'"));
+        }
+        assert_eq!(temporary_argv("C:\\k\\kadrell.exe"), vec!["C:\\k\\kadrell.exe", "--profile", "tmp"]);
+        let bundled = temporary_argv("/A/Kadrell.app/Contents/MacOS/kadrell");
+        if cfg!(target_os = "macos") {
+            assert_eq!(bundled, vec!["/usr/bin/open", "-n", "/A/Kadrell.app", "--args", "--profile", "tmp"]);
+        } else {
+            assert_eq!(bundled[1..], ["--profile", "tmp"]);
+        }
+    }
 
     fn paths(d: &TempDir) -> Paths {
         Paths::new(d.path().join("home"), d.path().join("support"), d.path().join("tmp"))

@@ -189,7 +189,7 @@ impl Shell {
     }
 
     /// Meldung mit einer Taste, ohne Abbrechen.
-    fn tell(&mut self, title: String, text: String, button: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn tell(&mut self, title: String, text: String, button: String, window: &mut Window, cx: &mut Context<Self>) {
         self.ask(Spec { title, text, button, destructive: false, notice: true }, None, window, cx);
     }
 

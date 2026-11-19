@@ -218,8 +218,7 @@ pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
     list.push(via_menu(&mut pool, trd!("Statistik"), de!("Statistik")));
     list.push(via_menu(&mut pool, trd!("Extensions"), de!("Extensions …")));
     list.push(plain(trd!("Reload"), Run::Reload));
-    // TODO(paket-shell): „Neu starten“ ruft den Neustart der Shell auf, sobald es ihn gibt.
-    list.push(plain(trd!("Neu starten"), Run::Unwired));
+    list.push(plain(trd!("Neu starten"), Run::Menu(Box::new(menus::RestartApp))));
     list.push(plain(trd!("Konto hinzufügen (aktuell angemeldetes)"), Run::Account(AccountRun::AddCurrent)));
     list.extend(snap.accounts.iter().map(|(id, title)| plain(trd!("Zu Konto wechseln: %@", title), Run::Account(AccountRun::Switch(id.clone())))));
     list.extend(snap.groups.iter().map(|g| plain(trd!("Alle Sessions von %@", &g.name), Run::Group(g.index))));
@@ -592,10 +591,11 @@ mod tests {
     }
 
     #[test]
-    fn wired_commands_are_not_dim_only_restart_is() {
+    fn every_command_is_wired_and_restart_runs_the_shell_restart() {
         let cmds = build_commands(&snap());
         let dim: Vec<&str> = cmds.iter().filter(|c| matches!(c.run, Run::Unwired)).map(|c| c.title.as_str()).collect();
-        assert_eq!(dim, ["Neu starten"]);
+        assert!(dim.is_empty(), "{dim:?}");
+        assert!(cmds.iter().any(|c| c.title == "Neu starten" && matches!(c.run, Run::Menu(_))));
         assert!(command_items(&cmds, "Reload").iter().all(|i| !i.dim));
         let run_of = |t: &str| cmds.iter().find(|c| c.title == t).map(|c| &c.run);
         assert!(matches!(run_of("Trennlinien zurücksetzen (gleich verteilt)"), Some(Run::ResetRatios)));

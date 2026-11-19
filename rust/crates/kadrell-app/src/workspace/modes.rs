@@ -288,8 +288,11 @@ impl Shell {
     // --- Seitlich scrollen ---
 
     /// Layout Scrollen: seitliches Wischen (bzw. Umschalt + Mausrad) über der Arbeitsfläche verschiebt die Spalten,
-    /// nicht das Terminal. `true`: verbraucht.
+    /// nicht das Terminal; ⌘ (Windows: Strg) + Mausrad ändert die Schriftgröße (`font_wheel`). `true`: verbraucht.
     pub(crate) fn wheel_scroll(&mut self, ev: &ScrollEvent, cx: &mut Context<Self>) -> bool {
+        if self.font_wheel(ev, cx) {
+            return true;
+        }
         if self.layout.mode != LayoutMode::Scroll || self.state.zoom || self.ws.preview.is_active() || self.modal_open() {
             return false;
         }
