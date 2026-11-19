@@ -78,6 +78,8 @@ pub struct SettingsDialog {
     pub(super) armed: Option<String>,
     /// Dropdown, das der letzte Mausdruck geschlossen hat: der folgende Klick auf dasselbe Feld öffnet es nicht neu.
     pub(super) just_closed: Option<String>,
+    /// Fokus der Haupttaste „Fertig“ (letzter Tab-Stopp nach den Zeilen), aus dem letzten Frame.
+    pub(super) foot_focus: Option<FocusHandle>,
     record_sub: Option<Subscription>,
     /// Zählt mit jedem Tippen im Suchfeld der Modelle hoch: nur die letzte Eingabe sucht (nach kurzer Pause).
     pub(super) search_token: u64,
@@ -111,6 +113,7 @@ impl SettingsDialog {
             draft: None,
             armed: None,
             just_closed: None,
+            foot_focus: None,
             record_sub: None,
             search_token: 0,
             reload_token: 0,
@@ -491,10 +494,33 @@ impl SettingsDialog {
         cx.notify();
     }
 
+    /// Tab und Umschalt+Tab: die Zeilen, danach die Haupttaste „Fertig“ (Tab-Stopp mit Ring), dann wieder die Zeilen.
+    pub(super) fn tab_stop(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
+        let rows = self.focusable_rows(cx);
+        let at = self.cursor.as_ref().and_then(|c| rows.iter().position(|r| r == c));
+        let in_foot = self.foot_focus.as_ref().is_some_and(|f| f.is_focused(window));
+        match tab_target(at, rows.len(), delta, in_foot) {
+            TabStop::Foot => {
+                self.cursor = None;
+                if let Some(foot) = self.foot_focus.clone() {
+                    foot.focus(window, cx);
+                }
+                cx.notify();
+            }
+            TabStop::Row(i) => {
+                self.cursor = Some(rows[i].clone());
+                self.focus.focus(window, cx);
+                self.ensure_visible(cx);
+                cx.notify();
+            }
+            TabStop::None => {}
+        }
+    }
+
     /// Tab: in einem Pfadfeld das Kürzel ausschreiben (das Feld behält Tab, auch ohne Treffer), sonst zur nächsten Zeile.
     pub(super) fn next_row(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let focused = self.inputs.iter().find(|(id, i)| paths::kind_of(id).is_some() && i.read(cx).focus.is_focused(window)).map(|(id, _)| id.clone());
-        let Some(id) = focused else { return self.move_cursor(1, window, cx) };
+        let Some(id) = focused else { return self.tab_stop(1, window, cx) };
         if paths::kind_of(&id) == Some(paths::PathKind::Folder) {
             let typed = self.input_text(&id, cx);
             if let Some(full) = paths::tab_expansion(&typed, &folders::home_dir(), &folders::list_dirs) {
@@ -636,9 +662,49 @@ pub fn hotkey_of(settings: &Settings, action: HotkeyAction) -> Option<Hotkey> {
     crate::workspace::keys::effective_map(settings, shortcut::current()).remove(&action)
 }
 
+/// Wohin Tab geht.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum TabStop {
+    Row(usize),
+    Foot,
+    None,
+}
+
+/// Tab-Reihenfolge: Zeile für Zeile, nach der letzten die Haupttaste, von dort zurück zur ersten Zeile. Ohne Markierung
+/// beginnt Tab bei der ersten Zeile, Umschalt+Tab bei der Haupttaste.
+pub(super) fn tab_target(at: Option<usize>, rows: usize, delta: isize, in_foot: bool) -> TabStop {
+    if rows == 0 {
+        return if in_foot { TabStop::None } else { TabStop::Foot };
+    }
+    let forward = delta > 0;
+    match (in_foot, at) {
+        (true, _) => TabStop::Row(if forward { 0 } else { rows - 1 }),
+        (false, None) if forward => TabStop::Row(0),
+        (false, None) => TabStop::Foot,
+        (false, Some(i)) if forward && i + 1 == rows => TabStop::Foot,
+        (false, Some(0)) if !forward => TabStop::Foot,
+        (false, Some(i)) => TabStop::Row(i.saturating_add_signed(delta).min(rows - 1)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Tab läuft durch die Zeilen und dann durch die Haupttaste (`dialog_foot_in`), Umschalt+Tab zurück.
+    #[test]
+    fn tab_visits_rows_then_the_primary_key() {
+        assert_eq!(tab_target(Some(0), 3, 1, false), TabStop::Row(1));
+        assert_eq!(tab_target(Some(2), 3, 1, false), TabStop::Foot);
+        assert_eq!(tab_target(None, 3, 1, false), TabStop::Row(0));
+        assert_eq!(tab_target(None, 3, -1, false), TabStop::Foot);
+        assert_eq!(tab_target(Some(0), 3, -1, false), TabStop::Foot);
+        assert_eq!(tab_target(Some(2), 3, -1, false), TabStop::Row(1));
+        assert_eq!(tab_target(None, 3, 1, true), TabStop::Row(0));
+        assert_eq!(tab_target(None, 3, -1, true), TabStop::Row(2));
+        assert_eq!(tab_target(None, 0, 1, false), TabStop::Foot);
+        assert_eq!(tab_target(None, 0, 1, true), TabStop::None);
+    }
 
     #[test]
     fn slider_value_rounds_to_steps_and_clamps() {
