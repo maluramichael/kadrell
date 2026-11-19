@@ -586,6 +586,25 @@ fn group_block(place: Place, group: &Group, sel: &Selection, ctx: &SidebarCtx, a
     block.children(block_overlays(&block_name, group, head_order, ctx, &t, a))
 }
 
+/// Beim Ziehen einer Zeile: geschlossene Hand und Scrollen am oberen und unteren Rand (`SidebarView.mouseDragged`:
+/// `autoscroll` und `NSCursor.closedHand`).
+fn autoscroll_on_drag(scroll: ScrollHandle) -> impl Fn(&gpui::DragMoveEvent<DragRow>, &mut gpui::Window, &mut gpui::App) + 'static {
+    move |ev, window, cx| {
+        cx.set_active_drag_cursor_style(gpui::CursorStyle::ClosedHand, window);
+        let (top, bottom) = (f32::from(ev.bounds.origin.y), f32::from(ev.bounds.bottom()));
+        let step = tree_rules::autoscroll_step(f32::from(ev.event.position.y), top, bottom);
+        if step == 0. {
+            return;
+        }
+        let (offset, max) = (scroll.offset(), scroll.max_offset().y);
+        let y = (offset.y - px(step)).max(-max).min(px(0.));
+        if y != offset.y {
+            scroll.set_offset(gpui::point(offset.x, y));
+            window.refresh();
+        }
+    }
+}
+
 pub fn sidebar(groups: &[Group], sel: &Selection, ctx: &SidebarCtx, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let width = ctx.width.unwrap_or_else(|| crate::windows::split::tree_width(cx));
     WIDTH_PX.store(width.to_bits(), std::sync::atomic::Ordering::Relaxed);
@@ -613,7 +632,8 @@ pub fn sidebar(groups: &[Group], sel: &Selection, ctx: &SidebarCtx, cx: &mut Con
                 this.drop_folder(&dir, window, cx);
             }
         }))
-        .drag_over::<ExternalPaths>(move |s, _, _, _| s.bg(accent));
+        .drag_over::<ExternalPaths>(move |s, _, _, _| s.bg(accent))
+        .on_drag_move::<DragRow>(autoscroll_on_drag(ctx.scroll.clone()));
     let mut order = 0;
     for (g, group) in groups.iter().enumerate() {
         col = col.child(group_block(Place { g, head_order: order, grouped }, group, sel, ctx, &a, cx));
