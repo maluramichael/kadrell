@@ -136,6 +136,7 @@ impl Shell {
             lang: lang(),
             width: window.viewport_size().width.as_f32(),
             left: 0.,
+            scale: crate::appearance::current(cx).scale,
             on_account: Rc::new(cx.listener(|this, ev: &MouseDownEvent, _, cx| this.open_account_menu(ev.position, cx))),
             on_detach: Rc::new(cx.listener(|this, _: &MouseDownEvent, window, cx| this.detach_idle_pill(window, cx))),
             on_waiting: Rc::new(cx.listener(|this, _: &MouseDownEvent, window, cx| this.select_waiting(window, cx))),

@@ -248,7 +248,6 @@ pub fn layout_scaled(mode: LayoutMode, color: Hsla, scale: f32) -> impl IntoElem
 }
 
 /// Layout-Symbol fürs Menü (`Icons.layoutImage`): 16 x 16, die Fläche zwei Punkte vom Rand, Strich 1,2.
-#[allow(dead_code)] // TODO(paket-menu): Layout-Auswahlmenü der Leiste, Farbe = Menüschrift
 pub fn layout_menu(mode: LayoutMode, color: Hsla) -> impl IntoElement {
     icon(16., layout_strokes(mode, Area { x: 2., y: 2., w: 12., h: 12. }), color, 1.2)
 }

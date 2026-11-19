@@ -38,6 +38,7 @@ pub mod pill;
 pub mod settings;
 pub mod rename;
 pub mod sidebar;
+pub mod sized;
 pub mod tile;
 pub mod tile_body;
 pub mod tile_icons;

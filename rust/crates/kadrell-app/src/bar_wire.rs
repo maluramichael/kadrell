@@ -15,7 +15,7 @@ use crate::ui::layout::LayoutMode;
 
 /// Einträge des Layout-Menüs: alle sieben Layouts in der Reihenfolge von ⌘L, das aktuelle mit Haken.
 pub fn layout_items(current: LayoutMode) -> Vec<Item> {
-    LayoutMode::ALL.iter().map(|m| Item::Entry(format!("{}{}", if *m == current { "✓ " } else { "    " }, layout_title(*m)), Cmd::Layout(*m))).collect()
+    LayoutMode::ALL.iter().map(|m| Item::Layout { label: layout_title(*m), cmd: Cmd::Layout(*m), mode: *m, checked: *m == current }).collect()
 }
 
 impl Shell {
@@ -99,9 +99,8 @@ mod tests {
     fn the_layout_menu_marks_the_current_mode() {
         let items = layout_items(LayoutMode::Scroll);
         assert_eq!(items.len(), 7);
-        let marked: Vec<&String> = items.iter().filter_map(|i| if let Item::Entry(t, _) = i { Some(t) } else { None }).filter(|t| t.starts_with('✓')).collect();
-        assert_eq!(marked.len(), 1);
-        assert!(marked[0].ends_with("Scrollen"));
-        assert!(matches!(&items[0], Item::Entry(t, Cmd::Layout(LayoutMode::Grid)) if t.ends_with("Grid")));
+        let marked: Vec<&String> = items.iter().filter_map(|i| if let Item::Layout { label, checked: true, .. } = i { Some(label) } else { None }).collect();
+        assert_eq!(marked, ["Scrollen"]);
+        assert!(matches!(&items[0], Item::Layout { label, mode: LayoutMode::Grid, cmd: Cmd::Layout(LayoutMode::Grid), .. } if label == "Grid"));
     }
 }

@@ -16,6 +16,7 @@ use super::format::{self, count_ticks};
 use super::{Counters, StatsView, ui_lang};
 use crate::theme::Theme;
 use crate::ui::settings::controls::{Geometry, measure};
+use crate::ui::sized::sized;
 use crate::ui::theme;
 
 const LIMIT_HEIGHT: f32 = 110.;
@@ -382,20 +383,14 @@ fn chart_frame(
     // `size`: Höhe samt Achse und Hintergrund der Tageslabels (Limits: `bg`, Prompts: `raised` zu 85 %, `DayLabels(background:)`).
     let (height, day_bg) = size;
     let (lang, geometry, plot_key) = probe;
-    let plot_width = geometry.borrow().get(&plot_key).map(|b| f32::from(b.size.width));
     let span = (snap.now - snap.from).max(1.);
     let frac = |at: f64| ((at - snap.from) / span) as f32;
     let height = height - AXIS_ROW - AXIS_GAP;
     let y_col = div().relative().flex_none().w(px(Y_LABEL_WIDTH)).h(px(height)).children(y_labels.iter().map(|(f, text)| {
         div().absolute().right(px(6.)).top(px(3. + f * (height - 6.) - 7.)).text_size(px(10.)).text_color(t.muted).child(text.clone())
     }));
-    let days = snap.days.iter().filter(|d| day_bg.is_some() && d.labeled).map(|d| {
-        let x = frac(d.date);
-        let right = label_flips(x, plot_width, crate::ui::overlay::scale());
-        let mut label = div().absolute().top(px(1.)).px(px(3.)).whitespace_nowrap().text_size(px(10.)).font_weight(FontWeight::BOLD).text_color(t.muted).bg(day_bg.unwrap_or(t.bg)).child(format::day_label(d.date, lang));
-        label = if right { label.right(relative(1. - x)) } else { label.left(relative(x)) };
-        label
-    });
+    let labels: Vec<(f32, String)> = snap.days.iter().filter(|d| day_bg.is_some() && d.labeled).map(|d| (frac(d.date), format::day_label(d.date, lang))).collect();
+    let (muted, label_bg) = (t.muted, day_bg.unwrap_or(t.bg));
     let tooltip_el = tooltip.map(|(h, content)| {
         let wrap = div().absolute().top(px(0.));
         let wrap = if h.x > h.width * 0.6 { wrap.right(px(h.width - h.x + 8.)) } else { wrap.left(px(h.x + 8.)) };
@@ -408,13 +403,25 @@ fn chart_frame(
         .h(px(height))
         .child(div().absolute().inset_0().child(canvas.size_full()))
         .child(measure(geometry, plot_key))
-        .child(div().absolute().inset_0().pr(px(END_PAD)).child(div().relative().size_full().children(days)))
+        .child(sized(move |bounds, _, _| day_labels(labels, bounds, (muted, label_bg))))
         .children(tooltip_el);
     let ticks = format::ticks(snap.range, snap.from, snap.now, lang).into_iter().map(|tick| {
         div().absolute().left(relative(frac(tick.at))).whitespace_nowrap().text_size(px(10.)).text_color(t.muted).child(tick.label)
     });
     let axis = div().relative().h(px(AXIS_ROW)).ml(px(Y_LABEL_WIDTH)).pr(px(END_PAD)).child(div().relative().size_full().children(ticks));
     div().flex().flex_col().gap(px(AXIS_GAP)).child(div().flex().child(y_col).child(plot)).child(axis).into_any_element()
+}
+
+/// Tagesdaten über dem Plot. Die Breite des Plots ist die der Fläche selbst, das Umklappen stimmt schon im ersten Frame.
+fn day_labels(labels: Vec<(f32, String)>, bounds: gpui::Bounds<gpui::Pixels>, colors: (Hsla, Hsla)) -> AnyElement {
+    let (color, background) = colors;
+    let width = f32::from(bounds.size.width);
+    let scale = crate::ui::overlay::scale();
+    let items = labels.into_iter().map(|(x, text)| {
+        let label = div().absolute().top(px(1.)).px(px(3.)).whitespace_nowrap().text_size(px(10.)).font_weight(FontWeight::BOLD).text_color(color).bg(background).child(text);
+        if label_flips(x, Some(width), scale) { label.right(relative(1. - x)) } else { label.left(relative(x)) }
+    });
+    div().w(bounds.size.width).h(bounds.size.height).pr(px(END_PAD)).child(div().relative().size_full().children(items)).into_any_element()
 }
 
 /// Klappt das Datum links an die Linie? Wenn rechts davon weniger als 110 mal UI-Größe bleibt (`DayLabels.labelRoom`); vor

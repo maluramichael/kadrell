@@ -145,6 +145,26 @@ impl Row {
         self
     }
 
+    /// Tasten der Zeile in Tab-Reihenfolge.
+    pub fn buttons(&self) -> &[Btn] {
+        match &self.control {
+            Control::Text { buttons, .. } | Control::Info { buttons, .. } | Control::Model { buttons, .. } | Control::Pull { buttons, .. } => buttons,
+            _ => &[],
+        }
+    }
+
+    /// Hat das Steuerelement selbst einen Tab-Stopp (Feld, Dropdown, Regler, Kürzel)? Zeilen aus Text und Tasten haben
+    /// nur die Tasten als Stopps (`kbdFocusRing` sitzt an jeder Taste).
+    pub fn own_stop(&self) -> bool {
+        !matches!(self.control, Control::Info { .. } | Control::Model { .. } | Control::Pull { .. } | Control::Note(_))
+    }
+
+    /// Tab-Stopps der Zeile: `None` ist das Steuerelement selbst, `Some(i)` die Taste `i`.
+    pub fn stops(&self) -> Vec<Option<usize>> {
+        let own = self.own_stop().then_some(None);
+        own.into_iter().chain((0..self.buttons().len()).map(Some)).collect()
+    }
+
     /// Nimmt die Zeile die Tastatur an (Tab, Pfeile)?
     pub fn focusable(&self) -> bool {
         match &self.control {
@@ -204,6 +224,18 @@ mod tests {
 
     fn info(id: &str, title: &str) -> Row {
         Row::new(id, title, Control::Note(String::new()))
+    }
+
+    /// Swift: `kbdFocusRing` sitzt an jeder Taste, ein Textfeld mit Tasten hat das Feld und danach jede Taste als Stopp.
+    #[test]
+    fn buttons_are_their_own_tab_stops() {
+        let pick = Btn::icon(Icon::Folder, Msg::Browse { row: "f".into(), files: false });
+        let clear = Btn::icon(Icon::Cross, Msg::Clear("f".into()));
+        let field = Row::new("f", "Ordner", Control::Text { placeholder: String::new(), value: String::new(), set: None, buttons: vec![pick.clone(), clear.clone()] });
+        assert_eq!(field.stops(), vec![None, Some(0), Some(1)]);
+        let status = Row::new("s", "Status", Control::Info { text: String::new(), tone: Tone::Normal, buttons: vec![pick] });
+        assert_eq!(status.stops(), vec![Some(0)]);
+        assert_eq!(info("n", "Hinweis").stops(), Vec::<Option<usize>>::new());
     }
 
     fn block(title: &str, note: &str, rows: &[&str]) -> Block {

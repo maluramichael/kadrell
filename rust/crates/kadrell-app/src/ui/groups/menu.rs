@@ -146,6 +146,7 @@ mod tests {
                 Item::Off(l) => format!("({l})"),
                 Item::Flag { label, checked, enabled, .. } => format!("{}{}{label}", if *checked { "v" } else { "" }, if *enabled { "+" } else { "(" }),
                 Item::Sub(l, sub) => format!("{l} > {}", sub.len()),
+                Item::Layout { label, checked, .. } => format!("{}+{label}", if *checked { "v" } else { "" }),
             })
             .collect()
     }
