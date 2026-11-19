@@ -430,6 +430,21 @@ fn hidden_window_notifies_even_for_the_focused_session() {
 }
 
 #[test]
+fn only_a_focus_change_acknowledges_the_new_marker() {
+    let dir = Dir::new();
+    let (mut state, a, b) = two_running(&dir, false);
+    report_status(&mut state, &a, "waiting");
+    assert!(state.is_unseen(&a));
+    // Gruppenklick bei gleichem Fokus: Auswahl neu gesetzt, Fokus bleibt, die Marke auch (`onFocusChange` feuert nicht).
+    state.set_selection(vec![a.clone(), b.clone()], Some(a.clone()));
+    assert!(state.is_unseen(&a));
+    // Ein Fokuswechsel auf die Session quittiert sie.
+    state.set_selection(vec![a.clone(), b.clone()], Some(b.clone()));
+    state.set_selection(vec![a.clone(), b.clone()], Some(a.clone()));
+    assert!(!state.is_unseen(&a));
+}
+
+#[test]
 fn finished_session_follows_the_notification_setting_and_clears_when_seen() {
     let dir = Dir::new();
     let (mut state, _a, b) = two_running(&dir, true);

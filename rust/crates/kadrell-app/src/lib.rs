@@ -323,6 +323,11 @@ impl Shell {
     fn click_session(&mut self, g: usize, s: usize, m: gpui::Modifiers, window: &mut Window, cx: &mut Context<Self>) {
         let flat = flat_index(&self.groups);
         self.selection = ui::tree_rules::click_selection(&self.selection, (g, s), m.shift, m.secondary(cx), &flat);
+        // Eine einzelne Session anklicken quittiert ihre Marke „neu“, auch ohne Fokuswechsel (`sidebar.onSelect`).
+        if !m.shift {
+            let key = self.groups[g].sessions[s].key.clone();
+            self.state.attention.mark_seen(&key);
+        }
         self.state.zoom = false;
         self.apply_selection(window, cx);
     }
