@@ -227,6 +227,7 @@ impl Shell {
         shell.start_extensions();
         shell.start_tray(window, cx);
         shell.open_extensions_from_env(window, cx);
+        shell.dev_focus_from_env(window, cx);
         shell.start_misc(window, cx);
         shell.start_windows(window, cx);
         shell.start_cli_check(window, cx);

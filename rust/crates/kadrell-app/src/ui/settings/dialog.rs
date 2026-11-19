@@ -6,7 +6,7 @@ use kadrell_i18n::trd;
 use std::collections::HashMap;
 
 use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, KeyDownEvent, PathPromptOptions, Pixels, ScrollHandle,
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, KeyDownEvent, Pixels, ScrollHandle,
     Subscription, Window, point, px,
 };
 use kadrell_core::Settings;
@@ -298,16 +298,12 @@ impl SettingsDialog {
 
     /// Ordner oder Datei im Systemdialog wählen und ins Feld der Zeile schreiben.
     fn browse(&mut self, row: &str, files: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let options = PathPromptOptions { files, directories: !files, multiple: false, prompt: None };
-        let picked = cx.prompt_for_paths(options);
+        // Wie `chooseFolder(start:images:)`: Ordner, oder mit `files` genau eine Bilddatei, Titel „Wählen“.
         let row = row.to_string();
-        cx.spawn_in(window, async move |this, cx| {
-            let Ok(Ok(Some(paths))) = picked.await else { return };
-            let Some(path) = paths.first() else { return };
-            let text = folders::short_path(&path.to_string_lossy().replace('\\', "/"), &folders::home_dir());
-            this.update_in(cx, |this, window, cx| this.set_input_text(&row, &text, window, cx)).ok();
-        })
-        .detach();
+        crate::ui::pick::choose_with(files, window, cx, move |this, path, window, cx| {
+            let text = folders::short_path(&path.replace('\\', "/"), &folders::home_dir());
+            this.set_input_text(&row, &text, window, cx);
+        });
     }
 
     // MARK: Dropdown

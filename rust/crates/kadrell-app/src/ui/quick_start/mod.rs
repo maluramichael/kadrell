@@ -29,7 +29,9 @@ use self::row::{Row, row};
 use super::chrome::h_seam;
 use super::folder_row::ROW_HEIGHT;
 use super::folders;
-use super::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
+use super::dialog_keys;
+use super::instrument::KeyRole;
+use super::overlay::{backdrop, dialog_foot_in, dialog_frame, dialog_title, overlay_width};
 use super::text_input::{TextInput, TextInputEvent};
 use super::theme;
 use crate::Shell;
@@ -46,6 +48,7 @@ const IDEA_SIZE: f32 = 14.;
 
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
+    dialog_keys::bind_keys(cx);
     cx.bind_keys([
         KeyBinding::new("up", MoveUp, c),
         KeyBinding::new("down", MoveDown, c),
@@ -257,10 +260,11 @@ impl QuickStart {
         cx.notify();
     }
 
-    /// Tab in der Projektwahl; ohne bereinigten Prompt ein Piepton, in den anderen Phasen tut Tab nichts.
-    fn toggle_cleaned(&mut self, _: &ToggleCleaned, _: &mut Window, cx: &mut Context<Self>) {
-        if self.flow.phase != Phase::Pick {
-            return;
+    /// Tab in der Projektwahl; ohne bereinigten Prompt ein Piepton. In den anderen Phasen hat das Ideenfeld keine
+    /// Tab-Aktion (`onTab: {}`), Tab geht dort zum nächsten Bedienelement (Haupttaste).
+    fn toggle_cleaned(&mut self, _: &ToggleCleaned, window: &mut Window, cx: &mut Context<Self>) {
+        if self.flow.phase != Phase::Pick || !self.filter.read(cx).focus.is_focused(window) {
+            return window.focus_next(cx);
         }
         if self.flow.toggle_cleaned() {
             cx.notify();
@@ -342,7 +346,8 @@ impl Render for QuickStart {
         }
         let t = theme(cx);
         let phase = self.flow.phase;
-        let foot = dialog_foot(model::hint(phase), model::button(phase), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let on_foot = cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx));
+        let foot = dialog_foot_in(model::hint(phase), model::button(phase), KeyRole::Primary, &t, window, cx, on_foot);
         let body = if phase == Phase::Pick { self.pick_phase(&t, cx) } else { self.idea_phase(&t) };
         let dialog = overlay_width(dialog_frame(&t), WIDTH)
             .flex_none()
@@ -356,7 +361,7 @@ impl Render for QuickStart {
             .child(dialog_title(model::title(), &t))
             .child(body)
             .child(foot);
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(QuickStartEvent::Close))).child(dialog)
+        dialog_keys::nav(backdrop(cx.listener(|_, _, _, cx| cx.emit(QuickStartEvent::Close)))).child(dialog)
     }
 }
 

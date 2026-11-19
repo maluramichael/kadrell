@@ -18,7 +18,9 @@ use crate::theme::Theme;
 use crate::ui::chrome::h_seam;
 use crate::ui::instrument::selected_row;
 use crate::ui::folders::{fuzzy, short_path};
-use crate::ui::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_width};
+use crate::ui::dialog_keys;
+use crate::ui::instrument::KeyRole;
+use crate::ui::overlay::{backdrop, dialog_foot_in, dialog_frame, dialog_title, overlay_width};
 use crate::ui::text_input::{TextInput, TextInputEvent};
 use crate::ui::theme;
 
@@ -44,6 +46,7 @@ pub fn truncate_head(text: &str, max: usize) -> String {
 
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
+    dialog_keys::bind_keys(cx);
     cx.bind_keys([
         KeyBinding::new("up", MoveUp, c),
         KeyBinding::new("down", MoveDown, c),
@@ -194,7 +197,7 @@ impl AgentPick {
 }
 
 impl Render for AgentPick {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let s = crate::ui::overlay::scale();
         // Eine Zeile, Kürzung am Anfang (`truncationMode(.head)`): GPUI kürzt nur am Ende, deshalb nach Zeichenzahl.
@@ -204,7 +207,8 @@ impl Render for AgentPick {
         let rows: Vec<_> = self.state.list.iter().enumerate().map(|(i, o)| self.row(i, o, &t, cx)).collect();
         let empty = self.state.list.is_empty().then(|| div().px(px(16.)).py(px(16.)).text_color(t.muted).child(tx(&trd!("Nichts gefunden."))));
         let hint = trd!("⏎ starten · ↑↓ wählt · Esc abbrechen");
-        let foot = dialog_foot(hint, trd!("Starten"), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let on_foot = cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx));
+        let foot = dialog_foot_in(hint, trd!("Starten"), KeyRole::Primary, &t, window, cx, on_foot);
         let dialog = overlay_width(dialog_frame(&t), 440.)
             .key_context(CONTEXT)
             .text_color(t.fg)
@@ -224,7 +228,7 @@ impl Render for AgentPick {
             .child(h_seam(&t))
             .child(div().flex().flex_col().pb(px(4.)).children(empty).children(rows))
             .child(foot);
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(AgentPickEvent::Close))).child(dialog)
+        dialog_keys::nav(backdrop(cx.listener(|_, _, _, cx| cx.emit(AgentPickEvent::Close)))).child(dialog)
     }
 }
 

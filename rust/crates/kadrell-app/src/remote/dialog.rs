@@ -17,7 +17,9 @@ use crate::lang::tx;
 use crate::ui::chrome::h_seam;
 use crate::ui::folder_row::{FolderRow, folder_row};
 use crate::ui::folders::fuzzy;
-use crate::ui::overlay::{backdrop, dialog_foot, dialog_frame, dialog_title, overlay_height, overlay_width};
+use crate::ui::dialog_keys;
+use crate::ui::instrument::KeyRole;
+use crate::ui::overlay::{backdrop, dialog_foot_in, dialog_frame, dialog_title, overlay_height, overlay_width};
 use crate::ui::text_input::{TextInput, TextInputEvent};
 use crate::ui::theme;
 
@@ -27,6 +29,7 @@ const CONTEXT: &str = "KadrellRemote";
 
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
+    dialog_keys::bind_keys(cx);
     cx.bind_keys([
         KeyBinding::new("up", MoveUp, c),
         KeyBinding::new("down", MoveDown, c),
@@ -192,7 +195,7 @@ impl RemoteDialog {
 }
 
 impl Render for RemoteDialog {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = theme(cx);
         let items = self.state.items();
         let rows: Vec<_> = items
@@ -210,7 +213,8 @@ impl Render for RemoteDialog {
             .collect();
         let empty = items.is_empty().then(|| div().px(px(16.)).py(px(16.)).text_color(t.muted).child(tx(&trd!("Nichts gefunden."))));
         let list = div().id("remote-list").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).children(empty).children(rows);
-        let foot = dialog_foot(trd!("⏎ starten · ↑↓ wählt · Esc abbrechen"), trd!("Starten"), &t, cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx)));
+        let on_foot = cx.listener(|this, _, w, cx| this.confirm(&Confirm, w, cx));
+        let foot = dialog_foot_in(trd!("⏎ starten · ↑↓ wählt · Esc abbrechen"), trd!("Starten"), KeyRole::Primary, &t, window, cx, on_foot);
         let dialog = overlay_height(overlay_width(dialog_frame(&t), 560.), 420.)
             .key_context(CONTEXT)
             .text_color(t.fg)
@@ -223,7 +227,7 @@ impl Render for RemoteDialog {
             .child(h_seam(&t))
             .child(list)
             .child(foot);
-        backdrop(cx.listener(|_, _, _, cx| cx.emit(RemoteEvent::Close))).child(dialog)
+        dialog_keys::nav(backdrop(cx.listener(|_, _, _, cx| cx.emit(RemoteEvent::Close)))).child(dialog)
     }
 }
 
