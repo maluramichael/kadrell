@@ -47,6 +47,10 @@ pub enum Cmd {
     Account(crate::usage::AccountCmd),
     /// Layout aus dem Menü der Layout-Taste der Leiste.
     Layout(crate::ui::layout::LayoutMode),
+    /// Markierten Terminaltext der Kachel kopieren (Rechtsklick auf markierten Text).
+    TermCopy(String),
+    /// Zwischenablage in das Terminal der Kachel einsetzen.
+    TermPaste(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -332,6 +336,8 @@ impl Shell {
         match cmd {
             Cmd::Rename(target) => self.open_rename(target, window, cx),
             Cmd::Account(cmd) => self.run_account_cmd(cmd, window, cx),
+            Cmd::TermCopy(key) => self.tile_copy(&key, cx),
+            Cmd::TermPaste(key) => self.tile_paste(&key, cx),
             Cmd::Layout(mode) => {
                 self.set_mode(mode, cx);
                 self.sync(window, cx);
