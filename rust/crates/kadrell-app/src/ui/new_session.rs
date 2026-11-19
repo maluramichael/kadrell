@@ -439,7 +439,7 @@ impl Shell {
 
     /// Ordner der fokussierten Session (Strg+Enter, Strg+T): die Gruppe, sonst der Startordner der Einstellungen.
     fn focused_folder(&self) -> String {
-        let focused = self.state.focused.as_deref().and_then(|k| self.state.session(k));
+        let focused = self.state.cur_focus().as_deref().and_then(|k| self.state.session(k));
         match focused {
             Some(s) => s.cwd.clone(),
             None => self.state.settings.start_folder(&self.state.paths.home).trim_end_matches('/').to_string(),
@@ -449,7 +449,7 @@ impl Shell {
     /// Strg+Enter / ⌘↩: neue Claude-Session im Ordner der fokussierten, ohne Dialog.
     pub fn new_session_here(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let cwd = self.focused_folder();
-        let group = self.state.focused.as_deref().and_then(|k| self.state.store.groups.group_for_session(k)).map(|g| g.id.clone());
+        let group = self.state.cur_focus().as_deref().and_then(|k| self.state.store.groups.group_for_session(k)).map(|g| g.id.clone());
         self.start_new_session(group, &cwd, None, window, cx);
     }
 

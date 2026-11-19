@@ -55,6 +55,24 @@ pub fn tab_label(entry: &PanelEntry) -> &str {
     if entry.1.title.is_empty() { &entry.0 } else { &entry.1.title }
 }
 
+/// Abstand der Tab-Leiste vom linken Rand und Zugabe zur Textbreite je Tab (`tabRects`).
+pub const TAB_LEFT: f32 = 4.;
+pub const TAB_PAD: f32 = 16.;
+
+/// Fläche jedes Tabs als (x, Breite): die Breite ist die des fetten Textes plus 16, die Tabs reihen sich ab 4 pt
+/// lückenlos auf (`tabRects`). `label_widths` sind die gemessenen Textbreiten in der Schrift 11 fett.
+pub fn tab_rects(label_widths: &[f32]) -> Vec<(f32, f32)> {
+    let mut x = TAB_LEFT;
+    label_widths
+        .iter()
+        .map(|w| {
+            let rect = (x, w + TAB_PAD);
+            x += w + TAB_PAD;
+            rect
+        })
+        .collect()
+}
+
 fn height(node: &PanelNode) -> f32 {
     match node {
         PanelNode::Section { .. } => SECTION_HEIGHT,
@@ -269,6 +287,14 @@ mod tests {
 
     fn tree(title: &str, nodes: Vec<PanelNode>) -> PanelTree {
         PanelTree { title: title.into(), nodes }
+    }
+
+    /// `tabRects`: ab 4 pt, jeder Tab so breit wie sein fetter Text plus 16, ohne Lücke.
+    #[test]
+    fn tab_rects_follow_the_bold_label_width() {
+        assert_eq!(tab_rects(&[40., 100.]), [(4., 56.), (60., 116.)]);
+        assert!(tab_rects(&[]).is_empty());
+        assert_eq!(tab_rects(&[0.]), [(4., 16.)]);
     }
 
     fn two_tabs() -> Vec<PanelEntry> {

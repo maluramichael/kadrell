@@ -25,15 +25,15 @@ impl ControlHandler for AppState {
     }
 
     fn focused(&self) -> Option<String> {
-        self.focused.clone()
+        self.cur_focus()
     }
 
     fn selected(&self) -> Vec<String> {
-        self.selected.clone()
+        self.cur_selected()
     }
 
     fn layout(&self) -> LayoutMode {
-        self.layout
+        self.cur_layout()
     }
 
     fn others_allowed(&self) -> bool {
@@ -118,16 +118,15 @@ impl ControlHandler for AppState {
     }
 
     fn select(&mut self, keys: &[String], add: bool) {
-        self.select_keys(keys, add);
+        self.cur_select(keys, add);
     }
 
     fn focus(&mut self, key: &str) {
-        self.focus_key(key);
+        self.cur_focus_key(key);
     }
 
     fn set_layout(&mut self, mode: LayoutMode) {
-        self.layout = mode;
-        self.save_layout();
+        self.cur_set_layout(mode);
     }
 
     fn toggle_zoom(&mut self) {

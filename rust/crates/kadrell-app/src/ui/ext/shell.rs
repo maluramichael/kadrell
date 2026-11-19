@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui::{AnyElement, App, AppContext, Context, Div, DragMoveEvent, Entity, Focusable, InteractiveElement, IntoElement, ParentElement, Styled, Window, div, px};
+use gpui::{AnyElement, App, AppContext, Context, Div, DragMoveEvent, Entity, Focusable, InteractiveElement, IntoElement, Window};
 use kadrell_ext::bridge::{self, SettingsStore};
 use kadrell_ext::http::UreqClient;
 use kadrell_ext::manager::ExtensionManager;
@@ -20,9 +20,8 @@ use super::model::PanelEntry;
 use super::panel::{ExtPanel, PanelEvent};
 use super::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar, status_color};
 use crate::Shell;
-use crate::windows::{layout, split};
+use crate::windows::{extra_ext, split};
 use crate::ui::bar::{ExtStatus, Handler};
-use crate::ui::chrome::{h_seam, v_seam};
 use crate::ui::context_menu::{Cmd, Item};
 use crate::ui::palette::{Command, Run};
 use kadrell_i18n::trd;
@@ -90,8 +89,11 @@ impl Shell {
     fn refresh_ext(&mut self, cx: &mut Context<Self>) {
         let (right, left) = (self.ext.panels_in(Dock::Right), self.ext.panels_in(Dock::Left));
         self.leave_vanishing_tab(&right, &left, cx);
-        self.ext_ui.right.update(cx, |p, cx| p.set_panels(right, cx));
-        self.ext_ui.left.update(cx, |p, cx| p.set_panels(left, cx));
+        self.ext_ui.right.update(cx, |p, cx| p.set_panels(right.clone(), cx));
+        self.ext_ui.left.update(cx, |p, cx| p.set_panels(left.clone(), cx));
+        for panels in self.win.extra_panels.values() {
+            panels.set(right.clone(), left.clone(), cx);
+        }
         let status = self.ext.status_items();
         if status != self.ext_ui.status {
             self.ext_ui.status = status;
@@ -202,49 +204,18 @@ impl Shell {
         });
     }
 
-    /// Die linke Spalte: der Baum, darunter (mit Panels) das Dock der Extensions. Der Trenner dazwischen lässt sich ziehen,
-    /// der Baum behält mindestens 80, das Dock mindestens 60 pt. Beim ersten Erscheinen bekommt das Dock unten 220 pt
-    /// (höchstens die halbe Spalte), danach gilt die gezogene Höhe.
+    /// Die linke Spalte: der Baum, darunter (mit Panels) das Dock der Extensions (`windows::extra_ext`).
     pub(crate) fn ext_left_column(&self, sidebar: impl IntoElement, window: &Window, cx: &mut Context<Self>) -> AnyElement {
-        if !layout::show_dock(self.ext_ui.left.read(cx).model().panels().len()) {
-            return sidebar.into_any_element();
-        }
         let t = theme(cx);
-        let width = self.win.sides.tree_width(window.viewport_size().width.as_f32());
         // Die Spalte ist so hoch wie das Fenster ohne Titel und Leiste; genau wird sie erst beim Ziehen gemessen.
         let column_h = window.viewport_size().height.as_f32() - 62.;
-        let dock_h = self.win.sides.dock_height(column_h);
-        let dock = div()
-            .flex()
-            .flex_none()
-            .h(px(dock_h))
-            .min_h(px(layout::DOCK_MIN_H))
-            .child(div().flex().flex_col().flex_none().w(px(width)).h_full().child(h_seam(&t)).child(self.ext_ui.left.clone()))
-            .child(v_seam(&t));
-        let tree = div().flex().flex_1().min_h(px(layout::TREE_MIN_H)).child(sidebar);
-        let grip = split::grip("grip-dock", split::DockDrag, false).bottom(px(dock_h - 1. - layout::GRAB / 2.));
-        div()
-            .relative()
-            .flex()
-            .flex_col()
-            .flex_none()
-            .h_full()
-            .on_drag_move::<split::DockDrag>(cx.listener(|this, ev: &DragMoveEvent<split::DockDrag>, _, cx| this.drag_dock(ev, cx)))
-            .child(tree)
-            .child(dock)
-            .child(grip)
-            .into_any_element()
+        let on_drag = cx.listener(|this, ev: &DragMoveEvent<split::DockDrag>, _, cx| this.drag_dock(ev, cx));
+        extra_ext::left_column(&self.win.sides, &self.ext_ui.left, sidebar, window, column_h, &t, cx, on_drag)
     }
 
     /// Die rechte Seitenleiste, nur mit Panels und solange sie nicht ausgeblendet ist.
     pub(crate) fn ext_right_panel(&self, window: &Window, cx: &App) -> Option<AnyElement> {
-        if !layout::show_right(self.win.sides.right_visible, self.ext_ui.right.read(cx).model().panels().len()) {
-            return None;
-        }
-        let t = theme(cx);
-        let width = self.win.sides.right_width(window.viewport_size().width.as_f32());
-        let column = div().flex().flex_col().flex_none().w(px(width)).h_full().child(self.ext_ui.right.clone());
-        Some(div().flex().flex_none().h_full().child(v_seam(&t)).child(column).into_any_element())
+        extra_ext::right_panel(&self.win.sides, &self.ext_ui.right, window, &theme(cx), cx)
     }
 
     // MARK: Statusleisten

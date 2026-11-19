@@ -1,23 +1,29 @@
 //! Weiteres Fenster (⌘⇧T): derselbe Satz Sessions, aber eigene Auswahl, eigenes Layout und eigener Fokus. Sessions und
-//! Terminals gehören der `Shell` des Hauptfensters; dieses Fenster liest ihren Baum, hält nur seine Auswahl (nach
-//! Schlüsseln, damit Umsortieren sie nicht verschiebt) und zeigt die Kacheln. Ein Terminal hängt nur in einem Fenster
+//! Terminals gehören der `Shell` des Hauptfensters; dieses Fenster liest ihren Baum, zeigt die Kacheln seiner Auswahl
+//! (Stand in `AppState::wins`, so erreichen ihn auch Steuerkanal und Menü, wenn dieses Fenster das aktuelle ist) und hat
+//! wie jedes Fenster eine rechte Seitenleiste und ein Dock der Extensions. Ein Terminal hängt nur in einem Fenster
 //! (`PaneOwners`): in dem anderen steht in der Kachel „IN ANDEREM FENSTER“, ein Klick holt es her. Schließen (⌘⇧W oder
 //! Fensterknopf) beendet keine Session.
+//!
+//! Befehle, die dieses Fenster nicht selbst kennt (neue Session, Palette, Einstellungen, Menüpunkte), gibt es als Aktion an
+//! das Hauptfenster weiter (`current::forward`); sie wirken dort auf dieses Fenster, weil es das aktuelle ist.
 
 use gpui::{AppContext as _, DragMoveEvent, MouseButton, MouseUpEvent,
-    AnyWindowHandle, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, Role,
+    Action, AnyWindowHandle, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, Role,
     StatefulInteractiveElement, Styled, Window, WindowOptions, div, px, size,
 };
 use kadrell_core::Settings;
-use serde_json::json;
 
-use super::model::{key_for, keys_of};
-use crate::Shell;
+use super::extra_ext::{self, ExtraPanels};
 use super::layout::{self, Change, Sides};
+use super::model::keys_of;
 use super::split;
+use super::views::View;
+use crate::Shell;
 use crate::menus::CloseWindow;
-use crate::state::Run;
 use crate::state::attention::{patch_setting, patch_settings};
+use crate::ui::ext::panel::PanelEvent;
+use crate::ui::ext::{FocusRightSidebar, ToggleRightSidebar};
 use crate::ui::layout::{LayoutMode, LayoutState, Rect, measure};
 use crate::ui::model::{Group, position};
 use crate::ui::tile;
@@ -25,14 +31,14 @@ use crate::ui::tile;
 pub struct ExtraWindow {
     shell: Entity<Shell>,
     index: usize,
-    selected: Vec<String>,
-    focus: Option<String>,
     layout: LayoutState,
     idle_focus: FocusHandle,
-    /// Aufteilung dieses Fensters: Breite des Baums (`sidebar.width.N`), Baum ein/aus.
+    /// Aufteilung dieses Fensters: Breite des Baums (`sidebar.width.N`), rechte Seitenleiste, Dock, Baum ein/aus.
     sides: Sides,
-    /// Noch nicht gespeicherte Breite, bis die Maus losgelassen wird.
-    unsaved: Option<Change>,
+    /// Noch nicht gespeicherte Breiten und Höhen, bis die Maus losgelassen wird.
+    unsaved: Vec<Change>,
+    /// Seitenleiste und Dock der Extensions dieses Fensters.
+    panels: ExtraPanels,
 }
 
 impl ExtraWindow {
@@ -40,7 +46,15 @@ impl ExtraWindow {
     pub fn new(shell: Entity<Shell>, index: usize, window: &mut Window, cx: &mut Context<Self>) -> ExtraWindow {
         cx.observe(&shell, |_, _, cx| cx.notify()).detach();
         cx.on_release(|this, cx| this.released(cx)).detach();
-        let (selected, focus, mode) = this_state(&shell, index, cx);
+        let manager = shell.read(cx).ext.clone();
+        let panels = ExtraPanels::new(&manager, cx);
+        let mode = shell.update(cx, |sh, _| {
+            sh.state.open_view(index);
+            sh.win.extra_panels.insert(index, panels.clone());
+            let keys = sh.state.wins.get(index).map(|v| v.selected.clone()).unwrap_or_default();
+            sh.state.start_now(&keys);
+            sh.state.wins.get(index).map(|v| v.mode).unwrap_or_default()
+        });
         let sides = Sides::restore(&Settings::load(&shell.read(cx).state.profile.settings_path()), index);
         super::frame::watch(window, cx, shell.read(cx).state.profile.settings_path(), index);
         cx.observe_window_activation(window, |this, window, cx| {
@@ -50,17 +64,26 @@ impl ExtraWindow {
             }
         })
         .detach();
-        let me = ExtraWindow { shell, index, selected, focus, layout: LayoutState::new(mode), idle_focus: cx.focus_handle(), sides, unsaved: None };
+        for panel in [&panels.right, &panels.left] {
+            cx.subscribe_in(panel, window, Self::on_panel_event).detach();
+        }
+        let layout = LayoutState::new(LayoutMode::from_name(mode.as_str()).unwrap_or(LayoutMode::Grid));
+        let me = ExtraWindow { shell, index, layout, idle_focus: cx.focus_handle(), sides, unsaved: Vec::new(), panels };
         cx.spawn(async move |this, cx| {
-            let _ = this.update(cx, |this, cx| this.start_missing(cx));
+            let _ = this.update(cx, |this, cx| this.sync_main(cx));
         })
         .detach();
         me
     }
 
+    /// Ansicht dieses Fensters aus dem Zustand der App.
+    fn view(&self, cx: &gpui::App) -> View {
+        self.shell.read(cx).state.wins.get(self.index).cloned().unwrap_or_default()
+    }
+
     /// Schlüssel der sichtbaren Kacheln (die Auswahl, soweit es die Sessions noch gibt).
-    fn visible_keys(&self, groups: &[Group]) -> Vec<String> {
-        self.selected.iter().filter(|k| position(groups, k).is_some()).cloned().collect()
+    fn visible_keys(view: &View, groups: &[Group]) -> Vec<String> {
+        view.selected.iter().filter(|k| position(groups, k).is_some()).cloned().collect()
     }
 
     /// Fenster ist zu: Terminals werden frei, die Schlüssel des Fensters verschwinden, die Liste wird gespeichert. Beim
@@ -69,101 +92,94 @@ impl ExtraWindow {
         let index = self.index;
         self.shell.update(cx, |shell, cx| {
             shell.shown.remove(&index);
+            shell.win.extra_panels.remove(&index);
             if shell.down {
                 return;
             }
             shell.windows.close(index);
-            let path = shell.state.profile.settings_path();
-            let mut changes: Vec<(String, Option<serde_json::Value>)> = keys_of(index).into_iter().map(|k| (k, None)).collect();
-            changes.push((super::model::OPEN_KEY.to_string(), Some(shell.windows.to_value())));
-            patch_settings(&path, changes);
             shell.extras.retain(|(i, _)| *i != index);
+            // Wie `closeWindow`: danach gilt das zuletzt geöffnete weitere Fenster, sonst das Hauptfenster.
+            let fallback = shell.extras.last().map_or(0, |(i, _)| *i);
+            shell.state.close_view(index, fallback);
+            if shell.win.pin.is_some_and(|p| p.index == index) {
+                shell.win.pin = None;
+            }
+            let keys = keys_of(index);
+            for key in &keys {
+                shell.state.settings.remove(key);
+            }
+            let mut changes: Vec<(String, Option<serde_json::Value>)> = keys.into_iter().map(|k| (k, None)).collect();
+            changes.push((super::model::OPEN_KEY.to_string(), Some(shell.windows.to_value())));
+            patch_settings(&shell.state.profile.settings_path(), changes);
             cx.notify();
         });
     }
 
-    /// Sessions der Auswahl ohne Prozess starten lassen: die Shell hält Terminals und Start (`reconcile`), ihr Fenster
-    /// ist das Hauptfenster.
-    fn start_missing(&self, cx: &mut Context<Self>) {
-        let keys = self.selected.clone();
+    /// Die Shell hält Terminals und Start (`reconcile`), ihr Fenster ist das Hauptfenster: dort die vorgemerkten Starts
+    /// ausführen lassen.
+    fn sync_main(&self, cx: &mut Context<Self>) {
         let shell = self.shell.clone();
         let Some(main) = shell.read(cx).main_window else { return };
         let _ = cx.update_window(main, |_, window, cx| {
-            shell.update(cx, |sh, cx| {
-                for key in &keys {
-                    if sh.state.run(key) == Run::NotStarted {
-                        let _ = sh.state.request_start(key);
-                    }
-                }
-                sh.sync(window, cx);
-            });
+            shell.update(cx, |sh, cx| sh.sync(window, cx));
         });
     }
 
     /// Ohne (noch vorhandene) Auswahl, etwa weil die Sessions erst nach dem Öffnen des Fensters entstehen: die erste
     /// Session, die das Hauptfenster nicht zeigt. Der Start läuft danach, nicht mitten im Zeichnen.
     fn pick_default(&mut self, cx: &mut Context<Self>) {
-        let (selected, focus, _) = this_state(&self.shell, self.index, cx);
-        if selected.is_empty() {
-            return;
-        }
-        self.selected = selected;
-        self.focus = focus;
+        let (shell, index) = (self.shell.clone(), self.index);
         cx.spawn(async move |this, cx| {
             let _ = this.update(cx, |this, cx| {
-                this.save(cx);
-                this.start_missing(cx);
+                shell.update(cx, |sh, _| sh.state.repick_view(index));
+                this.sync_main(cx);
             });
         })
         .detach();
     }
 
-    fn save(&self, cx: &mut Context<Self>) {
-        let path = self.shell.read(cx).state.profile.settings_path();
-        patch_setting(&path, &key_for("workspace.selected", self.index), json!(self.selected));
-        patch_setting(&path, &key_for("workspace.selected.focus", self.index), json!(self.focus));
-        patch_setting(&path, &key_for("workspace.mode", self.index), json!(self.layout.mode.key()));
-    }
-
-    fn apply_selection(&mut self, cx: &mut Context<Self>) {
-        self.save(cx);
-        self.start_missing(cx);
+    /// Nach einer Änderung der Ansicht: Starts ausführen, neu zeichnen.
+    fn changed(&mut self, cx: &mut Context<Self>) {
+        self.sync_main(cx);
         cx.notify();
     }
 
     /// Klick im Baum: nur diese Session, Strg/Cmd nimmt sie dazu oder weg.
     fn click_session(&mut self, key: String, add: bool, cx: &mut Context<Self>) {
-        if add && self.selected.contains(&key) && self.selected.len() > 1 {
-            self.selected.retain(|k| *k != key);
-            if self.focus.as_deref() == Some(key.as_str()) {
-                self.focus = self.selected.last().cloned();
-            }
-        } else if add {
-            if !self.selected.contains(&key) {
-                self.selected.push(key.clone());
-            }
-            self.focus = Some(key);
-        } else {
-            self.selected = vec![key.clone()];
-            self.focus = Some(key);
-        }
-        self.apply_selection(cx);
+        let index = self.index;
+        self.shell.update(cx, |sh, _| sh.state.view_select(index, &[key], add));
+        self.changed(cx);
     }
 
     /// Klick oder Fokus in eine Kachel: sie wird Fokus und holt sich das Terminal, wenn es woanders hängt.
     fn focus_tile(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.focus = Some(key.to_string());
         let index = self.index;
         let owned = self.shell.update(cx, |sh, cx| {
             sh.owners.take(key, index);
+            sh.state.view_focus(index, key);
             cx.notify();
             sh.panes.get(key).cloned()
         });
         if let Some(pane) = owned {
             pane.read(cx).focus.clone().focus(window, cx);
         }
-        self.save(cx);
         cx.notify();
+    }
+
+    /// Die Tastatur geht an das Terminal der fokussierten Kachel dieses Fensters zurück.
+    fn focus_pane(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let pane = self.view(cx).focus.and_then(|k| self.shell.read(cx).panes.get(&k).cloned());
+        match pane {
+            Some(p) => p.read(cx).focus.clone().focus(window, cx),
+            None => self.idle_focus.focus(window, cx),
+        }
+    }
+
+    fn on_panel_event(&mut self, _: &Entity<crate::ui::ext::panel::ExtPanel>, ev: &PanelEvent, window: &mut Window, cx: &mut Context<Self>) {
+        // TODO: Aktionsmenü der Panels (Rechtsklick, Alt+Enter) hier: das Kontextmenü liegt im Hauptfenster.
+        if matches!(ev, PanelEvent::Leave) {
+            self.focus_pane(window, cx);
+        }
     }
 
     /// ⌘B: Baum dieses Fensters ein/aus.
@@ -172,40 +188,96 @@ impl ExtraWindow {
         cx.notify();
     }
 
-    fn drag_tree(&mut self, ev: &DragMoveEvent<split::TreeDrag>, window: &Window, cx: &mut Context<Self>) {
-        let x = (ev.event.position.x - ev.bounds.origin.x).as_f32();
-        self.unsaved = Some(self.sides.drag_tree(x, window.viewport_size().width.as_f32()));
+    /// Strg+Alt+B: rechte Seitenleiste dieses Fensters ein/aus (gespeichert pro Fenster).
+    fn toggle_right(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (key, value) = self.sides.toggle_right();
+        patch_setting(&self.shell.read(cx).state.profile.settings_path(), &key, value);
+        if !self.sides.right_visible && self.panels.right.read(cx).has_keyboard(window) {
+            self.focus_pane(window, cx);
+        }
         cx.notify();
     }
 
-    /// Maus losgelassen: die gezogene Breite in die Einstellungen (`sidebar.width.N`).
+    /// Strg+3: Tastatur in die rechte Seitenleiste dieses Fensters (blendet sie bei Bedarf ein).
+    fn focus_right(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.panels.right.read(cx).is_empty() {
+            return;
+        }
+        if !self.sides.right_visible {
+            self.toggle_right(window, cx);
+        }
+        let panel = self.panels.right.clone();
+        cx.notify();
+        // Das Panel steht erst im nächsten Frame im Baum, ein Fokus davor liefe ins Leere.
+        cx.defer_in(window, move |_, window, cx| panel.read(cx).focus_handle(cx).focus(window, cx));
+    }
+
+    fn drag_tree(&mut self, ev: &DragMoveEvent<split::TreeDrag>, window: &Window, cx: &mut Context<Self>) {
+        let x = (ev.event.position.x - ev.bounds.origin.x).as_f32();
+        let change = self.sides.drag_tree(x, window.viewport_size().width.as_f32());
+        self.remember(change, cx);
+    }
+
+    fn drag_right(&mut self, ev: &DragMoveEvent<split::RightDrag>, window: &Window, cx: &mut Context<Self>) {
+        let from_right = (ev.bounds.right() - ev.event.position.x).as_f32();
+        let change = self.sides.drag_right(from_right, window.viewport_size().width.as_f32());
+        self.remember(change, cx);
+    }
+
+    fn drag_dock(&mut self, ev: &DragMoveEvent<split::DockDrag>, cx: &mut Context<Self>) {
+        let from_bottom = (ev.bounds.bottom() - ev.event.position.y).as_f32();
+        let change = self.sides.drag_dock(from_bottom, ev.bounds.size.height.as_f32());
+        self.remember(change, cx);
+    }
+
+    fn remember(&mut self, change: Change, cx: &mut Context<Self>) {
+        self.unsaved.retain(|(key, _)| *key != change.0);
+        self.unsaved.push(change);
+        cx.notify();
+    }
+
+    /// Maus losgelassen: die gezogenen Breiten und die Höhe in die Einstellungen (`sidebar.width.N` usw.).
     fn save_sides(&mut self, cx: &mut Context<Self>) {
-        let Some((key, value)) = self.unsaved.take() else { return };
-        let path = self.shell.read(cx).state.profile.settings_path();
-        patch_setting(&path, &key, value);
+        if self.unsaved.is_empty() {
+            return;
+        }
+        let changes = std::mem::take(&mut self.unsaved).into_iter().map(|(key, value)| (key, Some(value))).collect();
+        patch_settings(&self.shell.read(cx).state.profile.settings_path(), changes);
     }
 
     fn cycle_layout(&mut self, cx: &mut Context<Self>) {
-        self.layout.mode = self.layout.mode.next();
-        self.save(cx);
+        let (index, next) = (self.index, self.layout.mode.next());
+        let mode = kadrell_control::LayoutMode::from_raw(next.key()).unwrap_or_default();
+        self.shell.update(cx, |sh, _| sh.state.view_set_mode(index, mode));
         cx.notify();
+    }
+
+    /// Befehl an das Hauptfenster geben (siehe `current::forward`).
+    fn forward(&mut self, action: Box<dyn Action>, dialog: bool, cx: &mut Context<Self>) {
+        super::current::forward(&self.shell, self.index, action, dialog, cx);
     }
 }
 
-/// Gespeicherte Auswahl, Fokus und Layout dieses Fensters; ohne sie die erste Session, die das Hauptfenster nicht zeigt.
-fn this_state(shell: &Entity<Shell>, index: usize, cx: &gpui::App) -> (Vec<String>, Option<String>, LayoutMode) {
-    let sh = shell.read(cx);
-    let s: &Settings = &sh.state.settings;
-    let known = |k: &String| sh.state.session(k).is_some();
-    let mut selected: Vec<String> = s.strings_or(&key_for("workspace.selected", index)).into_iter().filter(known).collect();
-    if selected.is_empty() {
-        let order = sh.state.ordered_keys();
-        let pick = order.iter().find(|k| !sh.state.selected.contains(k)).or(order.first());
-        selected = pick.cloned().into_iter().collect();
-    }
-    let focus = s.opt_string(&key_for("workspace.selected.focus", index)).filter(|f| selected.contains(f)).or_else(|| selected.first().cloned());
-    let mode = LayoutMode::from_name(&s.string_or(&key_for("workspace.mode", index), "grid")).unwrap_or(LayoutMode::Grid);
-    (selected, focus, mode)
+/// Hängt die Aktionen `$a` an die Wurzel: jede geht unverändert an das Hauptfenster (`$dialog`: sie öffnet dort einen
+/// Dialog, das Hauptfenster kommt nach vorn).
+macro_rules! forward {
+    ($root:expr, $cx:expr, $dialog:expr; $($a:ty),+ $(,)?) => {{
+        let mut root = $root;
+        $( root = root.on_action($cx.listener(|this, a: &$a, _, cx| this.forward(a.boxed_clone(), $dialog, cx))); )+
+        root
+    }};
+}
+
+/// Alle Befehle des Menüs und der Kürzel, die auf die Sessions und Dialoge der App wirken.
+fn forward_commands(root: gpui::Stateful<gpui::Div>, cx: &mut Context<ExtraWindow>) -> gpui::Stateful<gpui::Div> {
+    use crate::menu_ctx::{MoveToGroup, SelectLayout};
+    use crate::menus::*;
+    use crate::misc::{OpenAbout, OpenWhatsNew};
+    use crate::ui::ext::OpenExtensions;
+    let root = forward!(root, cx, true; NewSession, NewRemote, OpenPalette, FindAll, SearchHistory, QuickStart, NewGroup, OpenSettings, OpenStats);
+    let root = forward!(root, cx, true; OpenExtensions, OpenAbout, OpenWhatsNew, RenameSession, RenameGroup, InstallCli);
+    let root = forward!(root, cx, false; NewSessionHere, NewTerminal, NewWindow, CloseSession, StopSession, ResumeSession, SelectGroups, SelectEverything);
+    forward!(root, cx, false; IsolateSession, RemoveFromView, NewSessionBeside, CopyPath, ShowInFolder, MoveToGroup, SelectLayout)
 }
 
 impl Focusable for ExtraWindow {
@@ -222,10 +294,11 @@ impl Render for ExtraWindow {
         self.layout.gap = a.gap;
         self.layout.ui_scale = a.scale;
         let index = self.index;
-        let mut visible = self.visible_keys(&self.shell.read(cx).groups);
+        let view = self.view(cx);
+        self.layout.mode = LayoutMode::from_name(view.mode.as_str()).unwrap_or(LayoutMode::Grid);
+        let visible = Self::visible_keys(&view, &self.shell.read(cx).groups);
         if visible.is_empty() {
             self.pick_default(cx);
-            visible = self.visible_keys(&self.shell.read(cx).groups);
         }
         // Dem Hauptfenster melden, was hier zu sehen ist: danach steht fest, wer welches Terminal hält.
         let shown = visible.clone();
@@ -237,7 +310,7 @@ impl Render for ExtraWindow {
         let sh = self.shell.read(cx);
         let groups: &[Group] = &sh.groups;
         let ids: Vec<(usize, usize)> = visible.iter().filter_map(|k| position(groups, k)).collect();
-        let focus_id = self.focus.as_deref().and_then(|f| position(groups, f)).or_else(|| ids.first().copied());
+        let focus_id = view.focus.as_deref().and_then(|f| position(groups, f)).or_else(|| ids.first().copied());
         let active = focus_id.and_then(|f| ids.iter().position(|i| *i == f)).unwrap_or(0);
         let (frames, _) = self.layout.plan(ids.len(), active);
         let stacked = self.layout.mode == LayoutMode::Stack && ids.len() > 1;
@@ -253,7 +326,7 @@ impl Render for ExtraWindow {
                 placed(frames[i], &session.key, el, cx)
             })
             .collect();
-        let vw = window.viewport_size().width.as_f32();
+        let (vw, vh) = (window.viewport_size().width.as_f32(), window.viewport_size().height.as_f32());
         let tree_w = self.sides.tree_width(vw);
         let mut tree = div().id("extra-tree").role(Role::Tree).flex().flex_col().flex_none().w(px(tree_w)).h_full().pt(px(a.s(6.))).overflow_y_scroll().bg(a.panel_fill(t.panel));
         for group in groups {
@@ -261,9 +334,12 @@ impl Render for ExtraWindow {
                 div().px(px(a.s(10.))).pt(px(a.s(8.))).pb(px(a.s(2.))).text_size(px(a.s(10.5))).text_color(t.sub).child(format!("{} · {}", group.name.to_uppercase(), group.sessions.len())),
             );
             for session in &group.sessions {
-                tree = tree.child(tree_row(session, self.selected.contains(&session.key), self.focus.as_deref() == Some(session.key.as_str()), &a, cx));
+                tree = tree.child(tree_row(session, view.selected.contains(&session.key), view.focus.as_deref() == Some(session.key.as_str()), &a, cx));
             }
         }
+        let left = extra_ext::left_column(&self.sides, &self.panels.left, tree, window, vh, &t, cx, cx.listener(|this, ev: &DragMoveEvent<split::DockDrag>, _, cx| this.drag_dock(ev, cx)));
+        let right = extra_ext::right_panel(&self.sides, &self.panels.right, window, &t, cx);
+        let right_w = self.sides.right_width(vw);
         let work = div()
             .id("extra-workspace")
             .relative()
@@ -273,7 +349,8 @@ impl Render for ExtraWindow {
             .bg(a.panel_fill(t.bg))
             .child(measure(self.layout.measured.clone(), cx.entity_id()))
             .children(tiles);
-        div()
+        let has_right = right.is_some();
+        let root = div()
             .id("extra-window")
             .track_focus(&self.idle_focus)
             .size_full()
@@ -286,13 +363,19 @@ impl Render for ExtraWindow {
             .on_action(cx.listener(|_, _: &CloseWindow, window, _| window.remove_window()))
             .on_action(cx.listener(|this, _: &crate::menus::NextLayout, _, cx| this.cycle_layout(cx)))
             .on_action(cx.listener(|this, _: &super::ToggleSidebar, _, cx| this.toggle_tree(cx)))
+            .on_action(cx.listener(|this, _: &ToggleRightSidebar, window, cx| this.toggle_right(window, cx)))
+            .on_action(cx.listener(|this, _: &FocusRightSidebar, window, cx| this.focus_right(window, cx)))
             .on_drag_move::<split::TreeDrag>(cx.listener(|this, ev: &DragMoveEvent<split::TreeDrag>, window, cx| this.drag_tree(ev, window, cx)))
+            .on_drag_move::<split::RightDrag>(cx.listener(|this, ev: &DragMoveEvent<split::RightDrag>, window, cx| this.drag_right(ev, window, cx)))
             .on_mouse_up(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| this.save_sides(cx)))
             .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| this.save_sides(cx)))
-            .relative()
-            .children((!self.sides.tree_hidden).then_some(tree))
+            .relative();
+        forward_commands(root, cx)
+            .children((!self.sides.tree_hidden).then_some(left))
             .child(work)
+            .children(right)
             .children((!self.sides.tree_hidden).then(|| split::grip("extra-grip-tree", split::TreeDrag, true).left(px(tree_w - layout::GRAB / 2.))))
+            .children(has_right.then(|| split::grip("extra-grip-right", split::RightDrag, true).left(px(vw - right_w - 1. - layout::GRAB / 2.))))
     }
 }
 

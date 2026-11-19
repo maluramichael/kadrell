@@ -200,10 +200,10 @@ pub struct MenuState {
 impl Shell {
     /// Schnappschuss der Menüs aus dem Zustand der App.
     fn menu_context(&self) -> MenuContext {
-        let key = self.state.focused.clone();
+        let key = self.state.cur_focus();
         let session = key.as_deref().and_then(|k| self.state.session(k)).map(|s| SessionFlags {
             attached: self.state.run(&s.id) == crate::state::Run::Running,
-            shown: self.state.selected.contains(&s.id),
+            shown: self.state.cur_selected().contains(&s.id),
             has_cwd: !s.cwd.is_empty(),
         });
         let ids: Vec<String> = key.into_iter().collect();
@@ -225,7 +225,7 @@ impl Shell {
 
     /// Gesamte Auswahl (Schlüssel) in Baumreihenfolge.
     fn selected_keys(&self) -> Vec<String> {
-        self.state.selected.clone()
+        self.state.cur_selected()
     }
 
     /// Setzt die Auswahl der Mac-App-Art: nur Sessions, die es gibt, der Fokus bleibt in der Auswahl.
@@ -233,7 +233,7 @@ impl Shell {
         self.ws.tree_focus = false;
         self.ws.preview.clear();
         self.state.zoom = false;
-        self.state.set_selection(keys, focus);
+        self.state.cur_set_selection(keys, focus);
         self.sync(window, cx);
     }
 
@@ -246,9 +246,9 @@ impl Shell {
                 self.select_for_menu(before, focus, window, cx);
             }
             SelectStep::Select(keys) => {
-                let focus = self.state.focused.clone();
+                let focus = self.state.cur_focus();
                 self.select_for_menu(keys, None, window, cx);
-                let after = self.state.selected.iter().cloned().collect();
+                let after = self.state.cur_selected().into_iter().collect();
                 self.menu.undo = Some(SelectUndo { shift, before: selected, focus, after });
             }
             // TODO: kein Piepton in der Rust-App, die Aktion bleibt wirkungslos.
@@ -257,7 +257,7 @@ impl Shell {
     }
 
     pub(crate) fn select_groups_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let ids = sessions_of_chosen_groups(&self.state.store.groups.groups, &self.state.selected);
+        let ids = sessions_of_chosen_groups(&self.state.store.groups.groups, &self.state.cur_selected());
         self.toggle_selection(ids, false, window, cx);
     }
 
@@ -268,20 +268,26 @@ impl Shell {
 
     /// Menü „Ansicht“: ein Layout wählen.
     pub(crate) fn select_layout_action(&mut self, mode: &str, cx: &mut Context<Self>) {
-        if let Some(mode) = LayoutMode::from_name(mode) {
-            self.set_mode(mode, cx);
+        let Some(mode) = LayoutMode::from_name(mode) else { return };
+        // Menü und Kürzel wirken im aktuellen Fenster: ein weiteres Fenster hat sein Layout im Zustand (`windows::views`).
+        match self.state.wins.current_extra() {
+            Some(index) => {
+                self.state.view_set_mode(index, kadrell_control::LayoutMode::from_raw(mode.key()).unwrap_or_default());
+                cx.notify();
+            }
+            None => self.set_mode(mode, cx),
         }
     }
 
     /// Menü „Session“: die fokussierte Session in diese Gruppe.
     pub(crate) fn move_focused_to_group(&mut self, group: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(key) = self.state.focused.clone() else { return };
+        let Some(key) = self.state.cur_focus() else { return };
         self.run_cmd(crate::ui::context_menu::Cmd::MoveTo { key, group: group.to_string() }, window, cx);
     }
 
     /// Menü „Session“: Nur diese zeigen, Aus Ansicht nehmen, Neue Session hier, Pfad kopieren, Im Explorer zeigen.
     pub(crate) fn focused_cmd(&mut self, make: impl FnOnce(String, String) -> crate::ui::context_menu::Cmd, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(key) = self.state.focused.clone() else { return };
+        let Some(key) = self.state.cur_focus() else { return };
         let cwd = self.state.session(&key).map(|s| s.cwd.clone()).unwrap_or_default();
         self.run_cmd(make(key, cwd), window, cx);
     }
@@ -322,7 +328,7 @@ impl Shell {
 
     /// Menü „Einsetzen“ ohne Textfeld im Fokus: der Text geht in das Terminal der Fokus-Kachel.
     pub(crate) fn paste_into_focused(&mut self, cx: &mut Context<Self>) {
-        let Some(pane) = self.state.focused.as_deref().and_then(|k| self.panes.get(k)).cloned() else { return };
+        let Some(pane) = self.state.cur_focus().as_deref().and_then(|k| self.panes.get(k)).cloned() else { return };
         pane.update(cx, |pane, cx| pane.paste(cx));
     }
 

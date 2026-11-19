@@ -110,6 +110,7 @@ impl Shell {
         }
         self.refresh_tray(window, cx);
         self.run_pending_overlay(window, cx);
+        self.settle_pin(window);
         cx.notify();
     }
 
