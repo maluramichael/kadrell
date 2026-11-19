@@ -17,7 +17,8 @@ struct Sandbox {
 }
 
 impl Sandbox {
-    fn new(tag: &str) -> Sandbox {
+    /// `ask_quit` an: Standard der App, SIGTERM/SIGINT fragen bei laufendem Claude erst nach. Aus: Settings `ask.quit`: false.
+    fn new(tag: &str, ask_quit: bool) -> Sandbox {
         // Kurzer Pfad: ein Unix-Socket darf auf dem Mac höchstens 104 Bytes lang sein, `$TMPDIR` allein frisst die Hälfte.
         let root = PathBuf::from("/tmp").join(format!("kadrell-sig-{}-{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -33,7 +34,7 @@ impl Sandbox {
         let script = format!("#!/bin/sh\n[ \"$1\" = \"--version\" ] && {{ echo fake; exit 0; }}\necho $$ > '{}'\nexec sleep 600\n", root.join("claude.pid").display());
         std::fs::write(&fake, script).unwrap();
         run(&["/bin/chmod", "755", fake.to_str().unwrap()]);
-        let settings = format!("{{\"claudeBinary\":{:?}}}", fake.to_str().unwrap());
+        let settings = format!("{{\"claudeBinary\":{:?},\"ask.quit\":{ask_quit}}}", fake.to_str().unwrap());
         std::fs::write(settings_dir.join("settings.json"), settings).unwrap();
         Sandbox { root, app: None }
     }
@@ -118,7 +119,7 @@ static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
 fn quits_cleanly_on(signal: &str, child_must_die: bool) {
     let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-    let mut sb = Sandbox::new(signal);
+    let mut sb = Sandbox::new(signal, false);
     let pid = sb.start_app();
     wait_until("Steuerkanal der App", Duration::from_secs(30), || exists(&sb.socket(pid)));
     let work = sb.root.join("work");
@@ -142,6 +143,8 @@ fn quits_cleanly_on(signal: &str, child_must_die: bool) {
     }
 }
 
+/// Mit abgeschalteter Rückfrage (`ask.quit: false`) läuft SIGTERM sofort durch den vollen Abbau. Mit Rückfrage (Standard)
+/// fragt die App bei laufendem Claude erst nach, wie Swift (`AppDelegate.swift`, Signalbehandlung): siehe unten.
 #[test]
 fn sigterm_quits_like_quit() {
     quits_cleanly_on("-TERM", false);
@@ -152,9 +155,32 @@ fn sigint_quits_like_quit() {
     quits_cleanly_on("-INT", false);
 }
 
-/// SIGTERM läuft durch denselben Abbau wie „Beenden“: SIGHUP an die Prozessgruppe des Kindes, 5 s warten, dann SIGKILL.
-/// Früher flackerte der Test, weil der Fake-claude auch beim `--version`-Probeaufruf blieb (siehe `Sandbox::new`).
+/// SIGTERM läuft (mit abgeschalteter Rückfrage) durch denselben Abbau wie „Beenden“: SIGHUP an die Prozessgruppe des
+/// Kindes, 5 s warten, dann SIGKILL. Früher flackerte der Test, weil der Fake-claude auch beim `--version`-Probeaufruf
+/// blieb (siehe `Sandbox::new`).
 #[test]
 fn sigterm_ends_the_child_too() {
     quits_cleanly_on("-TERM", true);
+}
+
+/// Mit Rückfrage (Standard) und laufendem Claude beendet SIGTERM die App nicht, sondern fragt nach, genau wie Swift
+/// (`AppDelegate.swift`): nach einigen Sekunden leben App und Fake-claude noch. Aufräumen übernimmt `Drop`.
+#[test]
+fn sigterm_asks_first_while_claude_runs() {
+    let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let mut sb = Sandbox::new("ask", true);
+    let pid = sb.start_app();
+    wait_until("Steuerkanal der App", Duration::from_secs(30), || exists(&sb.socket(pid)));
+    let work = sb.root.join("work");
+    let out = sb.cli(pid, &["new", "-d", "-c", work.to_str().unwrap()]);
+    assert!(out.status.success(), "new: {}", String::from_utf8_lossy(&out.stderr));
+    wait_until("Fake-claude läuft", Duration::from_secs(20), || sb.fake_claude_pid().is_some_and(alive));
+    let claude = sb.fake_claude_pid().unwrap();
+
+    run(&["/bin/kill", "-TERM", &pid.to_string()]);
+    std::thread::sleep(Duration::from_secs(3));
+
+    let app = sb.app.as_mut().unwrap();
+    assert!(app.try_wait().unwrap().is_none(), "App darf bei offener Rückfrage nicht enden");
+    assert!(alive(claude), "Fake-claude muss weiterlaufen");
 }
