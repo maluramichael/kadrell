@@ -58,7 +58,7 @@ pub fn action_rows(settings: &Settings, actions: &[HotkeyAction], mac: bool) -> 
     let mut out: Vec<Row> = Vec::new();
     for &action in actions {
         let text = help_text(action);
-        if out.iter().any(|r| r.text == text) {
+        if out.iter().any(|r| r.text == os_text(&text)) {
             continue;
         }
         let labels: Vec<String> = actions
@@ -67,7 +67,7 @@ pub fn action_rows(settings: &Settings, actions: &[HotkeyAction], mac: bool) -> 
             .filter_map(|a| keys::binding(settings, *a, mac).map(|k| keys::label(&k, mac)))
             .collect();
         let (Some(first), Some(last)) = (labels.first(), labels.last()) else { continue };
-        out.push(Row { keys: if labels.len() > 4 { format!("{first} … {last}") } else { labels.join(" ") }, text });
+        out.push(Row { keys: if labels.len() > 4 { format!("{first} … {last}") } else { labels.join(" ") }, text: os_text(&text) });
     }
     out
 }
@@ -77,8 +77,13 @@ fn fixed(keys: &str, text: &str) -> Row {
     Row { keys: os_text(keys), text: os_text(text) }
 }
 
+/// Kürzel, die es nur auf dem Mac gibt (`menus::bind_selection_keys`, `shortcut_mac_only`): unter Windows keine Zeile,
+/// sonst stünde dort ein Alt+W, das nichts tut.
+const MAC_ONLY_KEYS: [&str; 3] = ["⌘A", "⌘W", "⌘M"];
+
 fn extra(rows: &[(&str, &str)]) -> Vec<Row> {
-    rows.iter().map(|(k, t)| fixed(k, t)).collect()
+    let mac = cfg!(target_os = "macos");
+    rows.iter().filter(|(k, _)| mac || !MAC_ONLY_KEYS.contains(k)).map(|(k, t)| fixed(k, t)).collect()
 }
 
 fn open_section(settings: &Settings, mac: bool) -> Section {
@@ -226,6 +231,24 @@ mod tests {
         let rows = action_rows(&settings, &[ShowStats, ShowHelp], true);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].text, "diese Hilfe");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_help_has_no_mac_words_or_mac_only_keys() {
+        for lang in [kadrell_i18n::Language::De, kadrell_i18n::Language::En] {
+            kadrell_i18n::set_thread_language(lang);
+            for section in sections(&defaults(), false) {
+                for r in &section.rows {
+                    let all = format!("{} {}", r.keys, r.text);
+                    assert!(!all.chars().any(|c| matches!(c, '⌘' | '⌥' | '⌃' | '⇧' | '⌫')) && !all.contains("Finder"), "{all}");
+                    assert!(!all.contains("Dock") || all.contains("Extensions"), "{all}");
+                }
+                let mac_only = ["Fokus-Session beenden", "Minimieren", "ganze Gruppen der Auswahl", "Stop and remove the focused", "Minimize", "whole groups of the"];
+                assert!(!section.rows.iter().any(|r| mac_only.iter().any(|m| r.text.starts_with(m))), "{:?}", section.rows);
+            }
+        }
+        kadrell_i18n::set_thread_language(kadrell_i18n::Language::De);
     }
 
     #[cfg(windows)]

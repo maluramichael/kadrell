@@ -52,6 +52,21 @@ pub enum HelpEvent {
     Close,
 }
 
+/// Für Screenshots ohne Eingabe: `KADRELL_DEV_HELP_SCROLL=<Pixel>` scrollt die Hilfe, sobald der erste Frame gemessen ist.
+fn dev_scroll(scroll: &ScrollHandle, window: &mut Window, cx: &mut Context<HelpView>) {
+    let Some(y) = std::env::var("KADRELL_DEV_HELP_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) else { return };
+    let scroll = scroll.clone();
+    cx.spawn_in(window, async move |this, cx| {
+        cx.background_executor().timer(std::time::Duration::from_millis(700)).await;
+        this.update(cx, |_, cx| {
+            scroll.set_offset(gpui::point(px(0.), px(-y)));
+            cx.notify();
+        })
+        .ok();
+    })
+    .detach();
+}
+
 impl EventEmitter<HelpEvent> for HelpView {}
 
 pub struct HelpView {
@@ -79,7 +94,9 @@ impl HelpView {
         let help_key = keys::binding(settings, HotkeyAction::ShowHelp, mac).map(|k| keys::label(&k, mac));
         // Eine Ansicht für Hilfe und Über (`AboutView` der Mac-App): der Fuß nennt in beiden das Kürzel der Hilfe.
         let close_hint = help_key.unwrap_or_default();
-        Self { kind, focus, sections: help::sections(settings, mac), filter: Filter::default(), filter_input, scroll: ScrollHandle::new(), close_hint, _sub: sub }
+        let scroll = ScrollHandle::new();
+        dev_scroll(&scroll, window, cx);
+        Self { kind, focus, sections: help::sections(settings, mac), filter: Filter::default(), filter_input, scroll, close_hint, _sub: sub }
     }
 
     pub fn kind(&self) -> Kind {

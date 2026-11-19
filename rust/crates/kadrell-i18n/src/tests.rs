@@ -193,6 +193,7 @@ fn missing_translation_falls_back_to_german_without_panic() {
         setting: AtomicU8::new(Language::En.as_u8()),
         resolved: AtomicU8::new(Lang::En.as_u8()),
         generation: AtomicU64::new(0),
+        windows_words: std::sync::atomic::AtomicBool::new(false),
         reported: Mutex::new(HashSet::new()),
     };
     assert_eq!(i18n.t("nur-de"), "Hallo");

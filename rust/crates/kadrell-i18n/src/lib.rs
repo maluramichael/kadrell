@@ -19,15 +19,17 @@
 mod catalog;
 mod extra;
 mod system;
+mod winwords;
 
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 pub use system::system_language;
+pub use winwords::adapt as windows_words;
 
 const DE_FTL: &str = include_str!("../locales/de/kadrell.ftl");
 const EN_FTL: &str = include_str!("../locales/en/kadrell.ftl");
@@ -210,6 +212,8 @@ pub struct I18n {
     setting: AtomicU8,
     resolved: AtomicU8,
     generation: AtomicU64,
+    /// Windows-Begriffe statt Mac-Begriffe (Explorer statt Finder), Standard: nicht auf dem Mac.
+    windows_words: AtomicBool,
     reported: Mutex<HashSet<String>>,
 }
 
@@ -221,6 +225,7 @@ impl I18n {
             setting: AtomicU8::new(0),
             resolved: AtomicU8::new(0),
             generation: AtomicU64::new(0),
+            windows_words: AtomicBool::new(!cfg!(target_os = "macos")),
             reported: Mutex::new(HashSet::new()),
         };
         i18n.apply(language);
@@ -237,6 +242,11 @@ impl I18n {
     /// neu zeichnen und alles neu bauen, was Texte beim Erzeugen zwischenspeichert.
     pub fn set_language(&self, language: Language) {
         self.apply(language);
+    }
+
+    /// Schaltet die Windows-Begriffe ein oder aus (für Tests, die den Mac-Text prüfen).
+    pub fn set_windows_words(&self, on: bool) {
+        self.windows_words.store(on, Ordering::SeqCst);
     }
 
     /// Liest die Systemsprache neu ein (nur bei `Language::System` nötig, z. B. beim Zurückkehren in die App).
@@ -324,7 +334,8 @@ impl I18n {
         let bundle = self.bundle(lang);
         let pattern = bundle.get_message(id)?.value()?;
         let mut errors = Vec::new();
-        Some(bundle.format_pattern(pattern, Some(args), &mut errors).into_owned())
+        let text = bundle.format_pattern(pattern, Some(args), &mut errors).into_owned();
+        Some(if self.windows_words.load(Ordering::SeqCst) { winwords::adapt(&text, lang) } else { text })
     }
 
     /// Fehlende Übersetzung: in Debug-Builds einmal je Id auf stderr, nie ein Panic.
