@@ -64,7 +64,7 @@ impl ControlHandler for AppState {
         if transcript::path(session_id, &config_dir).is_none() {
             return Some(ResumeBlocker::NoTranscript);
         }
-        kadrell_claude::agent::running_pid(session_id, &config_dir, &crate::process_alive, &|_| None).map(|pid| ResumeBlocker::Running(i64::from(pid)))
+        kadrell_claude::agent::running_pid(session_id, &config_dir, &crate::process_alive, &crate::misc::procs::process_start).map(|pid| ResumeBlocker::Running(i64::from(pid)))
     }
 
     /// Pi ist installiert und unter „Pi-Sessions“ ist ein Modell (oder Pis Standard) gewählt.
