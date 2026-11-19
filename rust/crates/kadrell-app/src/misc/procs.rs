@@ -4,7 +4,16 @@
 use std::collections::{HashMap, HashSet};
 
 use kadrell_claude::background_shells::{self, ProcessTable};
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+/// Startzeit des Prozesses `pid` in Sekunden seit 1970 (Swift: `Session.processStart`); `None`, wenn es ihn nicht
+/// gibt. Frischt nur diese eine pid auf, kein Vollscan.
+pub fn process_start(pid: u32) -> Option<f64> {
+    let mut system = System::new().ok()?;
+    let target = [Pid::from_u32(pid)];
+    system.refresh_processes_specifics(ProcessesToUpdate::Some(&target), true, ProcessRefreshKind::nothing());
+    system.process(target[0]).map(|p| p.start_time() as f64)
+}
 
 /// Eine Momentaufnahme der Prozesse: Eltern, Programmname und Kommandozeile je pid.
 #[derive(Debug, Default)]
@@ -69,6 +78,30 @@ pub fn running_shells(pids: &[u32]) -> HashSet<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn own_process_start_is_in_the_past() {
+        let start = process_start(std::process::id()).expect("eigener Prozess");
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+        assert!(start <= now + 1.0 && start > now - 10.0 * 365.0 * 86400.0, "start {start}, now {now}");
+        assert!(process_start(u32::MAX - 1).is_none());
+    }
+
+    #[test]
+    fn stale_session_file_is_ignored_with_real_start() {
+        let dir = std::env::temp_dir().join(format!("kadrell-pstart-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sessions")).unwrap();
+        let pid = std::process::id();
+        let json = |started: f64| format!(r#"{{"id":"a","cwd":"/x","kind":"interactive","startedAt":{started},"sessionId":"s1","state":"idle"}}"#);
+        let start = process_start(pid).unwrap();
+        let cfg = dir.to_string_lossy().replace('\\', "/");
+        let file = dir.join("sessions").join(format!("{pid}.json"));
+        std::fs::write(&file, json((start - 3600.0) * 1000.0)).unwrap();
+        assert!(kadrell_claude::agent::local_agents(&[pid], &cfg, &process_start).is_empty());
+        std::fs::write(&file, json((start + 5.0) * 1000.0)).unwrap();
+        assert_eq!(kadrell_claude::agent::local_agents(&[pid], &cfg, &process_start).len(), 1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     const SNAPSHOT: &[(u32, u32, &str, &str)] = &[
         (100, 1, "claude.exe", "claude --resume abc"),
