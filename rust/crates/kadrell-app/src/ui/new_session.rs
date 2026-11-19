@@ -36,6 +36,11 @@ const WIDTH: f32 = 640.;
 /// Sichtbare Zeilen der Liste: 8 mal 46 (`visibleRows` mal `rowHeight`).
 const VISIBLE_ROWS: f32 = 8.;
 
+/// Höhe der Liste mal UI-Größe (`visibleRows * rowHeight * Theme.scale`).
+fn list_height(scale: f32) -> f32 {
+    VISIBLE_ROWS * super::folder_row::ROW_HEIGHT * scale
+}
+
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
     dialog_keys::bind_keys(cx);
@@ -235,7 +240,7 @@ impl NewSession {
             .flex()
             .flex_col()
             .flex_none()
-            .h(px(VISIBLE_ROWS * super::folder_row::ROW_HEIGHT))
+            .h(px(list_height(super::overlay::scale())))
             .min_h_0()
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
@@ -486,6 +491,13 @@ pub(crate) fn scan_roots(home: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_list_shows_eight_rows_at_any_ui_size() {
+        assert_eq!(list_height(1.), 368.);
+        assert_eq!(list_height(1.5), 552.);
+        assert_eq!(list_height(1.5) / (super::super::folder_row::ROW_HEIGHT * 1.5), VISIBLE_ROWS);
+    }
 
     #[test]
     fn scan_roots_cover_start_folder_and_parents_of_known_projects() {

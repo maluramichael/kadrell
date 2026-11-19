@@ -240,6 +240,13 @@ pub fn layout(mode: LayoutMode, color: Hsla) -> impl IntoElement {
     icon(10., layout_strokes(mode, Area { x: 1., y: 1., w: 8., h: 8. }), color, 1.2)
 }
 
+/// Layout-Symbol der Leiste mal UI-Größe (`Theme.scale`): Fläche, Linienzüge und Strich wachsen gemeinsam.
+pub fn layout_scaled(mode: LayoutMode, color: Hsla, scale: f32) -> impl IntoElement {
+    let strokes = layout_strokes(mode, Area { x: 1., y: 1., w: 8., h: 8. });
+    let strokes = strokes.into_iter().map(|k| Stroke { points: k.points.iter().map(|p| (p.0 * scale, p.1 * scale)).collect(), ..k }).collect();
+    icon(10. * scale, strokes, color, 1.2 * scale)
+}
+
 /// Layout-Symbol fürs Menü (`Icons.layoutImage`): 16 x 16, die Fläche zwei Punkte vom Rand, Strich 1,2.
 #[allow(dead_code)] // TODO(paket-menu): Layout-Auswahlmenü der Leiste, Farbe = Menüschrift
 pub fn layout_menu(mode: LayoutMode, color: Hsla) -> impl IntoElement {
