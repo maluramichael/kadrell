@@ -41,6 +41,7 @@ pub mod tile;
 pub mod tile_body;
 pub mod tile_icons;
 pub mod tile_actions;
+pub mod tile_context;
 pub mod tile_edge;
 pub mod tile_look;
 pub mod stack_row;
