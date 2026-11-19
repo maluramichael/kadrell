@@ -2,7 +2,7 @@
 //! Mac-App, wo jedes Fenster seine eigene Arbeitsfläche hat. Dazu gehören nächste und vorige Kachel, Fokus in eine
 //! Richtung, Kachel 1 bis 9, Zoom, Spaltenzahl, Kachel schließen und die Kürzel aus den Einstellungen. Was Dialoge öffnet
 //! (Schnellstart, Verlaufssuche, Statistik, Umbenennen), geht an das Hauptfenster (`current::forward_hotkey`).
-//! Vorschau, Sync, Auto, Teilen und Tauschen kennt nur das Hauptfenster.
+//! Sync gilt je Fenster (`extra_modes`). Vorschau, Teilen und Tauschen kennt nur das Hauptfenster.
 
 use gpui::{Context, KeyDownEvent, Window};
 use kadrell_core::hotkeys::HotkeyAction as A;
@@ -62,9 +62,11 @@ impl ExtraWindow {
         let m = ev.keystroke.modifiers;
         let input = KeyInput { control: m.control, alt: m.alt, shift: m.shift, platform: m.platform, key: ev.keystroke.key.clone() };
         self.keys.refresh(&self.shell.read(cx).state.settings);
-        let Some(action) = self.keys.lookup(&input) else { return };
+        let Some(action) = self.keys.lookup(&input) else { return self.forward_sync(&ev.keystroke, window, cx) };
         if self.run_hotkey(action, window, cx) {
             cx.stop_propagation();
+        } else {
+            self.forward_sync(&ev.keystroke, window, cx);
         }
     }
 
@@ -74,6 +76,7 @@ impl ExtraWindow {
             A::Zoom => self.toggle_zoom(cx),
             A::NextLayout => self.cycle_layout(cx),
             A::CloseFocused => self.close_focused(cx),
+            A::SyncInput => self.toggle_sync(cx),
             A::ShowStats => self.forward(Box::new(crate::menus::OpenStats), true, cx),
             A::QuickStart | A::SearchHistory | A::Restart => {
                 let dialog = action != A::Restart;

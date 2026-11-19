@@ -305,7 +305,7 @@ impl Shell {
 
     /// Das, was der Baum von der Shell braucht (er wird gezeichnet, während die Shell gesperrt ist).
     pub fn sidebar_ctx(&self) -> SidebarCtx {
-        SidebarCtx { view: self.tree_view(), scroll: self.groups_ui.scroll.clone(), keys: self.ws.tree_focus, anim: self.tree_anim.snapshot(std::time::Instant::now()), cmd: self.tree_anim.cmd_down }
+        SidebarCtx { view: self.tree_view(), scroll: self.groups_ui.scroll.clone(), keys: self.ws.tree_focus, anim: self.tree_anim.snapshot(std::time::Instant::now()), cmd: self.tree_anim.cmd_down, win: None, width: None }
     }
 
     /// Zeile im Baum losgelassen: Session sortieren oder verschieben, Gruppe verschieben.

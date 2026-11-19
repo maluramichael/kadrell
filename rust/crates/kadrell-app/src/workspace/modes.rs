@@ -21,7 +21,7 @@ use crate::ui::tile::Marks;
 /// Takt der Arbeitsfläche (`WorkspaceView.tickTask`).
 const TICK: std::time::Duration = std::time::Duration::from_millis(80);
 
-fn matches_auto(state: &AppState, filter: &Filter, key: &str) -> bool {
+pub(crate) fn matches_auto(state: &AppState, filter: &Filter, key: &str) -> bool {
     match state.display_status(key) {
         Some(SessionStatus::Waiting) => filter.waiting,
         Some(SessionStatus::Running) => filter.running,

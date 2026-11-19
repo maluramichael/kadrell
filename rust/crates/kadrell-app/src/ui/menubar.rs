@@ -98,6 +98,14 @@ fn next_enabled(entries: &[Entry], from: Option<usize>, dir: isize) -> Option<us
     None
 }
 
+/// Alt allein und Tastenfolge für die gezeichnete Menüleiste in dem Fenster, dessen Wurzel `root` ist (Hauptfenster und
+/// weitere Fenster teilen den Code, jedes hat seine eigene `MenuBar`).
+pub fn attach_hooks<E: InteractiveElement>(root: E, menubar: &gpui::Entity<MenuBar>) -> E {
+    let (on_mod, on_key) = (menubar.clone(), menubar.clone());
+    root.on_modifiers_changed(move |ev, window, cx| on_mod.update(cx, |m, cx| m.on_modifiers(ev, window, cx)))
+        .capture_key_down(move |_, _, cx| on_key.update(cx, |m, _| m.note_key()))
+}
+
 impl MenuBar {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let ctx = MenuContext::live();

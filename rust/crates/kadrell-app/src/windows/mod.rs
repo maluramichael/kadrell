@@ -6,9 +6,11 @@ pub mod extra;
 pub mod extra_ext;
 pub mod extra_bar;
 pub mod extra_keys;
+pub mod extra_modes;
 pub mod frame;
 pub mod layout;
 pub mod model;
+pub mod route;
 pub mod split;
 pub mod views;
 
@@ -40,6 +42,8 @@ pub struct WinState {
     pub pin: Option<current::Pin>,
     /// Seitenleiste und Dock der weiteren Fenster, damit `refresh_ext` sie aktuell hält.
     pub extra_panels: std::collections::HashMap<usize, extra_ext::ExtraPanels>,
+    /// Menü, das ein weiteres Fenster bei sich öffnen soll (Rechtsklick im Baum).
+    pub menu_request: Option<route::MenuRequest>,
     pending: Vec<layout::Change>,
     generation: u64,
 }
@@ -48,7 +52,7 @@ impl WinState {
     pub fn new(settings: &Settings) -> WinState {
         let mut sides = layout::Sides::restore(settings, 0);
         sides.apply_dev();
-        WinState { sides, pin: None, extra_panels: Default::default(), pending: Vec::new(), generation: 0 }
+        WinState { sides, pin: None, extra_panels: Default::default(), menu_request: None, pending: Vec::new(), generation: 0 }
     }
 }
 

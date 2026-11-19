@@ -27,6 +27,7 @@ use super::tree_icons::{self, TypeIcon, heart_filled, type_icon, type_icon_eleme
 use super::tree_rules::{self, MONO_ADVANCE};
 use super::tree_toolbar::{Spot, group_toolbar, session_toolbar};
 use crate::Shell;
+use crate::windows::route::routed;
 use crate::appearance::metrics::{self, ROW_INSET};
 use crate::appearance::{Appearance, a11y, breathing};
 use crate::theme::Theme;
@@ -41,6 +42,10 @@ pub struct SidebarCtx {
     pub anim: AnimSnapshot,
     /// ⌘ (Mac) bzw. Strg (Windows) gehalten: „Neue Session“ der Gruppen zeigt das Terminal-Symbol.
     pub cmd: bool,
+    /// Der Baum eines weiteren Fensters (Nummer): Klicks, Menüs und Ablagen gehen an dieses Fenster (`windows::route`).
+    pub win: Option<usize>,
+    /// Breite des Baums in diesem Fenster; ohne die des Hauptfensters.
+    pub width: Option<f32>,
 }
 
 const OUTLINE: f32 = 1.5;
@@ -106,13 +111,13 @@ fn group_label(group: &Group, t: &Theme, a: &Appearance, gap_right: f32) -> impl
 
 /// Chevron als eigene Klickfläche: klappt die Gruppe beim Drücken der Maustaste auf oder zu (`mouseDown`, nicht erst
 /// beim Loslassen), ohne sie zu markieren oder zu ziehen.
-fn chevron_button(g: usize, group: &Group, t: &Theme, a: &Appearance, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+fn chevron_button(g: usize, group: &Group, t: &Theme, a: &Appearance, win: Option<usize>, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     div()
         .id(("chevron", g))
         .flex_none()
         .w(px(a.s(CHEVRON_W)))
         .child(icons::chevron_scaled(!group.collapsed, t.muted, a.scale))
-        .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {
+        .on_mouse_down(MouseButton::Left, routed(cx, win, move |this, _: &MouseDownEvent, _, cx| {
             cx.stop_propagation();
             this.toggle_group(g, cx);
         }))
@@ -217,10 +222,10 @@ fn draggable(row: Stateful<Div>, drag: DragRow, view: TreeView) -> Stateful<Div>
 }
 
 /// Ablage auf einer Zeile: Wirkung nach `groups::drag::plan`, nur wo es eine gibt.
-fn droppable(row: Stateful<Div>, key: Option<String>, group: String, view: TreeView, cx: &mut Context<Shell>) -> Stateful<Div> {
-    let (k, g) = (key.clone(), group.clone());
+fn droppable(row: Stateful<Div>, key: Option<String>, group: String, ctx: &SidebarCtx, cx: &mut Context<Shell>) -> Stateful<Div> {
+    let (k, g, view) = (key.clone(), group.clone(), ctx.view);
     row.can_drop(move |v, _, _| v.downcast_ref::<DragRow>().is_some_and(|d| plan(d, over(&k, &g), view).is_some()))
-        .on_drop(cx.listener(move |this, d: &DragRow, window, cx| this.drop_on_row(d, key.as_deref(), &group, window, cx)))
+        .on_drop(routed(cx, ctx.win, move |this, d: &DragRow, window, cx| this.drop_on_row(d, key.as_deref(), &group, window, cx)))
 }
 
 fn over<'a>(key: &'a Option<String>, group: &'a str) -> Over<'a> {
@@ -240,7 +245,7 @@ struct HeadRow {
 
 fn group_header(h: HeadRow, group: &Group, ctx: &SidebarCtx, a: &Appearance, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let HeadRow { place: Place { g, head_order: order, .. }, holds_selection } = h;
-    let first = g == 0;
+    let (first, win) = (g == 0, ctx.win);
     let t = theme(cx);
     let m = a.rows();
     let bar = holds_selection.then(|| t.group(group.color));
@@ -250,7 +255,7 @@ fn group_header(h: HeadRow, group: &Group, ctx: &SidebarCtx, a: &Appearance, cx:
         .flex()
         .flex_col()
         .hover(move |s| s.bg(t.bg))
-        .child(group_head(group, &t, a, chevron_button(g, group, &t, a, cx).into_any_element()));
+        .child(group_head(group, &t, a, chevron_button(g, group, &t, a, ctx.win, cx).into_any_element()));
     let face = if m.path { face.child(group_path(group, &t, a)) } else { face };
     let label = a11y::group_label(&group.name, group.sessions.len());
     let host = format!("row-{order}");
@@ -263,29 +268,32 @@ fn group_header(h: HeadRow, group: &Group, ctx: &SidebarCtx, a: &Appearance, cx:
         .aria_label(label)
         .aria_level(a11y::level(true, true))
         .aria_expanded(!group.collapsed)
-        .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| this.click_group(g, ev.modifiers(), window, cx)))
+        .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| match win {
+            Some(i) => this.click_group_in(i, g, ev.modifiers(), cx),
+            None => this.click_group(g, ev.modifiers(), window, cx),
+        }))
         .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
             let id = this.groups[g].id.clone();
             if !id.is_empty() {
                 let items = this.group_menu_items(&id);
-                this.open_context(ev.position, items, cx);
+                this.open_menu_for(win, ev.position, items, cx);
             }
         }))
         .child(face);
     if real {
-        row = row.child(group_toolbar(g, group, Spot { host, row_height: m.group_row, cmd: ctx.cmd }, &t, a, cx));
+        row = row.child(group_toolbar(g, group, Spot { host, row_height: m.group_row, cmd: ctx.cmd, win }, &t, a, cx));
         let key = RowKey::Group(id.clone());
         let pressed = key.clone();
         row = row
-            .on_mouse_down(MouseButton::Middle, cx.listener(move |this, _, _, _| this.groups_ui.middle = Some(pressed.clone())))
-            .on_mouse_up(MouseButton::Middle, cx.listener(move |this, ev: &MouseUpEvent, window, cx| {
+            .on_mouse_down(MouseButton::Middle, routed(cx, win, move |this, _: &MouseDownEvent, _, _| this.groups_ui.middle = Some(pressed.clone())))
+            .on_mouse_up(MouseButton::Middle, routed(cx, win, move |this, ev: &MouseUpEvent, window, cx| {
                 if middle_released(&mut this.groups_ui.middle, &key) {
                     this.request_close_group(&id, ev.modifiers.alt, window, cx);
                 }
             }));
     }
     let group_id = group.id.clone();
-    let row = droppable(draggable(row, drag, ctx.view), None, group_id, ctx.view, cx);
+    let row = droppable(draggable(row, drag, ctx.view), None, group_id, ctx, cx);
     // Kompakt trennt eine Fuge die Gruppen, nur die erste hat keine. Sie liegt über dem Zeilenkopf und macht die Zeile
     // nicht höher (`Instrument.hSeam(y: r.minY)`), sonst rutschen alle Zeilen darunter und die Zeilenrechnung stimmt nicht mehr.
     let seam = (!m.path && !first).then(|| div().absolute().top_0().left_0().right_0().child(h_seam(&t)));
@@ -469,7 +477,7 @@ fn session_face(session: &Session, row: &SessionRow, host: &str, n: usize, t: &T
 fn session_row(row: SessionRow, group: &Group, ctx: &SidebarCtx, a: &Appearance, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let t = theme(cx);
     let (g, s, selected, focused, order, grouped) = (row.g, row.s, row.selected, row.focused, row.order, row.grouped);
-    let session = &group.sessions[s];
+    let (session, win) = (&group.sessions[s], ctx.win);
     let host = format!("row-{order}");
     let n = g * 100 + s;
     let mut face = session_face(session, &row, &host, n, &t, a).hover(move |st| st.bg(t.bg));
@@ -496,27 +504,30 @@ fn session_row(row: SessionRow, group: &Group, ctx: &SidebarCtx, a: &Appearance,
         .aria_value(a11y::session_value(&spoken, session.is_new, selected))
         .aria_level(a11y::level(false, grouped))
         .aria_selected(selected)
-        .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| this.click_session(g, s, ev.modifiers(), window, cx)))
+        .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| match win {
+            Some(i) => this.click_session_in(i, g, s, ev.modifiers(), cx),
+            None => this.click_session(g, s, ev.modifiers(), window, cx),
+        }))
         .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
             let items = this.session_menu_items(&menu_key);
-            this.open_context(ev.position, items, cx);
+            this.open_menu_for(win, ev.position, items, cx);
         }))
-        .on_mouse_down(MouseButton::Middle, cx.listener(move |this, _, _, _| this.groups_ui.middle = Some(pressed.clone())))
-        .on_mouse_up(MouseButton::Middle, cx.listener(move |this, ev: &MouseUpEvent, window, cx| {
+        .on_mouse_down(MouseButton::Middle, routed(cx, win, move |this, _: &MouseDownEvent, _, _| this.groups_ui.middle = Some(pressed.clone())))
+        .on_mouse_up(MouseButton::Middle, routed(cx, win, move |this, ev: &MouseUpEvent, window, cx| {
             if middle_released(&mut this.groups_ui.middle, &released) {
                 this.request_close_session(&close_key, ev.modifiers.alt, window, cx);
             }
         }))
         .children(row.ring().then(|| key_ring(&t, a)))
         .child(face)
-        .child(session_toolbar(n, &key, host.clone(), height, &t, a, cx));
+        .child(session_toolbar(n, &key, host.clone(), height, win, &t, a, cx));
     // Einfügelinie beim Umsortieren in der eigenen Gruppe (oder in der flachen Liste).
     for mark in [Mark::Above, Mark::Below] {
         let (k, gid, view) = (key.clone(), group.id.clone(), ctx.view);
         let show = move |d: &DragRow| row_mark(&plan(d, Over::Session { key: &k, group: &gid }, view), d, order) == Some(mark);
         row_el = row_el.child(mark_overlay(host.clone(), format!("{host}-{mark:?}"), mark, show, &t, a));
     }
-    droppable(draggable(row_el, drag, ctx.view), Some(key), group.id.clone(), ctx.view, cx)
+    droppable(draggable(row_el, drag, ctx.view), Some(key), group.id.clone(), ctx, cx)
 }
 
 /// Rahmen und Linien am ganzen Gruppenblock: eine fallende Session (Rahmen) und eine ziehende Gruppe (Linie).
@@ -576,7 +587,8 @@ fn group_block(place: Place, group: &Group, sel: &Selection, ctx: &SidebarCtx, a
 }
 
 pub fn sidebar(groups: &[Group], sel: &Selection, ctx: &SidebarCtx, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    WIDTH_PX.store(crate::windows::split::tree_width(cx).to_bits(), std::sync::atomic::Ordering::Relaxed);
+    let width = ctx.width.unwrap_or_else(|| crate::windows::split::tree_width(cx));
+    WIDTH_PX.store(width.to_bits(), std::sync::atomic::Ordering::Relaxed);
     let t = theme(cx);
     let a = crate::appearance::current(cx);
     let accent = t.accent.opacity(0.14);
@@ -588,7 +600,7 @@ pub fn sidebar(groups: &[Group], sel: &Selection, ctx: &SidebarCtx, cx: &mut Con
         .flex()
         .flex_col()
         .flex_none()
-        .w(px(crate::windows::split::tree_width(cx)))
+        .w(px(width))
         .h_full()
         .pt(px(a.s(a.rows().top_inset)))
         .pb(px(a.s(6.)))
@@ -596,7 +608,7 @@ pub fn sidebar(groups: &[Group], sel: &Selection, ctx: &SidebarCtx, cx: &mut Con
         .track_scroll(&ctx.scroll)
         .bg(a.panel_fill(t.panel))
         .text_size(px(a.s(12.)))
-        .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+        .on_drop(routed(cx, ctx.win, |this, paths: &ExternalPaths, window, cx| {
             if let Some(dir) = files::first_folder(paths) {
                 this.drop_folder(&dir, window, cx);
             }
