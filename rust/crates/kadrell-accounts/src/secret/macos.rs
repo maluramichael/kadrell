@@ -125,11 +125,28 @@ mod tests {
     }
 
     impl Scratch {
-        fn new(tag: &str) -> Scratch {
+        /// `None`, wenn der Schlüsselbund nicht beschreibbar ist, weil keine Oberfläche da ist (ssh-Sitzung ohne
+        /// entsperrten Login-Schlüsselbund): `security` endet dann mit 36 und "User interaction is not allowed.".
+        /// Nur dieser eine Fall überspringt den Test, jeder andere Fehler schlägt laut fehl.
+        fn new(tag: &str) -> Option<Scratch> {
             let service = format!("de.malura.kadrell.rust.test.{}-{tag}", std::process::id());
             assert_ne!(service, super::super::LIVE_SERVICE, "nie den echten Eintrag benutzen");
             assert!(service.starts_with("de.malura.kadrell.rust.test."));
-            Scratch { service }
+            let scratch = Scratch { service };
+            let probe = Command::new(SECURITY)
+                .args(write_args(&scratch.service, "konto-a", "probe"))
+                .output()
+                .expect("security startet");
+            if probe.status.success() {
+                SecuritySecretStore.delete(&scratch.service, "konto-a");
+                return Some(scratch);
+            }
+            let err = String::from_utf8_lossy(&probe.stderr);
+            if probe.status.code() == Some(36) && err.contains("User interaction is not allowed") {
+                eprintln!("übersprungen: Schlüsselbund nicht beschreibbar (keine Oberfläche, z. B. ssh): {}", err.trim());
+                return None;
+            }
+            panic!("Schreibprobe im Schlüsselbund schlug fehl ({:?}): {}", probe.status.code(), err.trim());
         }
     }
 
@@ -146,7 +163,7 @@ mod tests {
 
     #[test]
     fn keychain_roundtrip_with_json_value() {
-        let s = Scratch::new("roundtrip");
+        let Some(s) = Scratch::new("roundtrip") else { return };
         let store = SecuritySecretStore;
         assert_eq!(store.read(&s.service, Some("konto-a")), None, "vorher nichts");
         assert!(store.write(&s.service, "konto-a", BLOCK));
@@ -157,7 +174,7 @@ mod tests {
 
     #[test]
     fn keychain_write_updates_an_existing_entry() {
-        let s = Scratch::new("update");
+        let Some(s) = Scratch::new("update") else { return };
         let store = SecuritySecretStore;
         assert!(store.write(&s.service, "konto-a", "eins"));
         assert!(store.write(&s.service, "konto-a", "zwei"), "-U überschreibt statt zu scheitern");
@@ -168,7 +185,7 @@ mod tests {
 
     #[test]
     fn keychain_delete_removes_only_that_entry() {
-        let s = Scratch::new("delete");
+        let Some(s) = Scratch::new("delete") else { return };
         let store = SecuritySecretStore;
         store.write(&s.service, "konto-a", "eins");
         store.write(&s.service, "konto-b", "zwei");
@@ -182,7 +199,7 @@ mod tests {
     /// ASCII; stünde dort doch einmal ein Nicht-ASCII-Zeichen, darf `read` nicht stillschweigend Hex liefern.
     #[test]
     fn keychain_value_with_non_ascii_comes_back_unchanged() {
-        let s = Scratch::new("unicode");
+        let Some(s) = Scratch::new("unicode") else { return };
         let store = SecuritySecretStore;
         let value = r#"{"name":"Müller \u00e4 ö"}"#;
         assert!(store.write(&s.service, "konto-a", value));
