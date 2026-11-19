@@ -194,6 +194,17 @@ pub fn children_of(pid: u32) -> Vec<u32> {
         .collect()
 }
 
+/// Wartet auf das erste Kind eines Prozesses und liefert genau die Pid, bei der die Bedingung galt (ein zweiter Abruf
+/// könnte unter Last schon eine andere oder keine Liste sehen). Die Frist ist großzügig, das Warten endet sofort.
+pub fn wait_for_child(pid: u32) -> Option<u32> {
+    let mut found = None;
+    wait_until(3.0 * WAIT, || {
+        found = children_of(pid).first().copied();
+        found.is_some()
+    });
+    found
+}
+
 /// Laufende Helfer (`ext-host <dir>…`) für Extensions unter `dir`, gezählt über die Prozessliste.
 pub fn helpers_in(dir: &Path) -> usize {
     let mut sys = System::new().expect("sysinfo");
