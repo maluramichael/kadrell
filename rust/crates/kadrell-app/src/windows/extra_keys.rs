@@ -56,7 +56,7 @@ pub fn zoomed_keys(tiles: &[String], focus: Option<&str>, zoom: bool) -> Vec<Str
 impl ExtraWindow {
     /// Ein Tastendruck, bevor das Terminal ihn sieht: Kürzel aus den Einstellungen (`workspace_key` des Hauptfensters).
     pub(super) fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        if self.context.is_some() {
+        if self.context.is_some() || self.dialog_here(ev, window, cx) {
             return;
         }
         let m = ev.keystroke.modifiers;
@@ -70,6 +70,19 @@ impl ExtraWindow {
         }
     }
 
+    /// Steht hier ein Dialog, gehören ihm die Tasten (die Kürzel des Fensters ruhen); Esc schließt ihn auch ohne Fokus
+    /// (`Shell::cancel_visible`). `true`: die Taste ist vergeben.
+    fn dialog_here(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let (shell, index, idle) = (self.shell.clone(), self.index, self.idle_focus.clone());
+        if !crate::ui::overlay_host::shows_overlays(shell.read(cx).win.host, index) || !shell.read(cx).modal_open() {
+            return false;
+        }
+        if ev.keystroke.key == "escape" && shell.update(cx, |sh, scx| sh.cancel_visible_with(&idle, window, scx)) {
+            cx.stop_propagation();
+        }
+        true
+    }
+
     /// Führt die Aktion in diesem Fenster aus; `false`, wenn dieses Fenster sie nicht kennt.
     fn run_hotkey(&mut self, action: A, window: &mut Window, cx: &mut Context<Self>) -> bool {
         match action {
@@ -77,12 +90,12 @@ impl ExtraWindow {
             A::NextLayout => self.cycle_layout(cx),
             A::CloseFocused => self.close_focused(cx),
             A::SyncInput => self.toggle_sync(cx),
-            A::ShowStats => self.forward(Box::new(crate::menus::OpenStats), true, cx),
+            A::ShowStats => self.run_here(true, cx, |sh, w, c| sh.toggle_stats(w, c)),
             A::QuickStart | A::SearchHistory | A::Restart => {
                 let dialog = action != A::Restart;
                 super::current::forward_hotkey(&self.shell, self.index, action.raw(), dialog, cx);
             }
-            A::RenameSession => self.forward(Box::new(crate::menus::RenameSession), true, cx),
+            A::RenameSession => self.run_here(true, cx, |sh, w, c| sh.rename_focused(w, c)),
             other => return self.focus_by_action(other, window, cx),
         }
         true

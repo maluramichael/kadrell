@@ -41,6 +41,15 @@ pub fn selection_of(groups: &[Group], selected: &[String], focus: Option<&str>) 
     Selection { items, focus, anchor: focus }
 }
 
+/// Auswahl, nach der ein Menü des Baums von Fenster `win` entscheidet, was es anbietet: die des Fensters (`view`), im
+/// Hauptfenster (`None`) die der Shell. Ein geschlossenes Fenster hat keine.
+pub fn menu_selection<'a>(main: &'a [String], view: Option<&'a super::views::View>, win: Option<usize>) -> &'a [String] {
+    match win {
+        None => main,
+        Some(_) => view.map_or(&[], |v| v.selected.as_slice()),
+    }
+}
+
 /// Wunsch eines weiteren Fensters, ein Menü bei sich zu öffnen (Rechtsklick im Baum). Das Fenster holt ihn im nächsten Bild.
 pub struct MenuRequest {
     pub index: usize,
@@ -90,7 +99,7 @@ impl Shell {
 
     /// Nach einer Auswahl in einem weiteren Fenster: die Shell hält Terminals und Start, ihr Fenster ist das Hauptfenster.
     /// Der Abgleich läuft dort, nicht mitten im Klick.
-    fn sync_in_main(&self, cx: &mut Context<Self>) {
+    pub(crate) fn sync_in_main(&self, cx: &mut Context<Self>) {
         let Some(main) = self.main_window else { return };
         cx.spawn(async move |this, cx| {
             let _ = cx.update_window(main, |_, window, app| {
@@ -133,6 +142,17 @@ mod tests {
         let sel = selection_of(&g, &keys(&["b1", "a2"]), Some("b1"));
         assert_eq!(sel.items, [(0, 1), (1, 0)], "in Baumreihenfolge");
         assert_eq!(sel.focus, (1, 0));
+    }
+
+    /// Das Session-Menü im weiteren Fenster entscheidet nach der Auswahl dieses Fensters, nicht der des Hauptfensters.
+    #[test]
+    fn the_session_menu_reads_the_selection_of_its_own_window() {
+        use crate::windows::views::View;
+        let main = keys(&["a1", "a2"]);
+        let view = View { selected: keys(&["b1"]), ..View::default() };
+        assert_eq!(menu_selection(&main, Some(&view), None), main.as_slice(), "Hauptfenster: die der Shell");
+        assert_eq!(menu_selection(&main, Some(&view), Some(1)), keys(&["b1"]).as_slice());
+        assert!(menu_selection(&main, None, Some(2)).is_empty(), "geschlossenes Fenster: keine");
     }
 
     #[test]

@@ -54,6 +54,12 @@ pub struct Frame {
 }
 
 impl Area {
+    /// Fläche eines Fensters aus seiner Größe: Hauptfenster und weitere Fenster setzen sie je in ihrem eigenen Zeichnen,
+    /// ein Overlay folgt so der Größe des Fensters, in dem es steht.
+    pub fn of_window(width: f32, height: f32, top: f32, scale: f32, device: f32) -> Area {
+        Area { width, height: (height - top).max(0.), top, scale, device }
+    }
+
     /// Höchstbreite eines zentrierten Dialogs: Fläche minus Rand beidseits (`overlayMaxWidth`).
     pub fn max_width(&self) -> f32 {
         (self.width - 2. * MARGIN).max(0.)
@@ -157,14 +163,8 @@ pub fn title_bar_height() -> f32 {
 pub fn sync_area(window: &Window, cx: &App) {
     super::overlay_queue::note_launch();
     let view = window.viewport_size();
-    let top = title_bar_height();
-    set_area(Area {
-        width: view.width.as_f32(),
-        height: (view.height.as_f32() - top).max(0.),
-        top,
-        scale: crate::appearance::current(cx).scale,
-        device: window.scale_factor(),
-    });
+    let scale = crate::appearance::current(cx).scale;
+    set_area(Area::of_window(view.width.as_f32(), view.height.as_f32(), title_bar_height(), scale, window.scale_factor()));
 }
 
 /// Setzt alle vier Rahmenbreiten (GPUI kennt nur ganze Stufen, die Fuge braucht ein Gerätepixel).
@@ -502,6 +502,19 @@ mod tests {
         assert_eq!(a.seam(), if cfg!(target_os = "macos") { 1. } else { 0.5 });
         assert_eq!(a.snapped(10.3), 10.5);
         assert_eq!(window(100., 100.).snapped(10.4), 10.);
+    }
+
+    /// Zwei Fenster, zwei Flächen: Palette und Dialoge richten sich nach dem Fenster, in dem sie stehen.
+    #[test]
+    fn each_window_has_its_own_area() {
+        let main = Area::of_window(1400., 932., 32., 1., 1.);
+        let second = Area::of_window(700., 532., 32., 1.5, 2.);
+        assert_eq!(main.height, 900.);
+        assert_eq!(second.height, 500.);
+        assert_eq!(main.palette().width, 640.);
+        assert_eq!(second.palette().width, 700. - 2. * MARGIN, "im kleinen Fenster Fläche minus Rand");
+        assert!(second.dialog_width(1000.) < main.dialog_width(1000.));
+        assert_eq!(Area::of_window(10., 20., 32., 1., 1.).height, 0.);
     }
 
     #[test]

@@ -137,6 +137,37 @@ fn taking_the_focus_tile_out_changes_only_that_window() {
     assert_eq!(state.selected, [a]);
 }
 
+/// Audit A27: „Kachel schließen, wenn Claude endet“ nimmt die Kachel aus der Auswahl jedes Fensters, das sie zeigt.
+#[test]
+fn closing_a_tile_when_claude_ends_acts_on_every_window() {
+    let dir = Dir::new();
+    let (mut state, a, b, c) = two_windows(&dir);
+    state.select_keys(std::slice::from_ref(&b), true);
+    state.view_select(1, &[a.clone(), b.clone()], false);
+    state.settings.set("closeTileOnExit", serde_json::Value::Bool(true));
+    let terms = super::tests::start_all(&mut state);
+    terms.iter().find(|(k, _)| *k == b).unwrap().1.exited.set(true);
+    assert!(state.on_exit(&b));
+    assert_eq!(state.selected, std::slice::from_ref(&a), "Hauptfenster");
+    assert_eq!(state.wins.get(1).unwrap().selected, std::slice::from_ref(&a), "weiteres Fenster");
+    assert_eq!(state.wins.get(1).unwrap().focus.as_deref(), Some(a.as_str()));
+    assert!(state.session(&c).is_some());
+}
+
+#[test]
+fn a_window_with_only_the_ended_tile_keeps_it() {
+    let dir = Dir::new();
+    let (mut state, a, b, _) = two_windows(&dir);
+    state.select_keys(std::slice::from_ref(&b), true);
+    state.view_select(1, std::slice::from_ref(&b), false);
+    state.settings.set("closeTileOnExit", serde_json::Value::Bool(true));
+    let terms = super::tests::start_all(&mut state);
+    terms.iter().find(|(k, _)| *k == b).unwrap().1.exited.set(true);
+    state.on_exit(&b);
+    assert_eq!(state.selected, std::slice::from_ref(&a));
+    assert_eq!(state.wins.get(1).unwrap().selected, std::slice::from_ref(&b), "die letzte Kachel eines Fensters bleibt");
+}
+
 #[test]
 fn a_column_step_in_any_window_reaches_the_others() {
     use crate::ui::layout::{GRID_COLUMNS_KEY, LayoutMode, LayoutState};

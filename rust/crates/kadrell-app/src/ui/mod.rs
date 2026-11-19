@@ -25,6 +25,7 @@ pub mod instrument;
 pub mod overlay;
 pub mod pick;
 pub mod overlay_anim;
+pub mod overlay_host;
 pub mod overlay_queue;
 pub mod palette;
 pub mod quick_start;

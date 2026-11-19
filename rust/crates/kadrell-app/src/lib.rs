@@ -515,6 +515,7 @@ impl Render for Shell {
         self.sync_menus(cx);
         appearance::window_color::ensure_native(window);
         ui::overlay::sync_area(window, cx);
+        self.settle_host();
         let t = ui::theme(cx);
         if self.window_dark != Some(t.dark) {
             self.window_dark = Some(t.dark);
@@ -555,20 +556,7 @@ impl Render for Shell {
             .child(ui::bar::bar(&self.clock, &ctl, cx))
             .child(self.split_row(sidebar, workspace, right, window, cx))
             .children(footer)
-            .children(self.overlay.clone())
-            .children(self.palette.clone())
-            .children(self.quick_start.clone())
-            .children(self.agent_pick.clone())
-            .children(self.remote.clone())
-            .children(self.settings.clone())
-            .children(self.ext_ui.dialog.clone())
-            .children(self.rename.clone())
-            .children(self.misc.help.clone())
-            .children(self.misc.confirm.clone())
-            .children(self.groups_ui.edit.clone())
-            .children(self.groups_ui.confirm.clone())
-            .children(self.usage.stats.clone())
-            .children(self.closing_layer())
+            .children(self.overlay_layers(0))
             .children(self.context_layer(window, cx))
             .children(self.usage.notice.clone())
     }

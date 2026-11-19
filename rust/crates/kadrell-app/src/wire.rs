@@ -98,6 +98,9 @@ impl Shell {
     /// Nach jeder Änderung des Zustands: vorgemerkte Prozesse starten, Ansicht neu bauen, Tastatur an die
     /// Fokus-Kachel (solange kein Dialog offen ist), neu zeichnen.
     pub(crate) fn sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_main_window(window) {
+            return self.sync_foreign(window, cx);
+        }
         self.reconcile(window, cx);
         self.emit_ext_events();
         self.rebuild();
@@ -111,6 +114,7 @@ impl Shell {
         self.refresh_tray(window, cx);
         self.run_pending_overlay(window, cx);
         self.settle_pin(window);
+        self.settle_host();
         cx.notify();
     }
 

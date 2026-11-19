@@ -43,7 +43,6 @@ impl ExtraWindow {
         usage.on_account = press(cx, |this, at, cx| this.open_account_menu(at, cx));
         usage.on_detach = press(cx, |this, _, cx| this.detach_idle(cx));
         usage.on_waiting = press(cx, |this, _, cx| this.select_waiting(cx));
-        let noop: Press = Rc::new(|_, _, _| {});
         let mode = self.layout.mode;
         let (grouped, sort) = self.shell.read(cx).tree_look();
         let ctl = LayoutCtl {
@@ -57,8 +56,8 @@ impl ExtraWindow {
             pick_layout: press(cx, |this, at, cx| this.open_layout_menu(at, cx)),
             dec: press(cx, |this, _, cx| this.step_columns(-1, cx)),
             inc: press(cx, |this, _, cx| this.step_columns(1, cx)),
-            split: None,
-            cycle_split: noop.clone(),
+            split: (mode == LayoutMode::Custom).then(|| self.focused_split(cx)),
+            cycle_split: press(cx, |this, _, cx| this.cycle_split(cx)),
             auto: self.modes.auto.on,
             sync: self.modes.sync,
             zoom: view.zoom && tiles > 1,

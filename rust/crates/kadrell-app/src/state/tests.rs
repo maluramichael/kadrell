@@ -15,10 +15,10 @@ use super::launch::LaunchEnv;
 use super::{AppState, Parts, Run, Term};
 
 /// Terminal ohne Prozess: merkt sich Eingaben und zeigt feste Zeilen.
-struct FakeTerm {
+pub(super) struct FakeTerm {
     pid: u32,
     written: RefCell<Vec<u8>>,
-    exited: Cell<bool>,
+    pub(super) exited: Cell<bool>,
     code: Cell<Option<i32>>,
     scrollback: Cell<usize>,
     paste: bool,
@@ -96,7 +96,7 @@ pub(super) fn cwd(dir: &Dir, name: &str) -> String {
 }
 
 /// Startet alles Vorgemerkte mit Attrappen, wie es die Oberfläche mit echten Terminals tut.
-fn start_all(state: &mut AppState) -> Vec<(String, Rc<FakeTerm>)> {
+pub(super) fn start_all(state: &mut AppState) -> Vec<(String, Rc<FakeTerm>)> {
     let mut out = Vec::new();
     for (i, (key, spec)) in state.take_starts().into_iter().enumerate() {
         if spec.is_ok() {

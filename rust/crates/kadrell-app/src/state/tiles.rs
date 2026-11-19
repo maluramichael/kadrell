@@ -278,8 +278,11 @@ impl AppState {
         tile.state = Run::Ended;
         if self.session(key).is_some_and(kadrell_core::Session::is_shell) {
             self.remove_sessions(&[key.to_string()]);
-        } else if self.settings.close_tile_on_exit() && self.selected.len() > 1 && self.selected.iter().any(|k| k == key) {
-            self.select_keys(&[key.to_string()], true);
+        } else if self.settings.close_tile_on_exit() {
+            if self.selected.len() > 1 && self.selected.iter().any(|k| k == key) {
+                self.select_keys(&[key.to_string()], true);
+            }
+            self.view_drop_everywhere(key);
         }
         self.update_attention();
         true
