@@ -46,6 +46,8 @@ pub struct BarCtl {
     /// Breite des Fensters und geschätzte Breite der linken Tasten.
     pub width: f32,
     pub left: f32,
+    /// UI-Größe (`Theme.scale`): Schrift, Abstände und Höhen der rechten Seite wachsen damit.
+    pub scale: f32,
     pub on_account: Press,
     pub on_detach: Press,
     pub on_waiting: Press,
@@ -191,13 +193,14 @@ fn group_el(g: Group) -> impl IntoElement {
 }
 
 /// Flaches Modul mit Fuge rechts: Teile (Kürzel gedämpft, Wert farbig), 5 px Abstand dazwischen.
-fn module(id: impl Into<ElementId>, groups: Vec<Group>, tip: Option<String>, click: Option<&Handler>, t: &Theme) -> Part {
-    module_with(id, groups, USAGE_FACE, tip, click, t)
+fn module(id: impl Into<ElementId>, groups: Vec<Group>, tip: Option<String>, click: Option<&Handler>, t: &Theme, k: f32) -> Part {
+    module_with(id, groups, USAGE_FACE, tip, click, t, k)
 }
 
-fn module_with(id: impl Into<ElementId>, groups: Vec<Group>, face: Face, tip: Option<String>, click: Option<&Handler>, t: &Theme) -> Part {
-    let inner: f32 = groups.iter().map(|g| group_width(g, face.size)).sum::<f32>() + 5. * groups.len().saturating_sub(1) as f32;
-    let row = div().flex().items_center().h_full().px(px(10.)).gap(px(5.)).text_size(px(face.size)).whitespace_nowrap();
+fn module_with(id: impl Into<ElementId>, groups: Vec<Group>, face: Face, tip: Option<String>, click: Option<&Handler>, t: &Theme, k: f32) -> Part {
+    let size = face.size * k;
+    let inner: f32 = groups.iter().map(|g| group_width(g, size)).sum::<f32>() + 5. * k * groups.len().saturating_sub(1) as f32;
+    let row = div().flex().items_center().h_full().px(px(10. * k)).gap(px(5. * k)).text_size(px(size)).whitespace_nowrap();
     let row = if face.bold { row.font_weight(FontWeight::BOLD) } else { row };
     let row = groups.into_iter().fold(row, |r, g| r.child(group_el(g)));
     let mut el = div().id(id).flex().flex_none().items_center().h_full().child(row).child(v_seam(t));
@@ -208,7 +211,7 @@ fn module_with(id: impl Into<ElementId>, groups: Vec<Group>, face: Face, tip: Op
         let h = h.clone();
         el = el.cursor_pointer().on_click(move |e, w, c| h(e, w, c));
     }
-    Part { width: SEAM + 20. + inner, el: el.into_any_element() }
+    Part { width: SEAM + 20. * k + inner, el: el.into_any_element() }
 }
 
 /// Links der Tasten: Tipp, dann die Versionswarnung (`noticeModuleParts`).
@@ -217,12 +220,12 @@ fn notice_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
     if let Some(tip) = b.tip.as_ref().filter(|_| plan.tip) {
         let text = vec![vec![(format!("{tip}  ×"), t.waiting)]];
         let region = Region::new(trd!("Tipp"), Some(tip.clone()));
-        parts.push(module_with("tip", text, Face { size: 10.5, bold: false }, Some(region.tooltip()), Some(&b.on_tip), t));
+        parts.push(module_with("tip", text, Face { size: 10.5, bold: false }, Some(region.tooltip()), Some(&b.on_tip), t, b.scale));
     }
     if let Some(warning) = b.version_warning.as_ref().filter(|_| plan.version) {
         let text = vec![vec![(trd!("claude alt · claude update"), t.waiting)]];
         let region = Region::new(trd!("Ältere claude-Version"), Some(warning.clone()));
-        parts.push(module_with("claude-version", text, Face { size: 10.5, bold: true }, Some(region.tooltip()), Some(&b.on_version), t));
+        parts.push(module_with("claude-version", text, Face { size: 10.5, bold: true }, Some(region.tooltip()), Some(&b.on_version), t, b.scale));
     }
     parts
 }
@@ -247,7 +250,7 @@ fn usage_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
             }
             shown.push((value, color));
             let id = ids[match row.key { UsageKey::Fable => 0, UsageKey::Weekly => 1, UsageKey::Session => 2 }];
-            module(id, vec![vec![(row.key.name().to_string(), t.muted)], shown], Some(usage_tip(&row, b)), None, t)
+            module(id, vec![vec![(row.key.name().to_string(), t.muted)], shown], Some(usage_tip(&row, b)), None, t, b.scale)
         })
         .collect()
 }
@@ -256,7 +259,7 @@ fn usage_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
 
 /// Taste der rechten Seite: feuert beim Drücken, Trefferfläche über die ganze Höhe, Tooltip „Label: Wert“.
 fn key_part(id: &'static str, label: String, fill: Option<Hsla>, region: Region, press: &Press, b: &BarCtl, t: &Theme) -> Part {
-    let width = text_width(&label, 10.) + 16. + KEY_GAP;
+    let width = (text_width(&label, 10.) + 16.) * b.scale + KEY_GAP;
     let mut pill = Pill::new(id, label);
     match fill {
         Some(f) => pill = pill.fill(f),
@@ -267,9 +270,9 @@ fn key_part(id: &'static str, label: String, fill: Option<Hsla>, region: Region,
 }
 
 /// Die Update-Taste hat ihren eigenen Klick (`misc::update`), sie feuert beim Loslassen.
-fn update_part(u: &UpdatePill) -> Part {
+fn update_part(u: &UpdatePill, k: f32) -> Part {
     let label = trd!("%@ verfügbar", u.version.as_str());
-    let width = text_width(&label, 10.) + 16. + KEY_GAP;
+    let width = (text_width(&label, 10.) + 16.) * k + KEY_GAP;
     let h = u.on_click.clone();
     let pill = Pill::new("update", label).tooltip_text(Region::new(trd!("Update verfügbar"), Some(u.version.clone())).tooltip()).on_click(move |e, w, c| h(e, w, c));
     Part { width, el: pill.into_any_element() }
@@ -313,7 +316,7 @@ fn key_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
         parts.push(key_part("detach", trd!("%lld trennen", b.detachable), Some(t.idle), detach_region(b), &b.on_detach, b, t));
     }
     if let Some(u) = b.update.as_ref().filter(|_| plan.update) {
-        parts.push(update_part(u));
+        parts.push(update_part(u, b.scale));
     }
     if plan.account {
         parts.extend(account_part(b, plan.short_account, t));
@@ -384,9 +387,10 @@ fn dropped_usage(b: &BarCtl, plan: &BarPlan) -> String {
 
 fn display_part(b: &BarCtl, plan: &BarPlan, clock: &str, t: &Theme) -> Part {
     let text = b.error.clone().unwrap_or_else(|| logic::status_text(&b.counts, plan.compact));
-    let text_w = (text_width(&text, 10.5) - plan.shrink).max(0.);
-    let time_w = text_width(clock, 10.5);
-    let w = 10. + 7. + 6. + text_w + if text_w > 0. { 8. } else { 0. } + time_w + 10.;
+    let k = b.scale;
+    let text_w = (text_width(&text, 10.5 * k) - plan.shrink).max(0.);
+    let time_w = text_width(clock, 10.5 * k);
+    let w = (10. + 7. + 6. + if text_w > 0. { 8. } else { 0. } + 10.) * k + text_w + time_w;
     let ink = if b.error.is_some() { screen_error(t) } else { screen_ink() };
     let lamp = if b.error.is_some() { t.error } else { lamp_color(logic::lamp(&b.counts), t) };
     let spoken = spoken_status(b, plan);
@@ -400,20 +404,20 @@ fn display_part(b: &BarCtl, plan: &BarPlan, clock: &str, t: &Theme) -> Part {
         .flex_none()
         .items_center()
         .overflow_hidden()
-        .h(px(20.))
+        .h(px(20. * k))
         .w(px(w))
-        .px(px(10.))
-        .rounded(px(5.))
+        .px(px(10. * k))
+        .rounded(px(5. * k))
         .bg(screen_face(t))
-        .text_size(px(10.5))
+        .text_size(px(10.5 * k))
         .child(div().absolute().top_0().left_0().right_0().h(px(super::overlay::seam())).bg(hsla(0., 0., 1., 0.06)))
-        .child(div().size(px(7.)).flex_none().rounded_full().bg(lamp).mr(px(6.)))
+        .child(div().size(px(7. * k)).flex_none().rounded_full().bg(lamp).mr(px(6. * k)))
         .child(label)
-        .child(div().flex_1().min_w(px(if text_w > 0. { 8. } else { 0. })))
+        .child(div().flex_1().min_w(px(if text_w > 0. { 8. * k } else { 0. })))
         .child(div().flex_none().text_color(screen_muted()).child(clock.to_string()))
         .tooltip(tooltip::text(spoken.clone()));
     el = el.aria_description(b.announcement.clone().map_or(spoken.clone(), |a| format!("{spoken}. {a}")));
-    Part { width: w + EDGE, el: el.into_any_element() }
+    Part { width: w + EDGE * k, el: el.into_any_element() }
 }
 
 // MARK: Zusammenbau
@@ -424,7 +428,7 @@ fn spacer(width: f32) -> Part {
 
 /// Alle Teile von rechts nach links nach `plan`: Display, Tasten, Rand, Nutzung.
 fn parts(b: &BarCtl, plan: &BarPlan, clock: &str, t: &Theme) -> Vec<Part> {
-    let mut parts = vec![display_part(b, plan, clock, t), spacer(EDGE - KEY_GAP)];
+    let mut parts = vec![display_part(b, plan, clock, t), spacer(EDGE * b.scale - KEY_GAP)];
     let keys = key_parts(b, plan, t);
     let had_keys = !keys.is_empty();
     parts.extend(keys);
@@ -447,7 +451,7 @@ fn ext_parts(b: &BarCtl, plan: &BarPlan, t: &Theme) -> Vec<Part> {
         .rev()
         .map(|(i, e)| {
             let tip = format!("{}: {}", e.name, e.text);
-            module(("ext-status", i), vec![vec![(e.text.clone(), e.dot.unwrap_or(t.fg))]], Some(tip), e.click.as_ref(), t)
+            module(("ext-status", i), vec![vec![(e.text.clone(), e.dot.unwrap_or(t.fg))]], Some(tip), e.click.as_ref(), t, b.scale)
         })
         .collect()
 }
@@ -458,7 +462,7 @@ fn total(parts: &[Part]) -> f32 {
 
 /// Der vollständigste Plan, der neben die linken Tasten passt.
 pub fn plan_for(b: &BarCtl, clock: &str, t: &Theme) -> BarPlan {
-    let room = b.width - b.left - 16. - EDGE;
+    let room = b.width - b.left - (16. + EDGE) * b.scale;
     BarPlan::fit(b.ext.len(), room, |p| total(&parts(b, p, clock, t)))
 }
 
@@ -469,7 +473,7 @@ pub fn right_side(clock: &str, b: &BarCtl, t: &Theme) -> impl IntoElement + use<
     parts.reverse();
     let row = div().flex().flex_none().items_center().h_full().gap(px(0.));
     let row = parts.into_iter().fold(row, |r, p| r.child(p.el));
-    div().flex().flex_none().items_center().h_full().pr(px(EDGE)).child(row)
+    div().flex().flex_none().items_center().h_full().pr(px(EDGE * b.scale)).child(row)
 }
 
 
@@ -492,6 +496,7 @@ pub(crate) mod tests {
             lang: kadrell_accounts::Lang::De,
             width: 1400.,
             left: 0.,
+            scale: 1.,
             on_account: press.clone(),
             on_detach: press.clone(),
             on_waiting: press,

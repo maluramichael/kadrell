@@ -70,6 +70,8 @@ pub struct SettingsDialog {
     pub(super) popover: Option<Popover>,
     /// Zeile, die die Tastatur hat (Tab, Pfeile).
     pub(super) cursor: Option<String>,
+    /// Taste der Zeile mit der Tastatur; `None` ist das Steuerelement selbst (bei Zeilen ohne eigenen Stopp die erste Taste).
+    pub(super) cursor_btn: Option<usize>,
     pub(super) recording: Option<HotkeyAction>,
     pub(super) drag: Option<Drag>,
     /// Wert des gezogenen Reglers, solange er noch nicht übernommen ist.
@@ -108,6 +110,7 @@ impl SettingsDialog {
             pop_scroll: ScrollHandle::new(),
             popover: None,
             cursor: None,
+            cursor_btn: None,
             recording: None,
             drag: None,
             draft: None,
@@ -163,9 +166,21 @@ impl SettingsDialog {
 
     /// Zeilen, die Tab und Pfeile erreichen, in Anzeigereihenfolge (nach dem Filter).
     fn focusable_rows(&self, cx: &App) -> Vec<String> {
+        self.focusable_row_list(cx).into_iter().map(|r| r.id).collect()
+    }
+
+    fn focusable_row_list(&self, cx: &App) -> Vec<Row> {
         let blocks = self.blocks(cx);
         let shown = super::model::visible(&blocks, &self.filter);
-        shown.into_iter().flat_map(|(b, rows)| rows.into_iter().map(move |r| (b, r))).map(|(b, r)| &blocks[b].rows[r]).filter(|r| r.focusable()).map(|r| r.id.clone()).collect()
+        shown.into_iter().flat_map(|(b, rows)| rows.into_iter().map(move |r| (b, r))).map(|(b, r)| &blocks[b].rows[r]).filter(|r| r.focusable()).cloned().collect()
+    }
+
+    /// Die Taste der Zeile, die gerade die Tastatur hat. Zeilen ohne eigenen Stopp stehen auf ihrer ersten Taste.
+    pub(super) fn btn_focus(&self, row: &Row) -> Option<usize> {
+        if self.cursor.as_deref() != Some(row.id.as_str()) {
+            return None;
+        }
+        self.cursor_btn.or_else(|| (!row.own_stop() && !row.buttons().is_empty()).then_some(0))
     }
 
     // MARK: Änderungen
@@ -322,6 +337,7 @@ impl SettingsDialog {
         self.pop_scroll.scroll_to_item(cursor);
         self.popover = Some(Popover { row: row.id.clone(), options: options.clone(), value: value.clone(), set: set.clone(), cursor });
         self.cursor = Some(row.id.clone());
+        self.cursor_btn = None;
         cx.notify();
     }
 
@@ -469,6 +485,7 @@ impl SettingsDialog {
     /// ⏎ im Filter: die Tastatur geht an den ersten Treffer.
     fn jump_to_first_hit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.cursor = self.focusable_rows(cx).into_iter().next();
+        self.cursor_btn = None;
         self.focus.focus(window, cx);
         self.ensure_visible(cx);
         cx.notify();
@@ -489,6 +506,7 @@ impl SettingsDialog {
             None => rows.len() - 1,
         };
         self.cursor = Some(rows[next].clone());
+        self.cursor_btn = None;
         self.focus.focus(window, cx);
         self.ensure_visible(cx);
         cx.notify();
@@ -496,10 +514,12 @@ impl SettingsDialog {
 
     /// Tab und Umschalt+Tab: die Zeilen, danach die Haupttaste „Fertig“ (Tab-Stopp mit Ring), dann wieder die Zeilen.
     pub(super) fn tab_stop(&mut self, delta: isize, window: &mut Window, cx: &mut Context<Self>) {
-        let rows = self.focusable_rows(cx);
-        let at = self.cursor.as_ref().and_then(|c| rows.iter().position(|r| r == c));
+        let rows = self.focusable_row_list(cx);
+        let stops: Vec<(String, Option<usize>)> = rows.iter().flat_map(|r| r.stops().into_iter().map(move |s| (r.id.clone(), s))).collect();
+        let now = rows.iter().find(|r| self.cursor.as_deref() == Some(r.id.as_str())).map(|r| (r.id.clone(), if r.own_stop() { self.cursor_btn } else { self.btn_focus(r) }));
+        let at = now.and_then(|n| stops.iter().position(|s| *s == n));
         let in_foot = self.foot_focus.as_ref().is_some_and(|f| f.is_focused(window));
-        match tab_target(at, rows.len(), delta, in_foot) {
+        match tab_target(at, stops.len(), delta, in_foot) {
             TabStop::Foot => {
                 self.cursor = None;
                 if let Some(foot) = self.foot_focus.clone() {
@@ -508,7 +528,8 @@ impl SettingsDialog {
                 cx.notify();
             }
             TabStop::Row(i) => {
-                self.cursor = Some(rows[i].clone());
+                self.cursor = Some(stops[i].0.clone());
+                self.cursor_btn = stops[i].1;
                 self.focus.focus(window, cx);
                 self.ensure_visible(cx);
                 cx.notify();
@@ -558,6 +579,9 @@ impl SettingsDialog {
     /// Leertaste: die Zeile mit der Tastatur bedienen.
     pub(super) fn activate_cursor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(row) = self.cursor.as_deref().and_then(|id| self.find_row(id, cx)) else { return };
+        if let Some(b) = self.btn_focus(&row).and_then(|i| row.buttons().get(i)) {
+            return self.press(&b.clone(), window, cx);
+        }
         match &row.control {
             Control::Select { .. } => self.open_select(&row, window, cx),
             Control::Text { .. } => self.focus_input(&row.id, window, cx),

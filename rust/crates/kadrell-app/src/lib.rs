@@ -263,7 +263,10 @@ impl Shell {
     }
 
     /// `KADRELL_DEV_MENU=Datei` öffnet beim Start das Menü (Screenshots ohne Eingabe).
-    fn open_menu_from_env(&self, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_menu_from_env(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if std::env::var_os("KADRELL_DEV_LAYOUT_MENU").is_some() {
+            self.open_layout_menu(gpui::point(gpui::px(48.), gpui::px(60.)), cx);
+        }
         if let Ok(name) = std::env::var("KADRELL_DEV_MENU") {
             self.menubar.update(cx, |m, cx| m.open_named(&name, window, cx));
         }

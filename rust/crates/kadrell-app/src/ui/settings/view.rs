@@ -20,6 +20,7 @@ use crate::ui::chrome::h_seam;
 use crate::ui::instrument::KeyRole;
 use crate::ui::overlay::{self, backdrop_full, dialog_foot_in, dialog_frame};
 use crate::ui::overlay_anim::slide;
+use crate::ui::sized::sized;
 use crate::ui::theme;
 use kadrell_core::hotkeys::HotkeyAction;
 
@@ -49,12 +50,16 @@ fn id(prefix: &str, row: &str) -> SharedString {
 impl SettingsDialog {
     // MARK: Zeilen
 
-    fn button(&self, row: &str, index: usize, btn: &Btn, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+    fn button(&self, row: &Row, index: usize, btn: &Btn, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let focused = self.btn_focus(row) == Some(index);
+        let row = row.id.as_str();
         let color = if btn.destructive { t.pill_text_on(t.error) } else { t.key_label() };
         let content = key_content(&btn.label, btn.icon, color);
         let btn = btn.clone();
         let tip = btn.tip.clone();
         key_cap(content, btn.destructive, t)
+            .relative()
+            .when(focused, |d| d.child(keyboard_ring(t)))
             .id(id(&format!("btn{index}"), row))
             .when_some(tip, |d, tip| d.tooltip(crate::ui::tooltip::text(tip)))
             .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.press(&btn, window, cx)))
@@ -86,7 +91,7 @@ impl SettingsDialog {
 
     fn text_view(&self, row: &Row, buttons: &[Btn], t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let input = self.inputs.get(&row.id).cloned();
-        let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(&row.id, i, b, t, cx)).collect();
+        let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(row, i, b, t, cx)).collect();
         let field = div().id(id("field", &row.id)).flex_1().min_w_0().children(input);
         let field = if super::paths::kind_of(&row.id).is_some() { self.drop_target(field, &row.id, t, cx) } else { field };
         div().flex().items_center().gap(px(4.)).child(field).children(keys).into_any_element()
@@ -112,25 +117,31 @@ impl SettingsDialog {
             left = left.child(label);
         }
         for (i, b) in buttons.iter().enumerate().take(last) {
-            left = left.child(self.button(&row.id, i, b, t, cx));
+            left = left.child(self.button(row, i, b, t, cx));
         }
-        let right = buttons.last().map(|b| self.button(&row.id, last, b, t, cx));
+        let right = buttons.last().map(|b| self.button(row, last, b, t, cx));
         div().flex().items_center().gap(px(8.)).child(left).children(right).into_any_element()
     }
 
     /// Statustext: bei einer Taste rechts (oder keiner) füllt er den Platz und wird in der Mitte gekürzt (`.truncationMode(.middle)`),
     /// mit dem ganzen Text als Tooltip. Die Breite kommt aus dem letzten Frame; steht links noch eine Taste, kürzt GPUI am Ende.
     fn status_label(&self, row: &Row, text: &str, tone: Tone, fills: bool, t: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
+        let color = tone_color(tone, t);
+        let label = div().id(id("info", &row.id)).relative().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(color);
+        if !fills {
+            return label.child(text.to_string()).when_some(row.tip.clone(), |d, tip| d.tooltip(crate::ui::tooltip::text(tip)));
+        }
+        // Gekürzt wird mit der Breite der Fläche im selben Frame (`sized`), nur der Tooltip liest die letzte Messung.
         let width = self.geometry.borrow().get(&format!("status:{}", row.id)).map(|b| f32::from(b.size.width));
-        let shown = match width {
-            Some(max) if fills => super::truncate::middle(text, max, &|s| crate::ui::tile::text_width(cx, s, 12., false)),
-            _ => text.to_string(),
-        };
-        let cut = shown != text;
-        let label = div().id(id("info", &row.id)).relative().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(tone_color(tone, t));
-        let label = if fills { label.flex_1().child(measure(&self.geometry, format!("status:{}", row.id))) } else { label };
+        let cut = width.is_some_and(|max| super::truncate::middle(text, max, &|s| crate::ui::tile::text_width(cx, s, 12., false)) != text);
+        let full = text.to_string();
+        let body = sized(move |b, _, cx| {
+            let shown = super::truncate::middle(&full, f32::from(b.size.width), &|s| crate::ui::tile::text_width(cx, s, 12., false));
+            div().w(b.size.width).h(b.size.height).whitespace_nowrap().text_color(color).child(shown).into_any_element()
+        });
         let tip = row.tip.clone().or_else(|| cut.then(|| text.to_string()));
-        label.child(shown).when_some(tip, |d, tip| d.tooltip(crate::ui::tooltip::text(tip)))
+        let label = label.flex_1().h(px(crate::ui::overlay::line_px(12.))).child(measure(&self.geometry, format!("status:{}", row.id))).child(body);
+        label.when_some(tip, |d, tip| d.tooltip(crate::ui::tooltip::text(tip)))
     }
 
     fn control_view(&self, row: &Row, focused: bool, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
@@ -189,7 +200,7 @@ impl SettingsDialog {
         // Lange Beschreibungen (Suchtreffer) kürzen, der Name behält mindestens Platz für den Anfang.
         let detail = div().min_w_0().max_w(px(300.)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.muted).child(detail.to_string());
         let name = name.min_w(px(90.)).max_w(px(320.));
-        let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(&row.id, i, b, t, cx)).collect();
+        let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(row, i, b, t, cx)).collect();
         wide_row(div().child(name).child(div().flex_1().min_w_0().flex().justify_end().child(detail)).children(keys))
     }
 
@@ -198,7 +209,7 @@ impl SettingsDialog {
         let (text, tone, fraction) = state;
         let name = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(t.fg).child(row.title.clone());
         let detail = div().flex_none().max_w(px(260.)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(tone_color(tone, t)).child(text.to_string());
-        let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(&row.id, i, b, t, cx)).collect();
+        let keys: Vec<AnyElement> = buttons.iter().enumerate().map(|(i, b)| self.button(row, i, b, t, cx)).collect();
         let line = wide_row(div().child(name).child(detail).children(keys));
         let failed = tone == Tone::Error;
         let bar = (!failed).then(|| progress_bar(fraction, t));
@@ -217,7 +228,7 @@ impl SettingsDialog {
             Control::Pull { text, tone, fraction, buttons } => self.pull_row(row, (text, *tone, *fraction), buttons, t, cx),
             Control::Hotkey(action) => self.hotkey_row(row, *action, ctl_w, focused, t, cx),
             _ => {
-                let control = div().relative().child(self.control_view(row, focused, t, cx)).when(focused, |d| d.child(keyboard_ring(t)));
+                let control = div().relative().child(self.control_view(row, focused, t, cx)).when(focused && self.btn_focus(row).is_none(), |d| d.child(keyboard_ring(t)));
                 controls::row(&row.title, control.into_any_element(), ctl_w, t)
             }
         };

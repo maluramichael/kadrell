@@ -200,8 +200,12 @@ pub fn overlay_height(d: Div, height: f32) -> Div {
     d.max_h(px(area().dialog_height(height)))
 }
 
+/// Swift legt Schwarz 0,3 über einen Blur (`NSVisualEffectView` `.fullScreenUI`, Deckkraft 0,4, `Backdrop`). GPUI hat
+/// keinen Blur; die Abdunklung des Materials, die der Blur mitbringt, steckt hier im höheren Schwarzanteil.
+const DIM_ALPHA: f32 = 0.42;
+
 fn dim() -> Hsla {
-    hsla(0., 0., 0., 0.3)
+    hsla(0., 0., 0., DIM_ALPHA)
 }
 
 /// Abdunklung über der Inhaltsfläche (unter der Titelleiste), schluckt Maus und Rad und ruft `on_close` bei Klick

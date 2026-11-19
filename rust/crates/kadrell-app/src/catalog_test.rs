@@ -107,6 +107,28 @@ fn hotkey_titles_follow_the_language() {
     assert_eq!(crate::ui::settings::sections::hotkey_title(tile), "Kachel 3");
 }
 
+/// Mac-Zeichen für Tasten stehen unter Windows in keinem Text, der durch die Kürzelumwandlung läuft: jeder Quelltext des
+/// Codes und jeder Titel einer Aktion, in beiden Sprachen.
+#[test]
+fn windows_texts_have_no_mac_key_glyphs() {
+    let glyphs = ['⌘', '⌥', '⌃', '⇧'];
+    let i18n = I18n::new(Language::En);
+    let mut files = Vec::new();
+    sources(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+    let mut texts: Vec<String> = files.iter().flat_map(|f| literals(&std::fs::read_to_string(f).unwrap())).collect();
+    texts.extend(HotkeyAction::ALL.iter().filter(|a| a.tile_index().is_none()).map(|a| a.title_key()));
+    let mut bad = Vec::new();
+    for source in texts.iter().filter(|s| id_for_de(s).is_some() && !s.contains('%')) {
+        for lang in Lang::ALL {
+            let text = crate::lang::localize_shortcuts_for(&i18n.t_de_in(lang, source, &[]), false, lang);
+            if text.contains(glyphs) {
+                bad.push(format!("{}: {text}", lang.code()));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "Mac-Zeichen unter Windows:\n{}", bad.join("\n"));
+}
+
 #[test]
 fn reader_finds_literals_with_escapes() {
     let found = literals("a trd!(\"Kopieren\") b de!( \"Zeile \\\"x\\\"\" )\n  // trd!(\"Kommentar\")\nc trd!(var)");

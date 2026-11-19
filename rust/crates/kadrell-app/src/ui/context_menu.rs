@@ -63,13 +63,15 @@ pub enum Item {
     Flag { label: String, cmd: Cmd, checked: bool, enabled: bool, dot: Option<u32> },
     /// Untermenü.
     Sub(String, Vec<Item>),
+    /// Layout-Eintrag der Leiste: Häkchen für das aktuelle, davor das Layout-Symbol (`Icons.layoutImage`).
+    Layout { label: String, cmd: Cmd, mode: super::layout::LayoutMode, checked: bool },
 }
 
 impl Item {
     /// Kann der Cursor hier stehen?
     fn selectable(&self) -> bool {
         match self {
-            Item::Entry(..) | Item::Sub(..) => true,
+            Item::Entry(..) | Item::Sub(..) | Item::Layout { .. } => true,
             Item::Flag { enabled, .. } => *enabled,
             Item::Separator | Item::Off(_) => false,
         }
@@ -255,7 +257,7 @@ impl MenuNav {
     /// Enter: Befehl unter dem Cursor; auf einem Untermenü klappt es stattdessen auf.
     pub fn accept(&mut self) -> Option<Cmd> {
         match self.current()? {
-            Item::Entry(_, cmd) | Item::Flag { cmd, enabled: true, .. } => Some(cmd.clone()),
+            Item::Entry(_, cmd) | Item::Flag { cmd, enabled: true, .. } | Item::Layout { cmd, .. } => Some(cmd.clone()),
             Item::Sub(..) => {
                 self.right();
                 None
@@ -518,7 +520,7 @@ fn panels<V: MenuHost>(menu: &ContextMenu, view: (f32, f32), t: &crate::theme::T
 }
 
 fn panel<V: MenuHost>(menu: &ContextMenu, depth: usize, items: &[Item], at: (f32, f32), t: &crate::theme::Theme, cx: &mut Context<V>) -> gpui::AnyElement {
-    let marks = items.iter().any(|i| matches!(i, Item::Flag { .. }));
+    let marks = items.iter().any(|i| matches!(i, Item::Flag { .. } | Item::Layout { .. }));
     let cursor = menu.cursor_at(depth);
     let rows: Vec<_> = items.iter().enumerate().map(|(i, item)| row(depth, i, item, cursor == Some(i), marks, t, cx)).collect();
     div()
@@ -572,6 +574,14 @@ fn row<V: MenuHost>(depth: usize, i: usize, item: &Item, on: bool, marks: bool, 
                 .on_click(cx.listener(move |this: &mut V, _, window, cx| this.host_run(cmd.clone(), window, cx)))
                 .child(label_row(label, t.fg, marks, false, None))
                 .into_any_element()
+        }
+        Item::Layout { label, cmd, mode, checked } => {
+            let cmd = cmd.clone();
+            let body = div().flex().flex_1().min_w_0().items_center().gap(px(6.)).text_color(t.fg);
+            let body = body.child(div().w(px(12.)).flex_none().text_size(px(11.)).child(if *checked { "✓" } else { "" }));
+            let body = body.child(div().flex_none().child(super::icons::layout_menu(*mode, t.fg)));
+            let body = body.child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label.clone()));
+            face(div().id(id)).cursor_pointer().on_hover(hover).on_click(cx.listener(move |this: &mut V, _, window, cx| this.host_run(cmd.clone(), window, cx))).child(body).into_any_element()
         }
         Item::Flag { label, cmd, checked, enabled, dot } => {
             let cmd = cmd.clone();

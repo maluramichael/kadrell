@@ -119,27 +119,27 @@ const BUTTON_GAP: f32 = 8.;
 
 /// Taste des Leerzustands: 32 hoch, Breite Beschriftung plus 32, Beschriftung 11,5 fett; die Haupttaste in Akzent,
 /// die anderen neutral (`KeyRole`). Die Aktion feuert beim Drücken wie in Swift.
-fn button(i: usize, label: String, primary: bool, press: Press, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+fn button(i: usize, label: String, primary: bool, press: Press, t: &Theme, k: f32, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let (face, ink): (Hsla, Hsla) = if primary { (t.accent, t.pill_text_on(t.accent)) } else { (t.surface, t.key_label()) };
     let cap = div()
         .flex()
         .items_center()
         .justify_center()
         .h_full()
-        .px(px(16.))
-        .rounded(px(4.))
+        .px(px(16. * k))
+        .rounded(px(4. * k))
         .bg(face)
         .text_color(ink)
-        .text_size(px(11.5))
+        .text_size(px(11.5 * k))
         .font_weight(FontWeight::BOLD)
         .whitespace_nowrap()
         .child(label);
     div()
         .id(("empty-button", i))
         .flex_none()
-        .h(px(BUTTON_HEIGHT))
-        .pb(px(2.))
-        .rounded(px(5.))
+        .h(px(BUTTON_HEIGHT * k))
+        .pb(px(2. * k))
+        .rounded(px(5. * k))
         .bg(key_edge(t))
         .cursor_pointer()
         .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, window, cx| {
@@ -149,82 +149,83 @@ fn button(i: usize, label: String, primary: bool, press: Press, t: &Theme, cx: &
         .child(cap)
 }
 
-fn button_row(buttons: Vec<(String, bool, Press)>, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let items = buttons.into_iter().enumerate().map(|(i, (label, primary, press))| button(i, label, primary, press, t, cx));
-    div().flex().items_center().gap(px(BUTTON_GAP)).children(items)
+fn button_row(buttons: Vec<(String, bool, Press)>, t: &Theme, k: f32, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let items = buttons.into_iter().enumerate().map(|(i, (label, primary, press))| button(i, label, primary, press, t, k, cx));
+    div().flex().items_center().gap(px(BUTTON_GAP * k)).children(items)
 }
 
-fn shortcut_line(key: String, text: String, t: &Theme) -> impl IntoElement + use<> {
+fn shortcut_line(key: String, text: String, t: &Theme, k: f32) -> impl IntoElement + use<> {
     div()
         .flex()
-        .gap(px(6.))
-        .h(px(20.))
+        .gap(px(6. * k))
+        .h(px(20. * k))
         .items_center()
-        .text_size(px(11.))
+        .text_size(px(11. * k))
         .child(div().font_weight(FontWeight::BOLD).text_color(t.fg).child(key))
         .child(div().text_color(t.muted.opacity(0.75)).child(text))
 }
 
-fn onboarding(c: Card, chosen: bool, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+fn onboarding(c: Card, chosen: bool, t: &Theme, k: f32, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let main = vec![(c.button, true, Press::NewSession)];
-    let lines = c.shortcuts.into_iter().map(|(k, text)| shortcut_line(k, text, t));
-    let hint = |text: String| div().text_size(px(11.)).text_color(t.muted.opacity(0.55)).child(text);
+    let lines = c.shortcuts.into_iter().map(|(key, text)| shortcut_line(key, text, t, k));
+    let hint = |text: String| div().text_size(px(11. * k)).text_color(t.muted.opacity(0.55)).child(text);
     let languages = (!chosen).then(|| language_choices().map(|(l, title)| (title, false, Press::Language(l))).to_vec());
     div()
         .flex()
         .flex_col()
         .items_center()
-        .children(languages.map(|buttons| div().mb(px(24.)).child(button_row(buttons, t, cx))))
-        .child(div().text_size(px(13.)).font_weight(FontWeight::BOLD).text_color(t.fg).child(c.title))
-        .child(div().mt(px(16.)).child(button_row(main, t, cx)))
-        .child(div().mt(px(28.)).flex().flex_col().items_center().children(lines))
-        .children(c.elsewhere.map(|text| div().mt(px(12.)).child(hint(text))))
+        .children(languages.map(|buttons| div().mb(px(24. * k)).child(button_row(buttons, t, k, cx))))
+        .child(div().text_size(px(13. * k)).font_weight(FontWeight::BOLD).text_color(t.fg).child(c.title))
+        .child(div().mt(px(16. * k)).child(button_row(main, t, k, cx)))
+        .child(div().mt(px(28. * k)).flex().flex_col().items_center().children(lines))
+        .children(c.elsewhere.map(|text| div().mt(px(12. * k)).child(hint(text))))
 }
 
 /// Zwei Zeilen unter dem Mittelpunkt wie `drawCentered`: die erste 16 über der Mitte, die zweite 4 darunter.
-fn two_lines(first: impl IntoElement, second: Option<impl IntoElement>) -> gpui::Div {
+fn two_lines(first: impl IntoElement, second: Option<impl IntoElement>, k: f32) -> gpui::Div {
     div()
         .absolute()
         .w_full()
         .top(relative(0.5))
-        .mt(px(-16.))
+        .mt(px(-16. * k))
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(4.))
+        .gap(px(4. * k))
         .child(first)
         .children(second)
 }
 
-fn error_view(message: String, missing_binary: bool, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let title = div().text_size(px(12.)).text_color(t.error).child(trd!("Sessions können nicht geladen werden"));
-    let detail = div().text_size(px(11.)).text_color(t.error.opacity(0.7)).child(message);
-    two_lines(title, Some(detail)).child(div().mt(px(8.)).child(button_row(error_buttons(missing_binary), t, cx)))
+fn error_view(message: String, missing_binary: bool, t: &Theme, k: f32, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let title = div().text_size(px(12. * k)).text_color(t.error).child(trd!("Sessions können nicht geladen werden"));
+    let detail = div().text_size(px(11. * k)).text_color(t.error.opacity(0.7)).child(message);
+    two_lines(title, Some(detail), k).child(div().mt(px(8. * k)).child(button_row(error_buttons(missing_binary), t, k, cx)))
 }
 
-fn loading_view(t: &Theme) -> impl IntoElement + use<> {
-    two_lines(div().text_size(px(12.)).text_color(t.muted).child(trd!("Lade Sessions …")), None::<gpui::Div>)
+fn loading_view(t: &Theme, k: f32) -> impl IntoElement + use<> {
+    two_lines(div().text_size(px(12. * k)).text_color(t.muted).child(trd!("Lade Sessions …")), None::<gpui::Div>, k)
 }
 
-fn hint_view(auto_idle: bool, help_key: Option<&str>, t: &Theme) -> impl IntoElement + use<> {
+fn hint_view(auto_idle: bool, help_key: Option<&str>, t: &Theme, k: f32) -> impl IntoElement + use<> {
     let (a, b) = hint_lines(auto_idle, help_key);
-    let first = div().text_size(px(12.)).text_color(t.muted).child(a);
-    two_lines(first, Some(div().text_size(px(11.)).text_color(t.muted.opacity(0.7)).child(b)))
+    let first = div().text_size(px(12. * k)).text_color(t.muted).child(a);
+    two_lines(first, Some(div().text_size(px(11. * k)).text_color(t.muted.opacity(0.7)).child(b)), k)
 }
 
 /// Die leere Arbeitsfläche. Ohne jede Session startet ein Klick auf die freie Fläche eine neue Session (`onEmptyClick`).
 pub fn view(shell: &Shell, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let help_key = shell.help_shortcut();
+    let k = crate::appearance::current(cx).scale;
     let reason = reason(&shell.empty_facts());
     let area = div().id("empty-area").absolute().size_full().flex().items_center().justify_center().text_color(t.muted);
     match reason {
-        Reason::Error { message, missing_binary } => area.child(error_view(message, missing_binary, t, cx)).into_any_element(),
-        Reason::Loading => area.child(loading_view(t)).into_any_element(),
+        Reason::Error { message, missing_binary } => area.child(error_view(message, missing_binary, t, k, cx)).into_any_element(),
+        Reason::Loading => area.child(loading_view(t, k)).into_any_element(),
         Reason::NoSessions => {
-            let body = onboarding(card(help_key, shell.misc.other_interactive), shell.language_chosen(), t, cx);
+            let body = onboarding(card(help_key, shell.misc.other_interactive), shell.language_chosen(), t, k, cx);
             area.on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.new_session_action(window, cx))).child(body).into_any_element()
         }
-        Reason::Hint { auto_idle } => area.child(hint_view(auto_idle, help_key.as_deref(), t)).into_any_element(),
+        Reason::Hint { auto_idle } => area.child(hint_view(auto_idle, help_key.as_deref(), t, k)).into_any_element(),
     }
 }
 
