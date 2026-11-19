@@ -28,6 +28,7 @@ use self::model::{Confirmed, Inputs};
 use self::row::{Row, row};
 use super::chrome::h_seam;
 use super::folder_row::ROW_HEIGHT;
+use super::overlay::scale;
 use super::folders;
 use super::dialog_keys;
 use super::instrument::KeyRole;
@@ -43,6 +44,11 @@ actions!(kadrell_quick_start, [MoveUp, MoveDown, Confirm, Cancel, ToggleCleaned]
 const CONTEXT: &str = "KadrellQuickStart";
 const WIDTH: f32 = 640.;
 const VISIBLE_ROWS: f32 = 6.;
+/// Höhe der Liste mal UI-Größe (`visibleRows * rowHeight * Theme.scale`).
+fn list_height(scale: f32) -> f32 {
+    VISIBLE_ROWS * ROW_HEIGHT * scale
+}
+
 /// Schriftgröße des Ideenfelds (`PathField(size: 14)`).
 const IDEA_SIZE: f32 = 14.;
 
@@ -276,7 +282,8 @@ impl QuickStart {
     // --- Zeichnen ---
 
     fn idea_phase(&self, t: &Theme) -> gpui::Div {
-        let line = div().flex().items_center().gap(px(6.)).text_size(px(11.)).line_height(px(crate::ui::overlay::line_px(11.))).text_color(t.muted);
+        let s = scale();
+        let line = div().flex().items_center().gap(px(6. * s)).text_size(px(11. * s)).line_height(px(crate::ui::overlay::line_px(11. * s))).text_color(t.muted);
         let status = if self.flow.phase == Phase::Thinking {
             let text = model::thinking_text(self.flow.model_name.as_deref().unwrap_or_default());
             line.child(spinner::spinner(t.muted)).child(div().overflow_hidden().whitespace_nowrap().child(text))
@@ -284,17 +291,18 @@ impl QuickStart {
             let text = model::live_text(&self.flow, &self.inputs.home);
             line.child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(text))
         };
-        div().flex().flex_col().gap(px(8.)).p(px(14.)).child(self.idea.clone()).child(status)
+        div().flex().flex_col().gap(px(8. * s)).p(px(14. * s)).child(self.idea.clone()).child(status)
     }
 
     fn prompt_block(&self, t: &Theme) -> gpui::Div {
-        let mut head = div().flex().items_center().gap(px(8.)).child(crate::ui::instrument::kerned(&model::first_prompt_label(), 11., crate::ui::instrument::LABEL_KERN, false, t.muted));
+        let s = scale();
+        let mut head = div().flex().items_center().gap(px(8. * s)).child(crate::ui::instrument::kerned(&model::first_prompt_label(), 11. * s, crate::ui::instrument::LABEL_KERN, false, t.muted));
         if self.flow.cleaned.is_some() {
-            head = head.child(div().text_size(px(10.5)).text_color(t.accent_text).child(model::cleaned_label(self.flow.use_cleaned)));
+            head = head.child(div().text_size(px(10.5 * s)).text_color(t.accent_text).child(model::cleaned_label(self.flow.use_cleaned)));
         }
         // Höchstens drei Zeilen (`lineLimit(3)`), mit Auslassung am Ende.
         let prompt = div().w_full().line_clamp(3).text_ellipsis().text_color(t.fg).child(self.flow.prompt());
-        div().flex().flex_col().gap(px(4.)).px(px(16.)).pt(px(12.)).child(head).child(prompt)
+        div().flex().flex_col().gap(px(4. * s)).px(px(16. * s)).pt(px(12. * s)).child(head).child(prompt)
     }
 
     fn origin_line(&self, t: &Theme) -> gpui::Div {
@@ -303,7 +311,8 @@ impl QuickStart {
             (None, Some(o)) => (model::origin_text(o), t.muted),
             (None, None) => (String::new(), t.muted),
         };
-        div().px(px(16.)).pb(px(6.)).text_size(px(10.5)).text_color(color).overflow_hidden().whitespace_nowrap().text_ellipsis().child(text)
+        let s = scale();
+        div().px(px(16. * s)).pb(px(6. * s)).text_size(px(10.5 * s)).text_color(color).overflow_hidden().whitespace_nowrap().text_ellipsis().child(text)
     }
 
     fn row(&self, i: usize, c: &QuickStartCandidate, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -313,14 +322,15 @@ impl QuickStart {
     }
 
     fn list(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let s = scale();
         let rows: Vec<_> = self.flow.list.iter().enumerate().map(|(i, c)| self.row(i, c, t, cx)).collect();
-        let empty = rows.is_empty().then(|| div().px(px(16.)).py(px(16.)).text_color(t.muted).child(model::empty_list()));
+        let empty = rows.is_empty().then(|| div().px(px(16. * s)).py(px(16. * s)).text_color(t.muted).child(model::empty_list()));
         div()
             .id("qs-list")
             .flex()
             .flex_col()
             .flex_none()
-            .h(px(VISIBLE_ROWS * ROW_HEIGHT))
+            .h(px(list_height(s)))
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .children(empty)
@@ -332,7 +342,7 @@ impl QuickStart {
             .flex()
             .flex_col()
             .child(self.prompt_block(t))
-            .child(div().flex_none().p(px(14.)).child(self.filter.clone()))
+            .child(div().flex_none().p(px(14. * scale())).child(self.filter.clone()))
             .child(self.origin_line(t))
             .child(h_seam(t))
             .child(self.list(t, cx))
@@ -469,5 +479,17 @@ impl Shell {
         // Der Ordner wird beim Anlegen der Session als benutzt gemerkt (`AppState::add_session`).
         let prompt = (!prompt.is_empty()).then(|| prompt.to_string());
         self.start_new_session(group_id.map(String::from), path, prompt, window, cx);
+    }
+}
+
+#[cfg(test)]
+mod scale_tests {
+    use super::*;
+
+    #[test]
+    fn list_height_follows_ui_size() {
+        assert_eq!(list_height(1.0), 6. * 46.);
+        assert_eq!(list_height(1.5), 6. * 46. * 1.5);
+        assert_eq!(list_height(1.5) / (ROW_HEIGHT * 1.5), VISIBLE_ROWS);
     }
 }
