@@ -52,17 +52,49 @@ fn ext_host(args: &[String]) -> std::process::ExitCode {
     kadrell_ext::run_host(std::path::Path::new(dir))
 }
 
+/// Kommandozeile oder App? Das erste Argument ohne „-“ (oder `-h`/`--help`) ist ein Befehl; Optionen mit „-“ (Xcode,
+/// LaunchServices, `--profile tmp`) starten die App (Swift: `main.swift`).
+fn runs_cli(first: &str) -> bool {
+    !first.starts_with('-') || first == "-h" || first == "--help"
+}
+
 fn main() -> std::process::ExitCode {
     let (args, profile) = split_profile(std::env::args().skip(1).collect());
     let code = match args.first().map(String::as_str) {
-        None => {
+        Some("ext-host") => return ext_host(&args),
+        Some(first) if runs_cli(first) => kadrell_control::client::main_cli(&args, profile, &hook_map),
+        _ => {
             // Vor allen Threads: die Marker einer umgebenden Claude-Session erben die Kacheln sonst.
             kadrell_term::strip_inherited_env();
             detach_console();
             kadrell_app::run(profile)
         }
-        Some("ext-host") => return ext_host(&args),
-        Some(_) => kadrell_control::client::main_cli(&args, profile, &hook_map),
     };
     std::process::exit(code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn commands_run_the_cli_and_options_start_the_app() {
+        for command in ["ls", "new", "help", "hook", "kill-server"] {
+            assert!(runs_cli(command), "{command}");
+        }
+        assert!(runs_cli("-h") && runs_cli("--help"));
+        for option in ["--profile", "-psn_0_12345", "-NSDocumentRevisionsDebugMode", "--verbose"] {
+            assert!(!runs_cli(option), "{option}");
+        }
+    }
+
+    #[test]
+    fn profile_arguments_are_taken_out_before_the_decision() {
+        let args = |a: &[&str]| a.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+        let (rest, name) = split_profile(args(&["--profile", "tmp"]));
+        assert!(rest.is_empty());
+        assert_eq!(name.as_deref(), Some("tmp"));
+        let (rest, name) = split_profile(args(&["--profile", "tmp", "ls"]));
+        assert_eq!((rest, name.as_deref()), (args(&["ls"]), Some("tmp")));
+    }
 }

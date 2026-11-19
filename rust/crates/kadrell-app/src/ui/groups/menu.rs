@@ -42,7 +42,7 @@ pub fn reveal_label() -> String {
 
 /// Beschriftung der Gruppe in „Verschieben nach“: gleichnamige tragen ihren Ordner dahinter, sonst wären sie nicht
 /// zu unterscheiden.
-fn move_label(g: &Group, groups: &[Group], home: &str) -> String {
+pub fn move_label(g: &Group, groups: &[Group], home: &str) -> String {
     let same = groups.iter().filter(|o| o.name == g.name).count();
     if same < 2 {
         return g.name.clone();

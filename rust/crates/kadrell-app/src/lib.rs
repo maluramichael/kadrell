@@ -4,11 +4,14 @@
 
 mod appearance;
 mod ext;
+mod instance;
 mod models;
+mod quit;
 mod remote;
 mod lang;
 #[cfg(test)]
 mod catalog_test;
+mod menu_ctx;
 mod menus;
 mod misc;
 mod signals;
@@ -83,6 +86,10 @@ pub struct Shell {
     /// Der Steuerkanal; mit der Shell lebt und stirbt er.
     server: Option<ControlServer>,
     down: bool,
+    /// Beenden und Neustart (`quit`): Rückfrage beantwortet, Neustart gewünscht.
+    quit: quit::QuitState,
+    /// Zustand der Menüs: letzter Schnappschuss, Zurücknehmen von ⌘A (`menu_ctx`).
+    menu: menu_ctx::MenuState,
     /// Die Lua-Extensions dieses Profils.
     ext: ExtensionManager,
     /// Tray-Icon, Benachrichtigungen, Badge und das Verstecken des Fensters (`tray_wire`).
@@ -163,6 +170,8 @@ impl Shell {
             idle_focus: cx.focus_handle(),
             server,
             down: false,
+            quit: quit::QuitState::default(),
+            menu: menu_ctx::MenuState::default(),
             ext,
             tray: tray_wire::TrayWire::new(),
             language_generation: kadrell_i18n::global().generation(),
@@ -396,6 +405,11 @@ impl Shell {
         if self.usage_key(ev, window, cx) {
             return;
         }
+        // Schnellstart, Verlaufssuche, Statistik und Neustart nach der Belegung aus den Einstellungen.
+        if self.open_hotkey_key(ev, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         // Solange der Dialog offen ist, gehören Alt-Kürzel nicht der Shell.
         if self.modal_open() && m.alt {
             cx.stop_propagation();
@@ -439,6 +453,7 @@ impl Focusable for Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_language(cx);
+        self.sync_menus(cx);
         let t = ui::theme(cx);
         if self.window_dark != Some(t.dark) {
             self.window_dark = Some(t.dark);

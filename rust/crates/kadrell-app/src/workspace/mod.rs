@@ -28,6 +28,8 @@ pub struct Ws {
     pub auto: auto::Auto,
     /// Die Tastatur gehört dem Baum (⌘1), nicht Claude.
     pub tree_focus: bool,
+    /// Rest des Mausrads für die Schriftgröße (⌘ + Mausrad): Trackpad-Deltas sammeln sich zu ganzen Schritten.
+    pub wheel_rest: f32,
 }
 
 impl Ws {
@@ -44,6 +46,7 @@ impl Ws {
             preview: preview::Preview::default(),
             auto: auto::Auto::new(settings.bool_or(actions::AUTO_KEY, false)),
             tree_focus: false,
+            wheel_rest: 0.,
         }
     }
 }

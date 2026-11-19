@@ -4,6 +4,7 @@
 
 #[rustfmt::skip]
 pub static KEYS: &[(&str, &str)] = &[
+    ("%@ existiert schon und ist kein Symlink", "x-existiert-schon-kein-symlink-5e21"),
     ("%lld Git-Repos unter ~ gefunden", "x-git-repos-unter-gefunden-d4f3"),
     ("Di.", "x-di-212f"),
     ("Do.", "x-do-86a9"),
@@ -23,6 +24,7 @@ pub static KEYS: &[(&str, &str)] = &[
     ("Noch keine Session. ⌘N startet eine neue, ⌘P sucht.", "x-noch-keine-session-n-startet-eine-ne-b3f9"),
     ("Nächste Session", "x-naechste-session-9a67"),
     ("Nächstes Layout", "x-naechstes-layout-ab9f"),
+    ("Pfad der App unbekannt", "x-pfad-der-app-unbekannt-c7d4"),
     ("Rechte Sidebar: Tastatur hierher", "x-rechte-sidebar-tastatur-hierher-7b3a"),
     ("Sa.", "x-sa-1ed2"),
     ("So.", "x-so-335c"),

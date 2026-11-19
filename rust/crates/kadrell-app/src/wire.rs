@@ -139,7 +139,7 @@ impl Shell {
         let exited_key = key.clone();
         cx.subscribe_in(&pane, window, move |shell, _, ev: &TerminalEvent, window, cx| match ev {
             TerminalEvent::Exited => shell.on_exited(&exited_key, window, cx),
-            TerminalEvent::Link(link) => shell.on_link(&exited_key, link),
+            TerminalEvent::Link(link) => shell.on_link(&exited_key, link, window, cx),
         })
         .detach();
         self.panes.insert(key.clone(), pane);
@@ -217,15 +217,22 @@ impl Shell {
 
     // MARK: Beenden
 
-    /// Beim Beenden: Prozesse enden, der Kanal verschwindet, ein Wegwerfprofil räumt sich weg.
+    /// Beim Beenden (Swift: `applicationWillTerminate`): Prozesse enden, der Kanal verschwindet, Extensions und
+    /// lokale Modelle enden, ein Wegwerfprofil räumt sich weg. Der Beenden-Marker kommt vor dem Schließen des Kanals,
+    /// aber nicht beim Neustart, nicht im Wegwerfprofil. Ganz zuletzt startet beim Neustart der losgelöste Helfer, der
+    /// wartet, bis dieser Prozess weg und der Profil-Lock frei ist.
     pub(crate) fn shutdown(&mut self) {
+        if !self.quit.relaunch && !self.state.profile.temporary {
+            kadrell_core::profile::mark_quit(&self.state.profile.dir, crate::state::now_secs());
+        }
         self.state.shutdown_all();
         self.tray.close();
         self.server = None;
-        if !self.state.profile.temporary {
-            kadrell_core::profile::mark_quit(&self.state.profile.dir, crate::state::now_secs());
-        }
+        self.ext.shutdown_all();
         self.state.profile.clean_up();
+        if self.quit.relaunch {
+            crate::instance::relaunch_after_exit(self.state.profile.name.as_deref());
+        }
     }
 }
 

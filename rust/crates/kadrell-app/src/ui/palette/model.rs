@@ -206,7 +206,7 @@ pub fn build_commands(snap: &Snapshot) -> Vec<Command> {
     list.push(via_menu(&mut pool, trd!("Statistik"), de!("Statistik")));
     list.push(via_menu(&mut pool, trd!("Extensions"), de!("Extensions …")));
     list.push(plain(trd!("Reload"), Run::Unwired));
-    list.push(plain(trd!("Neu starten"), Run::Unwired));
+    list.push(plain(trd!("Neu starten"), Run::Menu(Box::new(menus::RestartApp))));
     list.push(plain(trd!("Konto hinzufügen (aktuell angemeldetes)"), Run::Unwired));
     list.extend(snap.groups.iter().map(|g| plain(trd!("Alle Sessions von %@", &g.name), Run::Group(g.index))));
     if let Some(own) = focused_group(snap) {
