@@ -69,14 +69,12 @@ fn field(content: &Content, theme: &TermTheme) -> Div {
         .children(status)
 }
 
-/// Die Leiste, absolut am oberen Rand des Terminals.
+/// Die Leiste am oberen Rand des Terminals, über der Fläche (nimmt ihr Platz weg, überdeckt sie nicht).
 pub fn view(content: &Content, actions: Actions, theme: &TermTheme) -> Div {
     let Actions { previous, next, done } = actions;
     div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .right_0()
+        .flex_none()
+        .w_full()
         .h(px(HEIGHT))
         .flex()
         .items_center()

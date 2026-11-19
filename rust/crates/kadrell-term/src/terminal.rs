@@ -791,9 +791,12 @@ impl Render for TerminalPane {
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
             .on_mouse_move(cx.listener(Self::mouse_move))
             .on_scroll(cx.listener(Self::scroll))
-            .relative()
-            .child(TerminalElement { pane: entity })
+            .flex()
+            .flex_col()
+            // Die Suchleiste schiebt die Fläche nach unten (wie die des Systems auf dem Mac): das Gitter wird um ihre
+            // Höhe kleiner, solange sie offen ist.
             .children(search)
+            .child(div().relative().flex_1().min_h_0().w_full().child(TerminalElement { pane: entity }))
     }
 }
 

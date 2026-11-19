@@ -255,3 +255,13 @@ fn language_setting_roundtrip() {
     assert_eq!(Lang::from_tag("en_US.UTF-8"), Some(Lang::En));
     assert_eq!(Lang::from_tag("fr"), None);
 }
+
+/// Die Texte der Terminal-Suchleiste gehen über `t_de` und folgen der gesetzten Sprache ohne Neustart.
+#[test]
+fn the_terminal_search_bar_texts_follow_the_language() {
+    let i18n = I18n::new(Language::De);
+    let texts = ["Suchen", "Keine Treffer", "Fertig"];
+    assert_eq!(texts.map(|t| i18n.t_de(t).to_string()), texts);
+    i18n.set_language(Language::En);
+    assert_eq!(texts.map(|t| i18n.t_de(t).to_string()), ["Search", "No results", "Done"]);
+}

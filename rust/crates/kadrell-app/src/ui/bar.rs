@@ -210,17 +210,17 @@ fn switch(id: usize, label: String, on: bool, face: Hsla, t: &crate::theme::Them
 const ARROW_WIDTH: f32 = 19.2;
 
 /// Pfeil der Spaltentasten als Textglyphe „‹“ bzw. „›“, 12 px fett in `color` (Swift: `arrowKey`).
-fn arrow_glyph(glyph: &'static str, color: Hsla) -> impl IntoElement {
-    div().text_size(px(12.)).font_weight(gpui::FontWeight::BOLD).text_color(color).child(glyph)
+fn arrow_glyph(glyph: &'static str, color: Hsla, k: f32) -> impl IntoElement {
+    div().text_size(px(12. * k)).font_weight(gpui::FontWeight::BOLD).text_color(color).child(glyph)
 }
 
 /// Die Kappe einer Taste, noch ohne Trefferfläche.
-fn cap(i: usize, key: Key, ctl: &LayoutCtl, t: &crate::theme::Theme) -> Pill {
+fn cap(i: usize, key: Key, ctl: &LayoutCtl, t: &crate::theme::Theme, k: f32) -> Pill {
     let label = key_label(key, ctl);
     let pill = match key {
-        Key::Layout => Pill::new(("bar", i), "").icon(icons::layout(ctl.mode, t.sub)).min_width(26.),
-        Key::Less => Pill::new(("bar", i), "").icon(arrow_glyph("‹", t.sub)).min_width(ARROW_WIDTH),
-        Key::More => Pill::new(("bar", i), "").icon(arrow_glyph("›", t.sub)).min_width(ARROW_WIDTH),
+        Key::Layout => Pill::new(("bar", i), "").icon(icons::layout_scaled(ctl.mode, t.sub, k)).min_width(26.),
+        Key::Less => Pill::new(("bar", i), "").icon(arrow_glyph("‹", t.sub, k)).min_width(ARROW_WIDTH),
+        Key::More => Pill::new(("bar", i), "").icon(arrow_glyph("›", t.sub, k)).min_width(ARROW_WIDTH),
         Key::Split => {
             let dir = ctl.split.unwrap_or('a');
             Pill::new(("bar", i), label.clone()).icon(colored(label, if dir == 'a' { t.muted } else { t.fg }))
@@ -241,40 +241,41 @@ fn sunk_while_pressed(pill: Pill, key: Key, ctl: &LayoutCtl, t: &crate::theme::T
 }
 
 /// Spaltenzahl zwischen den Pfeilen: Text, keine Taste.
-fn cols_text(ctl: &LayoutCtl, t: &crate::theme::Theme) -> AnyElement {
+fn cols_text(ctl: &LayoutCtl, t: &crate::theme::Theme, k: f32) -> AnyElement {
     let color = if ctl.cols == 0 { t.muted } else { t.fg };
-    div().flex_none().mx(px(2.)).text_size(px(10.)).font_weight(gpui::FontWeight::BOLD).text_color(color).child(key_label(Key::Cols, ctl)).into_any_element()
+    let text = key_label(Key::Cols, ctl);
+    div().flex_none().mx(px(2. * k)).text_size(px(10. * k)).font_weight(gpui::FontWeight::BOLD).text_color(color).whitespace_nowrap().child(text).into_any_element()
 }
 
-fn left_key(i: usize, key: Key, ctl: &LayoutCtl, t: &crate::theme::Theme) -> AnyElement {
+fn left_key(i: usize, key: Key, ctl: &LayoutCtl, t: &crate::theme::Theme, k: f32) -> AnyElement {
     if key == Key::Cols {
-        return cols_text(ctl, t);
+        return cols_text(ctl, t, k);
     }
-    let pill = cap(i, key, ctl, t);
+    let pill = cap(i, key, ctl, t, k);
     bar_keys::press_key(("bar-hit", i), key.id(), &region_of(key, ctl), pill, &press_of(key, ctl), &ctl.flash).into_any_element()
 }
 
-fn left_pills(ctl: &LayoutCtl, t: &crate::theme::Theme) -> impl IntoElement + use<> {
-    let pills = left_keys(ctl).into_iter().enumerate().map(|(i, k)| left_key(i, k, ctl, t));
-    div().flex().flex_none().items_center().h_full().gap(px(4.)).children(pills)
+fn left_pills(ctl: &LayoutCtl, t: &crate::theme::Theme, k: f32) -> impl IntoElement + use<> {
+    let pills = left_keys(ctl).into_iter().enumerate().map(|(i, key)| left_key(i, key, ctl, t, k));
+    div().flex().flex_none().items_center().h_full().gap(px(4. * k)).children(pills)
 }
 
 /// Geschätzte Breite der linken Tasten samt Rand (Schrift 10 px fett, dicktengleich: 6 px je Zeichen, Kappe 16 px mehr).
-fn left_width(ctl: &LayoutCtl) -> f32 {
+fn left_width(ctl: &LayoutCtl, k: f32) -> f32 {
     let width = |key: Key| match key {
         Key::Layout => 26.,
         Key::Less | Key::More => ARROW_WIDTH,
         Key::Cols => key_label(key, ctl).chars().count() as f32 * 6. - 14.,
         other => key_label(other, ctl).chars().count() as f32 * 6. + 16.,
     };
-    LEFT_INSET + left_keys(ctl).into_iter().map(|k| width(k) + 4.).sum::<f32>()
+    (LEFT_INSET + left_keys(ctl).into_iter().map(|key| width(key) + 4.).sum::<f32>()) * k
 }
 
 /// Rechts: Konto, „N trennen“, „N warten“, Nutzung und das Status-Display (`usage_bar`). Ohne Anbindung (nur Tests)
 /// bleibt die Seite leer.
 fn right_side(clock: &str, ctl: &LayoutCtl, cx: &App) -> AnyElement {
     let Some(usage) = &ctl.usage else { return div().into_any_element() };
-    let b = BarCtl { left: left_width(ctl), ext: ctl.ext.clone(), ..usage.clone() };
+    let b = BarCtl { left: left_width(ctl, crate::appearance::current(cx).scale),ext: ctl.ext.clone(), ..usage.clone() };
     usage_bar::right_side(clock, &b, &theme(cx)).into_any_element()
 }
 
@@ -318,6 +319,7 @@ fn row_height(scale: f32) -> f32 {
 /// Bildschirmleser (Rolle Werkzeugleiste, „Statusleiste“), die Tasten darin sind Knöpfe.
 pub fn bar(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
     let t = theme(cx);
+    let k = crate::appearance::current(cx).scale;
     let row = div()
         .id("status-bar")
         .role(Role::Toolbar)
@@ -326,8 +328,8 @@ pub fn bar(clock: &str, ctl: &LayoutCtl, cx: &App) -> impl IntoElement + use<> {
         .items_center()
         .h(px(row_height(crate::appearance::current(cx).scale)))
         .w_full()
-        .pl(px(LEFT_INSET))
-        .child(left_pills(ctl, &t))
+        .pl(px(LEFT_INSET * k))
+        .child(left_pills(ctl, &t, k))
         .child(div().flex_1().min_w(px(24.)))
         .child(right_side(clock, ctl, cx));
     div().flex().flex_col().flex_none().bg(t.panel).child(row).child(h_seam(&t))
@@ -434,6 +436,15 @@ mod tests {
         let free = LayoutCtl { split: Some('r'), ..ctl(LayoutMode::Custom) };
         assert_eq!(region_of(Key::Split, &free).tooltip(), "Nächste Kachel teilt: rechts");
         assert_eq!(key_label(Key::Split, &free), "TEILT →");
+    }
+
+    /// Die Breite der linken Tasten wächst mit der UI-Größe, damit die Nutzung rechts den Platz richtig errechnet.
+    #[test]
+    fn the_left_width_follows_the_ui_size() {
+        let c = ctl(LayoutMode::Grid);
+        let one = left_width(&c, 1.);
+        assert!(one > 100.);
+        assert!((left_width(&c, 1.5) - one * 1.5).abs() < 1e-3);
     }
 
     #[test]
