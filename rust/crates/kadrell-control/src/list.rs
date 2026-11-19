@@ -44,7 +44,7 @@ struct LsSession {
 pub fn list_output(h: &dyn ControlHandler, json: bool) -> String {
     let out = collect(h);
     if json {
-        return serde_json::to_string_pretty(&out).unwrap_or_default();
+        return serde_json::to_value(&out).map(|v| crate::json_pretty::pretty(&v)).unwrap_or_default();
     }
     out.groups.iter().map(text_group).collect::<Vec<_>>().join("\n")
 }
