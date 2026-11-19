@@ -13,12 +13,13 @@ actions!(kadrell_term_find, [FindInTerminal, FindNext, FindPrevious]);
 
 /// Kürzel: ⌘ auf dem Mac, Alt unter Windows (Strg gehört dem Terminal).
 pub fn bind_keys(cx: &mut App) {
-    let k = |mac: &'static str, win: &'static str| if cfg!(target_os = "macos") { mac } else { win };
+    use crate::keys::platform as k;
     cx.bind_keys([
-        KeyBinding::new(k("cmd-f", "alt-f"), FindInTerminal, None),
-        KeyBinding::new(k("cmd-g", "alt-g"), FindNext, None),
-        KeyBinding::new(k("cmd-shift-g", "alt-shift-g"), FindPrevious, None),
-        KeyBinding::new(k("cmd-c", "alt-c"), super::text_input::Copy, None),
+        KeyBinding::new(k("cmd-f"), FindInTerminal, None),
+        KeyBinding::new(k("cmd-g"), FindNext, None),
+        KeyBinding::new(k("cmd-shift-g"), FindPrevious, None),
+        KeyBinding::new(k("cmd-c"), super::text_input::Copy, None),
+        KeyBinding::new(k("cmd-v"), super::text_input::Paste, None),
     ]);
 }
 

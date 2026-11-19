@@ -80,7 +80,7 @@ fn app_menu() -> MenuDef {
             item(de!("Über Kadrell"), crate::Shell::about_shortcut(), OpenAbout),
             item(de!("Was ist neu"), none(), OpenWhatsNew),
             item(de!("Statistik"), shortcut("⌥F3"), OpenStats),
-            item(de!("Extensions …"), shortcut_os("⌥F4", "⇧⌘E"), OpenExtensions),
+            item(de!("Extensions …"), shortcut_os("⌥F4", "⇧⌥E"), OpenExtensions),
             Entry::Separator,
             item(de!("Einstellungen …"), shortcut("⌘,"), OpenSettings),
             item(de!("Kommandozeilen-Tool installieren …"), none(), InstallCli),
@@ -117,10 +117,11 @@ fn edit_menu() -> MenuDef {
     menu(
         de!("Bearbeiten"),
         vec![
-            // Im Terminal ist Strg+C der Abbruch: Kopieren und Einsetzen heißen dort Strg+Umschalt+C und +V.
-            item(de!("Ausschneiden"), shortcut("⌘X"), Cut),
-            item(de!("Kopieren"), shortcut_os("⌘C", "⇧⌘C"), Copy),
-            item(de!("Einsetzen"), shortcut_os("⌘V", "⇧⌘V"), Paste),
+            // Textfelder behalten unter Windows Strg (Strg+X im Textfeld), im Terminal ist Strg+C der Abbruch: Kopieren
+            // und Einsetzen im Terminal liegen dort auf Alt+C und Alt+V (⌘ ist Alt).
+            item(de!("Ausschneiden"), shortcut_os("⌘X", "⌃X"), Cut),
+            item(de!("Kopieren"), shortcut("⌘C"), Copy),
+            item(de!("Einsetzen"), shortcut("⌘V"), Paste),
             item(de!("Ganze Gruppen auswählen"), shortcut_mac_only("⌘A"), SelectGroups),
             item(de!("Alle Sessions auswählen"), shortcut("⇧⌘A"), SelectEverything),
             Entry::Separator,
@@ -151,7 +152,7 @@ fn flat_view_menu() -> MenuDef {
             item(de!("Kachel zoomen"), shortcut("⌘⇧↩"), ZoomTile),
             item(de!("Nächste Session"), shortcut("⌥N"), NextSession),
             item(de!("Vorherige Session"), shortcut("⌥P"), PrevSession),
-            item(de!("Farbschema wechseln"), shortcut("⌥T"), ToggleTheme),
+            item(de!("Farbschema wechseln"), shortcut_os("⌥T", "⌥⌘T"), ToggleTheme),
             Entry::Separator,
             item(de!("Suche"), shortcut("⌘P"), OpenPalette),
         ],
@@ -270,32 +271,32 @@ pub fn menus() -> Vec<MenuDef> {
     menus_for(&MenuContext::default())
 }
 
-/// Tastenbelegungen und globale Aktionen. Alt+N/P/T bleiben in `Shell::on_key` (Strg+Alt ist AltGr und gehört
-/// dem Terminal), hier steht nur, was als Aktion gebunden ist. Schnellstart, Verlaufssuche, Statistik und Neustart
-/// folgen der Belegung aus den Einstellungen und laufen über `Shell::open_hotkey_key`.
+/// Tastenbelegungen und globale Aktionen. Hier stehen die Mac-Tastenstrings, `keys::platform` macht daraus unter
+/// Windows Alt (⌘) bzw. Strg+Alt (⌘⌥, AltGr-freie Buchstaben). Wer eine Bindung dazunimmt, trägt sie in `keys::FIXED` ein.
+/// Alt+N/P (Mac ⌥N/⌥P) laufen über die Belegung aus den Einstellungen (`workspace::keys`), nicht hier. Schnellstart,
+/// Verlaufssuche, Statistik und Neustart folgen ebenfalls den Einstellungen (`Shell::open_hotkey_key`).
 pub fn init(cx: &mut App) {
-    let new_key = if cfg!(target_os = "macos") { "cmd-n" } else { "ctrl-n" };
-    let remote_key = if cfg!(target_os = "macos") { "cmd-shift-n" } else { "ctrl-shift-n" };
-    cx.bind_keys([KeyBinding::new(new_key, NewSession, None), KeyBinding::new(remote_key, NewRemote, None)]);
-    let (here_key, term_key, zoom_key) = if cfg!(target_os = "macos") { ("cmd-enter", "cmd-t", "cmd-shift-enter") } else { ("ctrl-enter", "ctrl-t", "ctrl-shift-enter") };
+    use crate::keys::platform as key;
+    cx.bind_keys([KeyBinding::new(key("cmd-n"), NewSession, None), KeyBinding::new(key("cmd-shift-n"), NewRemote, None)]);
     cx.bind_keys([
-        KeyBinding::new(here_key, NewSessionHere, None),
-        KeyBinding::new(term_key, NewTerminal, None),
-        KeyBinding::new(zoom_key, ZoomTile, None),
+        KeyBinding::new(key("cmd-enter"), NewSessionHere, None),
+        KeyBinding::new(key("cmd-t"), NewTerminal, None),
+        KeyBinding::new(key("cmd-shift-enter"), ZoomTile, None),
         KeyBinding::new("f2", RenameSession, None),
         KeyBinding::new("shift-f10", ShowContextMenu, None),
     ]);
-    // Strg+Alt+N: neue Gruppe (⌥⌘N der Mac-App).
-    cx.bind_keys([KeyBinding::new(if cfg!(target_os = "macos") { "cmd-alt-n" } else { "ctrl-alt-n" }, NewGroup, None)]);
-    let (search_key, find_all_key) = if cfg!(target_os = "macos") { ("cmd-p", "cmd-shift-f") } else { ("ctrl-p", "ctrl-shift-f") };
-    cx.bind_keys([KeyBinding::new(search_key, OpenPalette, None), KeyBinding::new(find_all_key, FindAll, None)]);
-    cx.bind_keys([KeyBinding::new(if cfg!(target_os = "macos") { "cmd-," } else { "ctrl-," }, OpenSettings, None)]);
+    // ⌥⌘N der Mac-App: neue Gruppe.
+    cx.bind_keys([KeyBinding::new(key("cmd-alt-n"), NewGroup, None)]);
+    cx.bind_keys([KeyBinding::new(key("cmd-p"), OpenPalette, None), KeyBinding::new(key("cmd-shift-f"), FindAll, None)]);
+    cx.bind_keys([KeyBinding::new(key("cmd-,"), OpenSettings, None)]);
     bind_selection_keys(cx);
     crate::ui::tile_context::bind_keys(cx);
-    // Alt+F4 und der rote Knopf verstecken nur das Fenster (`tray_wire`), beendet wird mit Strg+Q, über das Menü oder das Tray.
-    let (quit_key, close_key) = if cfg!(target_os = "macos") { ("cmd-q", "cmd-shift-w") } else { ("ctrl-q", "ctrl-shift-w") };
-    let new_window_key = if cfg!(target_os = "macos") { "cmd-shift-t" } else { "ctrl-shift-t" };
-    cx.bind_keys([KeyBinding::new(quit_key, Quit, None), KeyBinding::new(close_key, CloseWindow, None), KeyBinding::new(new_window_key, NewWindow, None)]);
+    // Alt+F4 und der rote Knopf verstecken nur das Fenster (`tray_wire`), beendet wird mit Alt+Q, über das Menü oder das Tray.
+    cx.bind_keys([
+        KeyBinding::new(key("cmd-q"), Quit, None),
+        KeyBinding::new(key("cmd-shift-w"), CloseWindow, None),
+        KeyBinding::new(key("cmd-shift-t"), NewWindow, None),
+    ]);
     cx.on_action(|_: &Quit, cx| crate::quit::request(cx));
     cx.on_action(|_: &RestartApp, cx| crate::quit::request_restart(cx));
     cx.on_action(|_: &ToggleTheme, cx| Shell::toggle_theme(cx));
@@ -304,7 +305,8 @@ pub fn init(cx: &mut App) {
 }
 
 /// Kürzel der Auswahl und des Session-Menüs. Auf dem Mac ⌘A, ⇧⌘A, ⌘H, ⌘R und ⌘. wie in der Mac-App; unter Windows
-/// gehören Strg+A, Strg+H, Strg+R (Verlaufssuche in Claude) und Strg+. dem Terminal, dort gilt nur Strg+Umschalt+A.
+/// gilt nur Alt+Umschalt+A (Alles auswählen), ⌘A, ⌘H, ⌘R und ⌘. bleiben ohne Belegung (Strg+A/R sind Textfeld bzw.
+/// Verlaufssuche in Claude, Alt+H/R/. gibt es in der Windows-Fassung nicht).
 fn bind_selection_keys(cx: &mut App) {
     if cfg!(target_os = "macos") {
         cx.bind_keys([
@@ -315,7 +317,7 @@ fn bind_selection_keys(cx: &mut App) {
             KeyBinding::new("cmd-.", StopSession, None),
         ]);
     } else {
-        cx.bind_keys([KeyBinding::new("ctrl-shift-a", SelectEverything, None)]);
+        cx.bind_keys([KeyBinding::new(crate::keys::platform("cmd-shift-a"), SelectEverything, None)]);
     }
 }
 

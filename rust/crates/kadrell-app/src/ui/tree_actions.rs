@@ -10,10 +10,9 @@ use crate::appearance::Appearance;
 
 actions!(kadrell_tree, [ToggleAllGroups]);
 
-/// ⇧⌘B (Mac) bzw. Strg+Umschalt+B (Windows).
+/// ⇧⌘B (Mac) bzw. Alt+Umschalt+B (Windows).
 pub fn bind_keys(cx: &mut App) {
-    let key = if cfg!(target_os = "macos") { "cmd-shift-b" } else { "ctrl-shift-b" };
-    cx.bind_keys([KeyBinding::new(key, ToggleAllGroups, None)]);
+    cx.bind_keys([KeyBinding::new(crate::keys::platform("cmd-shift-b"), ToggleAllGroups, None)]);
 }
 
 /// Aktionen des Fensters.

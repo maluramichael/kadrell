@@ -7,6 +7,7 @@ mod bar_wire;
 mod cli_wire;
 mod ext;
 mod instance;
+mod keys;
 mod models;
 mod quit;
 mod remote;
@@ -472,8 +473,9 @@ impl Shell {
             cx.stop_propagation();
             return;
         }
-        // Alt+T: Farbschema. Strg+Alt ist AltGr unter Windows und gehört dem Terminal.
-        if m.alt && !m.control && !m.platform && !m.shift && ev.keystroke.key == "t" {
+        // ⌥T (Mac) bzw. Strg+Alt+T (Windows, Alt+T ist dort ⌘T): Farbschema. T ist auf deutscher Tastatur kein AltGr-Zeichen.
+        let theme_mods = if cfg!(target_os = "macos") { m.alt && !m.control } else { m.alt && m.control };
+        if theme_mods && !m.platform && !m.shift && ev.keystroke.key == "t" {
             Self::toggle_theme(cx);
             cx.stop_propagation();
         }

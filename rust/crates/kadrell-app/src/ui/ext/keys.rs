@@ -2,91 +2,60 @@
 //! Kürzel des Extensions-Dialogs.
 //!
 //! Der Dialog hat auf dem Mac ⌥F4 als Standard (`HotkeyAction::ShowExtensions`). Unter Windows schließt Alt+F4 das
-//! Fenster, dort gilt deshalb Strg+Umschalt+E, solange der Nutzer nichts anderes eingestellt hat (die Einstellungen
-//! speichern nur Abweichungen vom Standard, ein gespeichertes Kürzel gewinnt immer). Die Wahl erfüllt, was die
-//! Einstellungen zulassen (`Hotkey::is_usable`: Strg, Alt oder Cmd dabei), kollidiert mit keinem Standardkürzel von
-//! `HotkeyAction::ALL` und vermeidet Strg+Alt, das unter Windows AltGr ist und dem Terminal gehört.
+//! Fenster, dort gilt deshalb Alt+Umschalt+E, solange der Nutzer nichts anderes eingestellt hat (die Einstellungen
+//! speichern nur Abweichungen vom Standard, ein gespeichertes Kürzel gewinnt immer; die Windows-Standards stehen in
+//! `workspace::keys::windows_default`). Die Wahl erfüllt, was die Einstellungen zulassen (`Hotkey::is_usable`),
+//! kollidiert mit keinem anderen Windows-Kürzel (Test in `keys`) und vermeidet Strg+Alt, das unter Windows AltGr ist.
+//! Unter Windows liegt ⌘ auf Alt (`crate::keys`), ⌘3 ist dort Alt+3 und ⌘⌥B Strg+Alt+B.
 
 use gpui::{Action, App, KeyBinding};
 use kadrell_core::Settings;
-use kadrell_core::hotkeys::{self, Hotkey, HotkeyAction, mods};
+use kadrell_core::hotkeys::{Hotkey, HotkeyAction, mods};
 
-use crate::lang::{Modifier, modifier_name};
 use super::{FocusRightSidebar, OpenExtensions, ToggleRightSidebar};
+use crate::keys::{Physical, gpui_key, stroke_of};
+use crate::ui::settings::shortcut::Platform;
+use crate::workspace::keys::{effective_map, platform_default};
 
-/// Standard des Extensions-Dialogs je Plattform: Mac ⌥F4, Windows Strg+Umschalt+E.
+fn platform_of(mac: bool) -> Platform {
+    if mac { Platform::Mac } else { Platform::Windows }
+}
+
+/// Standard des Extensions-Dialogs je Plattform: Mac ⌥F4, Windows Alt+Umschalt+E.
 pub fn dialog_default(mac: bool) -> Hotkey {
-    if mac { HotkeyAction::ShowExtensions.default_key() } else { Hotkey::new(mods::CONTROL | mods::SHIFT, "e") }
+    platform_default(HotkeyAction::ShowExtensions, platform_of(mac))
 }
 
-/// Belegung einer Aktion: Einstellungen, sonst Standard; unter Windows ersetzt der Windows-Standard das ⌥F4, solange
-/// der Nutzer nichts gespeichert hat (die gespeicherte Belegung wäre sonst nicht vom Standard zu unterscheiden).
+/// Belegung einer Aktion: Einstellungen, sonst Standard der Plattform (unter Windows ersetzt der Windows-Standard den
+/// Mac-Standard, solange der Nutzer nichts gespeichert hat). `None` ohne Kürzel.
 pub fn binding(settings: &Settings, action: HotkeyAction, mac: bool) -> Option<Hotkey> {
-    let key = hotkeys::current(settings).get(&action)?.clone();
-    if action == HotkeyAction::ShowExtensions && key == action.default_key() && !mac {
-        return Some(dialog_default(false));
-    }
-    (!key.key.is_empty()).then_some(key)
+    effective_map(settings, platform_of(mac)).remove(&action).filter(|k| !k.key.is_empty())
 }
 
-/// Name einer Taste im Tastenstring von GPUI (`left`, `f4`, `escape`), `None` für Unbekanntes.
-fn gpui_key(key: &str) -> Option<String> {
-    let named = match key {
-        "←" => "left",
-        "→" => "right",
-        "↑" => "up",
-        "↓" => "down",
-        "⏎" => "enter",
-        "⇥" => "tab",
-        "Esc" => "escape",
-        "Space" => "space",
-        "⌫" => "backspace",
-        k if k.len() > 1 && k.starts_with('F') && k[1..].chars().all(|c| c.is_ascii_digit()) => return Some(k.to_lowercase()),
-        k if k.chars().count() == 1 => return Some(k.to_lowercase()),
-        _ => return None,
-    };
-    Some(named.to_string())
-}
-
-/// Tastenstring für `KeyBinding::new`: ⌘ ist auf dem Mac `cmd`, unter Windows Strg (wie überall in der App).
+/// Tastenstring für `KeyBinding::new`: auf dem Mac `cmd`, `alt`, `ctrl`, unter Windows ⌘ als Alt (`crate::keys`).
 pub fn keystroke(hotkey: &Hotkey, mac: bool) -> Option<String> {
-    let mut parts: Vec<&str> = Vec::new();
-    let command_is_ctrl = !mac && hotkey.has(mods::COMMAND);
-    if hotkey.has(mods::CONTROL) || command_is_ctrl {
-        parts.push("ctrl");
-    }
-    if hotkey.has(mods::OPTION) {
-        parts.push("alt");
-    }
-    if hotkey.has(mods::SHIFT) {
-        parts.push("shift");
-    }
-    if mac && hotkey.has(mods::COMMAND) {
-        parts.push("cmd");
-    }
     let key = gpui_key(&hotkey.key)?;
+    if !mac {
+        return Some(stroke_of(Physical::from_bits(hotkey.mods), &key));
+    }
+    let mut parts: Vec<&str> = Vec::new();
+    for (flag, name) in [(mods::CONTROL, "ctrl"), (mods::OPTION, "alt"), (mods::SHIFT, "shift"), (mods::COMMAND, "cmd")] {
+        if hotkey.has(flag) {
+            parts.push(name);
+        }
+    }
     parts.push(&key);
     Some(parts.join("-"))
 }
 
-/// Anzeige für Hinweise und Menüs: auf dem Mac `⌥F4`, unter Windows `Strg+Umschalt+E`.
+/// Anzeige für Hinweise und Menüs: auf dem Mac `⌥F4`, unter Windows `Alt+Umschalt+E`.
 pub fn label(hotkey: &Hotkey, mac: bool) -> String {
     if mac {
         return hotkey.display();
     }
     let lang = kadrell_i18n::global().lang();
-    let mut parts: Vec<String> = Vec::new();
-    if hotkey.has(mods::CONTROL) || hotkey.has(mods::COMMAND) {
-        parts.push(modifier_name(Modifier::Ctrl, lang).into());
-    }
-    if hotkey.has(mods::OPTION) {
-        parts.push(modifier_name(Modifier::Alt, lang).into());
-    }
-    if hotkey.has(mods::SHIFT) {
-        parts.push(modifier_name(Modifier::Shift, lang).into());
-    }
-    let key = if hotkey.key.chars().count() == 1 { hotkey.key.to_uppercase() } else { hotkey.key.clone() };
-    parts.push(key);
+    let mut parts: Vec<String> = Physical::from_bits(hotkey.mods).names(lang).into_iter().map(String::from).collect();
+    parts.push(if hotkey.key.chars().count() == 1 { hotkey.key.to_uppercase() } else { hotkey.key.clone() });
     parts.join("+")
 }
 
@@ -114,13 +83,14 @@ pub fn close_hint(settings: &Settings, mac: bool) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kadrell_core::hotkeys::HotkeyMap;
+    use kadrell_core::hotkeys::{self, HotkeyMap};
 
     #[test]
     fn windows_default_is_allowed_unique_and_avoids_altgr_and_alt_f4() {
         let key = dialog_default(false);
         assert!(key.is_usable(), "die Einstellungen lassen es zu");
-        assert!(!key.has(mods::OPTION), "kein Alt: Alt+F4 und AltGr bleiben frei");
+        assert!(key.has(mods::SHIFT) && !key.has(mods::CONTROL), "Alt+Umschalt: Alt+F4 und AltGr (Strg+Alt) bleiben frei");
+        assert_ne!(key.key, "F4");
         for a in HotkeyAction::ALL {
             assert_ne!(a.default_key(), key, "{a:?} belegt es schon");
         }
@@ -146,12 +116,13 @@ mod tests {
     fn keystrokes_follow_the_platform() {
         let cmd3 = HotkeyAction::FocusRightSidebar.default_key();
         assert_eq!(keystroke(&cmd3, true).as_deref(), Some("cmd-3"));
-        assert_eq!(keystroke(&cmd3, false).as_deref(), Some("ctrl-3"));
+        assert_eq!(keystroke(&cmd3, false).as_deref(), Some("alt-3"));
         let toggle = HotkeyAction::ToggleRightSidebar.default_key();
         assert_eq!(keystroke(&toggle, true).as_deref(), Some("alt-cmd-b"));
         assert_eq!(keystroke(&toggle, false).as_deref(), Some("ctrl-alt-b"));
         assert_eq!(keystroke(&Hotkey::new(mods::OPTION, "F4"), true).as_deref(), Some("alt-f4"));
-        assert_eq!(keystroke(&dialog_default(false), false).as_deref(), Some("ctrl-shift-e"));
+        assert_eq!(keystroke(&dialog_default(false), false).as_deref(), Some("alt-shift-e"));
+        assert_eq!(keystroke(&Hotkey::new(mods::CONTROL, "k"), false).as_deref(), Some("ctrl-k"), "⌃ bleibt Strg");
         assert_eq!(keystroke(&Hotkey::new(mods::OPTION, "←"), false).as_deref(), Some("alt-left"));
         assert_eq!(keystroke(&Hotkey::new(mods::OPTION, "Esc"), false).as_deref(), Some("alt-escape"));
         assert_eq!(keystroke(&Hotkey::new(mods::OPTION, "??"), false), None);
@@ -159,9 +130,10 @@ mod tests {
 
     #[test]
     fn labels_use_windows_names_there() {
-        assert_eq!(label(&dialog_default(false), false), "Strg+Umschalt+E");
-        assert_eq!(label(&HotkeyAction::FocusRightSidebar.default_key(), false), "Strg+3");
+        assert_eq!(label(&dialog_default(false), false), "Alt+Umschalt+E");
+        assert_eq!(label(&HotkeyAction::FocusRightSidebar.default_key(), false), "Alt+3");
         assert_eq!(label(&HotkeyAction::ShowExtensions.default_key(), true), "⌥F4");
-        assert_eq!(close_hint(&Settings::default(), false).as_deref(), Some("Strg+Umschalt+E"));
+        assert_eq!(label(&HotkeyAction::ToggleRightSidebar.default_key(), false), "Strg+Alt+B");
+        assert_eq!(close_hint(&Settings::default(), false).as_deref(), Some("Alt+Umschalt+E"));
     }
 }

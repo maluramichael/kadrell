@@ -43,13 +43,8 @@ pub fn modifier_name(m: Modifier, lang: Lang) -> &'static str {
     }
 }
 
-fn modifier_of(glyph: char) -> Option<Modifier> {
-    match glyph {
-        '⌘' | '⌃' => Some(Modifier::Ctrl),
-        '⌥' => Some(Modifier::Alt),
-        '⇧' => Some(Modifier::Shift),
-        _ => None,
-    }
+fn is_modifier_glyph(glyph: char) -> bool {
+    matches!(glyph, '⌘' | '⌃' | '⌥' | '⇧')
 }
 
 /// Folgt auf die Modifier eine Taste, die mit ihnen ein Kürzel bildet?
@@ -57,12 +52,22 @@ fn is_key_char(c: char) -> bool {
     c.is_alphanumeric() || matches!(c, ',' | '+' | '-' | '↩' | '↑' | '↓' | '←' | '→')
 }
 
-/// Mac-Zeichen eines Kürzels (`⇧⌘N`, `⌥F4`) als Windows-Beschriftung (`Strg+Umschalt+N`). Reihenfolge Strg, Alt,
-/// Umschalt, jeder Modifier einmal.
-fn windows_run(mods: &[Modifier], key: Option<char>, lang: Lang) -> String {
+/// Ist das `-` oder `+` hinter dem Modifier die Taste (`⌘-`, `⌘+`) und nicht ein Bindestrich (`⌘-Klick`)?
+fn is_symbol_key(c: char, next: Option<char>) -> bool {
+    !matches!(c, '+' | '-') || !next.is_some_and(char::is_alphabetic)
+}
+
+/// Mac-Zeichen eines Kürzels (`⇧⌘N`, `⌥F4`) als Windows-Beschriftung (`Alt+Umschalt+N`). ⌘ ist unter Windows Alt (so
+/// liegen die App-Kürzel), ⌃ ist Strg, ⌘⌥ zusammen sind Strg+Alt. Ein ⌘ ohne Taste (`⌘ Mausrad`, `⌘-Klick`) meint die
+/// Maus und bleibt bei Strg, dem Windows-Standard für Auswahl und Zoom. Reihenfolge Strg, Alt, Umschalt.
+fn windows_run(glyphs: &[char], key: Option<char>, lang: Lang) -> String {
+    let has = |g: char| glyphs.contains(&g);
+    let (cmd, opt) = (has('⌘'), has('⌥'));
+    let ctrl = has('⌃') || (cmd && opt) || (cmd && key.is_none());
+    let alt = opt || (cmd && key.is_some());
     let mut parts: Vec<&str> = Vec::new();
-    for m in [Modifier::Ctrl, Modifier::Alt, Modifier::Shift] {
-        if mods.contains(&m) {
+    for (on, m) in [(ctrl, Modifier::Ctrl), (alt, Modifier::Alt), (has('⇧'), Modifier::Shift)] {
+        if on {
             parts.push(modifier_name(m, lang));
         }
     }
@@ -81,29 +86,36 @@ fn windows_run(mods: &[Modifier], key: Option<char>, lang: Lang) -> String {
 /// Ersetzt Mac-Kürzelzeichen im Text durch die Beschriftung des Betriebssystems. Auf dem Mac bleibt der Text, wie er
 /// ist. Ein Modifier ohne Taste (`⌘ Mausrad`) wird zum bloßen Namen (`Strg Mausrad`).
 pub fn localize_shortcuts_for(text: &str, mac: bool, lang: Lang) -> String {
-    if mac || !text.chars().any(|c| modifier_of(c).is_some()) {
+    if mac || !text.chars().any(is_modifier_glyph) {
         return text.to_string();
     }
+    let text = terminal_keys(text);
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::new();
     let mut i = 0;
     while i < chars.len() {
-        let Some(first) = modifier_of(chars[i]) else {
+        if !is_modifier_glyph(chars[i]) {
             out.push(chars[i]);
             i += 1;
             continue;
-        };
-        let mut mods = vec![first];
-        i += 1;
-        while let Some(m) = chars.get(i).copied().and_then(modifier_of) {
-            mods.push(m);
+        }
+        let start = i;
+        while chars.get(i).copied().is_some_and(is_modifier_glyph) {
             i += 1;
         }
-        let key = chars.get(i).copied().filter(|c| is_key_char(*c));
+        let next = chars.get(i + 1).copied();
+        let key = chars.get(i).copied().filter(|c| is_key_char(*c) && is_symbol_key(*c, next));
+        let glyphs = &chars[start..i];
         i += usize::from(key.is_some());
-        out.push_str(&windows_run(&mods, key, lang));
+        out.push_str(&windows_run(glyphs, key, lang));
     }
     out
+}
+
+/// Tasten, die unter Windows nicht auf Alt liegen: „alle Aktionen“
+/// im Panel der Extensions (Strg+⏎ statt ⌥⏎, Alt+⏎ ist ⌘⏎). `⏎` allein kennt die Umwandlung nicht, es wird `↩`.
+fn terminal_keys(text: &str) -> String {
+    text.replace("⌥⏎", "⌃↩").replace("⌘⏎", "⌘↩").replace("⌃⏎", "⌃↩")
 }
 
 /// Wie `localize_shortcuts_for` für dieses Betriebssystem und die eingestellte Sprache.
@@ -194,27 +206,39 @@ mod tests {
 
     #[test]
     fn windows_german_and_english_names() {
-        assert_eq!(win("Projektordner für ⌘N", Lang::De), "Projektordner für Strg+N");
-        assert_eq!(win("Project folder for ⌘N", Lang::En), "Project folder for Ctrl+N");
-        assert_eq!(win("⇧⌘N", Lang::De), "Strg+Umschalt+N");
-        assert_eq!(win("⇧⌘N", Lang::En), "Ctrl+Shift+N");
+        assert_eq!(win("Projektordner für ⌘N", Lang::De), "Projektordner für Alt+N");
+        assert_eq!(win("Project folder for ⌘N", Lang::En), "Project folder for Alt+N");
+        assert_eq!(win("⇧⌘N", Lang::De), "Alt+Umschalt+N");
+        assert_eq!(win("⇧⌘N", Lang::En), "Alt+Shift+N");
         assert_eq!(win("⌥⌘N", Lang::En), "Ctrl+Alt+N");
         assert_eq!(win("⌥F4", Lang::De), "Alt+F4");
+        assert_eq!(win("⌃C", Lang::De), "Strg+C", "⌃ bleibt Strg");
+        assert_eq!(win("⇧⌃V", Lang::En), "Ctrl+Shift+V");
     }
 
     #[test]
     fn punctuation_and_enter_keys() {
-        assert_eq!(win("⌘,", Lang::De), "Strg+,");
-        assert_eq!(win("⌘+", Lang::De), "Strg++");
-        assert_eq!(win("⌘-", Lang::En), "Ctrl+-");
-        assert_eq!(win("⌘↩", Lang::De), "Strg+Enter");
-        assert_eq!(win("⌘⇧↩", Lang::En), "Ctrl+Shift+Enter");
+        assert_eq!(win("⌘,", Lang::De), "Alt+,");
+        assert_eq!(win("⌘+", Lang::De), "Alt++");
+        assert_eq!(win("⌘-", Lang::En), "Alt+-");
+        assert_eq!(win("⌘↩", Lang::De), "Alt+Enter");
+        assert_eq!(win("⌘⏎", Lang::De), "Alt+Enter");
+        assert_eq!(win("⌘⇧↩", Lang::En), "Alt+Shift+Enter");
+        assert_eq!(win("⌃⏎", Lang::En), "Ctrl+Enter");
+    }
+
+    #[test]
+    fn panel_actions_stay_off_alt() {
+        assert_eq!(win("Tippen und ⌘V gehen", Lang::De), "Tippen und Alt+V gehen");
+        assert_eq!(win("⏎ erste Aktion, ⌥⏎ alle Aktionen", Lang::En), "⏎ erste Aktion, Ctrl+Enter alle Aktionen");
     }
 
     #[test]
     fn modifier_without_key_becomes_a_name() {
-        assert_eq!(win("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad", Lang::De), "Terminal-Schriftgröße  Strg++ Strg+- Strg+0  Strg Mausrad");
+        assert_eq!(win("Terminal-Schriftgröße  ⌘+ ⌘- ⌘0  ⌘ Mausrad", Lang::De), "Terminal-Schriftgröße  Alt++ Alt+- Alt+0  Strg Mausrad");
         assert_eq!(win("zweimal ⌃C, /exit", Lang::En), "zweimal Ctrl+C, /exit");
+        assert_eq!(win("⌘-Klick für mehrere", Lang::De), "Strg-Klick für mehrere", "Maus: Strg, kein Alt");
+        assert_eq!(win("mit ⌘: Terminal", Lang::De), "mit Strg: Terminal");
     }
 
     #[test]

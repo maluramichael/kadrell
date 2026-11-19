@@ -16,10 +16,9 @@ use model::{OPEN_KEY, WindowSet};
 
 actions!(kadrell_windows, [ToggleSidebar, ToggleAuto]);
 
-/// Taste für Baum ein/aus (⌘B, ⇧⌘B macht `ui::tree_actions`); unter Windows wie überall Strg statt ⌘.
+/// Taste für Baum ein/aus (⌘B, ⇧⌘B macht `ui::tree_actions`); unter Windows wie überall Alt statt ⌘.
 pub fn bind_keys(cx: &mut gpui::App) {
-    let tree = if cfg!(target_os = "macos") { "cmd-b" } else { "ctrl-b" };
-    cx.bind_keys([KeyBinding::new(tree, ToggleSidebar, None)]);
+    cx.bind_keys([KeyBinding::new(crate::keys::platform("cmd-b"), ToggleSidebar, None)]);
 }
 
 /// Aktionen der Ansicht am Wurzelelement des Hauptfensters.

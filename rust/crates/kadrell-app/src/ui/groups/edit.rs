@@ -30,9 +30,8 @@ const SWATCH: f32 = 18.;
 
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
-    let browse = if cfg!(target_os = "macos") { "cmd-o" } else { "ctrl-o" };
     dialog_keys::bind_keys(cx);
-    cx.bind_keys([KeyBinding::new("tab", Complete, c), KeyBinding::new(browse, Browse, c)]);
+    cx.bind_keys([KeyBinding::new("tab", Complete, c), KeyBinding::new(crate::keys::platform("cmd-o"), Browse, c)]);
 }
 
 pub enum EditEvent {

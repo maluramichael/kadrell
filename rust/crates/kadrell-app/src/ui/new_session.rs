@@ -39,7 +39,7 @@ const VISIBLE_ROWS: f32 = 8.;
 pub fn bind_keys(cx: &mut App) {
     let c = Some(CONTEXT);
     dialog_keys::bind_keys(cx);
-    let (browse, create) = if cfg!(target_os = "macos") { ("cmd-o", "cmd-enter") } else { ("ctrl-o", "ctrl-enter") };
+    let (browse, create) = (crate::keys::platform("cmd-o"), crate::keys::platform("cmd-enter"));
     cx.bind_keys([
         KeyBinding::new("up", MoveUp, c),
         KeyBinding::new("down", MoveDown, c),

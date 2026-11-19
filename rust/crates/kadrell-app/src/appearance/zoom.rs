@@ -1,4 +1,4 @@
-//! Terminal-Schrift per Tastatur: ⌘+ / ⌘- / ⌘0 (Strg unter Windows) ändern die Schriftgröße für alle Terminals,
+//! Terminal-Schrift per Tastatur: ⌘+ / ⌘- / ⌘0 (Alt unter Windows) ändern die Schriftgröße für alle Terminals,
 //! `menuFontBigger`, `menuFontSmaller`, `menuFontReset` der Mac-App. Die Größe landet in den Einstellungen des Profils.
 
 use gpui::{Context, Div, InteractiveElement, KeyBinding, actions};
@@ -30,7 +30,7 @@ pub fn is_font_wheel(m: gpui::Modifiers, mac: bool) -> bool {
     primary && !other && !m.alt && !m.shift
 }
 
-/// Tasten: Strg bzw. Cmd mit `=`/`+` (je nach Layout), `-` und `0`.
+/// Tasten: Alt bzw. Cmd mit `=`/`+` (je nach Layout), `-` und `0`.
 pub fn bind_keys(cx: &mut gpui::App) {
     macro_rules! mods {
         ($m:literal) => {
@@ -43,10 +43,11 @@ pub fn bind_keys(cx: &mut gpui::App) {
             ])
         };
     }
+    // Unter Windows liegt ⌘ auf Alt (`keys::platform`), das Mausrad bleibt bei Strg (Windows-Standard).
     if cfg!(target_os = "macos") {
         mods!("cmd");
     } else {
-        mods!("ctrl");
+        mods!("alt");
     }
 }
 

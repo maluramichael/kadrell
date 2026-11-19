@@ -10,7 +10,7 @@ use gpui::{
     Subscription, Window, point, px,
 };
 use kadrell_core::Settings;
-use kadrell_core::hotkeys::{self, Hotkey, HotkeyAction};
+use kadrell_core::hotkeys::{Hotkey, HotkeyAction};
 
 use super::backend::Backend;
 use super::controls::Geometry;
@@ -425,9 +425,12 @@ impl SettingsDialog {
     fn record_key(&mut self, m: &gpui::Modifiers, key: &str, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(action) = self.recording else { return };
         let input = KeyInput { control: m.control, alt: m.alt, shift: m.shift, platform: m.platform, key: key.to_string() };
-        match shortcut::classify(&input, shortcut::current()) {
+        let recorded = shortcut::classify_for(&input, shortcut::current(), Some(action));
+        match recorded {
             // Swift: `guard let k = Hotkey(event:), k.isUsable else { NSSound.beep(); return nil }`, die Aufnahme läuft weiter.
             Recorded::Reject => return kadrell_tray::beep(),
+            // Windows: ⌘ und ⌥ sind beide Alt, eine andere Aktion hat diese Taste schon (anderes gespeichertes Kürzel).
+            Recorded::Set(ref h) if self.alt_clash(action, h, cx) => return kadrell_tray::beep(),
             Recorded::Cancel => {}
             Recorded::Clear => self.change(|s| shortcut::assign(s, action, None), cx),
             Recorded::Set(h) => self.change(|s| shortcut::assign(s, action, Some(h)), cx),
@@ -438,6 +441,10 @@ impl SettingsDialog {
 
     pub(super) fn reset_hotkey(&mut self, action: HotkeyAction, cx: &mut Context<Self>) {
         self.change(|s| shortcut::assign(s, action, Some(action.default_key())), cx);
+    }
+
+    fn alt_clash(&self, action: HotkeyAction, h: &Hotkey, cx: &Context<Self>) -> bool {
+        shortcut::current() == shortcut::Platform::Windows && crate::workspace::keys::clashes(&cx.global::<AppSettings>().settings, action, h)
     }
 
     // MARK: Filter
@@ -624,9 +631,9 @@ fn sync_theme(cx: &mut App) {
     cx.refresh_windows();
 }
 
-/// Aktuelle Belegung einer Aktion.
+/// Aktuelle Belegung einer Aktion, unter Windows mit den Windows-Standards (`workspace::keys::windows_default`).
 pub fn hotkey_of(settings: &Settings, action: HotkeyAction) -> Option<Hotkey> {
-    hotkeys::current(settings).remove(&action)
+    crate::workspace::keys::effective_map(settings, shortcut::current()).remove(&action)
 }
 
 #[cfg(test)]

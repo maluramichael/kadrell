@@ -233,7 +233,7 @@ mod tests {
     fn windows_spells_the_keys_out() {
         let s = sections(&defaults(), false);
         assert_eq!(row(&s, "diese Hilfe").keys, "Alt+F1");
-        assert!(row(&s, "Neue Session: Projekt").keys.contains("Strg"), "⌘N wird zu Strg+N");
+        assert!(row(&s, "Neue Session: Projekt").keys.contains("Alt+N"), "⌘N wird zu Alt+N");
     }
 
     #[test]
