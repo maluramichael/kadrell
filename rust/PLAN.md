@@ -105,6 +105,10 @@ Fortschritt und Abweichungen trägt die Planungs-Session hier unten ein.
   Entschieden (Michael, 19.11.): App-Kürzel unter Windows auf Alt statt Strg (⌘ → Alt), damit Strg+B, Strg+R,
   Strg+P bei Claude Code im Terminal ankommen; bei Doppelbelegung mit ⌥-Kürzeln gewinnt ⌘, die ⌥-Aktion bekommt
   einen eigenen Windows-Standard. Textfelder behalten Strg+C/V/A/Z. Paket `rw8-alt`.
+  Welle 4 shell und Welle 8 gemergt (06843d9, 1520 Tests): ein Beenden-Dialog, Neustart, CLI-Installation,
+  Menüs; Kürzel unter Windows auf Alt (`crate::keys::platform`), Terminal Kopieren/Suchen/Rechtsklick, Tab-Fokus in allen
+  Dialogen, weitere Fenster mit rechter Seitenleiste und Dock. Welle 9 läuft: Windows-Begriffe in Texten, Reste weiterer
+  Fenster, Skalierung mit der UI-Größe.
   Die Mac-Session ist ab 19.11. offline (MacBook unterwegs): macOS-Zweige nur blind hinter cfg, Prüfung später.
 - Feinschliff-Liste: Einstellungstexte zeigen „⌘N“ auch unter Windows; unterste Listenzeile im Dialog „Neue Session“
   angeschnitten; Fensterfokus beim Start auf dem Mac; Layout-Menüeinträge auf dem Mac ausgegraut; Buchstabenabstand
