@@ -125,8 +125,7 @@ fn stdin_eof_kills_exec_children() {
         r#"kadrell.on("app.ready", function() kadrell.exec({{"{}", "sleep", "77"}}) end)"#,
         fake_lua()
     ));
-    assert!(wait_until(3.0, || !children_of(p.pid()).is_empty()));
-    let child = children_of(p.pid())[0];
+    let child = wait_for_child(p.pid()).expect("Kind");
     p.close_stdin();
     assert!(p.wait_for_exit(WAIT).is_some());
     assert!(
@@ -142,8 +141,7 @@ fn killing_the_helper_kills_exec_children() {
         r#"kadrell.on("app.ready", function() kadrell.exec({{"{}", "sleep", "77"}}) end)"#,
         fake_lua()
     ));
-    assert!(wait_until(3.0, || !children_of(p.pid()).is_empty()));
-    let child = children_of(p.pid())[0];
+    let child = wait_for_child(p.pid()).expect("Kind");
     p.child.kill().unwrap();
     let _ = p.wait_for_exit(WAIT);
     // Unter Unix bleiben Kinder nach SIGKILL des Helpers übrig (die App tötet dort die Prozessgruppe), unter Windows
