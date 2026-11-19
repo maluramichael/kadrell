@@ -482,13 +482,11 @@ fn session_row(row: SessionRow, group: &Group, ctx: &SidebarCtx, a: &Appearance,
     let n = g * 100 + s;
     let mut face = session_face(session, &row, &host, n, &t, a).hover(move |st| st.bg(t.bg));
     // Der Rand steht immer, nur seine Farbe wechselt: Inhalt springt bei der Auswahl nicht.
-    let hit = super::tile_look::palette_hit(cx, &session.key);
-    if selected || focused || hit == Some(true) {
+    if selected || focused {
         face = face.bg(t.bg);
     }
     face = outline(face, session_edge(focused, &t), a);
-    // Treffer der offenen Suche tragen den Balken in Akzentfarbe, die übrigen Zeilen treten zurück.
-    let bar = selected.then(|| t.group(group.color)).or_else(|| (hit == Some(true)).then_some(t.accent));
+    let bar = selected.then(|| t.group(group.color));
     let spoken = a11y::spoken(session.status, session.ended, session.shell_running);
     let key = session.key.clone();
     let (pressed, released) = (RowKey::Session(key.clone()), RowKey::Session(key.clone()));
@@ -498,8 +496,6 @@ fn session_row(row: SessionRow, group: &Group, ctx: &SidebarCtx, a: &Appearance,
     let mut frame = row_frame(("session", n), height, row.inset_y(), bar, a);
     if let Some((dx, alpha)) = row.anim.slide {
         frame = frame.left(px(a.s(dx))).opacity(alpha);
-    } else if hit == Some(false) {
-        frame = frame.opacity(super::tile_look::DIMMED_OPACITY);
     }
     let mut row_el = frame
         .group(host.clone())

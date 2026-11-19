@@ -91,8 +91,7 @@ impl Shell {
         let palette = cx.new(|cx| Palette::new(snap, panes, history, hosts, prefix, window, cx));
         let ext = self.ext_palette_commands();
         palette.update(cx, |p, cx| p.add_commands(ext, cx));
-        let ids = palette.read(cx).highlight();
-        self.set_palette_highlight(ids.map(|ids| self.keys_of(&ids)), cx);
+        self.palette_highlight = palette.read(cx).highlight().map(|ids| self.keys_of(&ids));
         cx.subscribe_in(&palette, window, Self::on_palette_event).detach();
         self.palette = Some(palette);
         self.refresh_history(cx);
@@ -140,13 +139,6 @@ impl Shell {
     /// Schlüssel der Sessions an diesen Plätzen (die Hervorhebung kennt Schlüssel, nicht Plätze).
     fn keys_of(&self, ids: &HashSet<(usize, usize)>) -> HashSet<String> {
         ids.iter().filter_map(|(g, s)| Some(self.groups.get(*g)?.sessions.get(*s)?.key.clone())).collect()
-    }
-
-    /// Merkt die Treffer der Suche und gibt sie den Kacheln und dem Baum (`tile_look::PaletteHits`); `None` löscht sie.
-    fn set_palette_highlight(&mut self, keys: Option<HashSet<String>>, cx: &mut Context<Self>) {
-        cx.set_global(crate::ui::tile_look::PaletteHits(keys.clone()));
-        self.palette_highlight = keys;
-        cx.notify();
     }
 
     /// Ist diese Session gerade Treffer der Suche? Kacheln und Baum zeichnen sich damit hervor, solange die Suche offen
@@ -250,7 +242,7 @@ impl Shell {
     /// Schließt die Suche; die Tastatur geht zurück an das Terminal der gewählten Session.
     fn close_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.palette = None;
-        self.set_palette_highlight(None, cx);
+        self.palette_highlight = None;
         self.sync(window, cx);
     }
 
@@ -312,10 +304,7 @@ impl Shell {
                 self.close_palette(window, cx);
                 self.account_command(run, cx);
             }
-            PaletteEvent::Highlight(ids) => {
-                let keys = ids.as_ref().map(|ids| self.keys_of(ids));
-                self.set_palette_highlight(keys, cx);
-            }
+            PaletteEvent::Highlight(ids) => self.palette_highlight = ids.as_ref().map(|ids| self.keys_of(ids)),
         }
     }
 
