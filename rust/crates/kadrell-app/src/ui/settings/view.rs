@@ -17,7 +17,8 @@ use super::store::AppSettings;
 use super::{layout, model};
 use crate::theme::Theme;
 use crate::ui::chrome::h_seam;
-use crate::ui::overlay::{self, backdrop_full, dialog_foot, dialog_frame};
+use crate::ui::instrument::KeyRole;
+use crate::ui::overlay::{self, backdrop_full, dialog_foot_in, dialog_frame};
 use crate::ui::overlay_anim::slide;
 use crate::ui::theme;
 use kadrell_core::hotkeys::HotkeyAction;
@@ -107,8 +108,7 @@ impl SettingsDialog {
             left = left.child(crate::ui::ext::spinner::spinner(t.muted));
         }
         if !text.is_empty() {
-            let label = div().id(id("info", &row.id)).min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(tone_color(tone, t)).child(text.to_string());
-            let label = label.when_some(row.tip.clone(), |d, tip| d.tooltip(crate::ui::tooltip::text(tip)));
+            let label = self.status_label(row, text, tone, last == 0, t, cx);
             left = left.child(label);
         }
         for (i, b) in buttons.iter().enumerate().take(last) {
@@ -116,6 +116,21 @@ impl SettingsDialog {
         }
         let right = buttons.last().map(|b| self.button(&row.id, last, b, t, cx));
         div().flex().items_center().gap(px(8.)).child(left).children(right).into_any_element()
+    }
+
+    /// Statustext: bei einer Taste rechts (oder keiner) füllt er den Platz und wird in der Mitte gekürzt (`.truncationMode(.middle)`),
+    /// mit dem ganzen Text als Tooltip. Die Breite kommt aus dem letzten Frame; steht links noch eine Taste, kürzt GPUI am Ende.
+    fn status_label(&self, row: &Row, text: &str, tone: Tone, fills: bool, t: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
+        let width = self.geometry.borrow().get(&format!("status:{}", row.id)).map(|b| f32::from(b.size.width));
+        let shown = match width {
+            Some(max) if fills => super::truncate::middle(text, max, &|s| crate::ui::tile::text_width(cx, s, 12., false)),
+            _ => text.to_string(),
+        };
+        let cut = shown != text;
+        let label = div().id(id("info", &row.id)).relative().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(tone_color(tone, t));
+        let label = if fills { label.flex_1().child(measure(&self.geometry, format!("status:{}", row.id))) } else { label };
+        let tip = row.tip.clone().or_else(|| cut.then(|| text.to_string()));
+        label.child(shown).when_some(tip, |d, tip| d.tooltip(crate::ui::tooltip::text(tip)))
     }
 
     fn control_view(&self, row: &Row, focused: bool, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
@@ -320,10 +335,15 @@ impl Render for SettingsDialog {
             .child(body)
             .child(div().h(px(12.)));
         let hint = if self.filter.open { trd!("⏎ zum ersten Treffer · Esc beendet die Suche") } else { trd!("Änderungen gelten sofort · / sucht · Esc schließt") };
-        let foot = dialog_foot(hint, format!("{} ⏎", trd!("Fertig")), &t, cx.listener(|this, _, _, cx| {
+        // Die Haupttaste ist der letzte Tab-Stopp mit Ring (`dialog_foot_in`); ihren Fokus merkt sich der Dialog für Tab.
+        self.foot_focus = Some(crate::ui::dialog_keys::handle("dialog-primary", window, cx));
+        let on_foot = cx.listener(|this, _: &ClickEvent, _, cx| {
             this.stop_recording();
             cx.emit(super::dialog::SettingsEvent::Close);
-        }));
+        });
+        let foot = dialog_foot_in(hint, format!("{} ⏎", trd!("Fertig")), KeyRole::Primary, &t, window, cx, move |ev, w, cx| {
+            on_foot(ev, w, cx);
+        });
         let frame = dialog_frame(&t)
             .size_full()
             .key_context(super::CONTEXT)

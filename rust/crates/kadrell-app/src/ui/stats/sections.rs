@@ -15,7 +15,7 @@ use super::draw::{self, END_PAD, Hover, OnHover, Style};
 use super::format::{self, count_ticks};
 use super::{Counters, StatsView, ui_lang};
 use crate::theme::Theme;
-use crate::ui::settings::controls::measure;
+use crate::ui::settings::controls::{Geometry, measure};
 use crate::ui::theme;
 
 const LIMIT_HEIGHT: f32 = 110.;
@@ -188,7 +188,7 @@ impl StatsView {
         let y_labels: Vec<(f32, String)> = [(0., "100 %"), (0.5, "50 %"), (1., "0 %")].iter().map(|(f, s)| (*f, s.to_string())).collect();
         let tooltip = self.hover.filter(|h| h.chart == idx).and_then(|h| limit_tooltip(account, snap, h, lang, &t).map(|c| (h, c)));
         let canvas = draw::limit_chart(snap.clone(), idx, self.hover, Style::new(&t), self.on_hover(cx));
-        chart_frame(snap, canvas, &y_labels, LIMIT_HEIGHT, true, tooltip, lang, &t)
+        chart_frame(snap, canvas, &y_labels, (LIMIT_HEIGHT, Some(t.bg)), tooltip, (lang, &self.geometry, format!("plot:{idx}")), &t)
     }
 
     // MARK: Prompts
@@ -221,7 +221,7 @@ impl StatsView {
         let y_labels: Vec<(f32, String)> = count_ticks(max).iter().map(|v| (1. - *v as f32 / max as f32, v.to_string())).collect();
         let tooltip = self.hover.filter(|h| h.chart == PROMPT_CHART).and_then(|h| prompt_tooltip(snap, h, lang, &t).map(|c| (h, c)));
         let canvas = draw::prompt_chart(snap.clone(), PROMPT_CHART, self.hover, Style::new(&t), self.on_hover(cx));
-        chart_frame(snap, canvas, &y_labels, PROMPT_HEIGHT, false, tooltip, lang, &t)
+        chart_frame(snap, canvas, &y_labels, (PROMPT_HEIGHT, Some(crate::ui::overlay::raised(&t).opacity(0.85))), tooltip, (lang, &self.geometry, format!("plot:{PROMPT_CHART}")), &t)
     }
 
     /// Die Tabelle zum Chart: alle Projekte des Zeitraums, scrollbar. ↑/↓ bewegt den Cursor, Leertaste oder Klick
@@ -277,6 +277,7 @@ impl StatsView {
     /// `ViewThatFits(in: .horizontal)`: passt die Reihe in voller Breite in den Platz, steht sie in einer Reihe, sonst
     /// in zwei Spalten. Breiten aus dem letzten Frame; ändern sie sich, folgt noch ein Frame.
     pub(super) fn counters_in_one_row(&mut self, window: &mut Window) -> bool {
+        self.plots_changed(window);
         let (natural, offered) = {
             let geo = self.geometry.borrow();
             (geo.get(ROW_KEY).map(|b| f32::from(b.size.width)), geo.get(AREA_KEY).map(|b| f32::from(b.size.width)))
@@ -287,6 +288,15 @@ impl StatsView {
         }
         self.counters_basis = Some(basis);
         fits_one_row(natural, offered)
+    }
+
+    /// Die Tageslabels der Charts hängen an der gemessenen Plotbreite: ändert sie sich, folgt noch ein Frame.
+    fn plots_changed(&mut self, window: &mut Window) {
+        let total: f32 = self.geometry.borrow().iter().filter(|(k, _)| k.starts_with("plot:")).map(|(_, b)| f32::from(b.size.width)).sum();
+        if (self.plot_basis - total).abs() >= 0.5 {
+            window.request_animation_frame();
+        }
+        self.plot_basis = total;
     }
 
     pub(super) fn counters_section(&self, lang: kadrell_accounts::Lang, one_row: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -364,22 +374,25 @@ fn chart_frame(
     snap: &StatsSnapshot,
     canvas: gpui::Canvas<()>,
     y_labels: &[(f32, String)],
-    height: f32,
-    day_labels: bool,
+    size: (f32, Option<Hsla>),
     tooltip: Option<(Hover, AnyElement)>,
-    lang: kadrell_accounts::Lang,
+    probe: (kadrell_accounts::Lang, &Geometry, String),
     t: &Theme,
 ) -> AnyElement {
+    // `size`: Höhe samt Achse und Hintergrund der Tageslabels (Limits: `bg`, Prompts: `raised` zu 85 %, `DayLabels(background:)`).
+    let (height, day_bg) = size;
+    let (lang, geometry, plot_key) = probe;
+    let plot_width = geometry.borrow().get(&plot_key).map(|b| f32::from(b.size.width));
     let span = (snap.now - snap.from).max(1.);
     let frac = |at: f64| ((at - snap.from) / span) as f32;
     let height = height - AXIS_ROW - AXIS_GAP;
     let y_col = div().relative().flex_none().w(px(Y_LABEL_WIDTH)).h(px(height)).children(y_labels.iter().map(|(f, text)| {
         div().absolute().right(px(6.)).top(px(3. + f * (height - 6.) - 7.)).text_size(px(10.)).text_color(t.muted).child(text.clone())
     }));
-    let days = snap.days.iter().filter(|d| day_labels && d.labeled).map(|d| {
+    let days = snap.days.iter().filter(|d| day_bg.is_some() && d.labeled).map(|d| {
         let x = frac(d.date);
-        let right = x > 0.7;
-        let mut label = div().absolute().top(px(1.)).px(px(3.)).whitespace_nowrap().text_size(px(10.)).font_weight(FontWeight::BOLD).text_color(t.muted).bg(t.bg).child(format::day_label(d.date, lang));
+        let right = label_flips(x, plot_width, crate::ui::overlay::scale());
+        let mut label = div().absolute().top(px(1.)).px(px(3.)).whitespace_nowrap().text_size(px(10.)).font_weight(FontWeight::BOLD).text_color(t.muted).bg(day_bg.unwrap_or(t.bg)).child(format::day_label(d.date, lang));
         label = if right { label.right(relative(1. - x)) } else { label.left(relative(x)) };
         label
     });
@@ -394,6 +407,7 @@ fn chart_frame(
         .min_w_0()
         .h(px(height))
         .child(div().absolute().inset_0().child(canvas.size_full()))
+        .child(measure(geometry, plot_key))
         .child(div().absolute().inset_0().pr(px(END_PAD)).child(div().relative().size_full().children(days)))
         .children(tooltip_el);
     let ticks = format::ticks(snap.range, snap.from, snap.now, lang).into_iter().map(|tick| {
@@ -401,6 +415,15 @@ fn chart_frame(
     });
     let axis = div().relative().h(px(AXIS_ROW)).ml(px(Y_LABEL_WIDTH)).pr(px(END_PAD)).child(div().relative().size_full().children(ticks));
     div().flex().flex_col().gap(px(AXIS_GAP)).child(div().flex().child(y_col).child(plot)).child(axis).into_any_element()
+}
+
+/// Klappt das Datum links an die Linie? Wenn rechts davon weniger als 110 mal UI-Größe bleibt (`DayLabels.labelRoom`); vor
+/// der ersten Messung der Plotbreite gilt der frühere Näherungswert.
+fn label_flips(x: f32, plot_width: Option<f32>, scale: f32) -> bool {
+    match plot_width {
+        Some(w) => x * w > w - 110. * scale,
+        None => x > 0.7,
+    }
 }
 
 fn tooltip_box(t: &Theme) -> gpui::Div {
@@ -473,6 +496,17 @@ impl<T> ChunksOwned<T> for Vec<T> {
 mod tests {
     use super::*;
     use kadrell_accounts::Lang;
+
+    /// `DayLabels.labelRoom`: rechts der Linie müssen 110 mal UI-Größe Platz sein, sonst steht das Datum links.
+    #[test]
+    fn day_label_flips_when_less_than_label_room_is_left() {
+        assert!(!label_flips(0.5, Some(600.), 1.));
+        assert!(label_flips(0.9, Some(600.), 1.));
+        assert!(!label_flips(0.9, Some(2000.), 1.));
+        assert!(label_flips(0.6, Some(300.), 1.25), "größere UI-Größe braucht mehr Platz");
+        assert!(label_flips(0.8, None, 1.));
+        assert!(!label_flips(0.5, None, 1.));
+    }
 
     #[test]
     fn numbers_group_by_language() {

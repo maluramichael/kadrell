@@ -20,6 +20,15 @@ use crate::ui::theme as app_theme;
 
 const TEXT_SIZE: f32 = 11.;
 
+/// Höhe der Leiste inklusive Fuge: 22 mal UI-Größe, gerundet (`FooterBarView.height`).
+pub fn height() -> f32 {
+    scaled_height(crate::ui::overlay::scale())
+}
+
+fn scaled_height(scale: f32) -> f32 {
+    (HEIGHT * scale).round()
+}
+
 /// Was ein Bildschirmleser zu einem Modul hört: Einträge mit Aktion sind Tasten, die übrigen Text mit dem Tooltip als Wert
 /// (`FooterBarView.accessibilityChildren`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,7 +146,7 @@ pub fn footer_bar(entries: &[FooterEntry], window: &Window, cx: &mut Context<She
     let t = app_theme(cx);
     let width = window.viewport_size().width.as_f32();
     let (left, right) = layout(entries, width, &|s| measure(window, s));
-    let mut body = div().relative().flex_none().w_full().h(px(HEIGHT - 2.)).text_color(t.fg);
+    let mut body = div().relative().flex_none().w_full().h(px(height() - 2.)).text_color(t.fg);
     for p in &left {
         body = body.child(module(p.index, &entries[p.index], p, &t, cx)).child(seam_at(p.x + p.width, &t));
     }
@@ -150,7 +159,7 @@ pub fn footer_bar(entries: &[FooterEntry], window: &Window, cx: &mut Context<She
 /// Eine leere Leiste: für die Schonfrist, in der die Leiste nach dem letzten Eintrag noch steht (kein Springen).
 pub fn empty_footer(cx: &App) -> impl IntoElement + use<> {
     let t = app_theme(cx);
-    div().flex().flex_col().flex_none().w_full().bg(t.panel).child(h_seam(&t)).child(div().h(px(HEIGHT - 2.)))
+    div().flex().flex_col().flex_none().w_full().bg(t.panel).child(h_seam(&t)).child(div().h(px(height() - 2.)))
 }
 
 #[cfg(test)]
@@ -183,6 +192,14 @@ mod tests {
         assert!(!text.button);
         assert_eq!(text.value.as_deref(), Some("CPU 23 %"));
         assert_eq!(access(&entry("c", Align::Right, None, None)).value, None);
+    }
+
+    /// `FooterBarView.height`: 22 mal UI-Größe, gerundet.
+    #[test]
+    fn height_follows_ui_scale_rounded() {
+        assert_eq!(scaled_height(1.), 22.);
+        assert_eq!(scaled_height(1.25), 28.);
+        assert_eq!(scaled_height(0.8), 18.);
     }
 
     #[test]

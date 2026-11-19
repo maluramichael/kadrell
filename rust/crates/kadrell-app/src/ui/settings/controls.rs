@@ -64,7 +64,7 @@ pub fn table(rows: Vec<AnyElement>, t: &Theme) -> Div {
 pub fn row(title: &str, control: AnyElement, control_width: f32, t: &Theme) -> Div {
     // Swift: Beschriftung, Zwischenraum 12, `Spacer(minLength: 12)`, Zwischenraum 12, Steuerelement: der Beschriftung bleiben
     // 24 pt weniger, lange Titel brechen früher um.
-    let label = div().flex_1().min_w_0().pr(px(24.)).text_color(t.fg).child(title.to_string());
+    let label = div().flex_1().min_w_0().pr(px(24.)).line_clamp(2).text_color(t.fg).child(title.to_string());
     let control = div().flex_none().w(px(control_width)).child(control);
     div().flex().items_center().gap(px(12.)).px(px(10.)).py(px(5.)).text_size(px(12.)).child(label).child(control)
 }
@@ -109,9 +109,16 @@ pub fn key_cap(content: impl IntoElement, destructive: bool, t: &Theme) -> Div {
 /// Inhalt einer kleinen Taste: Text oder Symbol.
 pub fn key_content(label: &str, icon: Option<Icon>, color: Hsla) -> AnyElement {
     match icon {
-        Some(icon) => icon_view(icon, color).into_any_element(),
+        Some(icon) => icon_frame(icon_view(icon, color)).into_any_element(),
         None => div().child(label.to_string()).into_any_element(),
     }
+}
+
+/// Symbol im Rahmen 22 x 16 mal UI-Größe (`iconButton`): mit der kompakten Taste ergibt das etwa 34 x 20 und die Zeile
+/// bleibt so hoch wie bisher.
+fn icon_frame(icon: impl IntoElement) -> Div {
+    let s = scale();
+    div().flex().items_center().justify_center().w(px(22. * s)).h(px(16. * s)).child(icon)
 }
 
 /// Akzentring um ein Steuerelement, das die Tastatur hat (liegt außen, verschiebt nichts).

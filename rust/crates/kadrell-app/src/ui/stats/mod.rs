@@ -118,6 +118,8 @@ pub struct StatsView {
     /// Gemessene Breiten der Zähler (eine Reihe oder zwei Spalten wie `ViewThatFits`).
     geometry: Geometry,
     counters_basis: Option<(f32, f32)>,
+    /// Summe der gemessenen Plotbreiten aus dem letzten Frame (Tageslabels der Charts).
+    plot_basis: f32,
     _task: Option<Task<()>>,
 }
 
@@ -142,6 +144,7 @@ impl StatsView {
             list_scroll: ScrollHandle::new(),
             geometry: Geometry::default(),
             counters_basis: None,
+            plot_basis: 0.,
             _task: None,
         };
         view._task = Some(view.start(cx));
