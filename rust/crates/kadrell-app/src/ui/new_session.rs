@@ -197,9 +197,11 @@ impl NewSession {
     }
 
     /// ⌘O / Strg+O: Ordnerdialog des Systems; der gewählte Ordner startet sofort. GPUI kennt keinen Startordner des
-    /// Dialogs, er öffnet dort, wo das System es für richtig hält.
+    /// Dialogs, `pick::choose_in` setzt ihn unter Windows selbst, am Mac bleibt es beim Systemverhalten.
+    /// Dialogs, er öffnet beim markierten Eintrag, sonst im Startordner (`browse()`).
     fn browse(&mut self, _: &Browse, window: &mut Window, cx: &mut Context<Self>) {
-        super::pick::choose(false, window, cx, |_, path, _, cx| {
+        let start = self.model.browse_start();
+        super::pick::choose_in(Some(&start), false, window, cx, |_, path, _, cx| {
             if let Some(dir) = files::folder_for(std::path::Path::new(&path)) {
                 cx.emit(NewSessionEvent::Start { group: None, path: dir });
             }

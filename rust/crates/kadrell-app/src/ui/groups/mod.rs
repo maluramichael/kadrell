@@ -425,7 +425,8 @@ impl Shell {
         let bounds = self.groups_ui.scroll.bounds();
         let offset = self.groups_ui.scroll.offset();
         let height = if group_row { measures.group_row } else { measures.session_row };
-        let at = gpui::point(bounds.origin.x + gpui::px(48.), bounds.origin.y + offset.y + gpui::px(top + height));
+        // Wie `popUp(_:at:)`: x = Zeilenanfang + 20, y = Zeilenmitte.
+        let at = gpui::point(bounds.origin.x + gpui::px(20.), bounds.origin.y + offset.y + gpui::px(top + height / 2.));
         let items = if group_row {
             let Some(id) = self.state.store.groups.group_for_session(&key).map(|g| g.id.clone()) else { return };
             self.group_menu_items(&id)

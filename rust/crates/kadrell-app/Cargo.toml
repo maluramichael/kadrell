@@ -25,6 +25,8 @@ sysinfo = "0.40" # Prozessliste für laufende Bash-Kommandos (statt `ps`, das es
 # Fenster verstecken und zeigen (tray_wire/window.rs): HWND aus GPUI, ShowWindow.
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"
+# Ordnerdialog mit Startordner (ui/pick/native.rs); Version wie gpui-pre-windows in rust/Cargo.lock.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 # Ohne `font-kit` nimmt GPUI auf dem Mac das NoopTextSystem: kein einziger Text.

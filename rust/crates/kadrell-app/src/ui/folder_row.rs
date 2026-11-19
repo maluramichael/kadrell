@@ -61,7 +61,7 @@ pub fn folder_row_titled(
                 .min_w_0()
                 .gap(px(2. * s))
                 .child(div().text_size(px(12. * s)).text_color(title_color).overflow_hidden().whitespace_nowrap().child(row.name))
-                .child(div().text_size(px(11. * s)).text_color(t.muted).overflow_hidden().whitespace_nowrap().text_ellipsis().child(row.path)),
+                .child(div().text_size(px(11. * s)).text_color(t.muted).overflow_hidden().whitespace_nowrap().text_ellipsis_start().child(row.path)),
         )
         .child(right);
     div().id(id).flex_none().h(px(ROW_HEIGHT * s)).px(px(6. * s)).py(px(1. * s)).cursor_pointer().on_click(on_click).child(inner)
