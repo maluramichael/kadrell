@@ -113,6 +113,12 @@ Fortschritt und Abweichungen trägt die Planungs-Session hier unten ein.
   (Titelleiste, Menü, Leiste, Baum, Dialoge im eigenen Fenster), Skalierung mit der UI-Größe, Suchleiste schiebt das
   Terminal, letzte Lücken der Nachprüfung (alle vier Audits erneut gegen den Code geprüft, Rest siehe Welle 12).
   Entscheidung: Paletten-Treffer werden nicht gezeichnet, weil Swift `onHighlight` nirgends verdrahtet.
+  Wellen 12 und 13 gemergt (f487e16, 1577 Tests): Layout-Menü mit Symbolen, Skalierung von Nutzungsanzeige und
+  leerem Zustand, eigene Tab-Stopps der Symbol-Tasten, Tests unter Last stabil, CLI exakt wie Swift (Nachprüfung
+  gegen `docs/cli-contract.md`), echte Prozess-Startzeit gegen wiederverwendete pids.
+  Offen, sobald der Mac wieder da ist: Pixelvergleich Swift gegen Rust (Palette 1 pt, Extensions-Kopfzeile 1 px),
+  `ls --json`-Formatierung leerer Arrays gegen echte Swift-Ausgabe, Abdunkelung hinter Dialogen (Rust 0,42 ohne Blur,
+  Swift 0,3 mit Blur), macOS-Zweige der Wellen 8 bis 13 bauen und testen, Mitteilungen/Badge.
   Die Mac-Session ist ab 19.11. offline (MacBook unterwegs): macOS-Zweige nur blind hinter cfg, Prüfung später.
 - Feinschliff-Liste: Einstellungstexte zeigen „⌘N“ auch unter Windows; unterste Listenzeile im Dialog „Neue Session“
   angeschnitten; Fensterfokus beim Start auf dem Mac; Layout-Menüeinträge auf dem Mac ausgegraut; Buchstabenabstand
