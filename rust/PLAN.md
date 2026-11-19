@@ -102,8 +102,10 @@ Fortschritt und Abweichungen trägt die Planungs-Session hier unten ein.
   Welle 5 gemergt (a12ce36, 1456 Tests): Aufräumen der Doppelungen (ein Piepton, eine Symbolquelle,
   Buchstabenabstand per Zeichenzellen), Startreihenfolge wie Swift, Kachel-Ausblenden, Tab-Fokus in Dialogen,
   gemessene Spalten der Einstellungen, Tooltips. Läuft: Kachelzustände in hellen Schemata, Sortiertaste.
-  Offene Frage an Michael: App-Kürzel auf Strg unter Windows fangen Terminal-Tasten von Claude Code ab
-  (Strg+B, Strg+R, Strg+P).
+  Entschieden (Michael, 19.11.): App-Kürzel unter Windows auf Alt statt Strg (⌘ → Alt), damit Strg+B, Strg+R,
+  Strg+P bei Claude Code im Terminal ankommen; bei Doppelbelegung mit ⌥-Kürzeln gewinnt ⌘, die ⌥-Aktion bekommt
+  einen eigenen Windows-Standard. Textfelder behalten Strg+C/V/A/Z. Paket `rw8-alt`.
+  Die Mac-Session ist ab 19.11. offline (MacBook unterwegs): macOS-Zweige nur blind hinter cfg, Prüfung später.
 - Feinschliff-Liste: Einstellungstexte zeigen „⌘N“ auch unter Windows; unterste Listenzeile im Dialog „Neue Session“
   angeschnitten; Fensterfokus beim Start auf dem Mac; Layout-Menüeinträge auf dem Mac ausgegraut; Buchstabenabstand
   der Gruppennamen; Blur hinter Dialogen; Konten/lokale Modelle im Einstellungen-Dialog noch Mock.
