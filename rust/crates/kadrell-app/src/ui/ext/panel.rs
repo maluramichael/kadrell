@@ -11,7 +11,7 @@ use gpui::{
 use kadrell_ext::manager::ExtensionManager;
 use kadrell_ext::panel::{PanelAction, ThemeColor};
 
-use super::model::{Line, LineKind, Outcome, PanelEntry, PanelModel, TAB_HEIGHT, tab_label};
+use super::model::{Line, LineKind, Outcome, PanelEntry, PanelModel, TAB_HEIGHT, TAB_LEFT, tab_label, tab_rects};
 use super::{status_color, text_color};
 use crate::theme::Theme;
 use crate::ui::chrome::{h_seam, key_edge};
@@ -131,11 +131,12 @@ impl ExtPanel {
 
     // MARK: Zeichnen
 
-    /// Tab als Taste: der gewählte bleibt eingesunken. Die Breite ist die des fetten Textes plus 16 (`tabRects`), die
-    /// Taste sitzt 2 px eingerückt (Breite hier ohne Messen des fetten Textes: Abstand 6 px je Seite).
+    /// Tab als Taste: der gewählte bleibt eingesunken. Die Fläche ist so breit wie der fette Text plus 16 (`tabRects`,
+    /// für alle Tabs gemessen, damit nichts springt, wenn die Auswahl wechselt), die Taste sitzt 2 px eingerückt.
     fn tabs(&self, t: &Theme, cx: &mut Context<Self>) -> Div {
-        let mut row = div().flex().flex_none().items_start().h(px(TAB_HEIGHT - 2.)).pt(px(5.)).px(px(4.));
-        for (i, entry) in self.model.panels().iter().enumerate() {
+        let mut row = div().flex().flex_none().items_start().h(px(TAB_HEIGHT - 2.)).pt(px(5.)).pl(px(TAB_LEFT));
+        let widths: Vec<f32> = self.model.panels().iter().map(|e| crate::ui::tile::text_width(cx, tab_label(e), 11., true)).collect();
+        for (i, (entry, (_, width))) in self.model.panels().iter().zip(tab_rects(&widths)).enumerate() {
             let on = self.model.selected_tab() == Some(entry.0.as_str());
             let name = entry.0.clone();
             let text = tab_label(entry).to_string();
@@ -144,7 +145,6 @@ impl ExtPanel {
                 .items_center()
                 .justify_center()
                 .flex_1()
-                .px(px(6.))
                 .rounded(px(5.))
                 .bg(t.surface)
                 .text_size(px(11.))
@@ -158,6 +158,7 @@ impl ExtPanel {
                 .flex_col()
                 .flex_none()
                 .h(px(22.))
+                .w(px(width - 4.))
                 .mx(px(2.))
                 .pt(px(if on { 2. } else { 0. }))
                 .pb(px(if on { 0. } else { 2. }))

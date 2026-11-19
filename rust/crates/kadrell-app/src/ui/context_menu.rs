@@ -347,7 +347,7 @@ impl Shell {
     // MARK: Aktionen für die fokussierte Session (Menü, Palette, Tastatur)
 
     fn focused_key(&self) -> Option<String> {
-        self.state.focused.clone()
+        self.state.cur_focus()
     }
 
     pub fn stop_focused(&mut self, window: &mut Window, cx: &mut Context<Self>) {

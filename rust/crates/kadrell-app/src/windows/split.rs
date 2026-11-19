@@ -165,18 +165,5 @@ impl Shell {
         })
         .detach();
     }
-
-    /// Das Fenster `index` ist jetzt vorn: Menü, Kürzel und Leiste richten sich nach ihm.
-    pub(crate) fn note_current(&mut self, index: usize, cx: &mut Context<Self>) {
-        if self.win.current != index {
-            self.win.current = index;
-            cx.notify();
-        }
-    }
-
-    /// Nummer des Fensters, das zuletzt aktiv war.
-    pub(crate) fn current_window(&self) -> usize {
-        self.win.current
-    }
 }
 

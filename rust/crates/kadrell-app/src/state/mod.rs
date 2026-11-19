@@ -84,6 +84,8 @@ pub struct AppState {
     pub anchor: Option<String>,
     pub layout: LayoutMode,
     pub zoom: bool,
+    /// Ansichten der weiteren Fenster und das Fenster, auf das Befehle wirken (`windows::views`).
+    pub wins: crate::windows::views::Views,
     pub collapsed: HashSet<String>,
     /// Steuerkanal und Oberfläche sind bereit (`STARTING_STATUS` davor).
     pub ready: bool,
@@ -150,6 +152,7 @@ impl AppState {
             anchor: None,
             layout: LayoutMode::Grid,
             zoom: false,
+            wins: Default::default(),
             collapsed: HashSet::new(),
             ready: false,
             quit_requested: false,
@@ -304,7 +307,7 @@ impl AppState {
         }
         self.wanted.push(key.clone());
         if show {
-            self.show_only(&key);
+            self.cur_show_only(&key);
         }
         self.fire_hook(HookEvent::SessionNew, &key);
         true
@@ -545,5 +548,7 @@ fn agent_status(s: SessionStatus) -> kadrell_claude::agent::Status {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod window_tests;
 #[cfg(test)]
 mod bar_tests;

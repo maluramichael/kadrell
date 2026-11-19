@@ -179,7 +179,7 @@ impl Shell {
         true
     }
 
-    fn plain_overlay_open(&self) -> bool {
+    pub(crate) fn plain_overlay_open(&self) -> bool {
         self.overlay.is_some()
             || self.rename.is_some()
             || self.quick_start.is_some()

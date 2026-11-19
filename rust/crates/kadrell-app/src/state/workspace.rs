@@ -28,4 +28,15 @@ impl AppState {
         self.focused = Some(key.to_string());
         self.attention.mark_seen(key);
     }
+
+    /// Sessions ohne Prozess sofort starten lassen, etwa die Auswahl eines weiteren Fensters (`start_selected_now`).
+    pub fn start_now(&mut self, keys: &[String]) {
+        let waiting: Vec<String> = keys.iter().filter(|k| self.run(k) == super::tiles::Run::NotStarted && !self.wanted.contains(k)).cloned().collect();
+        self.starts.enqueue(waiting.clone());
+        for key in self.starts.take_all(&waiting) {
+            if !self.wanted.contains(&key) {
+                self.wanted.push(key);
+            }
+        }
+    }
 }

@@ -284,7 +284,7 @@ impl Shell {
 
     /// ⌥E: Ordner der Fokus-Session im Editor.
     pub fn open_editor_focused(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let cwd = self.state.focused.as_deref().and_then(|k| self.state.session(k)).map(|s| s.cwd.clone()).unwrap_or_default();
+        let cwd = self.state.cur_focus().as_deref().and_then(|k| self.state.session(k)).map(|s| s.cwd.clone()).unwrap_or_default();
         self.open_editor_in(&cwd, window, cx);
     }
 
@@ -407,7 +407,7 @@ impl Shell {
 
     /// Palette `> Gruppe bearbeiten` und Menü: Gruppe der fokussierten Session.
     pub fn edit_focused_group(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let group = self.state.focused.as_deref().and_then(|k| self.state.store.groups.group_for_session(k)).map(|g| g.id.clone());
+        let group = self.state.cur_focus().as_deref().and_then(|k| self.state.store.groups.group_for_session(k)).map(|g| g.id.clone());
         if let Some(id) = group {
             self.open_edit_group(&id, window, cx);
         }
@@ -418,7 +418,7 @@ impl Shell {
         if self.groups_ui.open() || self.blocking_dialog() || self.context.is_some() {
             return;
         }
-        let Some(key) = self.state.focused.clone() else { return };
+        let Some(key) = self.state.cur_focus() else { return };
         let a = crate::appearance::current(cx);
         let measures = crate::ui::tree_actions::row_measures(&a);
         let Some((top, group_row)) = rows::focus_row_top(&self.groups, &key, measures) else { return };

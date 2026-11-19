@@ -1,11 +1,14 @@
 //! Weitere Fenster (⌘⇧T): `model` (offene Fenster, Besitzer der Terminals), `extra` (die Ansicht eines weiteren Fensters)
 //! und die Verbindung zur `Shell` des Hauptfensters.
 
+pub mod current;
 pub mod extra;
+pub mod extra_ext;
 pub mod frame;
 pub mod layout;
 pub mod model;
 pub mod split;
+pub mod views;
 
 use gpui::{Context, Div, InteractiveElement, KeyBinding, actions};
 use kadrell_core::Settings;
@@ -32,8 +35,10 @@ pub fn attach_actions(root: Div, cx: &mut Context<Shell>) -> Div {
 /// Änderungen, die verzögert in die Einstellungen gehen (beim Ziehen eines Trenners kommen viele).
 pub struct WinState {
     pub sides: layout::Sides,
-    /// Nummer des Fensters, das zuletzt aktiv war (`AppDelegate.current`, 0 Hauptfenster).
-    pub current: usize,
+    /// Dialog, den ein weiteres Fenster im Hauptfenster angefordert hat (`current`).
+    pub pin: Option<current::Pin>,
+    /// Seitenleiste und Dock der weiteren Fenster, damit `refresh_ext` sie aktuell hält.
+    pub extra_panels: std::collections::HashMap<usize, extra_ext::ExtraPanels>,
     pending: Vec<layout::Change>,
     generation: u64,
 }
@@ -42,7 +47,7 @@ impl WinState {
     pub fn new(settings: &Settings) -> WinState {
         let mut sides = layout::Sides::restore(settings, 0);
         sides.apply_dev();
-        WinState { sides, current: 0, pending: Vec::new(), generation: 0 }
+        WinState { sides, pin: None, extra_panels: Default::default(), pending: Vec::new(), generation: 0 }
     }
 }
 

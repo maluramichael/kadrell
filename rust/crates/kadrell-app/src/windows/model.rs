@@ -10,8 +10,18 @@ use serde_json::Value;
 /// Einstellung mit den Nummern der offenen Fenster (aufsteigend, Fenster 0 ist das Hauptfenster).
 pub const OPEN_KEY: &str = "windows.open";
 
-/// Schlüssel, die jedes Fenster für sich führt (`workspace.selected` usw. plus Suffix, hier mit dem Fokus der Rust-App).
-pub const PER_WINDOW_KEYS: [&str; 4] = ["workspace.selected", "workspace.selected.focus", "workspace.mode", "workspace.auto"];
+/// Schlüssel, die jedes Fenster für sich führt und beim Schließen verliert (`closeWindow`: Auswahl, Layout, Auto-Modus und
+/// die Breiten der Seitenleisten; dazu der Fokus und die Höhe des Docks der Rust-App).
+pub const PER_WINDOW_KEYS: [&str; 8] = [
+    "workspace.selected",
+    "workspace.selected.focus",
+    "workspace.mode",
+    "workspace.auto",
+    "sidebar.width",
+    "rightSidebar.width",
+    "rightSidebar.visible",
+    "leftDock.height",
+];
 
 /// Suffix der Schlüssel eines Fensters: Fenster 0 behält die bisherigen Schlüssel, weitere hängen `.<n+1>` an
 /// (`MainWindowController.suffix`).
@@ -176,6 +186,10 @@ mod tests {
         assert_eq!(key_for("workspace.selected", 2), "workspace.selected.3");
         assert!(keys_of(1).contains(&"workspace.mode.2".to_string()));
         assert!(keys_of(0).contains(&"workspace.mode".to_string()));
+        // `closeWindow` der Mac-App löscht auch die Breiten der Seitenleisten; das Dock der Rust-App kommt dazu.
+        for k in ["sidebar.width.2", "rightSidebar.width.2", "rightSidebar.visible.2", "leftDock.height.2", "workspace.auto.2"] {
+            assert!(keys_of(1).contains(&k.to_string()), "{k}");
+        }
     }
 
     /// Fenster kommen nach dem Neustart wieder: speichern, lesen, kleinste freie Nummer.
