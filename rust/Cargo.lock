@@ -2655,6 +2655,7 @@ dependencies = [
  "raw-window-handle",
  "serde_json",
  "sysinfo 0.40.4",
+ "windows 0.62.2",
  "windows-sys 0.61.2",
 ]
 

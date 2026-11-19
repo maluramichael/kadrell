@@ -3,7 +3,7 @@
 //! immer offen. Die Logik steht in `model`.
 
 use gpui::{
-    App, Context, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+    App, Context, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Role,
     ParentElement, Render, StatefulInteractiveElement, Styled, Subscription, Window, actions, div, prelude::*, px,
     rgb,
 };
@@ -164,10 +164,13 @@ impl EditGroup {
         let on = hex.eq_ignore_ascii_case(&self.model.color);
         let ring = if on { t.fg } else { gpui::transparent_black() };
         let s = crate::ui::overlay::scale();
-        // Auswahlring 1,5 pt in `fg`; Bedienhilfe-Beschriftung „<Palette> <Hex>“ gibt GPUI nicht her (keine Accessibility-API).
+        // Auswahlring 1,5 pt in `fg`; Bedienhilfe: Taste „<Palette> <Hex>“, gewählt wie `.isSelected`.
         let n = p * 100 + i;
         let swatch = border_px(div(), 1.5 * s)
             .id(("swatch", n))
+            .role(Role::Button)
+            .aria_label(swatch_label(p, hex))
+            .aria_selected(on)
             .relative()
             .size(px(SWATCH * s))
             .flex_none()
@@ -248,5 +251,21 @@ impl Render for EditGroup {
 impl Focusable for EditGroup {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.name.read(cx).focus.clone()
+    }
+}
+
+/// Beschriftung eines Farbfelds für die Sprachausgabe: „<Palette> <Hex>“ (`accessibilityLabel` in `EditGroupSheet.swift`).
+fn swatch_label(palette: usize, hex: &str) -> String {
+    format!("{} {hex}", PALETTES.get(palette).map_or("", |(name, _)| *name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn swatch_label_names_palette_and_hex() {
+        let (name, colors) = PALETTES[0];
+        assert_eq!(swatch_label(0, colors[0]), format!("{name} {}", colors[0]));
     }
 }

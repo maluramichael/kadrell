@@ -4,7 +4,7 @@
 //! Abweichung: GPUI kennt weder einen Startordner noch einen Dateityp-Filter des Dialogs. Der Dialog öffnet dort, wo das
 //! System es für richtig hält; eine gewählte Datei, die kein Bild ist, wird danach verworfen (mit Piepen).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use gpui::{Context, PathPromptOptions, Window};
 use kadrell_i18n::trd;
@@ -43,9 +43,27 @@ pub fn choose_with<V: 'static>(
     cx: &mut Context<V>,
     done: impl FnOnce(&mut V, String, &mut Window, &mut Context<V>) + 'static,
 ) {
+    choose_in(None, images, window, cx, done);
+}
+
+/// Wie `choose_with`, der Dialog öffnet in `start` (`chooseFolder(start:)`). Unter Windows gilt das für Ordner; ohne
+/// vorhandenen Startordner und für Bilder (dort ohne Startordner) öffnet der Dialog, wo das System es will.
+pub fn choose_in<V: 'static>(
+    start: Option<&str>,
+    images: bool,
+    window: &mut Window,
+    cx: &mut Context<V>,
+    done: impl FnOnce(&mut V, String, &mut Window, &mut Context<V>) + 'static,
+) {
     if warn_if_replaced(window, cx) {
         return;
     }
+    #[cfg(windows)]
+    if let Some(dir) = start_dir(start, images) {
+        return choose_native(dir, window, cx, done);
+    }
+    #[cfg(not(windows))]
+    let _ = start;
     let picked = cx.prompt_for_paths(options(images));
     cx.spawn_in(window, async move |this, cx| {
         let Ok(Ok(Some(paths))) = picked.await else { return };
@@ -57,9 +75,60 @@ pub fn choose_with<V: 'static>(
     .detach();
 }
 
+/// Startordner des Dialogs: `~` aufgelöst, nur wenn es ihn gibt (sonst wählt das System), nie bei Bildern.
+pub fn start_dir(start: Option<&str>, images: bool) -> Option<PathBuf> {
+    let raw = start?.trim();
+    if images || raw.is_empty() {
+        return None;
+    }
+    let home = || std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
+    let expanded = match raw.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => format!("{}{rest}", home()),
+        _ => raw.to_string(),
+    };
+    let path = PathBuf::from(expanded);
+    path.is_dir().then_some(path)
+}
+
+#[cfg(windows)]
+fn choose_native<V: 'static>(
+    dir: PathBuf,
+    window: &mut Window,
+    cx: &mut Context<V>,
+    done: impl FnOnce(&mut V, String, &mut Window, &mut Context<V>) + 'static,
+) {
+    let owner = native::owner_of(window);
+    let (tx, rx) = async_channel::bounded(1);
+    let prompt = trd!("Wählen");
+    std::thread::spawn(move || {
+        let _ = tx.send_blocking(native::pick_folder(&dir.to_string_lossy(), &prompt, owner));
+    });
+    cx.spawn_in(window, async move |this, cx| {
+        let Ok(Some(path)) = rx.recv().await else { return };
+        let path = path.to_string_lossy().into_owned();
+        let _ = this.update_in(cx, |this, window, cx| done(this, path, window, cx));
+    })
+    .detach();
+}
+
+#[cfg(windows)]
+mod native;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn start_dir_needs_an_existing_folder_and_no_images() {
+        let here = std::env::current_dir().unwrap();
+        let here = here.to_string_lossy();
+        assert!(start_dir(Some(&here), false).is_some());
+        assert!(start_dir(Some(&here), true).is_none());
+        assert!(start_dir(Some("/gibt/es/nicht/kadrell"), false).is_none());
+        assert!(start_dir(Some("  "), false).is_none());
+        assert!(start_dir(None, false).is_none());
+        assert!(start_dir(Some("~"), false).is_some());
+    }
 
     #[test]
     fn images_are_recognised_by_extension() {

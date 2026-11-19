@@ -8,7 +8,7 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gpui::{Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, fill, point, px, size};
+use gpui::{Animation, AnimationExt, BoxShadow, Hsla, IntoElement, ParentElement, Styled, div, point, px};
 
 /// Ein Atemzug: einatmen und ausatmen, je die Hälfte (Sekunden).
 pub const PERIOD: f64 = 2.8;
@@ -101,34 +101,31 @@ fn system_reduce_motion() -> bool {
 /// und bittet bei jedem Bild um das nächste, solange er sichtbar ist; es braucht kein Neuzeichnen der Ansicht.
 pub fn breathing_dot(color: Hsla, diameter: f32, glow: f32) -> impl IntoElement {
     let extra = glow.ceil().max(0.);
-    canvas(
-        |_, _, _| (),
-        move |bounds, (), window, _| {
-            let still = reduce_motion();
-            if !still {
-                window.request_animation_frame();
-            }
-            paint_dot(window, bounds, color, diameter, glow, pose_for(wall_clock(), still));
-        },
-    )
-    // Der Schein ragt über den Punkt hinaus: Platz dafür gehört zum Element, die Mitte bleibt die des Statuspunkts.
-    .size(px(diameter + 2. * extra))
-    .m(px(-extra))
+    let frame = div().flex().items_center().justify_center().flex_none().size(px(diameter + 2. * extra)).m(px(-extra));
+    let still = reduce_motion();
+    if still {
+        return frame.child(dot(color, diameter, glow, Pose::STILL)).into_any_element();
+    }
+    // Die Animation liefert nur den Takt der Bilder; die Phase kommt aus der Uhr, damit alle Punkte im Gleichschritt atmen.
+    // Der Schein ist ein weicher Schatten (`shadowRadius` der Ebene in `BreathingDots.swift`).
+    let cycle = Animation::new(Duration::from_secs_f64(PERIOD)).repeat();
+    frame
+        .with_animation("breathing-dot", cycle, move |el, _| {
+            el.child(dot(color, diameter, glow, pose_for(wall_clock(), false)))
+        })
+        .into_any_element()
 }
 
-fn paint_dot(window: &mut Window, bounds: Bounds<Pixels>, color: Hsla, diameter: f32, glow: f32, pose: Pose) {
-    let c = bounds.center();
-    let ring = |r: f32, alpha: f32| {
-        let b = Bounds::new(point(c.x - px(r), c.y - px(r)), size(px(2. * r), px(2. * r)));
-        fill(b, Hsla { a: color.a * alpha, ..color }).corner_radii(px(r))
+/// Der Punkt in einer Pose: Größe und Deckkraft, dazu der Schein als Schatten ohne Versatz.
+fn dot(color: Hsla, diameter: f32, glow: f32, pose: Pose) -> gpui::Div {
+    let shadow = BoxShadow {
+        color: Hsla { a: color.a * pose.glow * pose.opacity, ..color },
+        offset: point(px(0.), px(0.)),
+        blur_radius: px(glow * pose.scale),
+        spread_radius: px(0.),
+        inset: false,
     };
-    let r = diameter / 2. * pose.scale;
-    // Schein in drei Stufen nach außen, schwächer je weiter weg (Näherung des weichen Schattens).
-    for (i, share) in [1.0f32, 0.6, 0.3].into_iter().enumerate() {
-        let spread = glow * pose.scale * (3 - i) as f32 / 3.;
-        window.paint_quad(ring(r + spread, pose.glow * 0.35 * share * pose.opacity));
-    }
-    window.paint_quad(ring(r, pose.opacity));
+    div().size(px(diameter * pose.scale)).flex_none().rounded_full().bg(Hsla { a: color.a * pose.opacity, ..color }).shadow(vec![shadow])
 }
 
 #[cfg(test)]
