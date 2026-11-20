@@ -2609,6 +2609,7 @@ dependencies = [
 name = "kadrell"
 version = "0.1.0"
 dependencies = [
+ "embed-resource",
  "kadrell-app",
  "kadrell-claude",
  "kadrell-control",

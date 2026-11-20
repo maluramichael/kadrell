@@ -16,3 +16,7 @@ kadrell-ext = { path = "../kadrell-ext" }
 # Konsolenfenster der App unter Windows lösen (Version wie in kadrell-control und rust/Cargo.lock).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
+
+# App-Icon in die exe (build.rs); Version wie gpui-pre in rust/Cargo.lock, nur unter Windows benutzt.
+[build-dependencies]
+embed-resource = "=3.0.12"

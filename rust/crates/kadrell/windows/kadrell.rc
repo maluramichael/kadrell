@@ -1,0 +1,3 @@
+// Icon der exe (Explorer, Verknüpfungen) und des Fensters: GPUI lädt es als Ressource 1 (LoadImageW).
+// Kein Manifest hier: gpui-pre bettet schon RT_MANIFEST 1 ein, ein zweites wäre doppelt.
+1 ICON "kadrell.ico"
