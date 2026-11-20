@@ -165,7 +165,8 @@ mod tests {
     #[test]
     fn alt_actions_that_clash_with_command_shortcuts_have_their_own_windows_keys() {
         let t = table(Platform::Windows);
-        // Alt+N und Alt+P gehören „Neue Session“ und „Suche“ (feste Bindungen), nicht dem Tabellen-Eintrag.
+        // Alt+N ist frei (Neue Session liegt auf Strg+N), Alt+P gehört der „Suche“ (feste Bindung); der Tabellen-Eintrag
+        // belegt beide nicht.
         assert_eq!(t.lookup(&alt("n")), None);
         assert_eq!(t.lookup(&alt("p")), None);
         assert_eq!(t.lookup(&alt_shift("j")), Some(HotkeyAction::NextSession));

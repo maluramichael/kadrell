@@ -239,7 +239,9 @@ mod tests {
     #[test]
     fn windows_recorder_refuses_keys_of_the_app_and_the_system() {
         let alt = |k: &str| KeyInput { alt: true, ..key(k) };
-        assert_eq!(classify(&alt("n"), Platform::Windows), Recorded::Reject, "Alt+N ist „Neue Session“");
+        let ctrl_n = KeyInput { control: true, ..key("n") };
+        assert_eq!(classify(&ctrl_n, Platform::Windows), Recorded::Reject, "Strg+N ist „Neue Session“");
+        assert!(matches!(classify(&alt("n"), Platform::Windows), Recorded::Set(_)), "Alt+N ist frei");
         assert_eq!(classify(&alt("p"), Platform::Windows), Recorded::Reject, "Alt+P ist die Suche");
         assert_eq!(classify(&alt("f4"), Platform::Windows), Recorded::Reject, "Alt+F4 schließt das Fenster");
         assert_eq!(classify(&alt("tab"), Platform::Windows), Recorded::Reject);

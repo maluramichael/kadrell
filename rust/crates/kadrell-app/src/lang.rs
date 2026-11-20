@@ -63,8 +63,10 @@ fn is_symbol_key(c: char, next: Option<char>) -> bool {
 fn windows_run(glyphs: &[char], key: Option<char>, lang: Lang) -> String {
     let has = |g: char| glyphs.contains(&g);
     let (cmd, opt) = (has('⌘'), has('⌥'));
-    let ctrl = has('⌃') || (cmd && opt) || (cmd && key.is_none());
-    let alt = opt || (cmd && key.is_some());
+    // Ausnahme: das alleinstehende ⌘N (Neue Session) ist unter Windows Strg+N, siehe `keys::windows_stroke`.
+    let new_session = glyphs == ['⌘'] && key == Some('N');
+    let ctrl = has('⌃') || (cmd && opt) || (cmd && key.is_none()) || new_session;
+    let alt = opt || (cmd && key.is_some() && !new_session);
     let mut parts: Vec<&str> = Vec::new();
     for (on, m) in [(ctrl, Modifier::Ctrl), (alt, Modifier::Alt), (has('⇧'), Modifier::Shift)] {
         if on {
@@ -206,8 +208,10 @@ mod tests {
 
     #[test]
     fn windows_german_and_english_names() {
-        assert_eq!(win("Projektordner für ⌘N", Lang::De), "Projektordner für Alt+N");
-        assert_eq!(win("Project folder for ⌘N", Lang::En), "Project folder for Alt+N");
+        assert_eq!(win("Projektordner für ⌘N", Lang::De), "Projektordner für Strg+N");
+        assert_eq!(win("Project folder for ⌘N", Lang::En), "Project folder for Ctrl+N");
+        assert_eq!(win("⇧⌘N", Lang::De), "Alt+Umschalt+N");
+        assert_eq!(win("⌥⌘N", Lang::De), "Strg+Alt+N");
         assert_eq!(win("⇧⌘N", Lang::De), "Alt+Umschalt+N");
         assert_eq!(win("⇧⌘N", Lang::En), "Alt+Shift+N");
         assert_eq!(win("⌥⌘N", Lang::En), "Ctrl+Alt+N");

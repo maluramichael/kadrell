@@ -331,7 +331,7 @@ fn clipboard_folder(cx: &App, home: &str) -> Option<String> {
 // Anbindung an die Shell.
 
 impl Shell {
-    /// Aktion `NewSession` (Menü, Strg+N / ⌘N): öffnet den Dialog, solange er nicht schon offen ist.
+    /// Aktion `NewSession` (Menü, Mac ⌘N, Windows Strg+N): öffnet den Dialog, solange er nicht schon offen ist.
     pub fn new_session_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if std::env::var_os("KADRELL_DEV_KEYLOG").is_some() {
             eprintln!("action NewSession (Dialog offen: {})", self.overlay.is_some());

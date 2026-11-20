@@ -48,8 +48,17 @@ pub fn platform(stroke: &'static str) -> &'static str {
     if cfg!(target_os = "macos") { stroke } else { Box::leak(windows_stroke(stroke).into_boxed_str()) }
 }
 
-/// Mac-Tastenstring unter Windows: `cmd` wird `alt`, `cmd` mit `alt` und `ctrl` mit `alt` werden `ctrl-alt`.
+/// „Neue Session“ ist die bewusste Ausnahme von „Strg gehört dem Terminal“: Mac ⌘N, Windows Strg+N (Michael, 20.11.).
+/// Strg+N kommt dadurch nicht mehr im Terminal an, Alt+N bleibt frei. Beschriftung: `lang::windows_run`.
+const NEW_SESSION_MAC: &str = "cmd-n";
+const NEW_SESSION_WINDOWS: &str = "ctrl-n";
+
+/// Mac-Tastenstring unter Windows: `cmd` wird `alt` (außer ⌘N, siehe oben), `cmd` mit `alt` und `ctrl` mit `alt`
+/// werden `ctrl-alt`.
 pub fn windows_stroke(stroke: &str) -> String {
+    if stroke == NEW_SESSION_MAC {
+        return NEW_SESSION_WINDOWS.to_string();
+    }
     let mut bits = 0;
     let mut rest = stroke;
     while let Some((head, tail)) = rest.split_once('-').filter(|(_, tail)| !tail.is_empty()) {
@@ -172,7 +181,8 @@ mod tests {
 
     #[test]
     fn windows_turns_cmd_into_alt_and_keeps_ctrl() {
-        assert_eq!(windows_stroke("cmd-n"), "alt-n");
+        assert_eq!(windows_stroke("cmd-n"), "ctrl-n", "Ausnahme: Neue Session liegt auf Strg+N");
+        assert_eq!(windows_stroke("cmd-p"), "alt-p");
         assert_eq!(windows_stroke("cmd-shift-n"), "alt-shift-n");
         assert_eq!(windows_stroke("cmd-enter"), "alt-enter");
         assert_eq!(windows_stroke("cmd-alt-n"), "ctrl-alt-n");
@@ -180,6 +190,14 @@ mod tests {
         assert_eq!(windows_stroke("ctrl-alt-left"), "ctrl-alt-left");
         assert_eq!(windows_stroke("ctrl-enter"), "ctrl-enter");
         assert_eq!(windows_stroke("f2"), "f2");
+    }
+
+    #[test]
+    fn new_session_reserves_ctrl_n_and_frees_alt_n() {
+        let ctrl_n = Physical { ctrl: true, alt: false, shift: false };
+        let alt_n = Physical { ctrl: false, alt: true, shift: false };
+        assert!(is_reserved(ctrl_n, "n"));
+        assert!(!is_reserved(alt_n, "n"));
     }
 
     #[test]
@@ -196,7 +214,8 @@ mod tests {
         if cfg!(target_os = "macos") {
             assert_eq!(platform("cmd-n"), "cmd-n");
         } else {
-            assert_eq!(platform("cmd-n"), "alt-n");
+            assert_eq!(platform("cmd-n"), "ctrl-n");
+            assert_eq!(platform("cmd-p"), "alt-p");
         }
     }
 
@@ -242,7 +261,12 @@ mod tests {
     #[test]
     fn no_windows_binding_is_ctrl_alone_altgr_or_a_system_key() {
         for (name, p, k) in all_windows_bindings() {
-            assert!(p.alt || p.shift || k.starts_with('f') && k.len() > 1, "{name}: Strg allein gehört dem Terminal");
+            // Einzige Ausnahme: „Neue Session“ auf Strg+N (bewusste Entscheidung des Nutzers).
+            let new_session = name == "menus: Neue Session" && p == Physical { ctrl: true, alt: false, shift: false } && k == "n";
+            assert!(
+                p.alt || p.shift || k.starts_with('f') && k.len() > 1 || new_session,
+                "{name}: Strg allein gehört dem Terminal (einzige Ausnahme: Neue Session auf Strg+N)"
+            );
             if p.ctrl && p.alt {
                 assert!(!ALTGR.contains(k.as_str()) || k.chars().count() != 1, "{name}: Strg+Alt+{k} ist AltGr");
             }

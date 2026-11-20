@@ -273,7 +273,7 @@ pub fn menus() -> Vec<MenuDef> {
 
 /// Tastenbelegungen und globale Aktionen. Hier stehen die Mac-Tastenstrings, `keys::platform` macht daraus unter
 /// Windows Alt (⌘) bzw. Strg+Alt (⌘⌥, AltGr-freie Buchstaben). Wer eine Bindung dazunimmt, trägt sie in `keys::FIXED` ein.
-/// Alt+N/P (Mac ⌥N/⌥P) laufen über die Belegung aus den Einstellungen (`workspace::keys`), nicht hier. Schnellstart,
+/// Neue Session liegt unter Windows auf Strg+N (bewusste Ausnahme, siehe `keys::windows_stroke`). Alt+N/P (Mac ⌥N/⌥P) laufen über die Belegung aus den Einstellungen (`workspace::keys`), nicht hier. Schnellstart,
 /// Verlaufssuche, Statistik und Neustart folgen ebenfalls den Einstellungen (`Shell::open_hotkey_key`).
 pub fn init(cx: &mut App) {
     use crate::keys::platform as key;
