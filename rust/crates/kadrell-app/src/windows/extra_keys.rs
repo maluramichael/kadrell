@@ -56,7 +56,8 @@ pub fn zoomed_keys(tiles: &[String], focus: Option<&str>, zoom: bool) -> Vec<Str
 impl ExtraWindow {
     /// Ein Tastendruck, bevor das Terminal ihn sieht: Kürzel aus den Einstellungen (`workspace_key` des Hauptfensters).
     pub(super) fn on_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        if self.context.is_some() || self.dialog_here(ev, window, cx) {
+        // Offenes Menü: ihm gehören die Tasten, weder Kürzel noch Sync-Eingabe noch Esc für einen Dialog.
+        if self.context.is_some() || self.modes.menubar.read(cx).is_open() || self.dialog_here(ev, window, cx) {
             return;
         }
         let m = ev.keystroke.modifiers;

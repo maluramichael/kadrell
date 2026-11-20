@@ -458,6 +458,10 @@ impl Shell {
         if std::env::var_os("KADRELL_DEV_KEYLOG").is_some() {
             eprintln!("key {:?}", ev.keystroke);
         }
+        // Offenes Menü: Esc, Pfeile und Enter gehören ihm (es schließt zuerst, nicht ein Dialog dahinter).
+        if self.menubar.read(cx).is_open() {
+            return;
+        }
         if ev.keystroke.key == "escape" && self.cancel_visible(window, cx) {
             cx.stop_propagation();
             return;
@@ -481,12 +485,18 @@ impl Shell {
             return;
         }
         // ⌥T (Mac) bzw. Strg+Alt+T (Windows, Alt+T ist dort ⌘T): Farbschema. T ist auf deutscher Tastatur kein AltGr-Zeichen.
-        let theme_mods = if cfg!(target_os = "macos") { m.alt && !m.control } else { m.alt && m.control };
-        if theme_mods && !m.platform && !m.shift && ev.keystroke.key == "t" {
+        if is_theme_key(ev) {
             Self::toggle_theme(cx);
             cx.stop_propagation();
         }
     }
+}
+
+/// ⌥T (Mac) bzw. Strg+Alt+T (Windows, Alt+T ist dort ⌘T): Farbschema. T ist auf deutscher Tastatur kein AltGr-Zeichen.
+fn is_theme_key(ev: &KeyDownEvent) -> bool {
+    let m = ev.keystroke.modifiers;
+    let theme_mods = if cfg!(target_os = "macos") { m.alt && !m.control } else { m.alt && m.control };
+    theme_mods && !m.platform && !m.shift && ev.keystroke.key == "t"
 }
 
 impl Drop for Shell {

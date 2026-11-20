@@ -105,7 +105,7 @@ impl Shell {
         self.emit_ext_events();
         self.rebuild();
         self.refresh_auto();
-        if self.overlay.is_none() && self.palette.is_none() && self.rename.is_none() && self.settings.is_none() && self.agent_pick.is_none() && self.remote.is_none() && !self.ext_ui.keeps_focus(window, cx) && !self.usage.overlay_open() && !self.misc.overlay_open() && !self.ws.keeps_focus() {
+        if !self.keyboard_taken(window, cx) {
             let focus = self.selected.and_then(|(g, s)| self.groups[g].sessions[s].pane.as_ref().map(|p| p.read(cx).focus.clone()));
             if let Some(focus) = focus {
                 focus.focus(window, cx);
@@ -116,6 +116,19 @@ impl Shell {
         self.settle_pin(window);
         self.settle_host();
         cx.notify();
+    }
+
+    /// Gehört die Tastatur gerade etwas anderem als dem Terminal der Fokus-Kachel? Dialog, Menü, Panel, Baum oder Vorschau.
+    fn keyboard_taken(&self, window: &Window, cx: &gpui::App) -> bool {
+        self.dialog_taken() || self.menubar.read(cx).is_open() || self.panel_taken(window, cx)
+    }
+
+    fn dialog_taken(&self) -> bool {
+        self.overlay.is_some() || self.palette.is_some() || self.rename.is_some() || self.settings.is_some() || self.agent_pick.is_some() || self.remote.is_some()
+    }
+
+    fn panel_taken(&self, window: &Window, cx: &gpui::App) -> bool {
+        self.ext_ui.keeps_focus(window, cx) || self.usage.overlay_open() || self.misc.overlay_open() || self.ws.keeps_focus()
     }
 
     /// Startet, was der Zustand vorgemerkt hat, und räumt Kacheln gelöschter Sessions weg.

@@ -5,8 +5,8 @@
 //! (`set_context`). Auf macOS ersetzt die System-Menüleiste (`menus::init`) diese Ansicht, sie bleibt dort leer.
 
 use gpui::{
-    Context, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, ModifiersChangedEvent, MouseButton,
-    ParentElement, Render, StatefulInteractiveElement, Styled, Window, anchored, deferred, div, point, prelude::FluentBuilder, px,
+    Context, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Subscription, Window, anchored, deferred, div, point, prelude::FluentBuilder, px,
 };
 
 use super::theme;
@@ -41,7 +41,34 @@ pub struct MenuBar {
     sub_active: Option<usize>,
     focus: FocusHandle,
     restore: Option<FocusHandle>,
-    alt_clean: bool,
+    alt: AltTap,
+    /// Hält den Tasten-Interceptor am Leben (`AltTap::key`), bis die Leiste verschwindet.
+    _keys: Subscription,
+}
+
+/// Alt allein: gedrückt und losgelassen, ohne dass dazwischen eine andere Taste kam.
+#[derive(Default)]
+struct AltTap {
+    clean: bool,
+}
+
+impl AltTap {
+    /// Modifier haben sich geändert; `true`, wenn Alt jetzt losgelassen wurde und rein geblieben war.
+    fn modifiers(&mut self, m: Modifiers) -> bool {
+        if m.alt {
+            self.clean = !m.control && !m.shift && !m.platform;
+            return false;
+        }
+        std::mem::take(&mut self.clean)
+    }
+
+    /// Eine Taste kam dazwischen: aus Alt wird ein Kürzel-Modifier. Alt selbst zählt nicht (GPUI meldet das Loslassen
+    /// einer einzelnen Modifier-Taste als Tastendruck mit dem Namen der Taste).
+    fn key(&mut self, ks: &Keystroke) {
+        if !ks.is_modifier_key() {
+            self.clean = false;
+        }
+    }
 }
 
 impl Focusable for MenuBar {
@@ -98,18 +125,29 @@ fn next_enabled(entries: &[Entry], from: Option<usize>, dir: isize) -> Option<us
     None
 }
 
-/// Alt allein und Tastenfolge für die gezeichnete Menüleiste in dem Fenster, dessen Wurzel `root` ist (Hauptfenster und
-/// weitere Fenster teilen den Code, jedes hat seine eigene `MenuBar`).
+/// Alt allein für die gezeichnete Menüleiste in dem Fenster, dessen Wurzel `root` ist (Hauptfenster und weitere Fenster
+/// teilen den Code, jedes hat seine eigene `MenuBar`). Dass eine Taste dazwischen kam, meldet der Interceptor in
+/// `MenuBar::new`: der läuft auch bei Alt+N, wo GPUI die Aktion behandelt, bevor Listener an den Elementen laufen.
 pub fn attach_hooks<E: InteractiveElement>(root: E, menubar: &gpui::Entity<MenuBar>) -> E {
-    let (on_mod, on_key) = (menubar.clone(), menubar.clone());
+    let on_mod = menubar.clone();
     root.on_modifiers_changed(move |ev, window, cx| on_mod.update(cx, |m, cx| m.on_modifiers(ev, window, cx)))
-        .capture_key_down(move |_, _, cx| on_key.update(cx, |m, _| m.note_key()))
 }
 
 impl MenuBar {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let ctx = MenuContext::live();
-        MenuBar { menus: menus_for(&ctx), ctx, open: None, active: None, sub: None, sub_active: None, focus: cx.focus_handle(), restore: None, alt_clean: false }
+        // Jede Leiste hört auf alle Fenster: Alt ist nur im Fenster mit dem Fokus gedrückt, dort ist `clean` gesetzt, in
+        // den anderen ist das Zurücksetzen wirkungslos.
+        let this = cx.entity().downgrade();
+        let keys = cx.intercept_keystrokes(move |ev, _, cx| {
+            this.update(cx, |m, _| m.alt.key(&ev.keystroke)).ok();
+        });
+        MenuBar { menus: menus_for(&ctx), ctx, open: None, active: None, sub: None, sub_active: None, focus: cx.focus_handle(), restore: None, alt: AltTap::default(), _keys: keys }
+    }
+
+    /// Ist ein Menü offen? Dann gehört ihm die Tastatur (`Shell::sync` holt den Fokus nicht an die Kachel zurück).
+    pub fn is_open(&self) -> bool {
+        self.open.is_some()
     }
 
     /// Baut die Menüs neu, nach einem Sprachwechsel.
@@ -164,20 +202,10 @@ impl MenuBar {
 
     /// Alt allein (gedrückt und losgelassen, ohne andere Taste dazwischen) öffnet das erste Menü oder schließt.
     pub fn on_modifiers(&mut self, ev: &ModifiersChangedEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let m = ev.modifiers;
-        if m.alt {
-            self.alt_clean = !m.control && !m.shift && !m.platform;
-            return;
-        }
-        if !std::mem::take(&mut self.alt_clean) {
+        if !self.alt.modifiers(ev.modifiers) {
             return;
         }
         if self.open.is_some() { self.close(window, cx) } else { self.open(0, window, cx) }
-    }
-
-    /// Jede andere Taste macht aus Alt einen Tastenkürzel-Modifier, der die Leiste nicht öffnet.
-    pub fn note_key(&mut self) {
-        self.alt_clean = false;
     }
 
     /// Einträge des offenen Menüs bzw. seines aufgeklappten Untermenüs.
@@ -434,6 +462,46 @@ mod tests {
         assert_eq!(next_enabled(&entries, Some(3), 1), Some(1), "am Ende wieder vorn");
         assert_eq!(next_enabled(&entries, None, -1), Some(3));
         assert_eq!(next_enabled(&[item(false)], None, 1), None);
+    }
+
+    fn press(key: &str) -> Keystroke {
+        Keystroke { key: key.into(), key_char: None, modifiers: Modifiers::default() }
+    }
+
+    fn alt() -> Modifiers {
+        Modifiers { alt: true, ..Modifiers::default() }
+    }
+
+    #[test]
+    fn alone_alt_opens_on_release() {
+        let mut tap = AltTap::default();
+        assert!(!tap.modifiers(alt()));
+        assert!(tap.modifiers(Modifiers::default()));
+        assert!(!tap.modifiers(Modifiers::default()), "ein zweites Loslassen löst nichts aus");
+    }
+
+    #[test]
+    fn a_key_between_alt_down_and_up_cancels_the_tap() {
+        // Alt+N: die Taste erreicht nur den Interceptor, nicht die Listener der Elemente.
+        let mut tap = AltTap::default();
+        tap.modifiers(alt());
+        tap.key(&press("n"));
+        assert!(!tap.modifiers(Modifiers::default()));
+    }
+
+    #[test]
+    fn the_modifier_keystroke_of_alt_itself_does_not_cancel() {
+        let mut tap = AltTap::default();
+        tap.modifiers(alt());
+        tap.key(&press("alt"));
+        assert!(tap.modifiers(Modifiers::default()));
+    }
+
+    #[test]
+    fn alt_with_another_modifier_never_taps() {
+        let mut tap = AltTap::default();
+        tap.modifiers(Modifiers { alt: true, shift: true, ..Modifiers::default() });
+        assert!(!tap.modifiers(Modifiers::default()));
     }
 
     #[test]
