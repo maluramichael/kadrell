@@ -433,7 +433,15 @@ impl TerminalPane {
     }
 
     pub fn paste(&mut self, cx: &mut Context<Self>) {
-        let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) else { return };
+        let Some(item) = cx.read_from_clipboard() else { return };
+        let text = match paste_choice(&item, image_key()) {
+            Paste::Text(text) => text,
+            Paste::ImageKey(key) => {
+                self.write(key);
+                return;
+            }
+            Paste::Nothing => return,
+        };
         let bracketed = self.term.lock().mode().contains(TermMode::BRACKETED_PASTE);
         let text = text.replace("\r\n", "\r").replace('\n', "\r");
         if bracketed {
@@ -801,6 +809,33 @@ impl Render for TerminalPane {
 }
 
 // ---------- Tasten ----------
+
+/// Was beim Einsetzen an den Prozess geht.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Paste {
+    Text(String),
+    /// Die Bild-Taste von Claude Code: es liest das Bild selbst aus der Zwischenablage.
+    ImageKey(&'static [u8]),
+    Nothing,
+}
+
+/// Bild-Taste von Claude Code: Alt+V unter Windows (`ESC v`). Auf dem Mac ist es Strg+V (`0x16`); Kadrell fängt dort ⌘V
+/// ab, Strg+V käme zwar direkt an, aber ein Bild per ⌘V einzusetzen soll genauso klappen.
+/// (Doku: code.claude.com/docs/en/interactive-mode, Keyboard shortcuts.)
+pub(crate) fn image_key() -> &'static [u8] {
+    if cfg!(target_os = "windows") { b"v" } else { b"" }
+}
+
+/// Text hat Vorrang; ohne Text, aber mit Bild, geht die Bild-Taste hinaus, sonst nichts.
+pub(crate) fn paste_choice(item: &ClipboardItem, key: &'static [u8]) -> Paste {
+    if let Some(text) = item.text().filter(|t| !t.is_empty()) {
+        return Paste::Text(text);
+    }
+    if item.entries().iter().any(|e| matches!(e, gpui::ClipboardEntry::Image(_))) {
+        return Paste::ImageKey(key);
+    }
+    Paste::Nothing
+}
 
 /// ⌘ auf dem Mac, Strg+Shift unter Windows (Strg allein gehört dem Terminal).
 pub(crate) fn is_cmd(ks: &Keystroke, key: &str) -> bool {
@@ -1442,6 +1477,33 @@ fn indexed(term: &Term<Listener>, i: usize, t: &TermTheme) -> Hsla {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn bild() -> ClipboardItem {
+        ClipboardItem::new_image(&gpui::Image::from_bytes(gpui::ImageFormat::Png, vec![1, 2, 3]))
+    }
+
+    #[test]
+    fn text_wins_over_image_key() {
+        let item = ClipboardItem::new_string("hallo".into());
+        assert_eq!(paste_choice(&item, b"v"), Paste::Text("hallo".into()));
+    }
+
+    #[test]
+    fn image_without_text_sends_the_image_key() {
+        assert_eq!(paste_choice(&bild(), b"v"), Paste::ImageKey(b"v"));
+        assert_eq!(paste_choice(&bild(), b""), Paste::ImageKey(b""));
+    }
+
+    #[test]
+    fn empty_text_and_no_image_do_nothing() {
+        assert_eq!(paste_choice(&ClipboardItem::new_string(String::new()), b"v"), Paste::Nothing);
+    }
+
+    #[test]
+    fn image_key_matches_platform() {
+        let expected: &[u8] = if cfg!(target_os = "windows") { b"v" } else { b"" };
+        assert_eq!(image_key(), expected);
+    }
 
     /// Catppuccin Mocha, wie die App es liefert.
     fn test_theme() -> TermTheme {
