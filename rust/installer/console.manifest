@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Wird beim Installer-Bau per mt.exe mit dem Manifest von gpui-pre zusammengeführt (gpui-pre-platform erzwingt
+     dessen Manifest, ein eigenes in build.rs wäre doppelt). Vom Explorer oder einer Verknüpfung gestartet bekommt
+     die App so kein Konsolenfenster, aus einem Terminal erbt die Kommandozeile dessen Konsole wie bisher.
+     Ab Windows 11 24H2, ältere Versionen ignorieren den Eintrag. -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+    <application xmlns="urn:schemas-microsoft-com:asm.v3">
+        <windowsSettings>
+            <consoleAllocationPolicy xmlns="http://schemas.microsoft.com/SMI/2024/WindowsSettings">detached</consoleAllocationPolicy>
+        </windowsSettings>
+    </application>
+</assembly>
