@@ -66,6 +66,9 @@ pub fn fire(dir: &Path, event: HookEvent, session: &Session, branch: Option<&str
         cmd.current_dir(&cwd);
     }
     cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    // Hooks laufen still im Hintergrund, ohne das Flag öffnet unter Windows jeder ein Konsolenfenster.
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
     match cmd.spawn() {
         Ok(mut child) => {
             // Abräumen, sonst bleibt der beendete Hook als Zombie stehen.

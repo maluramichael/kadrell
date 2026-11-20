@@ -40,6 +40,9 @@ impl CommandRunner for SystemRunner {
     fn run(&self, program: &str, args: &[String], env: Option<&BTreeMap<String, String>>, cwd: Option<&str>, timeout: Duration) -> Result<RunOutput, String> {
         let mut cmd = Command::new(program);
         cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        // Die App hat unter Windows keine Konsole: ohne das Flag öffnet jedes `claude`, `git` … ein eigenes Fenster.
+        #[cfg(windows)]
+        std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
         if let Some(env) = env {
             cmd.env_clear().envs(env);
         }
